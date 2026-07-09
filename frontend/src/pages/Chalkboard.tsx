@@ -405,7 +405,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       // Keyboard tool selection (Ctrl + key or Cmd + key)
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
         const key = e.key.toLowerCase();
-        if (key === 'b' || key === 'c') {
+        if (key === 'b') {
           e.preventDefault();
           setActiveTool('chalk');
         } else if (key === 'e') {

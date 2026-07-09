@@ -61,7 +61,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setShowSettings((prev) => !prev);
               }
             }}
-            title="Chalk (Ctrl+B / Ctrl+C)"
+            title="Chalk (Ctrl+B)"
           >
             <PenTool size={20} />
           </button>

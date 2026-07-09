@@ -6,7 +6,13 @@ import ActionSticks from '@/components/tools/ActionSticks';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { getRandomColor } from '@/utils/colors';
-import { drawChalkSegment, drawEraserSegment, getCombinedBoundingBox, isStrokeInRect, transformStrokes } from '@/utils/drawing';
+import {
+  drawChalkSegment,
+  drawEraserSegment,
+  getCombinedBoundingBox,
+  isStrokeInRect,
+  transformStrokes
+} from '@/utils/drawing';
 import type { Rect } from '@/types';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 

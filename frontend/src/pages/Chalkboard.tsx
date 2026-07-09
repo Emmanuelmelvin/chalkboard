@@ -4,6 +4,8 @@ import { Copy, Check, Users, Maximize2 } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import { getRandomColor } from '@/utils/colors';
+import { drawChalkSegment, drawEraserSegment } from '@/utils/drawing';
 
 interface Point {
   x: number;
@@ -16,6 +18,7 @@ interface Stroke {
   tool: 'chalk' | 'eraser';
   color: string;
   size: number;
+  intensity?: number;
   points: Point[];
 }
 
@@ -33,22 +36,6 @@ interface ChalkboardProps {
   onLeaveRoom: () => void;
 }
 
-// Custom function to convert hex color to rgba for transparency
-function addAlpha(hex: string, alpha: number): string {
-  let c = hex.substring(1);
-  if (c.length === 3) {
-    c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
-  }
-  const r = parseInt(c.substring(0, 2), 16);
-  const g = parseInt(c.substring(2, 4), 16);
-  const b = parseInt(c.substring(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-// Generate a random chalk color for a user's cursor
-const CURSOR_COLORS = ['#fff3a1', '#a3e5ff', '#ffa3d1', '#a3ffd6', '#ffffff'];
-const getRandomColor = () => CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)];
-
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
   userName,
@@ -62,6 +49,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [activeTool, setActiveTool] = useState<'chalk' | 'eraser'>('chalk');
   const [activeColor, setActiveColor] = useState<string>('#ffffff');
   const [brushSize, setBrushSize] = useState<number>(8);
+  const [brushIntensity, setBrushIntensity] = useState<number>(0.85);
 
   // Navigation (Pan & Zoom)
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
@@ -110,75 +98,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     [panOffset, zoom]
   );
 
-  // Render a chalk segment with realistic dust texture
-  const drawChalkSegment = (
-    ctx: CanvasRenderingContext2D,
-    x0: number,
-    y0: number,
-    x1: number,
-    y1: number,
-    color: string,
-    size: number
-  ) => {
-    const dist = Math.hypot(x1 - x0, y1 - y0);
-    const steps = Math.max(Math.ceil(dist / 1.5), 1); // step every 1.5px
-
-    for (let i = 0; i < steps; i++) {
-      const t = i / steps;
-      const cx = x0 + (x1 - x0) * t;
-      const cy = y0 + (y1 - y0) * t;
-
-      // Draw a soft chalk core
-      ctx.beginPath();
-      ctx.arc(cx, cy, size / 2.2, 0, Math.PI * 2);
-      ctx.fillStyle = addAlpha(color, 0.12);
-      ctx.fill();
-
-      // Scattered chalk dust particles
-      const particleCount = Math.min(Math.ceil(size * 1.2), 20);
-      for (let p = 0; p < particleCount; p++) {
-        const angle = Math.random() * Math.PI * 2;
-        const radius = Math.random() * (size / 1.8);
-        const px = cx + Math.cos(angle) * radius;
-        const py = cy + Math.sin(angle) * radius;
-
-        ctx.beginPath();
-        // Tiny dust grains
-        ctx.arc(px, py, Math.random() * 0.7 + 0.3, 0, Math.PI * 2);
-        ctx.fillStyle = addAlpha(color, Math.random() * 0.35 + 0.15);
-        ctx.fill();
-      }
-    }
-  };
-
-  // Render an eraser segment
-  const drawEraserSegment = (
-    ctx: CanvasRenderingContext2D,
-    x0: number,
-    y0: number,
-    x1: number,
-    y1: number,
-    size: number
-  ) => {
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-
-    // Draw thick overlapping circles to clear the canvas
-    const dist = Math.hypot(x1 - x0, y1 - y0);
-    const steps = Math.max(Math.ceil(dist / 3), 1);
-
-    for (let i = 0; i < steps; i++) {
-      const t = i / steps;
-      const cx = x0 + (x1 - x0) * t;
-      const cy = y0 + (y1 - y0) * t;
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, size * 2, 0, Math.PI * 2); // Eraser has expanded radius
-      ctx.fill();
-    }
-    ctx.restore();
-  };
-
   // Draw the entire board state (cached/cleared then redrawn)
   const drawBoard = useCallback(() => {
     const canvas = canvasRef.current;
@@ -200,10 +119,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
       if (stroke.tool === 'chalk') {
         if (pts.length === 1) {
-          drawChalkSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.color, stroke.size);
+          drawChalkSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.color, stroke.size, stroke.intensity);
         } else {
           for (let i = 1; i < pts.length; i++) {
-            drawChalkSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.color, stroke.size);
+            drawChalkSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.color, stroke.size, stroke.intensity);
           }
         }
       } else {
@@ -286,10 +205,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
 
     // 4. Remote drawing
-    socket.on('stroke-start', ({ strokeId, userId, tool, color, size, startPoint }) => {
+    socket.on('stroke-start', ({ strokeId, userId, tool, color, size, intensity, startPoint }) => {
       setStrokes((prev) => [
         ...prev,
-        { id: strokeId, userId, tool, color, size, points: [startPoint] },
+        { id: strokeId, userId, tool, color, size, intensity, points: [startPoint] },
       ]);
     });
 
@@ -366,6 +285,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       tool: activeTool,
       color: activeColor,
       size: brushSize,
+      intensity: brushIntensity,
       points: [pos],
     };
 
@@ -378,6 +298,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       tool: activeTool,
       color: activeColor,
       size: brushSize,
+      intensity: brushIntensity,
       startPoint: pos,
     });
   };
@@ -677,9 +598,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           activeTool={activeTool}
           activeColor={activeColor}
           brushSize={brushSize}
+          brushIntensity={brushIntensity}
           onToolChange={setActiveTool}
           onColorChange={setActiveColor}
           onBrushSizeChange={setBrushSize}
+          onIntensityChange={setBrushIntensity}
           onUndo={handleUndo}
           onRedo={handleRedo}
           onClear={handleClear}

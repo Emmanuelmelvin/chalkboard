@@ -1,122 +1,68 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState, useEffect } from 'react';
+import { io, Socket } from 'socket.io-client';
+import Lobby from '@/components/Lobby';
+import Chalkboard from '@/components/Chalkboard';
+
+// Initialize a single socket client that can be activated on demand
+const socket: Socket = io({
+  autoConnect: false,
+  transports: ['websocket'],
+});
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [userName, setUserName] = useState<string | null>(null);
+  const [roomId, setRoomId] = useState<string | null>(null);
+  const [initialRoomId, setInitialRoomId] = useState<string | null>(null);
+
+  // Check URL query parameters for an active invite code on load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roomParam = params.get('room');
+    if (roomParam) {
+      setInitialRoomId(roomParam.trim().toLowerCase());
+    }
+  }, []);
+
+  const handleJoinRoom = (name: string, room: string) => {
+    setUserName(name);
+    setRoomId(room);
+
+    // Update browser URL query string without reloading
+    window.history.pushState(null, '', `?room=${room}`);
+
+    // Connect to WebSocket backend
+    socket.connect();
+  };
+
+  const handleLeaveRoom = () => {
+    if (roomId) {
+      socket.emit('leave-room', { roomId, userName });
+    }
+    socket.disconnect();
+    setRoomId(null);
+    setInitialRoomId(null);
+
+    // Remove the room query string from the URL
+    window.history.pushState(null, '', window.location.pathname);
+  };
 
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+      {roomId && userName ? (
+        <Chalkboard
+          roomId={roomId}
+          userName={userName}
+          socket={socket}
+          onLeaveRoom={handleLeaveRoom}
+        />
+      ) : (
+        <Lobby
+          initialRoomId={initialRoomId}
+          onJoinRoom={handleJoinRoom}
+        />
+      )}
     </>
-  )
+  );
 }
 
-export default App
+export default App;

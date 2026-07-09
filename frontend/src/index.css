@@ -1,111 +1,741 @@
+/* Chalkboard Design System */
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  /* Wood Frame Colors */
+  --wood-dark: #3a1a0b;
+  --wood-light: #5d2b12;
+  --wood-grain: #271107;
+  
+  /* Metallic Accent Colors */
+  --brass: #c5a059;
+  --brass-dark: #8c6e30;
+  --brass-light: #e8d098;
+  
+  /* Slate Blackboard Colors */
+  --slate-green: #143525;
+  --slate-dark: #0b2216;
+  --chalk-dust: rgba(255, 255, 255, 0.08);
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* Chalk Colors */
+  --chalk-white: #ffffff;
+  --chalk-yellow: #fff3a1;
+  --chalk-blue: #a3e5ff;
+  --chalk-pink: #ffa3d1;
+  --chalk-green: #a3ffd6;
+  --chalk-eraser: rgba(255, 255, 255, 0.2);
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  /* Fonts */
+  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-hand: 'Caveat', cursive;
+  --font-sketch: 'Architects Daughter', cursive;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+/* Global Reset */
+* {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  margin: 0;
+  font-family: var(--font-sans);
+  background-color: #121212;
+  color: #e5e7eb;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+#root {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
+/* The Blackboard Slate Frame Container */
+.board-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--slate-dark);
+  
+  /* 3D Wood Frame Border (Simulated with outer shadows and inset borders) */
+  border: 24px solid var(--wood-light);
+  border-image: linear-gradient(
+    to bottom right,
+    var(--wood-light),
+    var(--wood-dark) 50%,
+    var(--wood-light)
+  ) 24;
+  box-shadow: 
+    inset 0 10px 30px rgba(0, 0, 0, 0.95),
+    inset 0 -10px 30px rgba(0, 0, 0, 0.95),
+    0 15px 40px rgba(0, 0, 0, 0.8);
 }
-h2 {
+
+/* Wood frame corners brackets */
+.board-container::before {
+  content: '';
+  position: absolute;
+  top: -24px;
+  left: -24px;
+  right: -24px;
+  bottom: -24px;
+  pointer-events: none;
+  border: 4px solid var(--brass);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+  opacity: 0.75;
+  z-index: 10;
+}
+
+/* Blackboard Slate Background Texture */
+.blackboard-slate {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  background-color: var(--slate-green);
+  /* Layer 1: Radial shine, Layer 2: Chalk dust clouds, Layer 3: Noise overlay */
+  background-image:
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.05) 0%, transparent 60%),
+    radial-gradient(circle at 20% 70%, rgba(255, 255, 255, 0.02) 0%, transparent 40%),
+    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.16'/%3E%3C/svg%3E");
+  background-size: auto, auto, auto, 256px 256px;
+}
+
+/* Drawing Canvas */
+.chalk-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  cursor: crosshair;
+  display: block;
+}
+
+/* Floating HUD Panels */
+.hud-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+}
+
+.hud-panel {
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 18px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s ease;
+}
+
+.hud-panel:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.7);
+}
+
+/* Header UI */
+.board-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.board-title {
+  display: flex;
+  flex-direction: column;
+}
+
+.board-title h1 {
+  font-family: var(--font-sketch);
   font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
+  color: #fff;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
+.board-title span {
+  font-family: var(--font-hand);
+  font-size: 18px;
+  color: var(--chalk-yellow);
+  margin-top: 2px;
+}
+
+/* Share Panel */
+.share-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-code-badge {
+  font-family: var(--font-sketch);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #fff;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  color: #cbd5e1;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.btn-icon:active {
+  transform: scale(0.95);
+}
+
+/* Users List */
+.users-panel {
+  position: absolute;
+  top: 100px;
+  right: 24px;
+  max-height: 250px;
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.users-panel h3 {
+  font-family: var(--font-sketch);
+  font-size: 14px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 4px;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.user-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.user-name {
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Floating Chalk Ledge (Toolbar) */
+.chalk-ledge-container {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding-bottom: 12px;
+}
+
+/* The actual wooden ledge tray for chalk sticks */
+.chalk-ledge {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  padding: 10px 32px 14px;
+  background: linear-gradient(to bottom, #4a230f, #2d1306);
+  border-radius: 8px 8px 0 0;
+  box-shadow: 
+    0 -4px 10px rgba(0, 0, 0, 0.5),
+    inset 0 2px 4px rgba(255, 255, 255, 0.1),
+    inset 0 -4px 6px rgba(0, 0, 0, 0.6);
+  border-top: 2px solid var(--wood-light);
+  border-left: 2px solid var(--wood-dark);
+  border-right: 2px solid var(--wood-dark);
+}
+
+/* Side brass brackets holding the ledge */
+.chalk-ledge::before,
+.chalk-ledge::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  width: 16px;
+  height: 12px;
+  background: linear-gradient(to bottom, var(--brass-light), var(--brass-dark));
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  border-radius: 2px;
+}
+.chalk-ledge::before { left: -16px; }
+.chalk-ledge::after { right: -16px; }
+
+/* Chalk Stick Button */
+.chalk-stick {
+  position: relative;
+  width: 22px;
+  height: 70px;
+  border: none;
+  border-radius: 3px 3px 2px 2px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 
+    2px 2px 5px rgba(0,0,0,0.6),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.3),
+    inset -1px -3px 3px rgba(0, 0, 0, 0.4);
+  transform-origin: bottom center;
+}
+
+/* Individual Chalk Colors */
+.chalk-stick.color-white { background-color: var(--chalk-white); }
+.chalk-stick.color-yellow { background-color: var(--chalk-yellow); }
+.chalk-stick.color-blue { background-color: var(--chalk-blue); }
+.chalk-stick.color-pink { background-color: var(--chalk-pink); }
+.chalk-stick.color-green { background-color: var(--chalk-green); }
+
+/* Selected Chalk Stick Animation (lifts up from ledge) */
+.chalk-stick.active {
+  transform: translateY(-16px) scale(1.08);
+  box-shadow: 
+    0 10px 15px rgba(0, 0, 0, 0.7),
+    0 0 12px currentColor,
+    inset 1px 1px 2px rgba(255, 255, 255, 0.4);
+}
+
+.chalk-stick:hover:not(.active) {
+  transform: translateY(-6px);
+}
+
+.chalk-stick span {
+  display: none;
+}
+
+/* Tool Dividers */
+.ledge-divider {
+  width: 2px;
+  height: 60px;
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.05);
+  margin: 0 4px;
+}
+
+/* Chalk Eraser Ledge Button */
+.felt-eraser {
+  position: relative;
+  width: 90px;
+  height: 40px;
+  background: #3e2723; /* wooden back of eraser */
   border-radius: 4px;
-  color: var(--text-h);
+  border: 1px solid #1a0c06;
+  cursor: pointer;
+  box-shadow: 2px 3px 6px rgba(0,0,0,0.5);
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
+/* Felt layers of the eraser */
+.felt-eraser::before {
+  content: '';
+  width: 100%;
+  height: 18px;
+  background: repeating-linear-gradient(
+    90deg,
+    #5d4037,
+    #5d4037 4px,
+    #4e342e 4px,
+    #4e342e 8px
+  );
+  border-top: 3px solid #000;
+}
+
+.felt-eraser:hover {
+  transform: translateY(-4px);
+  box-shadow: 2px 7px 10px rgba(0,0,0,0.6);
+}
+
+.felt-eraser.active {
+  transform: translateY(-8px) rotate(-3deg);
+  box-shadow: 
+    0 8px 12px rgba(0, 0, 0, 0.6),
+    0 0 8px rgba(255,255,255,0.2);
+}
+
+.felt-eraser span {
+  position: absolute;
+  top: 4px;
+  width: 100%;
+  text-align: center;
+  font-family: var(--font-sketch);
+  font-size: 9px;
+  color: #d7ccc8;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+/* Brush Size Selector Ledge Controls */
+.brush-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  height: 70px;
+  padding: 0 4px;
+}
+
+.size-dot-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8d6e63;
+  transition: all 0.2s ease;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.size-dot-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.size-dot-btn.active {
+  color: var(--brass-light);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 8px rgba(197, 160, 89, 0.4);
+}
+
+.size-dot {
+  background-color: currentColor;
+  border-radius: 50%;
+  box-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+/* Action Stick Buttons (Undo, Redo, Clear) */
+.action-stick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(to bottom, #424242, #212121);
+  color: #e0e0e0;
+  border: 1px solid #111;
+  border-radius: 4px;
+  width: 44px;
+  height: 50px;
+  cursor: pointer;
+  box-shadow: 1px 2px 4px rgba(0,0,0,0.6);
+  transition: all 0.2s ease;
+  gap: 4px;
+}
+
+.action-stick:hover {
+  transform: translateY(-4px);
+  color: #fff;
+  background: linear-gradient(to bottom, #616161, #303030);
+  box-shadow: 1px 5px 8px rgba(0,0,0,0.6);
+}
+
+.action-stick:active {
+  transform: translateY(0);
+}
+
+.action-stick span {
+  font-family: var(--font-sketch);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+/* Zoom display indicator */
+.zoom-indicator {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  font-family: var(--font-sketch);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.3);
   padding: 4px 8px;
-  background: var(--code-bg);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Real-Time Collaborator Cursors */
+.collaborator-cursor {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transition: left 0.1s linear, top 0.1s linear;
+}
+
+/* Simulate the piece of chalk drawing */
+.cursor-pointer-chalk {
+  position: absolute;
+  width: 8px;
+  height: 24px;
+  border-radius: 1px;
+  transform: rotate(35deg) translate(-2px, -20px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+/* Username Label */
+.cursor-label {
+  position: absolute;
+  top: 10px;
+  left: 15px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-hand);
+  font-size: 16px;
+  font-weight: bold;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+
+/* LOBBY SCREEN AESTHETICS */
+.lobby-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  background-color: #0f172a;
+  background-image: 
+    radial-gradient(circle at center, rgba(15, 23, 42, 0.8) 0%, #020617 100%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
+  padding: 20px;
+}
+
+/* Desktop blackboard model for the lobby form */
+.lobby-chalkboard {
+  position: relative;
+  width: 520px;
+  max-width: 100%;
+  background-color: var(--slate-green);
+  border: 16px solid var(--wood-light);
+  border-image: linear-gradient(
+    to bottom right,
+    var(--wood-light),
+    var(--wood-dark) 50%,
+    var(--wood-light)
+  ) 16;
+  box-shadow: 
+    inset 0 8px 20px rgba(0,0,0,0.9),
+    0 20px 40px rgba(0, 0, 0, 0.6);
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.lobby-chalkboard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  background-image: 
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.04) 0%, transparent 70%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 128 128' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.12'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+.lobby-content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+}
+
+.lobby-logo {
+  font-family: var(--font-sketch);
+  font-size: 42px;
+  color: #fff;
+  letter-spacing: 2px;
+  text-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+  margin-bottom: 8px;
+}
+
+.lobby-subtitle {
+  font-family: var(--font-hand);
+  font-size: 22px;
+  color: var(--chalk-yellow);
+  margin-bottom: 40px;
+}
+
+.lobby-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.form-group label {
+  font-family: var(--font-sketch);
+  font-size: 14px;
+  color: #cbd5e1;
+  letter-spacing: 0.5px;
+}
+
+.lobby-input {
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.lobby-input:focus {
+  border-color: var(--brass);
+  box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.25);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.lobby-divider-text {
+  font-family: var(--font-sketch);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.3);
+  margin: 8px 0;
+  position: relative;
+}
+
+.lobby-divider-text::before,
+.lobby-divider-text::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 40%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.lobby-divider-text::before { left: 0; }
+.lobby-divider-text::after { right: 0; }
+
+.btn-primary {
+  background: linear-gradient(to bottom, var(--brass-light), var(--brass));
+  border: 1px solid var(--brass-dark);
+  color: #1c1917;
+  padding: 14px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  font-family: var(--font-sketch);
+  letter-spacing: 0.5px;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(197, 160, 89, 0.35);
+  background: linear-gradient(to bottom, #f3e0b2, var(--brass));
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e2e8f0;
+  padding: 14px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: var(--font-sketch);
+  letter-spacing: 0.5px;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-secondary:active {
+  transform: scale(0.98);
+}
+
+/* Chalk Dust Particle System Container */
+.dust-puff {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  animation: puffOut 0.8s ease-out forwards;
+}
+
+@keyframes puffOut {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
 }

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Socket } from 'socket.io-client';
-import { Copy, Check, Users, Maximize2 } from 'lucide-react';
+import { Copy, Check, Users, Maximize2, Minus, Plus } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -46,7 +46,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Drawing settings
-  const [activeTool, setActiveTool] = useState<'chalk' | 'eraser'>('chalk');
+  const [activeTool, setActiveTool] = useState<'chalk' | 'eraser' | 'pan'>('chalk');
   const [activeColor, setActiveColor] = useState<string>('#ffffff');
   const [brushSize, setBrushSize] = useState<number>(8);
   const [brushIntensity, setBrushIntensity] = useState<number>(0.85);
@@ -272,7 +272,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   // Local/Network Drawing triggers
   const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (isPanning || spacePressed || e.button === 1 || e.button === 2) return; // ignore right, middle click, panning
+    if (isPanning || spacePressed || e.button === 1 || e.button === 2 || activeTool === 'pan') return; // ignore right, middle click, panning
 
     setIsDrawing(true);
     const pos = screenToCanvas(e.clientX, e.clientY);
@@ -282,7 +282,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const newStroke: Stroke = {
       id: strokeId,
       userId: socket.id || 'local',
-      tool: activeTool,
+      tool: activeTool as 'chalk' | 'eraser',
       color: activeColor,
       size: brushSize,
       intensity: brushIntensity,
@@ -295,7 +295,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     socket.emit('stroke-start', {
       roomId,
       strokeId,
-      tool: activeTool,
+      tool: activeTool as 'chalk' | 'eraser',
       color: activeColor,
       size: brushSize,
       intensity: brushIntensity,
@@ -353,8 +353,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Pan with spacebar+leftclick or middle mouse button
-    if (spacePressed || e.button === 1) {
+    // Pan with spacebar+leftclick, middle mouse button, or pan tool active
+    if (spacePressed || e.button === 1 || activeTool === 'pan') {
       setIsPanning(true);
       panStart.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
       canvas.setPointerCapture(e.pointerId);
@@ -421,7 +421,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (strokes.length === 0) return;
 
     // Find last stroke drawn by this local user
-    const lastUserStrokeIdx = [...strokes].reverse().findIndex((s) => s.userId === socket.id);
+    const localId = socket.id || 'local';
+    const lastUserStrokeIdx = [...strokes].reverse().findIndex((s) => s.userId === localId);
     if (lastUserStrokeIdx === -1) return; // none of our strokes are on board
 
     const realIdx = strokes.length - 1 - lastUserStrokeIdx;
@@ -520,6 +521,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       <canvas
         ref={canvasRef}
         className="chalk-canvas"
+        style={{ cursor: isPanning ? 'grabbing' : (spacePressed || activeTool === 'pan') ? 'grab' : 'crosshair' }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -582,12 +584,20 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
         {/* Zoom scale info badge */}
         <div className="zoom-indicator">
-          Scale: {Math.round(zoom * 100)}%
+          <Button variant="icon" onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))} style={{ padding: 2 }}>
+            <Minus size={12} />
+          </Button>
+          <span style={{ margin: '0 4px', width: '36px', textAlign: 'center' }}>
+            {Math.round(zoom * 100)}%
+          </span>
+          <Button variant="icon" onClick={() => setZoom((z) => Math.min(5, z + 0.1))} style={{ padding: 2 }}>
+            <Plus size={12} />
+          </Button>
           <Button
             variant="icon"
             onClick={resetPanZoom}
             title="Reset Pan/Zoom"
-            style={{ display: 'inline-flex', padding: 2, marginLeft: 8 }}
+            style={{ padding: 2, marginLeft: 4 }}
           >
             <Maximize2 size={12} />
           </Button>
@@ -606,7 +616,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onUndo={handleUndo}
           onRedo={handleRedo}
           onClear={handleClear}
-          canUndo={strokes.some((s) => s.userId === socket.id)}
+          canUndo={strokes.some((s) => s.userId === (socket.id || 'local'))}
           canRedo={redoStack.length > 0}
         />
       </div>

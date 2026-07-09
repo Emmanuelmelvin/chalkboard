@@ -502,6 +502,10 @@ body {
   padding: 4px 8px;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Real-Time Collaborator Cursors */
@@ -739,4 +743,211 @@ body {
     transform: scale(2.5);
     opacity: 0;
   }
+}
+
+/* Floating Toolbar Toggle */
+.toolbar-toggle-btn {
+  position: absolute;
+  right: 32px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--wood-dark);
+  border: 2px solid var(--wood-light);
+  color: #fff;
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  transition: all 0.2s;
+  z-index: 1000;
+  pointer-events: auto;
+}
+.toolbar-toggle-btn:hover {
+  background: var(--chalk-board);
+  transform: translateY(-50%) scale(1.1);
+}
+
+/* Toolbar Modal Panel */
+.toolbar-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  z-index: 999;
+  pointer-events: auto;
+}
+
+.toolbar-modal {
+  position: absolute;
+  right: 32px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(45, 19, 6, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--wood-light);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+  z-index: 1000;
+  cursor: default;
+  pointer-events: auto;
+  max-height: 85vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  width: 280px;
+}
+
+/* Custom Scrollbar for Toolbar */
+.toolbar-modal::-webkit-scrollbar {
+  width: 6px;
+}
+.toolbar-modal::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+.toolbar-modal::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+.toolbar-modal::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Figma-like Inputs */
+.slider-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.slider-input {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  outline: none;
+}
+.slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.number-input {
+  width: 48px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  text-align: center;
+  outline: none;
+}
+.number-input:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Color Picker Swatches */
+.swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  transition: transform 0.1s;
+}
+.color-swatch:hover {
+  transform: scale(1.1);
+}
+.color-swatch.active {
+  border-color: #fff;
+  transform: scale(1.1);
+}
+
+.native-color-picker {
+  width: 100%;
+  height: 40px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+.native-color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.native-color-picker::-webkit-color-swatch {
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+}
+
+.toolbar-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #fff;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+}
+.toolbar-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.toolbar-close-btn {
+  background: none;
+  border: none;
+  color: #a1a1aa;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.toolbar-close-btn:hover {
+  color: #fff;
+}
+
+.toolbar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toolbar-section-title {
+  color: #94a3b8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.toolbar-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
 }

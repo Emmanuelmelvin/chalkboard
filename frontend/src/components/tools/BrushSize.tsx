@@ -6,28 +6,30 @@ interface BrushSizeProps {
 }
 
 const BrushSize: React.FC<BrushSizeProps> = ({ brushSize, onBrushSizeChange }) => {
-  const sizes = [
-    { label: 'small', val: 3, dotSize: '6px' },
-    { label: 'medium', val: 8, dotSize: '12px' },
-    { label: 'large', val: 18, dotSize: '18px' },
-  ];
-
   return (
-    <div className="brush-controls">
-      {sizes.map((s) => (
-        <button
-          key={s.label}
-          type="button"
-          className={`size-dot-btn ${brushSize === s.val ? 'active' : ''}`}
-          title={`Size: ${s.label}`}
-          onClick={() => onBrushSizeChange(s.val)}
-        >
-          <div
-            className="size-dot"
-            style={{ width: s.dotSize, height: s.dotSize }}
-          />
-        </button>
-      ))}
+    <div className="slider-container">
+      <input
+        type="range"
+        className="slider-input"
+        min="1"
+        max="100"
+        value={brushSize}
+        onChange={(e) => onBrushSizeChange(parseInt(e.target.value, 10))}
+      />
+      <input
+        type="number"
+        className="number-input"
+        min="1"
+        max="100"
+        value={brushSize}
+        onChange={(e) => {
+          let val = parseInt(e.target.value, 10);
+          if (isNaN(val)) val = 1;
+          if (val > 100) val = 100;
+          if (val < 1) val = 1;
+          onBrushSizeChange(val);
+        }}
+      />
     </div>
   );
 };

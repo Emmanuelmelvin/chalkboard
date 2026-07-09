@@ -1,8 +1,8 @@
 import React from 'react';
 
 interface EraserProps {
-  activeTool: 'chalk' | 'eraser';
-  onToolChange: (tool: 'chalk' | 'eraser') => void;
+  activeTool: 'chalk' | 'eraser' | 'pan';
+  onToolChange: (tool: 'chalk' | 'eraser' | 'pan') => void;
 }
 
 const Eraser: React.FC<EraserProps> = ({ activeTool, onToolChange }) => {

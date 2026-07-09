@@ -15,9 +15,9 @@ export const CHALK_COLORS: ChalkColor[] = [
 ];
 
 interface ChalkSticksProps {
-  activeTool: 'chalk' | 'eraser';
+  activeTool: 'chalk' | 'eraser' | 'pan';
   activeColor: string;
-  onToolChange: (tool: 'chalk' | 'eraser') => void;
+  onToolChange: (tool: 'chalk' | 'eraser' | 'pan') => void;
   onColorChange: (color: string) => void;
 }
 

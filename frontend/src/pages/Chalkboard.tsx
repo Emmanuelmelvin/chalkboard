@@ -59,7 +59,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [selectionMarquee, setSelectionMarquee] = useState<Rect | null>(null);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [transformBox, setTransformBox] = useState<Rect | null>(null);
-  const [transformMode, setTransformMode] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | null>(null);
+  const [transformMode, setTransformMode] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | null>(null);
+  const [hoveredHandle, setHoveredHandle] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | null>(null);
   const transformStart = useRef<Point>({ x: 0, y: 0 });
   const initialTransformBox = useRef<Rect | null>(null);
   const initialSelectedStrokes = useRef<Stroke[]>([]);
@@ -534,6 +535,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       // Check if clicking inside transform box or handles
       if (transformBox) {
         const handleSize = 10 / zoom;
+        const edgeTolerance = 8 / zoom;
         
         const inResizeTL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
           pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
@@ -547,11 +549,27 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         const inResizeBR = pos.x >= transformBox.maxX - handleSize && pos.x <= transformBox.maxX + handleSize &&
           pos.y >= transformBox.maxY - handleSize && pos.y <= transformBox.maxY + handleSize;
 
-        let mode: 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'move' | null = null;
+        const onLeftEdge = Math.abs(pos.x - transformBox.minX) <= edgeTolerance &&
+          pos.y >= transformBox.minY - edgeTolerance && pos.y <= transformBox.maxY + edgeTolerance;
+          
+        const onRightEdge = Math.abs(pos.x - transformBox.maxX) <= edgeTolerance &&
+          pos.y >= transformBox.minY - edgeTolerance && pos.y <= transformBox.maxY + edgeTolerance;
+          
+        const onTopEdge = Math.abs(pos.y - transformBox.minY) <= edgeTolerance &&
+          pos.x >= transformBox.minX - edgeTolerance && Math.max(transformBox.minX, pos.x) <= transformBox.maxX + edgeTolerance;
+          
+        const onBottomEdge = Math.abs(pos.y - transformBox.maxY) <= edgeTolerance &&
+          pos.x >= transformBox.minX - edgeTolerance && Math.max(transformBox.minX, pos.x) <= transformBox.maxX + edgeTolerance;
+
+        let mode: 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'move' | null = null;
         if (inResizeTL) mode = 'resize-tl';
         else if (inResizeTR) mode = 'resize-tr';
         else if (inResizeBL) mode = 'resize-bl';
         else if (inResizeBR) mode = 'resize-br';
+        else if (onLeftEdge) mode = 'resize-l';
+        else if (onRightEdge) mode = 'resize-r';
+        else if (onTopEdge) mode = 'resize-t';
+        else if (onBottomEdge) mode = 'resize-b';
         else {
           const inBox = pos.x >= transformBox.minX && pos.x <= transformBox.maxX &&
             pos.y >= transformBox.minY && pos.y <= transformBox.maxY;
@@ -613,6 +631,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         } else if (transformMode === 'resize-bl') {
           newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + dx);
           newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + dy);
+        } else if (transformMode === 'resize-l') {
+          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + dx);
+        } else if (transformMode === 'resize-r') {
+          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + dx);
+        } else if (transformMode === 'resize-t') {
+          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + dy);
+        } else if (transformMode === 'resize-b') {
+          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + dy);
         }
 
         setTransformBox(newBox);
@@ -631,6 +657,59 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       if (selectionMarquee) {
         setSelectionMarquee(prev => prev ? { ...prev, maxX: pos.x, maxY: pos.y } : null);
         return;
+      }
+
+      // Hover detection when activeTool === 'select' and not dragging
+      if (transformBox) {
+        const handleSize = 10 / zoom;
+        const edgeTolerance = 8 / zoom;
+
+        const inResizeTL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
+          pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
+          
+        const inResizeTR = pos.x >= transformBox.maxX - handleSize && pos.x <= transformBox.maxX + handleSize &&
+          pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
+          
+        const inResizeBL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
+          pos.y >= transformBox.maxY - handleSize && pos.y <= transformBox.maxY + handleSize;
+          
+        const inResizeBR = pos.x >= transformBox.maxX - handleSize && pos.x <= transformBox.maxX + handleSize &&
+          pos.y >= transformBox.maxY - handleSize && pos.y <= transformBox.maxY + handleSize;
+
+        const onLeftEdge = Math.abs(pos.x - transformBox.minX) <= edgeTolerance &&
+          pos.y >= transformBox.minY - edgeTolerance && pos.y <= transformBox.maxY + edgeTolerance;
+          
+        const onRightEdge = Math.abs(pos.x - transformBox.maxX) <= edgeTolerance &&
+          pos.y >= transformBox.minY - edgeTolerance && pos.y <= transformBox.maxY + edgeTolerance;
+          
+        const onTopEdge = Math.abs(pos.y - transformBox.minY) <= edgeTolerance &&
+          pos.x >= transformBox.minX - edgeTolerance && Math.max(transformBox.minX, pos.x) <= transformBox.maxX + edgeTolerance;
+          
+        const onBottomEdge = Math.abs(pos.y - transformBox.maxY) <= edgeTolerance &&
+          pos.x >= transformBox.minX - edgeTolerance && Math.max(transformBox.minX, pos.x) <= transformBox.maxX + edgeTolerance;
+
+        let hover: typeof hoveredHandle = null;
+        if (inResizeTL) hover = 'resize-tl';
+        else if (inResizeTR) hover = 'resize-tr';
+        else if (inResizeBL) hover = 'resize-bl';
+        else if (inResizeBR) hover = 'resize-br';
+        else if (onLeftEdge) hover = 'resize-l';
+        else if (onRightEdge) hover = 'resize-r';
+        else if (onTopEdge) hover = 'resize-t';
+        else if (onBottomEdge) hover = 'resize-b';
+        else {
+          const inBox = pos.x >= transformBox.minX && pos.x <= transformBox.maxX &&
+            pos.y >= transformBox.minY && pos.y <= transformBox.maxY;
+          if (inBox) hover = 'move';
+        }
+
+        if (hover !== hoveredHandle) {
+          setHoveredHandle(hover);
+        }
+      } else {
+        if (hoveredHandle !== null) {
+          setHoveredHandle(null);
+        }
       }
     }
 
@@ -722,10 +801,24 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (isPanning) return 'grabbing';
     if (spacePressed || activeTool === 'pan') return 'grab';
     if (activeTool === 'select') {
-      if (transformMode === 'move') return 'move';
-      if (transformMode === 'resize-tl' || transformMode === 'resize-br') return 'nwse-resize';
-      if (transformMode === 'resize-tr' || transformMode === 'resize-bl') return 'nesw-resize';
+      const mode = transformMode || hoveredHandle;
+      if (mode === 'move') return 'move';
+      if (mode === 'resize-tl' || mode === 'resize-br') return 'nwse-resize';
+      if (mode === 'resize-tr' || mode === 'resize-bl') return 'nesw-resize';
+      if (mode === 'resize-l' || mode === 'resize-r') return 'ew-resize';
+      if (mode === 'resize-t' || mode === 'resize-b') return 'ns-resize';
       return 'default';
+    }
+    if (activeTool === 'chalk') {
+      const penSvg = encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Outer border/shadow of the pen -->
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" fill="${activeColor}" stroke="#000000" stroke-width="2.5"/>
+          <!-- Pen tip color indicator -->
+          <path d="M7 19l-4 1 1-4Z" fill="${activeColor}" stroke="#000000" stroke-width="1"/>
+        </svg>
+      `.trim());
+      return `url("data:image/svg+xml;utf8,${penSvg}") 3 20, crosshair`;
     }
     return 'crosshair';
   };

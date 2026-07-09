@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Socket } from 'socket.io-client';
 import { Copy, Check, Users, Maximize2, Minus, Plus } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import ActionSticks from '@/components/tools/ActionSticks';
@@ -13,37 +12,14 @@ import {
   isStrokeInRect,
   transformStrokes
 } from '@/utils/drawing';
-import type { Rect } from '@/types';
+import type { 
+  Rect,
+  Point,
+  Stroke,
+  ChalkboardProps,
+  Collaborator
+ } from '@/types';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
-
-interface Point {
-  x: number;
-  y: number;
-}
-
-interface Stroke {
-  id: string;
-  userId: string;
-  tool: 'chalk' | 'eraser';
-  color: string;
-  size: number;
-  intensity?: number;
-  points: Point[];
-}
-
-interface Collaborator {
-  id: string;
-  name: string;
-  color: string;
-  cursor?: Point;
-}
-
-interface ChalkboardProps {
-  roomId: string;
-  userName: string;
-  socket: Socket;
-  onLeaveRoom: () => void;
-}
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
@@ -994,6 +970,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s);
               setStrokes(updated);
               socket.emit('undo-stroke', { roomId, strokes: updated });
+            }}
+            onCut={() => {
+
             }}
             onDelete={() => {
               const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));

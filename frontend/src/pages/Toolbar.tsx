@@ -3,17 +3,7 @@ import { PenTool, Eraser, Hand, MousePointer2 } from 'lucide-react';
 import ColorPicker from '@/components/tools/ColorPicker';
 import BrushSize from '@/components/tools/BrushSize';
 import BrushIntensity from '@/components/tools/BrushIntensity';
-
-interface ToolbarProps {
-  activeTool: 'chalk' | 'eraser' | 'pan' | 'select';
-  activeColor: string;
-  brushSize: number;
-  brushIntensity: number;
-  onToolChange: (tool: 'chalk' | 'eraser' | 'pan' | 'select') => void;
-  onColorChange: (color: string) => void;
-  onBrushSizeChange: (size: number) => void;
-  onIntensityChange: (intensity: number) => void;
-}
+import type { ToolbarProps } from '@/types';
 
 export const Toolbar: React.FC<ToolbarProps> = ({
   activeTool,

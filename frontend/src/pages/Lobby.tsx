@@ -2,11 +2,7 @@ import React, { useState } from 'react';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Card from '@/components/ui/Card';
-
-interface LobbyProps {
-  initialRoomId: string | null;
-  onJoinRoom: (userName: string, roomId: string) => void;
-}
+import type { LobbyProps } from '@/types';
 
 export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
   const [userName, setUserName] = useState('');

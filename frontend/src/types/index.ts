@@ -1,7 +1,4 @@
-export interface Point {
-  x: number;
-  y: number;
-}
+import { Socket } from 'socket.io-client';
 
 export interface Stroke {
   id: string;
@@ -18,4 +15,39 @@ export interface Rect {
   minY: number;
   maxX: number;
   maxY: number;
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface Collaborator {
+  id: string;
+  name: string;
+  color: string;
+  cursor?: Point;
+}
+
+export interface ChalkboardProps {
+  roomId: string;
+  userName: string;
+  socket: Socket;
+  onLeaveRoom: () => void;
+}
+
+export interface LobbyProps {
+  initialRoomId: string | null;
+  onJoinRoom: (userName: string, roomId: string) => void;
+}
+
+export interface ToolbarProps {
+  activeTool: 'chalk' | 'eraser' | 'pan' | 'select';
+  activeColor: string;
+  brushSize: number;
+  brushIntensity: number;
+  onToolChange: (tool: 'chalk' | 'eraser' | 'pan' | 'select') => void;
+  onColorChange: (color: string) => void;
+  onBrushSizeChange: (size: number) => void;
+  onIntensityChange: (intensity: number) => void;
 }

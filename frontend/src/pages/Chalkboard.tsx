@@ -152,7 +152,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     return () => window.removeEventListener('resize', resizeCanvas);
   }, [resizeCanvas]);
 
-  // Spacebar pan listeners
+  // Keyboard shortcuts and Spacebar pan listeners
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
@@ -160,6 +160,17 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         if (document.activeElement?.tagName !== 'INPUT') {
           e.preventDefault();
         }
+      }
+      
+      // Keyboard Undo / Redo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        handleRedo();
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -174,7 +185,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [strokes, redoStack]);
 
   // Web Socket listeners
   useEffect(() => {
@@ -417,25 +428,25 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   };
 
   // Local Undo/Redo/Clear
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     if (strokes.length === 0) return;
 
     // Find last stroke drawn by this local user
-    const localId = socket.id || 'local';
-    const lastUserStrokeIdx = [...strokes].reverse().findIndex((s) => s.userId === localId);
+    const isLocal = (s: Stroke) => s.userId === socket.id || s.userId === 'local';
+    const lastUserStrokeIdx = [...strokes].reverse().findIndex(isLocal);
     if (lastUserStrokeIdx === -1) return; // none of our strokes are on board
 
     const realIdx = strokes.length - 1 - lastUserStrokeIdx;
     const strokeToUndo = strokes[realIdx];
-
     const nextStrokes = strokes.filter((_, idx) => idx !== realIdx);
+    
     setStrokes(nextStrokes);
     setRedoStack((prev) => [strokeToUndo, ...prev]);
 
     socket.emit('undo-stroke', { roomId, strokes: nextStrokes });
-  };
+  }, [strokes, redoStack, socket.id, roomId]);
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     if (redoStack.length === 0) return;
     const strokeToRestore = redoStack[0];
     const nextRedo = redoStack.slice(1);
@@ -445,7 +456,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setRedoStack(nextRedo);
 
     socket.emit('draw-stroke', { roomId, stroke: strokeToRestore });
-  };
+  }, [strokes, redoStack, roomId]);
 
   const handleClear = () => {
     setStrokes([]);
@@ -616,7 +627,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onUndo={handleUndo}
           onRedo={handleRedo}
           onClear={handleClear}
-          canUndo={strokes.some((s) => s.userId === (socket.id || 'local'))}
+          canUndo={strokes.some((s) => s.userId === socket.id || s.userId === 'local')}
           canRedo={redoStack.length > 0}
         />
       </div>

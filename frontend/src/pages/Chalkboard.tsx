@@ -64,6 +64,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const transformStart = useRef<Point>({ x: 0, y: 0 });
   const initialTransformBox = useRef<Rect | null>(null);
   const initialSelectedStrokes = useRef<Stroke[]>([]);
+  const clipboardRef = useRef<Stroke[]>([]);
   const [activeColor, setActiveColor] = useState<string>('#ffffff');
   const [brushSize, setBrushSize] = useState<number>(8);
   const [brushIntensity, setBrushIntensity] = useState<number>(0.85);
@@ -281,6 +282,76 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, selectedStrokeIds, socket, roomId]);
 
+  const handleCopy = useCallback(() => {
+    if (selectedStrokeIds.length === 0) return;
+    const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
+    clipboardRef.current = selected;
+  }, [strokes, selectedStrokeIds]);
+
+  const handleCut = useCallback(() => {
+    if (selectedStrokeIds.length === 0) return;
+    const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
+    clipboardRef.current = selected;
+
+    const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));
+    setStrokes(updated);
+    setSelectedStrokeIds([]);
+    setTransformBox(null);
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }, [strokes, selectedStrokeIds, socket, roomId]);
+
+  const handlePaste = useCallback(() => {
+    if (clipboardRef.current.length === 0) return;
+
+    const offset = 20 / zoom;
+    const pastedStrokes: Stroke[] = clipboardRef.current.map(s => {
+      const newId = `${socket.id}-${Date.now()}-${Math.random()}`;
+      return {
+        ...s,
+        id: newId,
+        userId: socket.id || 'local',
+        points: s.points.map(p => ({ x: p.x + offset, y: p.y + offset }))
+      };
+    });
+
+    const updated = [...strokes, ...pastedStrokes];
+    setStrokes(updated);
+
+    const newIds = pastedStrokes.map(s => s.id);
+    setSelectedStrokeIds(newIds);
+    setTransformBox(getCombinedBoundingBox(pastedStrokes));
+
+    // Update clipboardRef to reference the pasted strokes so subsequent pastes offset consecutively
+    clipboardRef.current = pastedStrokes;
+
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }, [strokes, socket, roomId, zoom]);
+
+  const handleDuplicate = useCallback(() => {
+    if (selectedStrokeIds.length === 0) return;
+    const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
+    const offset = 20 / zoom;
+    
+    const duplicated: Stroke[] = selected.map(s => {
+      const newId = `${socket.id}-${Date.now()}-${Math.random()}`;
+      return {
+        ...s,
+        id: newId,
+        userId: socket.id || 'local',
+        points: s.points.map(p => ({ x: p.x + offset, y: p.y + offset }))
+      };
+    });
+
+    const updated = [...strokes, ...duplicated];
+    setStrokes(updated);
+
+    const newIds = duplicated.map(s => s.id);
+    setSelectedStrokeIds(newIds);
+    setTransformBox(getCombinedBoundingBox(duplicated));
+
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }, [strokes, selectedStrokeIds, socket, roomId, zoom]);
+
   // Keyboard shortcuts and Spacebar pan listeners
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -300,6 +371,24 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         }
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         handleRedo();
+      }
+
+      // Keyboard Copy / Paste / Cut / Duplicate shortcuts
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
+        const key = e.key.toLowerCase();
+        if (key === 'c' && selectedStrokeIds.length > 0) {
+          e.preventDefault();
+          handleCopy();
+        } else if (key === 'v') {
+          e.preventDefault();
+          handlePaste();
+        } else if (key === 'x' && selectedStrokeIds.length > 0) {
+          e.preventDefault();
+          handleCut();
+        } else if (key === 'd' && selectedStrokeIds.length > 0) {
+          e.preventDefault();
+          handleDuplicate();
+        }
       }
 
       // Selection size shortcuts
@@ -343,7 +432,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [strokes, redoStack, setActiveTool, selectedStrokeIds, handleIncreaseSize, handleDecreaseSize]);
+  }, [strokes, redoStack, setActiveTool, selectedStrokeIds, handleIncreaseSize, handleDecreaseSize, handleCopy, handleCut, handlePaste, handleDuplicate]);
 
   // Web Socket listeners
   useEffect(() => {
@@ -534,8 +623,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (activeTool === 'select') {
       // Check if clicking inside transform box or handles
       if (transformBox) {
-        const handleSize = 10 / zoom;
-        const edgeTolerance = 8 / zoom;
+        const handleSize = 15 / zoom;
+        const edgeTolerance = 10 / zoom;
         
         const inResizeTL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
           pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
@@ -556,10 +645,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           pos.y >= transformBox.minY - edgeTolerance && pos.y <= transformBox.maxY + edgeTolerance;
           
         const onTopEdge = Math.abs(pos.y - transformBox.minY) <= edgeTolerance &&
-          pos.x >= transformBox.minX - edgeTolerance && Math.max(transformBox.minX, pos.x) <= transformBox.maxX + edgeTolerance;
+          pos.x >= transformBox.minX - edgeTolerance && pos.x <= transformBox.maxX + edgeTolerance;
           
         const onBottomEdge = Math.abs(pos.y - transformBox.maxY) <= edgeTolerance &&
-          pos.x >= transformBox.minX - edgeTolerance && Math.max(transformBox.minX, pos.x) <= transformBox.maxX + edgeTolerance;
+          pos.x >= transformBox.minX - edgeTolerance && pos.x <= transformBox.maxX + edgeTolerance;
 
         let mode: 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'move' | null = null;
         if (inResizeTL) mode = 'resize-tl';
@@ -661,8 +750,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
       // Hover detection when activeTool === 'select' and not dragging
       if (transformBox) {
-        const handleSize = 10 / zoom;
-        const edgeTolerance = 8 / zoom;
+        const handleSize = 15 / zoom;
+        const edgeTolerance = 10 / zoom;
 
         const inResizeTL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
           pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
@@ -683,10 +772,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           pos.y >= transformBox.minY - edgeTolerance && pos.y <= transformBox.maxY + edgeTolerance;
           
         const onTopEdge = Math.abs(pos.y - transformBox.minY) <= edgeTolerance &&
-          pos.x >= transformBox.minX - edgeTolerance && Math.max(transformBox.minX, pos.x) <= transformBox.maxX + edgeTolerance;
+          pos.x >= transformBox.minX - edgeTolerance && pos.x <= transformBox.maxX + edgeTolerance;
           
         const onBottomEdge = Math.abs(pos.y - transformBox.maxY) <= edgeTolerance &&
-          pos.x >= transformBox.minX - edgeTolerance && Math.max(transformBox.minX, pos.x) <= transformBox.maxX + edgeTolerance;
+          pos.x >= transformBox.minX - edgeTolerance && pos.x <= transformBox.maxX + edgeTolerance;
 
         let hover: typeof hoveredHandle = null;
         if (inResizeTL) hover = 'resize-tl';
@@ -919,6 +1008,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             }}
             onIncreaseSize={handleIncreaseSize}
             onDecreaseSize={handleDecreaseSize}
+            onCopy={handleCopy}
+            onDuplicate={handleDuplicate}
           />
         )}
 

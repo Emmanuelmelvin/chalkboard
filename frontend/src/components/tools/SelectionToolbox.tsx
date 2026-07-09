@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, X, Plus, Minus } from 'lucide-react';
+import { Trash2, X, Plus, Minus, Copy, SquareStack } from 'lucide-react';
 import ColorPicker from './ColorPicker';
 import Card from '../ui/Card';
 
@@ -12,6 +12,8 @@ interface SelectionToolboxProps {
   onDeselect: () => void;
   onIncreaseSize: () => void;
   onDecreaseSize: () => void;
+  onCopy: () => void;
+  onDuplicate: () => void;
 }
 
 const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
@@ -23,6 +25,8 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   onDeselect,
   onIncreaseSize,
   onDecreaseSize,
+  onCopy,
+  onDuplicate,
 }) => {
   return (
     <div
@@ -98,9 +102,42 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           }}
         />
 
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ fontSize: '12px', color: '#cbd5e1' }}>Edit</span>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              type="button"
+              className="action-stick"
+              title="Copy (Ctrl+C)"
+              onClick={onCopy}
+              style={{ width: '32px', height: '32px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Copy size={14} />
+            </button>
+            <button
+              type="button"
+              className="action-stick"
+              title="Duplicate (Ctrl+D)"
+              onClick={onDuplicate}
+              style={{ width: '32px', height: '32px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <SquareStack size={14} />
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            width: '1px',
+            height: '40px',
+            background: 'rgba(255,255,255,0.1)',
+            margin: '0 8px',
+          }}
+        />
+
         <button
           className="action-stick"
-          title="Delete Selection"
+          title="Delete Selection (Ctrl+X)"
           onClick={onDelete}
           style={{ width: '40px', height: '40px' }}
         >

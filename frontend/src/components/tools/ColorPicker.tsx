@@ -19,9 +19,9 @@ export const CHALK_COLORS: ChalkColor[] = [
 ];
 
 interface ColorPickerProps {
-  activeTool: 'chalk' | 'eraser' | 'pan';
+  activeTool: 'chalk' | 'eraser' | 'pan' | 'select';
   activeColor: string;
-  onToolChange: (tool: 'chalk' | 'eraser' | 'pan') => void;
+  onToolChange: (tool: 'chalk' | 'eraser' | 'pan' | 'select') => void;
   onColorChange: (color: string) => void;
 }
 

@@ -2,8 +2,8 @@ import React from 'react';
 import { Hand } from 'lucide-react';
 
 interface HandToolProps {
-  activeTool: 'chalk' | 'eraser' | 'pan';
-  onToolChange: (tool: 'chalk' | 'eraser' | 'pan') => void;
+  activeTool: 'chalk' | 'eraser' | 'pan' | 'select';
+  onToolChange: (tool: 'chalk' | 'eraser' | 'pan' | 'select') => void;
 }
 
 const HandTool: React.FC<HandToolProps> = ({ activeTool, onToolChange }) => {

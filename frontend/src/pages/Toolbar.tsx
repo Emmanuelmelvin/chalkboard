@@ -27,12 +27,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 }) => {
   const [showSettings, setShowSettings] = useState(false);
 
-  // Close settings when tool is switched away from chalk
-  useEffect(() => {
+  const [prevActiveTool, setPrevActiveTool] = useState(activeTool);
+
+  if (activeTool !== prevActiveTool) {
+    setPrevActiveTool(activeTool);
     if (activeTool !== 'chalk') {
       setShowSettings(false);
     }
-  }, [activeTool]);
+  }
 
   return (
     <div className="bottom-toolbar-container">

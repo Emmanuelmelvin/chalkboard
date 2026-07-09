@@ -59,7 +59,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [selectionMarquee, setSelectionMarquee] = useState<Rect | null>(null);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [transformBox, setTransformBox] = useState<Rect | null>(null);
-  const [transformMode, setTransformMode] = useState<'move' | 'resize-br' | null>(null);
+  const [transformMode, setTransformMode] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | null>(null);
   const transformStart = useRef<Point>({ x: 0, y: 0 });
   const initialTransformBox = useRef<Rect | null>(null);
   const initialSelectedStrokes = useRef<Stroke[]>([]);
@@ -85,7 +85,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   // Collaborators & Cursors
   const [collaborators, setCollaborators] = useState<Record<string, Collaborator>>({});
   const [isCopied, setIsCopied] = useState<boolean>(false);
-  const userCursorColor = useRef<string>(getRandomColor());
+  const [userCursorColor] = useState<string>(() => getRandomColor());
 
   // Eraser dust puff effects
   const [dustPuffs, setDustPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
@@ -154,11 +154,26 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         transformBox.maxX - transformBox.minX,
         transformBox.maxY - transformBox.minY
       );
-      // Resize Handle BR
+      // Resize Handles (TL, TR, BL, BR)
       ctx.fillStyle = '#fff';
       const hs = 6 / zoom;
+      
+      // TL
+      ctx.fillRect(transformBox.minX - hs, transformBox.minY - hs, hs * 2, hs * 2);
+      ctx.strokeRect(transformBox.minX - hs, transformBox.minY - hs, hs * 2, hs * 2);
+      
+      // TR
+      ctx.fillRect(transformBox.maxX - hs, transformBox.minY - hs, hs * 2, hs * 2);
+      ctx.strokeRect(transformBox.maxX - hs, transformBox.minY - hs, hs * 2, hs * 2);
+      
+      // BL
+      ctx.fillRect(transformBox.minX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
+      ctx.strokeRect(transformBox.minX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
+      
+      // BR
       ctx.fillRect(transformBox.maxX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
       ctx.strokeRect(transformBox.maxX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
+      
       ctx.restore();
     }
 
@@ -187,7 +202,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
 
     ctx.restore();
-  }, [strokes, zoom, panOffset]);
+  }, [strokes, zoom, panOffset, selectionMarquee, transformBox, selectedStrokeIds]);
 
   // RequestAnimationFrame draw loop trigger
   useEffect(() => {
@@ -201,6 +216,69 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     window.addEventListener('resize', resizeCanvas);
     return () => window.removeEventListener('resize', resizeCanvas);
   }, [resizeCanvas]);
+
+  // Local Undo/Redo/Clear
+  const handleUndo = useCallback(() => {
+    if (strokes.length === 0) return;
+
+    // Find last stroke drawn by this local user
+    const isLocal = (s: Stroke) => s.userId === socket.id || s.userId === 'local';
+    const lastUserStrokeIdx = [...strokes].reverse().findIndex(isLocal);
+    if (lastUserStrokeIdx === -1) return; // none of our strokes are on board
+
+    const realIdx = strokes.length - 1 - lastUserStrokeIdx;
+    const strokeToUndo = strokes[realIdx];
+    const nextStrokes = strokes.filter((_, idx) => idx !== realIdx);
+
+    setStrokes(nextStrokes);
+    setRedoStack((prev) => [strokeToUndo, ...prev]);
+
+    socket.emit('undo-stroke', { roomId, strokes: nextStrokes });
+  }, [strokes, redoStack, socket, roomId]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const strokeToRestore = redoStack[0];
+    const nextRedo = redoStack.slice(1);
+
+    const nextStrokes = [...strokes, strokeToRestore];
+    setStrokes(nextStrokes);
+    setRedoStack(nextRedo);
+
+    socket.emit('draw-stroke', { roomId, stroke: strokeToRestore });
+  }, [strokes, redoStack, roomId, socket]);
+
+  const handleClear = () => {
+    setStrokes([]);
+    setRedoStack([]);
+    setSelectedStrokeIds([]);
+    setTransformBox(null);
+    socket.emit('clear-board', { roomId });
+  };
+
+  const handleIncreaseSize = useCallback(() => {
+    if (selectedStrokeIds.length === 0) return;
+    const updated = strokes.map(s => {
+      if (selectedStrokeIds.includes(s.id)) {
+        return { ...s, size: Math.min(100, s.size + 2) };
+      }
+      return s;
+    });
+    setStrokes(updated);
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }, [strokes, selectedStrokeIds, socket, roomId]);
+
+  const handleDecreaseSize = useCallback(() => {
+    if (selectedStrokeIds.length === 0) return;
+    const updated = strokes.map(s => {
+      if (selectedStrokeIds.includes(s.id)) {
+        return { ...s, size: Math.max(1, s.size - 2) };
+      }
+      return s;
+    });
+    setStrokes(updated);
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }, [strokes, selectedStrokeIds, socket, roomId]);
 
   // Keyboard shortcuts and Spacebar pan listeners
   useEffect(() => {
@@ -221,6 +299,17 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         }
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         handleRedo();
+      }
+
+      // Selection size shortcuts
+      if (selectedStrokeIds.length > 0 && document.activeElement?.tagName !== 'INPUT') {
+        if (e.key === ']' || e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          handleIncreaseSize();
+        } else if (e.key === '[' || e.key === '-') {
+          e.preventDefault();
+          handleDecreaseSize();
+        }
       }
 
       // Keyboard tool selection (Ctrl + key or Cmd + key)
@@ -253,12 +342,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [strokes, redoStack, setActiveTool]);
+  }, [strokes, redoStack, setActiveTool, selectedStrokeIds, handleIncreaseSize, handleDecreaseSize]);
 
   // Web Socket listeners
   useEffect(() => {
     // 1. Connection & room info
-    socket.emit('join-room', { roomId, userName, color: userCursorColor.current });
+    socket.emit('join-room', { roomId, userName, color: userCursorColor });
 
     // 2. Stroke history catch-up
     socket.on('room-history', (historyStrokes: Stroke[]) => {
@@ -445,22 +534,32 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       // Check if clicking inside transform box or handles
       if (transformBox) {
         const handleSize = 10 / zoom;
+        
+        const inResizeTL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
+          pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
+          
+        const inResizeTR = pos.x >= transformBox.maxX - handleSize && pos.x <= transformBox.maxX + handleSize &&
+          pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
+          
+        const inResizeBL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
+          pos.y >= transformBox.maxY - handleSize && pos.y <= transformBox.maxY + handleSize;
+          
         const inResizeBR = pos.x >= transformBox.maxX - handleSize && pos.x <= transformBox.maxX + handleSize &&
           pos.y >= transformBox.maxY - handleSize && pos.y <= transformBox.maxY + handleSize;
 
-        if (inResizeBR) {
-          setTransformMode('resize-br');
-          transformStart.current = pos;
-          initialTransformBox.current = { ...transformBox };
-          initialSelectedStrokes.current = strokes.filter(s => selectedStrokeIds.includes(s.id));
-          canvas.setPointerCapture(e.pointerId);
-          return;
+        let mode: 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'move' | null = null;
+        if (inResizeTL) mode = 'resize-tl';
+        else if (inResizeTR) mode = 'resize-tr';
+        else if (inResizeBL) mode = 'resize-bl';
+        else if (inResizeBR) mode = 'resize-br';
+        else {
+          const inBox = pos.x >= transformBox.minX && pos.x <= transformBox.maxX &&
+            pos.y >= transformBox.minY && pos.y <= transformBox.maxY;
+          if (inBox) mode = 'move';
         }
 
-        const inBox = pos.x >= transformBox.minX && pos.x <= transformBox.maxX &&
-          pos.y >= transformBox.minY && pos.y <= transformBox.maxY;
-        if (inBox) {
-          setTransformMode('move');
+        if (mode) {
+          setTransformMode(mode);
           transformStart.current = pos;
           initialTransformBox.current = { ...transformBox };
           initialSelectedStrokes.current = strokes.filter(s => selectedStrokeIds.includes(s.id));
@@ -504,6 +603,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           newBox.maxY += dy;
         } else if (transformMode === 'resize-br') {
           newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + dx);
+          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + dy);
+        } else if (transformMode === 'resize-tl') {
+          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + dx);
+          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + dy);
+        } else if (transformMode === 'resize-tr') {
+          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + dx);
+          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + dy);
+        } else if (transformMode === 'resize-bl') {
+          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + dx);
           newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + dy);
         }
 
@@ -602,48 +710,24 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setPanOffset(nextPanOffset);
   };
 
-  // Local Undo/Redo/Clear
-  const handleUndo = useCallback(() => {
-    if (strokes.length === 0) return;
 
-    // Find last stroke drawn by this local user
-    const isLocal = (s: Stroke) => s.userId === socket.id || s.userId === 'local';
-    const lastUserStrokeIdx = [...strokes].reverse().findIndex(isLocal);
-    if (lastUserStrokeIdx === -1) return; // none of our strokes are on board
-
-    const realIdx = strokes.length - 1 - lastUserStrokeIdx;
-    const strokeToUndo = strokes[realIdx];
-    const nextStrokes = strokes.filter((_, idx) => idx !== realIdx);
-
-    setStrokes(nextStrokes);
-    setRedoStack((prev) => [strokeToUndo, ...prev]);
-
-    socket.emit('undo-stroke', { roomId, strokes: nextStrokes });
-  }, [strokes, redoStack, socket.id, roomId]);
-
-  const handleRedo = useCallback(() => {
-    if (redoStack.length === 0) return;
-    const strokeToRestore = redoStack[0];
-    const nextRedo = redoStack.slice(1);
-
-    const nextStrokes = [...strokes, strokeToRestore];
-    setStrokes(nextStrokes);
-    setRedoStack(nextRedo);
-
-    socket.emit('draw-stroke', { roomId, stroke: strokeToRestore });
-  }, [strokes, redoStack, roomId]);
-
-  const handleClear = () => {
-    setStrokes([]);
-    setRedoStack([]);
-    setSelectedStrokeIds([]);
-    setTransformBox(null);
-    socket.emit('clear-board', { roomId });
-  };
 
   const resetPanZoom = () => {
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
+  };
+
+  // Dynamically determine canvas cursor
+  const getCanvasCursor = () => {
+    if (isPanning) return 'grabbing';
+    if (spacePressed || activeTool === 'pan') return 'grab';
+    if (activeTool === 'select') {
+      if (transformMode === 'move') return 'move';
+      if (transformMode === 'resize-tl' || transformMode === 'resize-br') return 'nwse-resize';
+      if (transformMode === 'resize-tr' || transformMode === 'resize-bl') return 'nesw-resize';
+      return 'default';
+    }
+    return 'crosshair';
   };
 
   return (
@@ -709,7 +793,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       <canvas
         ref={canvasRef}
         className="chalk-canvas"
-        style={{ cursor: isPanning ? 'grabbing' : (spacePressed || activeTool === 'pan') ? 'grab' : 'crosshair' }}
+        style={{ cursor: getCanvasCursor() }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -740,6 +824,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               setSelectedStrokeIds([]);
               setTransformBox(null);
             }}
+            onIncreaseSize={handleIncreaseSize}
+            onDecreaseSize={handleDecreaseSize}
           />
         )}
 
@@ -793,7 +879,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               Classmates ({Object.keys(collaborators).length + 1})
             </h3>
             <div className="user-item">
-              <span className="user-dot" style={{ color: userCursorColor.current, backgroundColor: userCursorColor.current }} />
+              <span className="user-dot" style={{ color: userCursorColor, backgroundColor: userCursorColor }} />
               <span className="user-name">{userName} (You)</span>
             </div>
             {Object.entries(collaborators).map(([id, coll]) => (

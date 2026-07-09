@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import Lobby from '@/components/Lobby';
-import Chalkboard from '@/components/Chalkboard';
+import { Route, Switch, useLocation } from 'wouter';
+import Lobby from '@/pages/Lobby';
+import Chalkboard from '@/pages/Chalkboard';
 
 // Initialize a single socket client that can be activated on demand
 const socket: Socket = io({
@@ -11,57 +12,71 @@ const socket: Socket = io({
 
 function App() {
   const [userName, setUserName] = useState<string | null>(null);
-  const [roomId, setRoomId] = useState<string | null>(null);
-  const [initialRoomId, setInitialRoomId] = useState<string | null>(null);
-
-  // Check URL query parameters for an active invite code on load
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const roomParam = params.get('room');
-    if (roomParam) {
-      setInitialRoomId(roomParam.trim().toLowerCase());
-    }
-  }, []);
+  const [, setLocation] = useLocation();
 
   const handleJoinRoom = (name: string, room: string) => {
     setUserName(name);
-    setRoomId(room);
-
-    // Update browser URL query string without reloading
-    window.history.pushState(null, '', `?room=${room}`);
 
     // Connect to WebSocket backend
     socket.connect();
+
+    // Redirect to the chalkboard room path
+    setLocation(`/room/${room}`);
   };
 
   const handleLeaveRoom = () => {
-    if (roomId) {
-      socket.emit('leave-room', { roomId, userName });
-    }
     socket.disconnect();
-    setRoomId(null);
-    setInitialRoomId(null);
+    setUserName(null);
 
-    // Remove the room query string from the URL
-    window.history.pushState(null, '', window.location.pathname);
+    // Redirect back to the landing lobby
+    setLocation('/');
   };
 
   return (
-    <>
-      {roomId && userName ? (
-        <Chalkboard
-          roomId={roomId}
-          userName={userName}
-          socket={socket}
-          onLeaveRoom={handleLeaveRoom}
-        />
-      ) : (
+    <Switch>
+      {/* Dynamic room route */}
+      <Route path="/room/:roomId">
+        {(params: any) => {
+          const roomId = params.roomId.toLowerCase();
+
+          if (userName) {
+            return (
+              <Chalkboard
+                roomId={roomId}
+                userName={userName}
+                socket={socket}
+                onLeaveRoom={handleLeaveRoom}
+              />
+            );
+          } else {
+            // Guard: If the user directly browses to a room URL without setting their name,
+            // render the Lobby to capture their nickname for this specific room code.
+            return (
+              <Lobby
+                initialRoomId={roomId}
+                onJoinRoom={handleJoinRoom}
+              />
+            );
+          }
+        }}
+      </Route>
+
+      {/* Default lobby route */}
+      <Route path="/">
         <Lobby
-          initialRoomId={initialRoomId}
+          initialRoomId={null}
           onJoinRoom={handleJoinRoom}
         />
-      )}
-    </>
+      </Route>
+
+      {/* Catch-all fallback */}
+      <Route>
+        <Lobby
+          initialRoomId={null}
+          onJoinRoom={handleJoinRoom}
+        />
+      </Route>
+    </Switch>
   );
 }
 

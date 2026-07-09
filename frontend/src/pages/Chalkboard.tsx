@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Socket } from 'socket.io-client';
 import { Copy, Check, Users, Maximize2 } from 'lucide-react';
-import Toolbar from '@/components/Toolbar';
+import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 
@@ -162,7 +162,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   ) => {
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
-    
+
     // Draw thick overlapping circles to clear the canvas
     const dist = Math.hypot(x1 - x0, y1 - y0);
     const steps = Math.max(Math.ceil(dist / 3), 1);
@@ -498,7 +498,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   // Local Undo/Redo/Clear
   const handleUndo = () => {
     if (strokes.length === 0) return;
-    
+
     // Find last stroke drawn by this local user
     const lastUserStrokeIdx = [...strokes].reverse().findIndex((s) => s.userId === socket.id);
     if (lastUserStrokeIdx === -1) return; // none of our strokes are on board

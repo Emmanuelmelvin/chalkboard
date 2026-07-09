@@ -222,6 +222,24 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         handleRedo();
       }
+
+      // Keyboard tool selection (Ctrl + key or Cmd + key)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === 'b' || key === 'c') {
+          e.preventDefault();
+          setActiveTool('chalk');
+        } else if (key === 'e') {
+          e.preventDefault();
+          setActiveTool('eraser');
+        } else if (key === 'm' || key === 'h') {
+          e.preventDefault();
+          setActiveTool('pan');
+        } else if (key === 's') {
+          e.preventDefault();
+          setActiveTool('select');
+        }
+      }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
@@ -235,7 +253,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [strokes, redoStack]);
+  }, [strokes, redoStack, setActiveTool]);
 
   // Web Socket listeners
   useEffect(() => {

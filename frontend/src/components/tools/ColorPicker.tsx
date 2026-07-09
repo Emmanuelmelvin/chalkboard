@@ -32,7 +32,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   onColorChange,
 }) => {
   return (
-    <div style={{ width: '100%' }}>
+    <div className="color-picker-container">
       <input
         type="color"
         className="native-color-picker"

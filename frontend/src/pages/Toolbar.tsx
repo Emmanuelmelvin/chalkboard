@@ -1,9 +1,6 @@
-import React, { useState } from 'react';
-import { PenTool, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { PenTool, Eraser, Hand, MousePointer2 } from 'lucide-react';
 import ColorPicker from '@/components/tools/ColorPicker';
-import Eraser from '@/components/tools/Eraser';
-import HandTool from '@/components/tools/HandTool';
-import SelectTool from '@/components/tools/SelectTool';
 import BrushSize from '@/components/tools/BrushSize';
 import BrushIntensity from '@/components/tools/BrushIntensity';
 
@@ -28,71 +25,107 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onBrushSizeChange,
   onIntensityChange,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
-  if (!isOpen) {
-    return (
-      <button className="toolbar-toggle-btn" onClick={() => setIsOpen(true)} title="Open Tools">
-        <PenTool size={26} />
-      </button>
-    );
-  }
+  // Close settings when tool is switched away from chalk
+  useEffect(() => {
+    if (activeTool !== 'chalk') {
+      setShowSettings(false);
+    }
+  }, [activeTool]);
 
   return (
-    <>
-      <div className="toolbar-modal-overlay" onClick={() => setIsOpen(false)} />
-      <div className="toolbar-modal">
-        <div className="toolbar-modal-header">
-          <h3>Blackboard Tools</h3>
-          <button className="toolbar-close-btn" onClick={() => setIsOpen(false)} title="Close Tools">
-            <X size={20} />
+    <div className="bottom-toolbar-container">
+      <div className="bottom-toolbar-card">
+        {/* Chalk/Brush wrapper to manage hover/click */}
+        <div
+          className="chalk-tool-wrapper"
+          onMouseEnter={() => {
+            if (activeTool === 'chalk') {
+              setShowSettings(true);
+            }
+          }}
+          onMouseLeave={() => setShowSettings(false)}
+          style={{ display: 'flex', alignItems: 'center', position: 'relative' }}
+        >
+          <button
+            type="button"
+            className={`action-stick ${activeTool === 'chalk' ? 'active' : ''}`}
+            onClick={() => {
+              if (activeTool !== 'chalk') {
+                onToolChange('chalk');
+                setShowSettings(true);
+              } else {
+                setShowSettings((prev) => !prev);
+              }
+            }}
+            title="Chalk (Ctrl+B / Ctrl+C)"
+          >
+            <PenTool size={20} />
           </button>
+
+          {showSettings && activeTool === 'chalk' && (
+            <div className="chalk-settings-flyout">
+              <div className="settings-section">
+                <span className="settings-label">Color</span>
+                <ColorPicker
+                  activeTool={activeTool}
+                  activeColor={activeColor}
+                  onToolChange={onToolChange}
+                  onColorChange={onColorChange}
+                />
+              </div>
+              <div className="settings-divider" />
+              <div className="settings-section">
+                <span className="settings-label">Size</span>
+                <BrushSize brushSize={brushSize} onBrushSizeChange={onBrushSizeChange} />
+              </div>
+              <div className="settings-divider" />
+              <div className="settings-section">
+                <span className="settings-label">Intensity</span>
+                <BrushIntensity brushIntensity={brushIntensity} onIntensityChange={onIntensityChange} />
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="toolbar-section">
-          <div className="toolbar-section-title">Chalk Color</div>
-          <div className="toolbar-row" style={{ paddingTop: '4px' }}>
-            <ColorPicker
-              activeTool={activeTool}
-              activeColor={activeColor}
-              onToolChange={onToolChange}
-              onColorChange={onColorChange}
-            />
-          </div>
-        </div>
+        <button
+          type="button"
+          className={`action-stick ${activeTool === 'eraser' ? 'active' : ''}`}
+          onClick={() => {
+            onToolChange('eraser');
+            setShowSettings(false);
+          }}
+          title="Eraser (Ctrl+E)"
+        >
+          <Eraser size={20} />
+        </button>
 
-        <div className="toolbar-section">
-          <div className="toolbar-section-title">Eraser</div>
-          <div className="toolbar-row">
-            <Eraser activeTool={activeTool} onToolChange={onToolChange} />
-          </div>
-        </div>
+        <button
+          type="button"
+          className={`action-stick ${activeTool === 'pan' ? 'active' : ''}`}
+          onClick={() => {
+            onToolChange('pan');
+            setShowSettings(false);
+          }}
+          title="Move Board (Ctrl+H / Ctrl+M)"
+        >
+          <Hand size={20} />
+        </button>
 
-        <div className="toolbar-section">
-          <div className="toolbar-section-title">Move</div>
-          <div className="toolbar-row">
-            <HandTool activeTool={activeTool} onToolChange={onToolChange} />
-          </div>
-        </div>
-
-        <div className="toolbar-section">
-          <div className="toolbar-section-title">Select</div>
-          <div className="toolbar-row">
-            <SelectTool activeTool={activeTool} onToolChange={onToolChange} />
-          </div>
-        </div>
-
-        <div className="toolbar-section">
-          <div className="toolbar-section-title">Brush Size</div>
-          <BrushSize brushSize={brushSize} onBrushSizeChange={onBrushSizeChange} />
-        </div>
-
-        <div className="toolbar-section">
-          <div className="toolbar-section-title">Chalk Intensity</div>
-          <BrushIntensity brushIntensity={brushIntensity} onIntensityChange={onIntensityChange} />
-        </div>
+        <button
+          type="button"
+          className={`action-stick ${activeTool === 'select' ? 'active' : ''}`}
+          onClick={() => {
+            onToolChange('select');
+            setShowSettings(false);
+          }}
+          title="Select Items (Ctrl+S)"
+        >
+          <MousePointer2 size={20} />
+        </button>
       </div>
-    </>
+    </div>
   );
 };
 

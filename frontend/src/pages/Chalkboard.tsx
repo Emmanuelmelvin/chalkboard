@@ -69,24 +69,36 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [dustPuffs, setDustPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
   const dustIdCounter = useRef<number>(0);
 
-  // Resize handler
+  // devicePixelRatio kept in a ref so it is stable across renders
+  const dprRef = useRef<number>(window.devicePixelRatio || 1);
+
+  // Resize handler — sizes the pixel buffer from the canvas element's OWN
+  // bounding rect (not the parent's, which includes the 24px wood border).
+  // We also multiply by devicePixelRatio so the buffer is sharp on retina.
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.parentElement?.getBoundingClientRect();
-    canvas.width = rect?.width || window.innerWidth;
-    canvas.height = rect?.height || window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+    dprRef.current = dpr;
+    const rect = canvas.getBoundingClientRect();   // ← canvas own rect, not parent
+    canvas.width  = Math.round(rect.width  * dpr);
+    canvas.height = Math.round(rect.height * dpr);
   }, []);
 
-  // Helper to convert screen mouse coordinates to canvas absolute coordinates
+  // Single shared function: screen (clientX/Y) → logical canvas coordinates.
+  // Subtracts the canvas's own left/top, then divides by dpr so the result
+  // lines up with the pan/zoom transform applied in drawBoard.
   const screenToCanvas = useCallback(
     (screenX: number, screenY: number): Point => {
       const canvas = canvasRef.current;
       if (!canvas) return { x: 0, y: 0 };
       const rect = canvas.getBoundingClientRect();
+      // cssX/cssY are in CSS pixels (same space as panOffset / zoom)
+      const cssX = screenX - rect.left;
+      const cssY = screenY - rect.top;
       return {
-        x: (screenX - rect.left - panOffset.x) / zoom,
-        y: (screenY - rect.top - panOffset.y) / zoom,
+        x: (cssX - panOffset.x) / zoom,
+        y: (cssY - panOffset.y) / zoom,
       };
     },
     [panOffset, zoom]
@@ -103,8 +115,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
-    // Apply pan & zoom transform
-    ctx.setTransform(zoom, 0, 0, zoom, panOffset.x, panOffset.y);
+    // Scale by dpr first so every logical unit maps to the correct number of
+    // physical pixels, then apply pan & zoom in CSS-pixel space.
+    const dpr = dprRef.current;
+    ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, panOffset.x * dpr, panOffset.y * dpr);
 
     // Draw selection marquee
     if (selectionMarquee) {

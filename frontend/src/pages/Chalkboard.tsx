@@ -12,6 +12,7 @@ import {
   isStrokeInRect,
   transformStrokes
 } from '@/utils/drawing';
+import { addAlpha } from '@/utils/colors';
 import type { 
   Rect,
   Point,
@@ -42,14 +43,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const initialSelectedStrokes = useRef<Stroke[]>([]);
   const clipboardRef = useRef<Stroke[]>([]);
   const [activeColor, setActiveColor] = useState<string>('#ffffff');
-  const [brushSize, setBrushSize] = useState<number>(8);
-  const [brushIntensity, setBrushIntensity] = useState<number>(0.85);
+  const [brushSize, setBrushSize] = useState<number>(5);
+  const [brushIntensity, setBrushIntensity] = useState<number>(1.0);
   const [eraserWidth, setEraserWidth] = useState<number>(40);
   const [eraserHeight, setEraserHeight] = useState<number>(20);
 
   // Navigation (Pan & Zoom)
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState<number>(1);
+  const [zoom, setZoom] = useState<number>(0.5);
   const [isPanning, setIsPanning] = useState<boolean>(false);
   const panStart = useRef<Point>({ x: 0, y: 0 });
 
@@ -174,7 +175,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       ctx.restore();
     }
 
-    // Draw all strokes
+    // Draw all strokes with smooth curves
     strokes.forEach((stroke) => {
       if (stroke.points.length < 1) return;
       const pts = stroke.points;
@@ -182,10 +183,39 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       if (stroke.tool === 'chalk') {
         if (pts.length === 1) {
           drawChalkSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.color, stroke.size, stroke.intensity);
+        } else if (pts.length === 2) {
+          drawChalkSegment(ctx, pts[0].x, pts[0].y, pts[1].x, pts[1].y, stroke.color, stroke.size, stroke.intensity);
         } else {
-          for (let i = 1; i < pts.length; i++) {
-            drawChalkSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.color, stroke.size, stroke.intensity);
+          // Use quadratic bezier curves for smooth interpolation
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length - 1; i++) {
+            const midX = (pts[i].x + pts[i + 1].x) / 2;
+            const midY = (pts[i].y + pts[i + 1].y) / 2;
+            ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
           }
+          // Connect to the last point
+          ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.lineWidth = stroke.size * 1.5;
+          ctx.strokeStyle = addAlpha(stroke.color, stroke.intensity ?? 0.85);
+          ctx.stroke();
+          // Subtle texture overlay
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length - 1; i++) {
+            const midX = (pts[i].x + pts[i + 1].x) / 2;
+            const midY = (pts[i].y + pts[i + 1].y) / 2;
+            ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+          }
+          ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+          ctx.lineWidth = stroke.size * 2.2;
+          ctx.strokeStyle = addAlpha(stroke.color, Math.max(0.05, (stroke.intensity ?? 0.85) * 0.25));
+          ctx.setLineDash([1, stroke.size * 0.3]);
+          ctx.stroke();
+          ctx.restore();
         }
       } else {
         if (pts.length === 1) {
@@ -399,6 +429,49 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           e.preventDefault();
           handleDecreaseSize();
         }
+      }
+
+      // Ctrl+Arrow keys: nudge selected objects
+      if ((e.ctrlKey || e.metaKey) && selectedStrokeIds.length > 0 && document.activeElement?.tagName !== 'INPUT') {
+        const nudgeAmount = 5 / zoom;
+        let dx = 0;
+        let dy = 0;
+        if (e.key === 'ArrowUp') { dy = -nudgeAmount; e.preventDefault(); }
+        else if (e.key === 'ArrowDown') { dy = nudgeAmount; e.preventDefault(); }
+        else if (e.key === 'ArrowLeft') { dx = -nudgeAmount; e.preventDefault(); }
+        else if (e.key === 'ArrowRight') { dx = nudgeAmount; e.preventDefault(); }
+
+        if (dx !== 0 || dy !== 0) {
+          const updated = strokes.map(s => {
+            if (selectedStrokeIds.includes(s.id)) {
+              return {
+                ...s,
+                points: s.points.map(p => ({ x: p.x + dx, y: p.y + dy }))
+              };
+            }
+            return s;
+          });
+          setStrokes(updated);
+          // Update transform box
+          if (transformBox) {
+            setTransformBox({
+              minX: transformBox.minX + dx,
+              minY: transformBox.minY + dy,
+              maxX: transformBox.maxX + dx,
+              maxY: transformBox.maxY + dy,
+            });
+          }
+          socket.emit('undo-stroke', { roomId, strokes: updated });
+        }
+      }
+
+      // Arrow keys without Ctrl: pan the canvas
+      if (!(e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
+        const panAmount = 30;
+        if (e.key === 'ArrowUp') { setPanOffset(p => ({ ...p, y: p.y + panAmount })); e.preventDefault(); }
+        else if (e.key === 'ArrowDown') { setPanOffset(p => ({ ...p, y: p.y - panAmount })); e.preventDefault(); }
+        else if (e.key === 'ArrowLeft') { setPanOffset(p => ({ ...p, x: p.x + panAmount })); e.preventDefault(); }
+        else if (e.key === 'ArrowRight') { setPanOffset(p => ({ ...p, x: p.x - panAmount })); e.preventDefault(); }
       }
 
       // Keyboard tool selection (Ctrl + key or Cmd + key)
@@ -1016,6 +1089,17 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             }}
             onIncreaseSize={handleIncreaseSize}
             onDecreaseSize={handleDecreaseSize}
+            onSetSize={(size) => {
+              if (selectedStrokeIds.length === 0) return;
+              const updated = strokes.map(s => {
+                if (selectedStrokeIds.includes(s.id)) {
+                  return { ...s, size: Math.min(100, Math.max(1, size)) };
+                }
+                return s;
+              });
+              setStrokes(updated);
+              socket.emit('undo-stroke', { roomId, strokes: updated });
+            }}
             onCopy={handleCopy}
             onDuplicate={handleDuplicate}
           />

@@ -8,10 +8,9 @@ import {
   SquareStack,
   Scissors,
   ChevronRight,
-  Palette,
   RulerIcon,
 } from 'lucide-react';
-import { CHALK_COLORS } from './ColorPicker';
+import { CHALK_COLORS } from '@/components/tools/ColorPicker';
 
 interface SelectionToolboxProps {
   /** Canvas-space X of the right edge of the transform box in screen coords */
@@ -26,6 +25,7 @@ interface SelectionToolboxProps {
   onDeselect: () => void;
   onIncreaseSize: () => void;
   onDecreaseSize: () => void;
+  onSetSize: (size: number) => void;
   onCopy: () => void;
   onDuplicate: () => void;
   onCut: () => void;
@@ -35,6 +35,7 @@ type SubPanel = 'color' | 'size' | null;
 
 const PANEL_WIDTH = 188;
 const PANEL_MARGIN = 16; // gap from selection box edge to panel
+const RIGHT_EXTRA_OFFSET = 60; // extra offset to the right so the panel doesn't block the selection
 
 const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   boxScreenLeft,
@@ -46,6 +47,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   onDeselect,
   onIncreaseSize,
   onDecreaseSize,
+  onSetSize,
   onCopy,
   onDuplicate,
   onCut,
@@ -61,7 +63,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   const spaceLeft = boxScreenLeft - PANEL_MARGIN;
   const placeRight = spaceRight >= PANEL_WIDTH || spaceRight >= spaceLeft;
   const panelX = placeRight
-    ? boxScreenRight + PANEL_MARGIN
+    ? boxScreenRight + PANEL_MARGIN + RIGHT_EXTRA_OFFSET
     : boxScreenLeft - PANEL_MARGIN - PANEL_WIDTH;
 
   // Clamp vertically so the panel stays on screen
@@ -287,8 +289,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               onChange={(e) => {
                 const v = Number(e.target.value);
                 setBrushSize(v);
-                // fire increase/decrease enough times to approach v
-                // simpler: expose a direct size setter in parent; for now use stepper
+                onSetSize(v);
               }}
             />
             <input
@@ -301,6 +302,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               onChange={(e) => {
                 const v = Math.min(100, Math.max(1, Number(e.target.value)));
                 setBrushSize(v);
+                onSetSize(v);
               }}
             />
           </div>

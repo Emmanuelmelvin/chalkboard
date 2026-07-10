@@ -24,14 +24,16 @@ export const drawChalkSegment = (
   ctx.strokeStyle = addAlpha(color, intensity);
   ctx.stroke();
 
-  // Outer porous texture layer using dotted dash-array
+  // Subtle texture layer - smoother, less dotted appearance
   ctx.beginPath();
   ctx.moveTo(x0, y0);
   ctx.lineTo(x1, y1);
-  ctx.lineWidth = size * 2.5;
-  // Make the outer layer alpha relative to the core intensity
-  ctx.strokeStyle = addAlpha(color, Math.max(0.1, intensity * 0.4));
-  ctx.setLineDash([2, size * 0.8]);
+  ctx.lineWidth = size * 2.2;
+  ctx.strokeStyle = addAlpha(color, Math.max(0.05, intensity * 0.25));
+  // Use a much finer dash pattern for a smoother chalk look
+  ctx.setLineDash([1, size * 0.3]);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.stroke();
 
   ctx.restore();

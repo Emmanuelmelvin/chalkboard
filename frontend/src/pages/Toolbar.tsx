@@ -10,19 +10,27 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   activeColor,
   brushSize,
   brushIntensity,
+  eraserWidth,
+  eraserHeight,
   onToolChange,
   onColorChange,
   onBrushSizeChange,
   onIntensityChange,
+  onEraserWidthChange,
+  onEraserHeightChange,
 }) => {
-  const [showSettings, setShowSettings] = useState(false);
+  const [showChalkSettings, setShowChalkSettings] = useState(false);
+  const [showEraserSettings, setShowEraserSettings] = useState(false);
 
   const [prevActiveTool, setPrevActiveTool] = useState(activeTool);
 
   if (activeTool !== prevActiveTool) {
     setPrevActiveTool(activeTool);
     if (activeTool !== 'chalk') {
-      setShowSettings(false);
+      setShowChalkSettings(false);
+    }
+    if (activeTool !== 'eraser') {
+      setShowEraserSettings(false);
     }
   }
 
@@ -34,10 +42,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           className="chalk-tool-wrapper"
           onMouseEnter={() => {
             if (activeTool === 'chalk') {
-              setShowSettings(true);
+              setShowChalkSettings(true);
             }
           }}
-          onMouseLeave={() => setShowSettings(false)}
+          onMouseLeave={() => setShowChalkSettings(false)}
           style={{ display: 'flex', alignItems: 'center', position: 'relative' }}
         >
           <button
@@ -46,9 +54,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             onClick={() => {
               if (activeTool !== 'chalk') {
                 onToolChange('chalk');
-                setShowSettings(true);
+                setShowChalkSettings(true);
               } else {
-                setShowSettings((prev) => !prev);
+                setShowChalkSettings((prev) => !prev);
               }
             }}
             title="Chalk (Ctrl+B)"
@@ -56,7 +64,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <PenTool size={20} />
           </button>
 
-          {showSettings && activeTool === 'chalk' && (
+          {showChalkSettings && activeTool === 'chalk' && (
             <div className="chalk-settings-flyout">
               <div className="settings-section">
                 <span className="settings-label">Color</span>
@@ -81,24 +89,114 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           )}
         </div>
 
-        <button
-          type="button"
-          className={`action-stick ${activeTool === 'eraser' ? 'active' : ''}`}
-          onClick={() => {
-            onToolChange('eraser');
-            setShowSettings(false);
+        {/* Eraser wrapper to manage hover/click */}
+        <div
+          className="chalk-tool-wrapper"
+          onMouseEnter={() => {
+            if (activeTool === 'eraser') {
+              setShowEraserSettings(true);
+            }
           }}
-          title="Eraser (Ctrl+E)"
+          onMouseLeave={() => setShowEraserSettings(false)}
+          style={{ display: 'flex', alignItems: 'center', position: 'relative' }}
         >
-          <Eraser size={20} />
-        </button>
+          <button
+            type="button"
+            className={`action-stick ${activeTool === 'eraser' ? 'active' : ''}`}
+            onClick={() => {
+              if (activeTool !== 'eraser') {
+                onToolChange('eraser');
+                setShowEraserSettings(true);
+              } else {
+                setShowEraserSettings((prev) => !prev);
+              }
+            }}
+            title="Eraser (Ctrl+E)"
+          >
+            <Eraser size={20} />
+          </button>
+
+          {showEraserSettings && activeTool === 'eraser' && (
+            <div className="chalk-settings-flyout eraser-settings-flyout">
+              <div className="eraser-flyout-header">
+                <span className="eraser-flyout-icon">⬜</span>
+                <span className="eraser-flyout-title">Eraser Size</span>
+              </div>
+              <div className="settings-divider" />
+
+              {/* Eraser Preview */}
+              <div className="eraser-preview-area">
+                <div
+                  className="eraser-preview-rect"
+                  style={{
+                    width: Math.min(eraserWidth, 200),
+                    height: Math.min(eraserHeight, 60),
+                  }}
+                />
+              </div>
+
+              <div className="settings-section">
+                <span className="settings-label">Width — {eraserWidth}px</span>
+                <div className="slider-container">
+                  <input
+                    type="range"
+                    className="slider-input"
+                    min={10}
+                    max={300}
+                    step={5}
+                    value={eraserWidth}
+                    onChange={(e) => onEraserWidthChange(Number(e.target.value))}
+                  />
+                  <input
+                    type="number"
+                    className="number-input"
+                    min={10}
+                    max={300}
+                    value={eraserWidth}
+                    onChange={(e) => {
+                      const v = Math.min(300, Math.max(10, Number(e.target.value)));
+                      onEraserWidthChange(v);
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="settings-divider" />
+              <div className="settings-section">
+                <span className="settings-label">Height — {eraserHeight}px</span>
+                <div className="slider-container">
+                  <input
+                    type="range"
+                    className="slider-input"
+                    min={10}
+                    max={200}
+                    step={5}
+                    value={eraserHeight}
+                    onChange={(e) => onEraserHeightChange(Number(e.target.value))}
+                  />
+                  <input
+                    type="number"
+                    className="number-input"
+                    min={10}
+                    max={200}
+                    value={eraserHeight}
+                    onChange={(e) => {
+                      const v = Math.min(200, Math.max(10, Number(e.target.value)));
+                      onEraserHeightChange(v);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         <button
           type="button"
           className={`action-stick ${activeTool === 'pan' ? 'active' : ''}`}
           onClick={() => {
             onToolChange('pan');
-            setShowSettings(false);
+            setShowChalkSettings(false);
+            setShowEraserSettings(false);
           }}
           title="Move Board (Ctrl+H / Ctrl+M)"
         >
@@ -110,7 +208,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           className={`action-stick ${activeTool === 'select' ? 'active' : ''}`}
           onClick={() => {
             onToolChange('select');
-            setShowSettings(false);
+            setShowChalkSettings(false);
+            setShowEraserSettings(false);
           }}
           title="Select Items (Ctrl+S)"
         >

@@ -38,23 +38,43 @@ export const drawChalkSegment = (
 };
 
 // Render an eraser segment (Optimized)
+// When eraserWidth/eraserHeight are provided, uses a rectangular eraser stamp
+// along the segment; otherwise falls back to the round line eraser.
 export const drawEraserSegment = (
   ctx: CanvasRenderingContext2D,
   x0: number,
   y0: number,
   x1: number,
   y1: number,
-  size: number
+  size: number,
+  eraserWidth?: number,
+  eraserHeight?: number
 ) => {
   ctx.save();
   ctx.globalCompositeOperation = 'destination-out';
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = size * 4; // Make the eraser sweep very wide
-  ctx.stroke();
+
+  if (eraserWidth && eraserHeight) {
+    // Rectangular eraser: stamp the rect at every step along the segment
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const steps = Math.max(1, Math.ceil(dist / Math.min(eraserWidth, eraserHeight) * 2));
+    for (let i = 0; i <= steps; i++) {
+      const t = steps === 0 ? 0 : i / steps;
+      const cx = x0 + dx * t;
+      const cy = y0 + dy * t;
+      ctx.fillRect(cx - eraserWidth / 2, cy - eraserHeight / 2, eraserWidth, eraserHeight);
+    }
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = size * 4; // Make the eraser sweep very wide
+    ctx.stroke();
+  }
+
   ctx.restore();
 };
 

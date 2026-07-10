@@ -44,6 +44,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [activeColor, setActiveColor] = useState<string>('#ffffff');
   const [brushSize, setBrushSize] = useState<number>(8);
   const [brushIntensity, setBrushIntensity] = useState<number>(0.85);
+  const [eraserWidth, setEraserWidth] = useState<number>(40);
+  const [eraserHeight, setEraserHeight] = useState<number>(20);
 
   // Navigation (Pan & Zoom)
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
@@ -68,6 +70,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   // Eraser dust puff effects
   const [dustPuffs, setDustPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
   const dustIdCounter = useRef<number>(0);
+
+  // Tracks the latest canvas-space cursor position so Ctrl+V can paste there
+  const cursorPosRef = useRef<Point>({ x: 0, y: 0 });
 
   // devicePixelRatio kept in a ref so it is stable across renders
   const dprRef = useRef<number>(window.devicePixelRatio || 1);
@@ -184,10 +189,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         }
       } else {
         if (pts.length === 1) {
-          drawEraserSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.size);
+          drawEraserSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
         } else {
           for (let i = 1; i < pts.length; i++) {
-            drawEraserSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.size);
+            drawEraserSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
           }
         }
       }
@@ -293,14 +298,21 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const handlePaste = useCallback(() => {
     if (clipboardRef.current.length === 0) return;
 
-    const offset = 20 / zoom;
+    // Compute the bounding box of the copied strokes so we know their origin
+    const srcBox = getCombinedBoundingBox(clipboardRef.current);
+    const cursor = cursorPosRef.current;
+
+    // Translate so the top-left of the pasted group sits at the cursor
+    const dx = srcBox ? cursor.x - srcBox.minX : 0;
+    const dy = srcBox ? cursor.y - srcBox.minY : 0;
+
     const pastedStrokes: Stroke[] = clipboardRef.current.map(s => {
       const newId = `${socket.id}-${Date.now()}-${Math.random()}`;
       return {
         ...s,
         id: newId,
         userId: socket.id || 'local',
-        points: s.points.map(p => ({ x: p.x + offset, y: p.y + offset }))
+        points: s.points.map(p => ({ x: p.x + dx, y: p.y + dy }))
       };
     });
 
@@ -311,11 +323,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setSelectedStrokeIds(newIds);
     setTransformBox(getCombinedBoundingBox(pastedStrokes));
 
-    // Update clipboardRef to reference the pasted strokes so subsequent pastes offset consecutively
-    clipboardRef.current = pastedStrokes;
-
     socket.emit('undo-stroke', { roomId, strokes: updated });
-  }, [strokes, socket, roomId, zoom]);
+  }, [strokes, socket, roomId]);
 
   const handleDuplicate = useCallback(() => {
     if (selectedStrokeIds.length === 0) return;
@@ -453,10 +462,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
 
     // 4. Remote drawing
-    socket.on('stroke-start', ({ strokeId, userId, tool, color, size, intensity, startPoint }) => {
+    socket.on('stroke-start', ({ strokeId, userId, tool, color, size, intensity, eraserWidth: ew, eraserHeight: eh, startPoint }) => {
       setStrokes((prev) => [
         ...prev,
-        { id: strokeId, userId, tool, color, size, intensity, points: [startPoint] },
+        { id: strokeId, userId, tool, color, size, intensity, eraserWidth: ew, eraserHeight: eh, points: [startPoint] },
       ]);
     });
 
@@ -534,6 +543,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       color: activeColor,
       size: brushSize,
       intensity: brushIntensity,
+      eraserWidth: activeTool === 'eraser' ? eraserWidth : undefined,
+      eraserHeight: activeTool === 'eraser' ? eraserHeight : undefined,
       points: [pos],
     };
 
@@ -547,6 +558,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       color: activeColor,
       size: brushSize,
       intensity: brushIntensity,
+      eraserWidth: activeTool === 'eraser' ? eraserWidth : undefined,
+      eraserHeight: activeTool === 'eraser' ? eraserHeight : undefined,
       startPoint: pos,
     });
   };
@@ -556,6 +569,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (!canvas) return;
 
     const pos = screenToCanvas(e.clientX, e.clientY);
+
+    // Keep cursor position up to date for paste-at-cursor
+    cursorPosRef.current = pos;
 
     // Broadcast cursor movement
     socket.emit('cursor-move', { roomId, cursor: pos });
@@ -1095,10 +1111,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           activeColor={activeColor}
           brushSize={brushSize}
           brushIntensity={brushIntensity}
+          eraserWidth={eraserWidth}
+          eraserHeight={eraserHeight}
           onToolChange={setActiveTool}
           onColorChange={setActiveColor}
           onBrushSizeChange={setBrushSize}
           onIntensityChange={setBrushIntensity}
+          onEraserWidthChange={setEraserWidth}
+          onEraserHeightChange={setEraserHeight}
         />
       </div>
     </div>

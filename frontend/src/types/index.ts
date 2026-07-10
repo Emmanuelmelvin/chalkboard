@@ -7,8 +7,11 @@ export interface Stroke {
   color: string;
   size: number;
   intensity?: number;
+  eraserWidth?: number;
+  eraserHeight?: number;
   points: Point[];
 }
+
 
 export interface Rect {
   minX: number;
@@ -46,8 +49,12 @@ export interface ToolbarProps {
   activeColor: string;
   brushSize: number;
   brushIntensity: number;
+  eraserWidth: number;
+  eraserHeight: number;
   onToolChange: (tool: 'chalk' | 'eraser' | 'pan' | 'select') => void;
   onColorChange: (color: string) => void;
   onBrushSizeChange: (size: number) => void;
   onIntensityChange: (intensity: number) => void;
+  onEraserWidthChange: (w: number) => void;
+  onEraserHeightChange: (h: number) => void;
 }

@@ -1168,3 +1168,276 @@ body {
   min-height: 6px;
 }
 
+
+/* ═══════════════════════════════════════════════════════
+   SELECTION TOOLBOX  — vertical context-menu panel
+   ═══════════════════════════════════════════════════════ */
+
+/* Main panel card */
+.sel-toolbox-panel {
+  width: 188px;
+  background: rgba(12, 17, 30, 0.94);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  padding: 5px;
+  box-shadow:
+    0 20px 40px -8px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  animation: selPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+@keyframes selPanelIn {
+  from {
+    opacity: 0;
+    transform: scale(0.93) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ── Row (shared base) ── */
+.sel-toolbox-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  text-align: left;
+  outline: none;
+  transition: background 0.12s ease, color 0.12s ease;
+  user-select: none;
+}
+
+.sel-toolbox-row:hover,
+.sel-row-active {
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: #f1f5f9 !important;
+}
+
+/* Icon wrapper */
+.sel-row-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  flex-shrink: 0;
+  color: #94a3b8;
+}
+
+.sel-toolbox-row:hover .sel-row-icon,
+.sel-row-active .sel-row-icon {
+  color: #e2e8f0;
+}
+
+.sel-row-label {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 450;
+}
+
+.sel-row-chevron {
+  opacity: 0.45;
+  flex-shrink: 0;
+}
+
+/* Colour dot inside icon */
+.sel-color-dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Divider ── */
+.sel-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 3px 0;
+}
+
+/* ── Danger row (Delete) ── */
+.sel-danger-row {
+  color: #fca5a5 !important;
+}
+.sel-danger-row .sel-row-icon {
+  color: #f87171 !important;
+}
+.sel-danger-row:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+}
+
+/* ── Deselect row ── */
+.sel-deselect-row {
+  color: #94a3b8 !important;
+}
+
+/* ── Keyboard hint ── */
+.sel-kbd {
+  margin-left: auto;
+  font-size: 9.5px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: #64748b;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  font-family: var(--font-sans);
+  white-space: nowrap;
+}
+
+/* ════════════════════════════════
+   Sub-panels (Color / Size)
+   ════════════════════════════════ */
+.sel-subpanel {
+  width: 200px;
+  background: rgba(12, 17, 30, 0.96);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  padding: 14px 14px 12px;
+  box-shadow:
+    0 20px 40px -8px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: selSubIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  align-self: flex-start;
+  /* vertical centering inside the flex container done via align-self + margin-top set inline */
+}
+
+/* Place sub-panel to the right of the main panel */
+.sel-subpanel-right {
+  margin-left: 8px;
+  transform-origin: left center;
+}
+
+/* Place sub-panel to the left of the main panel */
+.sel-subpanel-left {
+  margin-right: 8px;
+  transform-origin: right center;
+}
+
+@keyframes selSubIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
+}
+
+.sel-subpanel-right + .sel-toolbox-panel ~ .sel-subpanel {
+  transform-origin: right center;
+}
+
+.sel-subpanel-title {
+  font-family: var(--font-sketch);
+  font-size: 10px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin: 0 0 2px;
+}
+
+/* ── Color sub-panel: swatch grid ── */
+.sel-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.sel-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  outline: none;
+}
+
+.sel-swatch:hover {
+  transform: scale(1.18);
+}
+
+.sel-swatch-active {
+  border-color: #fff;
+  transform: scale(1.14);
+}
+
+/* ── Size sub-panel: stepper ── */
+.sel-size-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sel-size-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: #cbd5e1;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.12s, color 0.12s;
+}
+
+.sel-size-btn:hover {
+  background: rgba(255, 255, 255, 0.11);
+  color: #fff;
+}
+
+.sel-size-preview {
+  flex: 1;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.sel-size-dot {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  transition: width 0.15s ease, height 0.15s ease;
+  min-width: 4px;
+  min-height: 4px;
+  max-width: 48px;
+  max-height: 48px;
+}
+
+.sel-size-hint {
+  font-size: 10px;
+  color: #475569;
+  margin: 0;
+  text-align: center;
+}
+

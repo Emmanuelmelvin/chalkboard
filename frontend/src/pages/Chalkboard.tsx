@@ -993,17 +993,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         {/* Selection Toolbox */}
         {selectedStrokeIds.length > 0 && transformBox && (
           <SelectionToolbox
-            x={(transformBox.minX + transformBox.maxX) / 2 * zoom + panOffset.x}
-            y={(transformBox.maxY) * zoom + panOffset.y + 40}
+            boxScreenLeft={transformBox.minX * zoom + panOffset.x}
+            boxScreenRight={transformBox.maxX * zoom + panOffset.x}
+            boxScreenCenterY={(transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y}
             activeColor={activeColor}
             onColorChange={(color) => {
               const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s);
               setStrokes(updated);
               socket.emit('undo-stroke', { roomId, strokes: updated });
             }}
-            onCut={() => {
-
-            }}
+            onCut={handleCut}
             onDelete={() => {
               const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));
               setStrokes(updated);

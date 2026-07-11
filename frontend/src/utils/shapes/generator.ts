@@ -20,7 +20,7 @@ export function generatePolygon(
   rotation = 0
 ): Point[] {
   const points: Point[] = [];
-  for (let i = 0; i <= sides; i++) {
+  for (let i = 0; i < sides; i++) {
     const angle = rotation + (i / sides) * Math.PI * 2;
     points.push({
       x: cx + radius * Math.cos(angle),

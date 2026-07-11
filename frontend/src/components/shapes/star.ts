@@ -7,7 +7,7 @@ export const star: ShapeGenerator = (canvasCenter, opts) => {
   const innerR = BASE_SIZE * 0.45;
   const points: Point[] = [];
 
-  for (let i = 0; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     const angle = (i / 10) * Math.PI * 2 - Math.PI / 2;
     const r = i % 2 === 0 ? outerR : innerR;
     points.push({

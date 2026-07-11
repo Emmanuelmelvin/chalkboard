@@ -1,5 +1,5 @@
-import type { ShapeGenerator, ShapeStrokeOptions, CanvasCenter } from './types';
-import { makeStrokeFactory, BASE_SIZE } from '../../utils/shapes/generator';
+import type { ShapeGenerator } from '@/types';
+import { makeStrokeFactory, BASE_SIZE } from '@/utils/shapes/generator';
 
 export const rectangle: ShapeGenerator = (canvasCenter, opts) => {
   const { x: cx, y: cy } = canvasCenter;
@@ -12,6 +12,5 @@ export const rectangle: ShapeGenerator = (canvasCenter, opts) => {
     { x: cx + w / 2, y: cy - h / 2 },
     { x: cx + w / 2, y: cy + h / 2 },
     { x: cx - w / 2, y: cy + h / 2 },
-    { x: cx - w / 2, y: cy - h / 2 },
   ])];
 };

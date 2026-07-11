@@ -1441,3 +1441,112 @@ body {
   text-align: center;
 }
 
+/* ═══════════════════════════════════════════════════════
+   INSERT SHAPES MODAL
+   ═══════════════════════════════════════════════════════ */
+
+.insert-shapes-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.insert-shapes-panel {
+  background: rgba(12, 17, 30, 0.96);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.7);
+  animation: selPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  max-width: 360px;
+  width: 90%;
+  pointer-events: auto;
+}
+
+.insert-shapes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 12px;
+}
+
+.insert-shapes-header h3 {
+  font-family: var(--font-sketch);
+  font-size: 16px;
+  color: #e2e8f0;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.insert-shapes-close {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.12s ease;
+}
+
+.insert-shapes-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.insert-shapes-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.insert-shape-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 9px;
+}
+
+.insert-shape-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: scale(1.05);
+}
+
+.insert-shape-btn:active {
+  transform: scale(0.97);
+}
+
+.insert-shape-btn span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+

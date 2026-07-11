@@ -1,10 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Copy, Check, Users, Maximize2, Minus, Plus } from 'lucide-react';
+import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import ActionSticks from '@/components/tools/ActionSticks';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { getRandomColor } from '@/utils/colors';
 import {
   drawChalkSegment,
   drawEraserSegment,
@@ -12,7 +11,10 @@ import {
   isStrokeInRect,
   transformStrokes
 } from '@/utils/drawing';
-import { addAlpha } from '@/utils/colors';
+import { 
+  addAlpha,
+  getRandomColor
+ } from '@/utils/colors';
 import type { 
   Rect,
   Point,
@@ -21,6 +23,9 @@ import type {
   Collaborator
  } from '@/types';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
+import InsertShapes from '@/components/tools/InsertShapes';
+import type { ShapeType } from '@/components/tools/InsertShapes';
+import { generateShapeStrokes } from '@/utils/shapes';
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
@@ -67,6 +72,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [collaborators, setCollaborators] = useState<Record<string, Collaborator>>({});
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [userCursorColor] = useState<string>(() => getRandomColor());
+
+  // Insert shapes modal
+  const [showInsertShapes, setShowInsertShapes] = useState<boolean>(false);
 
   // Eraser dust puff effects
   const [dustPuffs, setDustPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
@@ -381,6 +389,35 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, selectedStrokeIds, socket, roomId, zoom]);
 
+  // Insert a shape at the center of the current viewport
+  const handleInsertShape = useCallback((shape: ShapeType) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    // Center of the visible canvas in canvas coordinates
+    const centerX = (rect.width / 2 - panOffset.x) / zoom;
+    const centerY = (rect.height / 2 - panOffset.y) / zoom;
+
+    const newStrokes = generateShapeStrokes(shape, { x: centerX, y: centerY }, {
+      id: `${socket.id}-${Date.now()}`,
+      userId: socket.id || 'local',
+      color: activeColor,
+      size: brushSize,
+      intensity: brushIntensity,
+    });
+
+    const updated = [...strokes, ...newStrokes];
+    setStrokes(updated);
+    setShowInsertShapes(false);
+
+    // Auto-select the inserted shape
+    const newIds = newStrokes.map(s => s.id);
+    setSelectedStrokeIds(newIds);
+    setTransformBox(getCombinedBoundingBox(newStrokes));
+
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }, [strokes, socket, roomId, zoom, panOffset, activeColor, brushSize, brushIntensity]);
+
   // Keyboard shortcuts and Spacebar pan listeners
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -475,6 +512,50 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         else if (e.key === 'ArrowRight') { setPanOffset(p => ({ ...p, x: p.x - panAmount })); e.preventDefault(); }
       }
 
+      // Delete / Backspace: delete selected strokes
+      if (selectedStrokeIds.length > 0 && document.activeElement?.tagName !== 'INPUT') {
+        if (e.key === 'Delete' || e.key === 'Del' || e.key === 'Backspace') {
+          e.preventDefault();
+          const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));
+          setStrokes(updated);
+          setSelectedStrokeIds([]);
+          setTransformBox(null);
+          socket.emit('undo-stroke', { roomId, strokes: updated });
+          return;
+        }
+      }
+
+      // Escape: deselect
+      if (e.key === 'Escape' && selectedStrokeIds.length > 0) {
+        e.preventDefault();
+        setSelectedStrokeIds([]);
+        setTransformBox(null);
+        return;
+      }
+
+      // Ctrl+Alt+Plus / Ctrl+Alt+Minus: zoom in/out
+      if ((e.ctrlKey || e.metaKey) && e.altKey) {
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          setZoom(z => Math.min(4, z + 0.15));
+          return;
+        } else if (e.key === '-' || e.key === '_') {
+          e.preventDefault();
+          setZoom(z => Math.max(0.15, z - 0.15));
+          return;
+        }
+      }
+
+      // Ctrl+S: open insert shapes modal (only when not in input)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
+        const key = e.key.toLowerCase();
+        if (key === 's') {
+          e.preventDefault();
+          setShowInsertShapes(prev => !prev);
+          return;
+        }
+      }
+
       // Keyboard tool selection (Ctrl + key or Cmd + key)
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
         const key = e.key.toLowerCase();
@@ -487,9 +568,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         } else if (key === 'm' || key === 'h') {
           e.preventDefault();
           setActiveTool('pan');
-        } else if (key === 's') {
-          e.preventDefault();
-          setActiveTool('select');
         }
       }
     };
@@ -1061,6 +1139,52 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
       />
+
+      {/* Insert Shapes Modal */}
+      {showInsertShapes && (
+        <InsertShapes
+          onInsertShape={handleInsertShape}
+          onClose={() => setShowInsertShapes(false)}
+        />
+      )}
+
+      {/* Insert Shapes Button (left side, center) */}
+      <button
+        className="insert-shapes-fab"
+        onClick={() => setShowInsertShapes(prev => !prev)}
+        title="Insert Shape (Ctrl+S)"
+        style={{
+          position: 'absolute',
+          left: '48px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 100,
+          pointerEvents: 'auto',
+          width: 44,
+          height: 44,
+          borderRadius: '50%',
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          color: '#cbd5e1',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(30, 41, 59, 0.85)';
+          e.currentTarget.style.color = '#fff';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(15, 23, 42, 0.75)';
+          e.currentTarget.style.color = '#cbd5e1';
+        }}
+      >
+        <Shapes size={20} />
+      </button>
 
       {/* HUD Overlay layer */}
       <div className="hud-layer">

@@ -9,9 +9,11 @@ import {
   Star,
   Diamond,
   X,
+  Pentagon,
+  RectangleHorizontal,
 } from 'lucide-react';
 
-export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'line' | 'arrow' | 'hexagon' | 'star' | 'diamond';
+export type ShapeType = 'triangle' | 'square' | 'rectangle' | 'pentagon' | 'hexagon' | 'circle' | 'star' | 'diamond' | 'line' | 'arrow';
 
 interface InsertShapesProps {
   onInsertShape: (shape: ShapeType) => void;
@@ -19,14 +21,16 @@ interface InsertShapesProps {
 }
 
 const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
-  { type: 'rectangle', label: 'Rectangle', icon: <Square size={20} /> },
+  { type: 'rectangle', label: 'Rectangle', icon: <RectangleHorizontal size={20} /> },
+  { type: 'square', label: 'Square', icon: <Square size={20} /> },
   { type: 'circle', label: 'Circle', icon: <Circle size={20} /> },
   { type: 'triangle', label: 'Triangle', icon: <Triangle size={20} /> },
-  { type: 'line', label: 'Line', icon: <Minus size={20} /> },
-  { type: 'arrow', label: 'Arrow', icon: <ArrowRight size={20} /> },
+  { type: 'pentagon', label: 'Pentagon', icon: <Pentagon size={20} /> },
   { type: 'hexagon', label: 'Hexagon', icon: <Hexagon size={20} /> },
   { type: 'star', label: 'Star', icon: <Star size={20} /> },
   { type: 'diamond', label: 'Diamond', icon: <Diamond size={20} /> },
+  { type: 'line', label: 'Line', icon: <Minus size={20} /> },
+  { type: 'arrow', label: 'Arrow', icon: <ArrowRight size={20} /> },
 ];
 
 const InsertShapes: React.FC<InsertShapesProps> = ({ onInsertShape, onClose }) => {

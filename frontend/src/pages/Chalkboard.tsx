@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes, Link2 } from 'lucide-react';
+import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -24,7 +24,6 @@ import type {
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
-import LinksListPanel from '@/components/tools/LinksListPanel';
 import { generateShapeStrokes } from '@/utils/shapes';
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
@@ -208,54 +207,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       }
     });
 
-    // Draw images
-    canvasImages.forEach((img) => {
-      const imgObj = new Image();
-      imgObj.src = img.src;
-      ctx.drawImage(
-        imgObj,
-        img.bounds.minX,
-        img.bounds.minY,
-        img.bounds.maxX - img.bounds.minX,
-        img.bounds.maxY - img.bounds.minY
-      );
-    });
-
-    // Draw link icons
-    canvasLinks.forEach((link) => {
-      const x = link.bounds.minX;
-      const y = link.bounds.minY;
-      const size = 20 / zoom;
-      
-      ctx.save();
-      ctx.fillStyle = '#3b82f6';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2 / zoom;
-      
-      // Draw link icon (chain link shape)
-      ctx.beginPath();
-      ctx.arc(x + size * 0.35, y + size * 0.5, size * 0.25, 0, Math.PI * 2);
-      ctx.arc(x + size * 0.65, y + size * 0.5, size * 0.25, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      
-      // Draw chain lines
-      ctx.beginPath();
-      ctx.moveTo(x + size * 0.35, y + size * 0.35);
-      ctx.lineTo(x + size * 0.35, y + size * 0.25);
-      ctx.moveTo(x + size * 0.65, y + size * 0.35);
-      ctx.lineTo(x + size * 0.65, y + size * 0.25);
-      ctx.moveTo(x + size * 0.35, y + size * 0.65);
-      ctx.lineTo(x + size * 0.35, y + size * 0.75);
-      ctx.moveTo(x + size * 0.65, y + size * 0.65);
-      ctx.lineTo(x + size * 0.65, y + size * 0.75);
-      ctx.stroke();
-      
-      ctx.restore();
-    });
-
     ctx.restore();
-  }, [strokes, zoom, panOffset, selectionMarquee, transformBox, selectedStrokeIds, canvasImages, canvasLinks]);
+  }, [strokes, zoom, panOffset, selectionMarquee, transformBox, selectedStrokeIds]);
 
   // RequestAnimationFrame draw loop trigger
   useEffect(() => {
@@ -464,68 +417,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, socket, roomId, zoom, panOffset, activeColor, brushSize, brushIntensity]);
-
-  // Start link creation process
-  const handleStartLinkCreation = useCallback(() => {
-    setShowInsertShapes(false);
-    setActiveTool('select');
-    setIsCreatingLink(true);
-    setLinkStartPoint(null);
-  }, []);
-
-  // Start image insertion process
-  const handleStartImageInsert = useCallback(() => {
-    setShowInsertShapes(false);
-    
-    // Create file input
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const src = event.target?.result as string;
-        const img = new Image();
-        img.onload = () => {
-          const canvas = canvasRef.current;
-          if (!canvas) return;
-          const rect = canvas.getBoundingClientRect();
-          const centerX = (rect.width / 2 - panOffset.x) / zoom;
-          const centerY = (rect.height / 2 - panOffset.y) / zoom;
-          
-          // Scale image to reasonable size (max 300px)
-          const maxSize = 300;
-          const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
-          const width = img.width * scale;
-          const height = img.height * scale;
-          
-          const newImage: CanvasImage = {
-            id: `${socket.id}-${Date.now()}`,
-            src,
-            bounds: {
-              minX: centerX - width / 2,
-              minY: centerY - height / 2,
-              maxX: centerX + width / 2,
-              maxY: centerY + height / 2,
-            },
-            userId: socket.id || 'local',
-          };
-          
-          setCanvasImages(prev => [...prev, newImage]);
-          
-          // Select the image
-          setSelectedStrokeIds([]);
-          setTransformBox(newImage.bounds);
-        };
-        img.src = src;
-      };
-      reader.readAsDataURL(file);
-    };
-    input.click();
-  }, [socket, zoom, panOffset]);
 
   // Keyboard shortcuts and Spacebar pan listeners
   useEffect(() => {
@@ -1185,61 +1076,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       }
     }
 
-    // Handle link creation
-    if (isCreatingLink && activeTool === 'select') {
-      const pos = screenToCanvas(e.clientX, e.clientY);
-      
-      if (!linkStartPoint) {
-        // First click: set the start point (where the link icon will be placed)
-        setLinkStartPoint(pos);
-        // Start selection marquee for target area
-        setSelectionMarquee({ minX: pos.x, minY: pos.y, maxX: pos.x, maxY: pos.y });
-        if (canvas) canvas.setPointerCapture(e.pointerId);
-        return;
-      } else {
-        // Second click: finalize the link
-        const targetBounds = {
-          minX: Math.min(linkStartPoint.x, pos.x),
-          minY: Math.min(linkStartPoint.y, pos.y),
-          maxX: Math.max(linkStartPoint.x, pos.x),
-          maxY: Math.max(linkStartPoint.y, pos.y),
-        };
-
-        // Check if there are objects in the target area
-        const targetStrokes = strokes.filter(s => isStrokeInRect(s, targetBounds));
-        
-        if (targetStrokes.length > 0) {
-          const newLink: CanvasLink = {
-            id: `${socket.id}-${Date.now()}`,
-            bounds: {
-              minX: linkStartPoint.x - 10,
-              minY: linkStartPoint.y - 10,
-              maxX: linkStartPoint.x + 10,
-              maxY: linkStartPoint.y + 10,
-            },
-            targetBounds,
-            label: `Link ${canvasLinks.length + 1}`,
-            userId: socket.id || 'local',
-          };
-
-          setCanvasLinks(prev => [...prev, newLink]);
-          
-          // Copy link to clipboard
-          const linkString = `${window.location.origin}${window.location.pathname}?room=${roomId}&link=${newLink.id}`;
-          navigator.clipboard.writeText(linkString);
-        }
-
-        // Reset link creation state
-        setIsCreatingLink(false);
-        setLinkStartPoint(null);
-        setSelectionMarquee(null);
-        setSelectedStrokeIds([]);
-        setTransformBox(null);
-        if (canvas) canvas.releasePointerCapture(e.pointerId);
-        return;
-      }
-    }
-
     stopDrawing();
   };
 
@@ -1381,8 +1217,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       {showInsertShapes && (
         <InsertShapes
           onInsertShape={handleInsertShape}
-          onInsertLink={handleStartLinkCreation}
-          onInsertImage={handleStartImageInsert}
           onClose={() => setShowInsertShapes(false)}
         />
       )}
@@ -1424,58 +1258,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       >
         <Shapes size={20} />
       </button>
-
-      {/* Links List Button */}
-      {canvasLinks.length > 0 && (
-        <button
-          className="links-list-fab"
-          onClick={() => setShowLinksList(prev => !prev)}
-          title="View Links"
-          style={{
-            position: 'absolute',
-            left: '100px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            zIndex: 100,
-            pointerEvents: 'auto',
-            width: 44,
-            height: 44,
-            borderRadius: '50%',
-            background: 'rgba(59, 130, 246, 0.75)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <Link2 size={20} />
-        </button>
-      )}
-
-      {/* Links List Panel */}
-      {showLinksList && (
-        <LinksListPanel
-          links={canvasLinks}
-          onClose={() => setShowLinksList(false)}
-          onNavigateToLink={(link) => {
-            // Pan and zoom to the link target
-            const targetCenterX = (link.targetBounds.minX + link.targetBounds.maxX) / 2;
-            const targetCenterY = (link.targetBounds.minY + link.targetBounds.maxY) / 2;
-            
-            setZoom(1.5);
-            setPanOffset({
-              x: window.innerWidth / 2 - targetCenterX * 1.5,
-              y: window.innerHeight / 2 - targetCenterY * 1.5,
-            });
-            setShowLinksList(false);
-          }}
-        />
-      )}
 
       {/* HUD Overlay layer */}
       <div className="hud-layer">

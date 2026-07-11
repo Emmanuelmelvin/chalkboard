@@ -15,15 +15,11 @@ import {
   Heart,
   Plus,
   Shapes,
-  Link,
-  Image,
 } from 'lucide-react';
 
 import type { ShapeType } from '@/types';
 interface InsertShapesProps {
   onInsertShape: (shape: ShapeType) => void;
-  onInsertLink: () => void;
-  onInsertImage: () => void;
   onClose: () => void;
 }
 
@@ -46,56 +42,28 @@ const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
   { type: 'arrow', label: 'Arrow', icon: <ArrowRight size={20} /> },
 ];
 
-const InsertShapes: React.FC<InsertShapesProps> = ({ onInsertShape, onInsertLink, onInsertImage, onClose }) => {
+const InsertShapes: React.FC<InsertShapesProps> = ({ onInsertShape, onClose }) => {
   return (
     <div className="insert-shapes-overlay" onClick={onClose}>
       <div className="insert-shapes-panel" onClick={(e) => e.stopPropagation()}>
         <div className="insert-shapes-header">
-          <h3>Insert</h3>
+          <h3>Insert Shape</h3>
           <button className="insert-shapes-close" onClick={onClose}>
             <X size={16} />
           </button>
         </div>
-        
-        {/* Shapes Section */}
-        <div className="insert-shapes-section">
-          <h4>Shapes</h4>
-          <div className="insert-shapes-grid">
-            {shapes.map((s) => (
-              <button
-                key={s.type}
-                className="insert-shape-btn"
-                onClick={() => onInsertShape(s.type)}
-                title={s.label}
-              >
-                {s.icon}
-                <span>{s.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Media Section */}
-        <div className="insert-shapes-section">
-          <h4>Media</h4>
-          <div className="insert-shapes-grid">
+        <div className="insert-shapes-grid">
+          {shapes.map((s) => (
             <button
+              key={s.type}
               className="insert-shape-btn"
-              onClick={onInsertLink}
-              title="Insert Link"
+              onClick={() => onInsertShape(s.type)}
+              title={s.label}
             >
-              <Link size={20} />
-              <span>Link</span>
+              {s.icon}
+              <span>{s.label}</span>
             </button>
-            <button
-              className="insert-shape-btn"
-              onClick={onInsertImage}
-              title="Insert Image"
-            >
-              <Image size={20} />
-              <span>Image</span>
-            </button>
-          </div>
+          ))}
         </div>
       </div>
     </div>

@@ -18,8 +18,6 @@ import type {
   ChalkboardProps,
   Collaborator,
   ShapeType,
-  CanvasLink,
-  CanvasImage
  } from '@/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
@@ -74,14 +72,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   // Insert shapes modal
   const [showInsertShapes, setShowInsertShapes] = useState<boolean>(false);
-  
-  // Links and Images
-  const [canvasLinks, setCanvasLinks] = useState<CanvasLink[]>([]);
-  const [canvasImages, setCanvasImages] = useState<CanvasImage[]>([]);
-  const [isCreatingLink, setIsCreatingLink] = useState<boolean>(false);
-  const [linkStartPoint, setLinkStartPoint] = useState<Point | null>(null);
-  const [showLinksList, setShowLinksList] = useState<boolean>(false);
-
   // Eraser dust puff effects
   const [dustPuffs, setDustPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
   const dustIdCounter = useRef<number>(0);
@@ -1265,7 +1255,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         {selectedStrokeIds.length > 0 && transformBox && (() => {
           const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
           const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
-          const commonGroupId = hasGroupId ? selectedStrokes[0].groupId : undefined;
+          //const commonGroupId = hasGroupId ? selectedStrokes[0].groupId : undefined;
           
           return (
             <SelectionToolbox

@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
-import ActionSticks from '@/components/tools/ActionSticks';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import {
@@ -20,6 +19,7 @@ import type {
   Collaborator,
   ShapeType
  } from '@/types';
+import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
 import { generateShapeStrokes } from '@/utils/shapes';
@@ -831,6 +831,70 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           canvas.setPointerCapture(e.pointerId);
           return;
         }
+      }
+
+      // Check if clicking on a stroke (for group selection)
+      const clickedStroke = strokes.find(s => isStrokeInRect(s, {
+        minX: pos.x - 5 / zoom,
+        minY: pos.y - 5 / zoom,
+        maxX: pos.x + 5 / zoom,
+        maxY: pos.y + 5 / zoom
+      }));
+
+      if (clickedStroke) {
+        // If the clicked stroke is part of a group, handle group selection
+        if (clickedStroke.groupId) {
+          const groupStrokes = strokes.filter(s => s.groupId === clickedStroke.groupId);
+          const groupIds = groupStrokes.map(s => s.id);
+          
+          // If Ctrl/Cmd is held, add/remove the group from current selection
+          if (e.ctrlKey || e.metaKey) {
+            if (selectedStrokeIds.includes(clickedStroke.id)) {
+              // Remove the entire group from selection
+              const newSelection = selectedStrokeIds.filter(id => !groupIds.includes(id));
+              setSelectedStrokeIds(newSelection);
+              if (newSelection.length > 0) {
+                const selected = strokes.filter(s => newSelection.includes(s.id));
+                setTransformBox(getCombinedBoundingBox(selected));
+              } else {
+                setTransformBox(null);
+              }
+            } else {
+              // Add the entire group to current selection
+              const newSelection = [...new Set([...selectedStrokeIds, ...groupIds])];
+              setSelectedStrokeIds(newSelection);
+              const selected = strokes.filter(s => newSelection.includes(s.id));
+              setTransformBox(getCombinedBoundingBox(selected));
+            }
+          } else {
+            // Replace selection with the entire group
+            setSelectedStrokeIds(groupIds);
+            setTransformBox(getCombinedBoundingBox(groupStrokes));
+          }
+          canvas.setPointerCapture(e.pointerId);
+          return;
+        }
+        
+        // Toggle selection for non-grouped strokes
+        if (selectedStrokeIds.includes(clickedStroke.id)) {
+          // Deselect if already selected
+          const newSelection = selectedStrokeIds.filter(id => id !== clickedStroke.id);
+          setSelectedStrokeIds(newSelection);
+          if (newSelection.length > 0) {
+            const selected = strokes.filter(s => newSelection.includes(s.id));
+            setTransformBox(getCombinedBoundingBox(selected));
+          } else {
+            setTransformBox(null);
+          }
+        } else {
+          // Add to selection
+          const newSelection = [...selectedStrokeIds, clickedStroke.id];
+          setSelectedStrokeIds(newSelection);
+          const selected = strokes.filter(s => newSelection.includes(s.id));
+          setTransformBox(getCombinedBoundingBox(selected));
+        }
+        canvas.setPointerCapture(e.pointerId);
+        return;
       }
 
       // Start new selection marquee

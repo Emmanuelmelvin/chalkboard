@@ -204,8 +204,8 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           className="sel-toolbox-row sel-action-row"
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onGroup(); }}
-          disabled={selectedCount < 2}
-          style={{ opacity: selectedCount < 2 ? 0.5 : 1, cursor: selectedCount < 2 ? 'not-allowed' : 'pointer' }}
+          disabled={selectedCount < 2 || isGrouped}
+          style={{ opacity: (selectedCount < 2 || isGrouped) ? 0.5 : 1, cursor: (selectedCount < 2 || isGrouped) ? 'not-allowed' : 'pointer' }}
         >
           <span className="sel-row-icon"><Group size={13} /></span>
           <span className="sel-row-label">Group</span>
@@ -219,7 +219,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onUngroup(); }}
           disabled={!isGrouped || selectedCount < 1}
-          style={{ opacity: !isGrouped || selectedCount < 1 ? 0.5 : 1, cursor: !isGrouped || selectedCount < 1 ? 'not-allowed' : 'pointer' }}
+          style={{ opacity: (!isGrouped || selectedCount < 1) ? 0.5 : 1, cursor: (!isGrouped || selectedCount < 1) ? 'not-allowed' : 'pointer' }}
         >
           <span className="sel-row-icon"><Ungroup size={13} /></span>
           <span className="sel-row-label">Ungroup</span>

@@ -1,23 +1,23 @@
 import type { Stroke } from '@/types';
-import type { CanvasCenter, ShapeStrokeOptions } from './utils';
-import type { ShapeGenerator } from './types';
+import type { CanvasCenter, ShapeStrokeOptions } from './shapes/types';
+import type { ShapeGenerator } from './shapes/types';
 
-import { triangle } from './triangle';
-import { square } from './square';
-import { rectangle } from './rectangle';
-import { pentagon } from './pentagon';
-import { hexagon } from './hexagon';
-import { heptagon } from './heptagon';
-import { octagon } from './octagon';
-import { nonagon } from './nonagon';
-import { decagon } from './decagon';
-import { circle } from './circle';
-import { star } from './star';
-import { diamond } from './diamond';
-import { line } from './line';
+import { triangle } from './shapes/triangle';
+import { square } from './shapes/square';
+import { rectangle } from './shapes/rectangle';
+import { pentagon } from './shapes/pentagon';
+import { hexagon } from './shapes/hexagon';
+import { heptagon } from './shapes/heptagon';
+import { octagon } from './shapes/octagon';
+import { nonagon } from './shapes/nonagon';
+import { decagon } from './shapes/decagon';
+import { circle } from './shapes/circle';
+import { star } from './shapes/star';
+import { diamond } from './shapes/diamond';
+import { line } from './shapes/line';
 import { arrow } from './shapes/arrow';
-import { cross } from './cross';
-import { heart } from './heart';
+import { cross } from './shapes/cross';
+import { heart } from './shapes/heart';
 
 export type ShapeType =
   | 'triangle'

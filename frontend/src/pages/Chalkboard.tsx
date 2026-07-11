@@ -546,10 +546,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         }
       }
 
-      // Ctrl+S: open insert shapes modal (only when not in input)
+      // Ctrl+I: open insert shapes modal (only when not in input)
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
         const key = e.key.toLowerCase();
-        if (key === 's') {
+        if (key === 'i') {
           e.preventDefault();
           setShowInsertShapes(prev => !prev);
           return;
@@ -568,6 +568,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         } else if (key === 'm' || key === 'h') {
           e.preventDefault();
           setActiveTool('pan');
+        } else if (key === 's') {
+          e.preventDefault();
+          setActiveTool('select');
         }
       }
     };
@@ -1152,7 +1155,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       <button
         className="insert-shapes-fab"
         onClick={() => setShowInsertShapes(prev => !prev)}
-        title="Insert Shape (Ctrl+S)"
+        title="Insert Shape (Ctrl+1)"
         style={{
           position: 'absolute',
           left: '48px',

@@ -1,20 +1,12 @@
-import type { Point, Stroke } from '@/types';
+import type { 
+  ShapeStrokeOptions, 
+  CanvasCenter, 
+  Point, 
+  Stroke
+ } from '@/types';
 
 /** Default bounding radius used by most shapes. */
 export const BASE_SIZE = 80;
-
-export interface ShapeStrokeOptions {
-  id: string;
-  userId: string;
-  color: string;
-  size: number;
-  intensity: number;
-}
-
-export interface CanvasCenter {
-  x: number;
-  y: number;
-}
 
 /**
  * Generate points for a regular N-sided polygon centered at (cx, cy).
@@ -53,4 +45,20 @@ export function makeStrokeFactory(shapeName: string, opts: ShapeStrokeOptions) {
     intensity,
     points,
   });
+}
+
+/**
+ * Factory for shapes that are just a regular N-sided polygon.
+ * Keeps triangle/square/pentagon/etc. files tiny and declarative —
+ * each one just picks a side count and a starting rotation.
+ */
+export function createRegularPolygonShape(
+  shapeName: string,
+  sides: number,
+  rotation = -Math.PI / 2
+) {
+  return (canvasCenter: CanvasCenter, opts: ShapeStrokeOptions) => {
+    const stroke = makeStrokeFactory(shapeName, opts);
+    return [stroke(generatePolygon(sides, canvasCenter.x, canvasCenter.y, BASE_SIZE, rotation))];
+  };
 }

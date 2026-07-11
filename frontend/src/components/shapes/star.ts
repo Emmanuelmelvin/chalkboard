@@ -1,6 +1,5 @@
-import type { ShapeGenerator, ShapeStrokeOptions, CanvasCenter } from './types';
-import type { Point } from '@/types';
-import { makeStrokeFactory, BASE_SIZE } from './utils';
+import type { ShapeGenerator, Point } from '@/types';
+import { makeStrokeFactory, BASE_SIZE } from '@/utils/shapes/generator';
 
 export const star: ShapeGenerator = (canvasCenter, opts) => {
   const { x: cx, y: cy } = canvasCenter;

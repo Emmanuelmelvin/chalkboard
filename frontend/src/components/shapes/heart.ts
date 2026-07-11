@@ -1,6 +1,8 @@
-import type { Point } from '@/types';
-import type { ShapeGenerator } from '@/components/shapes/types';
-import { makeStrokeFactory, BASE_SIZE } from './utils';
+import type { 
+  Point,
+  ShapeGenerator
+ } from '@/types';
+import { makeStrokeFactory, BASE_SIZE } from '../../utils/shapes/generator';
 
 // New shape: parametric heart curve.
 export const heart: ShapeGenerator = (canvasCenter, opts) => {

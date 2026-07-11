@@ -1,6 +1,6 @@
+import type { ShapeGenerator, ShapeStrokeOptions, CanvasCenter } from './types';
 import type { Point } from '@/types';
-import type { ShapeGenerator } from './types';
-import { makeStrokeFactory, BASE_SIZE } from './utils';
+import { makeStrokeFactory, BASE_SIZE } from '../../utils/shapes/generator';
 
 export const circle: ShapeGenerator = (canvasCenter, opts) => {
   const { x: cx, y: cy } = canvasCenter;

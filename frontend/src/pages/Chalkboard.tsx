@@ -468,6 +468,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       // Arrow keys without Ctrl: pan the canvas
       if (!(e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
         const panAmount = 30;
+        // ArrowUp/ArrowLeft reveal content above/left by moving content down/right
         if (e.key === 'ArrowUp') { setPanOffset(p => ({ ...p, y: p.y + panAmount })); e.preventDefault(); }
         else if (e.key === 'ArrowDown') { setPanOffset(p => ({ ...p, y: p.y - panAmount })); e.preventDefault(); }
         else if (e.key === 'ArrowLeft') { setPanOffset(p => ({ ...p, x: p.x + panAmount })); e.preventDefault(); }
@@ -504,7 +505,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [strokes, redoStack, setActiveTool, selectedStrokeIds, handleIncreaseSize, handleDecreaseSize, handleCopy, handleCut, handlePaste, handleDuplicate]);
+  }, [strokes, redoStack, setActiveTool, selectedStrokeIds, handleIncreaseSize, handleDecreaseSize, handleCopy, handleCut, handlePaste, handleDuplicate, transformBox, zoom]);
 
   // Web Socket listeners
   useEffect(() => {

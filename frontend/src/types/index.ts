@@ -22,6 +22,30 @@ export interface Stroke {
   groupId?: string;
 }
 
+/** Represents a link reference to a canvas area */
+export interface CanvasLink {
+  id: string;
+  /** Bounding box of the link icon on canvas */
+  bounds: Rect;
+  /** Target area this link points to */
+  targetBounds: Rect;
+  /** Label for the link */
+  label: string;
+  /** User who created the link */
+  userId: string;
+}
+
+/** Represents an image inserted on the canvas */
+export interface CanvasImage {
+  id: string;
+  /** Image data URL */
+  src: string;
+  /** Position and size on canvas */
+  bounds: Rect;
+  /** User who inserted the image */
+  userId: string;
+}
+
 
 export interface Rect {
   minX: number;

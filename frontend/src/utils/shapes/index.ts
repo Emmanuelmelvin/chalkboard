@@ -2,7 +2,8 @@ import type {
   Stroke,
   ShapeGenerator, 
   CanvasCenter, 
-  ShapeStrokeOptions 
+  ShapeStrokeOptions ,
+  ShapeType
  } from '@/types';
 
 import { triangle } from '@/components/shapes/triangle';
@@ -21,24 +22,6 @@ import { line } from '@/components/shapes/line';
 import { arrow } from '@/components/shapes/arrow';
 import { cross } from '@/components/shapes/cross';
 import { heart } from '@/components/shapes/heart';
-
-export type ShapeType =
-  | 'triangle'
-  | 'square'
-  | 'rectangle'
-  | 'pentagon'
-  | 'hexagon'
-  | 'heptagon'
-  | 'octagon'
-  | 'nonagon'
-  | 'decagon'
-  | 'circle'
-  | 'star'
-  | 'diamond'
-  | 'line'
-  | 'arrow'
-  | 'cross'
-  | 'heart';
 
 const shapeRegistry: Record<ShapeType, ShapeGenerator> = {
   triangle,

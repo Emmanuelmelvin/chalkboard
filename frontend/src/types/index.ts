@@ -76,3 +76,21 @@ export type ShapeGenerator = (
   canvasCenter: CanvasCenter,
   opts: ShapeStrokeOptions
 ) => Stroke[];
+
+export type ShapeType =
+  | 'triangle'
+  | 'square'
+  | 'rectangle'
+  | 'pentagon'
+  | 'hexagon'
+  | 'heptagon'
+  | 'octagon'
+  | 'nonagon'
+  | 'decagon'
+  | 'circle'
+  | 'star'
+  | 'diamond'
+  | 'line'
+  | 'arrow'
+  | 'cross'
+  | 'heart';

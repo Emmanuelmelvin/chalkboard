@@ -20,11 +20,12 @@ import type {
   Point,
   Stroke,
   ChalkboardProps,
-  Collaborator
+  Collaborator,
+  ShapeType
  } from '@/types';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
-import { generateShapeStrokes, type ShapeType } from '@/utils/shapes';
+import { generateShapeStrokes } from '@/utils/shapes';
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,

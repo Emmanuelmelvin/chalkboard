@@ -11,10 +11,13 @@ import {
   X,
   Pentagon,
   RectangleHorizontal,
+  Octagon,
+  Heart,
+  Plus,
+  Shapes,
 } from 'lucide-react';
 
-export type ShapeType = 'triangle' | 'square' | 'rectangle' | 'pentagon' | 'hexagon' | 'circle' | 'star' | 'diamond' | 'line' | 'arrow';
-
+import type { ShapeType } from '@/types';
 interface InsertShapesProps {
   onInsertShape: (shape: ShapeType) => void;
   onClose: () => void;
@@ -27,8 +30,14 @@ const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
   { type: 'triangle', label: 'Triangle', icon: <Triangle size={20} /> },
   { type: 'pentagon', label: 'Pentagon', icon: <Pentagon size={20} /> },
   { type: 'hexagon', label: 'Hexagon', icon: <Hexagon size={20} /> },
+  { type: 'heptagon', label: 'Heptagon', icon: <Shapes size={20} /> },
+  { type: 'octagon', label: 'Octagon', icon: <Octagon size={20} /> },
+  { type: 'nonagon', label: 'Nonagon', icon: <Shapes size={20} /> },
+  { type: 'decagon', label: 'Decagon', icon: <Shapes size={20} /> },
   { type: 'star', label: 'Star', icon: <Star size={20} /> },
   { type: 'diamond', label: 'Diamond', icon: <Diamond size={20} /> },
+  { type: 'cross', label: 'Cross', icon: <Plus size={20} /> },
+  { type: 'heart', label: 'Heart', icon: <Heart size={20} /> },
   { type: 'line', label: 'Line', icon: <Minus size={20} /> },
   { type: 'arrow', label: 'Arrow', icon: <ArrowRight size={20} /> },
 ];

@@ -72,6 +72,5 @@ export function generateShapeStrokes(
 }
 
 // Re-export shared pieces in case other code needs them directly
-export type { ShapeGenerator } from './types';
-export { BASE_SIZE, generatePolygon, makeStrokeFactory } from './utils';
-export type { ShapeStrokeOptions, CanvasCenter } from './utils';
+export type { ShapeGenerator, ShapeStrokeOptions, CanvasCenter } from './shapes/types';
+export { BASE_SIZE, generatePolygon, makeStrokeFactory } from './shapes/utils';

@@ -24,8 +24,7 @@ import type {
  } from '@/types';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
-import type { ShapeType } from '@/components/tools/InsertShapes';
-import { generateShapeStrokes } from '@/utils/shapes';
+import { generateShapeStrokes, type ShapeType } from '@/utils/shapes';
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,

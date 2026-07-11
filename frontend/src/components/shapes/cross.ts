@@ -1,6 +1,5 @@
-import type { ShapeGenerator, ShapeStrokeOptions, CanvasCenter } from './types';
-import type { Point } from '@/types';
-import { makeStrokeFactory, BASE_SIZE } from '../../utils/shapes/generator';
+import type { ShapeGenerator } from '@/types';
+import { makeStrokeFactory, BASE_SIZE } from '@/utils/shapes/generator';
 
 export const cross: ShapeGenerator = (canvasCenter, opts) => {
   const { x: cx, y: cy } = canvasCenter;
@@ -21,6 +20,5 @@ export const cross: ShapeGenerator = (canvasCenter, opts) => {
     { x: cx - len, y: cy + arm },
     { x: cx - len, y: cy - arm },
     { x: cx - arm, y: cy - arm },
-    { x: cx - arm, y: cy - len },
-  ])];
+  ], '', { pathType: 'linear', closed: true })];
 };

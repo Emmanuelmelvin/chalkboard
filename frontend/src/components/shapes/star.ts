@@ -17,5 +17,5 @@ export const star: ShapeGenerator = (canvasCenter, opts) => {
   }
 
   const stroke = makeStrokeFactory('star', opts);
-  return [stroke(points)];
+  return [stroke(points, '', { pathType: 'linear', closed: true })];
 };

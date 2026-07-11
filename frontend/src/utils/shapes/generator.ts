@@ -36,13 +36,18 @@ export function generatePolygon(
  */
 export function makeStrokeFactory(shapeName: string, opts: ShapeStrokeOptions) {
   const { id, userId, color, size, intensity } = opts;
-  return (points: Point[], suffix = ''): Stroke => ({
+  return (
+    points: Point[],
+    suffix = '',
+    pathOptions: Pick<Stroke, 'pathType' | 'closed'> = {}
+  ): Stroke => ({
     id: `${id}-${shapeName}${suffix}`,
     userId,
     tool: 'chalk',
     color,
     size,
     intensity,
+    ...pathOptions,
     points,
   });
 }
@@ -59,6 +64,10 @@ export function createRegularPolygonShape(
 ) {
   return (canvasCenter: CanvasCenter, opts: ShapeStrokeOptions) => {
     const stroke = makeStrokeFactory(shapeName, opts);
-    return [stroke(generatePolygon(sides, canvasCenter.x, canvasCenter.y, BASE_SIZE, rotation))];
+    return [stroke(
+      generatePolygon(sides, canvasCenter.x, canvasCenter.y, BASE_SIZE, rotation),
+      '',
+      { pathType: 'linear', closed: true }
+    )];
   };
 }

@@ -1,6 +1,5 @@
-import type { ShapeGenerator, ShapeStrokeOptions, CanvasCenter } from './types';
-import type { Point } from '@/types';
-import { makeStrokeFactory, BASE_SIZE } from '../../utils/shapes/generator';
+import type { ShapeGenerator, Point } from '@/types';
+import { makeStrokeFactory, BASE_SIZE } from '@/utils/shapes/generator';
 
 export const diamond: ShapeGenerator = (canvasCenter, opts) => {
   const { x: cx, y: cy } = canvasCenter;
@@ -9,9 +8,8 @@ export const diamond: ShapeGenerator = (canvasCenter, opts) => {
     { x: cx + BASE_SIZE * 0.65, y: cy },
     { x: cx, y: cy + BASE_SIZE },
     { x: cx - BASE_SIZE * 0.65, y: cy },
-    { x: cx, y: cy - BASE_SIZE },
   ];
 
   const stroke = makeStrokeFactory('diamond', opts);
-  return [stroke(points)];
+  return [stroke(points, '', { pathType: 'linear', closed: true })];
 };

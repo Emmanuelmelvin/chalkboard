@@ -5,16 +5,13 @@ import ActionSticks from '@/components/tools/ActionSticks';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import {
-  drawChalkSegment,
+  drawChalkStroke,
   drawEraserSegment,
   getCombinedBoundingBox,
   isStrokeInRect,
   transformStrokes
 } from '@/utils/drawing';
-import { 
-  addAlpha,
-  getRandomColor
- } from '@/utils/colors';
+import { getRandomColor } from '@/utils/colors';
 import type { 
   Rect,
   Point,
@@ -189,42 +186,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       const pts = stroke.points;
 
       if (stroke.tool === 'chalk') {
-        if (pts.length === 1) {
-          drawChalkSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.color, stroke.size, stroke.intensity);
-        } else if (pts.length === 2) {
-          drawChalkSegment(ctx, pts[0].x, pts[0].y, pts[1].x, pts[1].y, stroke.color, stroke.size, stroke.intensity);
-        } else {
-          // Use quadratic bezier curves for smooth interpolation
-          ctx.save();
-          ctx.beginPath();
-          ctx.moveTo(pts[0].x, pts[0].y);
-          for (let i = 1; i < pts.length - 1; i++) {
-            const midX = (pts[i].x + pts[i + 1].x) / 2;
-            const midY = (pts[i].y + pts[i + 1].y) / 2;
-            ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
-          }
-          // Connect to the last point
-          ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          ctx.lineWidth = stroke.size * 1.5;
-          ctx.strokeStyle = addAlpha(stroke.color, stroke.intensity ?? 0.85);
-          ctx.stroke();
-          // Subtle texture overlay
-          ctx.beginPath();
-          ctx.moveTo(pts[0].x, pts[0].y);
-          for (let i = 1; i < pts.length - 1; i++) {
-            const midX = (pts[i].x + pts[i + 1].x) / 2;
-            const midY = (pts[i].y + pts[i + 1].y) / 2;
-            ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
-          }
-          ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-          ctx.lineWidth = stroke.size * 2.2;
-          ctx.strokeStyle = addAlpha(stroke.color, Math.max(0.05, (stroke.intensity ?? 0.85) * 0.25));
-          ctx.setLineDash([1, stroke.size * 0.3]);
-          ctx.stroke();
-          ctx.restore();
-        }
+        drawChalkStroke(ctx, stroke);
       } else {
         if (pts.length === 1) {
           drawEraserSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
@@ -389,6 +351,35 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, selectedStrokeIds, socket, roomId, zoom]);
 
+  const handleGroup = useCallback(() => {
+    if (selectedStrokeIds.length < 2) return;
+    
+    const groupId = `${socket.id}-${Date.now()}`;
+    const updated = strokes.map(s => {
+      if (selectedStrokeIds.includes(s.id)) {
+        return { ...s, groupId };
+      }
+      return s;
+    });
+    
+    setStrokes(updated);
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }, [strokes, selectedStrokeIds, socket, roomId]);
+
+  const handleUngroup = useCallback(() => {
+    if (selectedStrokeIds.length === 0) return;
+    
+    const updated = strokes.map(s => {
+      if (selectedStrokeIds.includes(s.id) && s.groupId) {
+        return { ...s, groupId: undefined };
+      }
+      return s;
+    });
+    
+    setStrokes(updated);
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }, [strokes, selectedStrokeIds, socket, roomId]);
+
   // Insert a shape at the center of the current viewport
   const handleInsertShape = useCallback((shape: ShapeType) => {
     const canvas = canvasRef.current;
@@ -439,8 +430,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         handleRedo();
       }
 
-      // Keyboard Copy / Paste / Cut / Duplicate shortcuts
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
+      // Keyboard Copy / Paste / Cut / Duplicate / Group / Ungroup shortcuts
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
         const key = e.key.toLowerCase();
         if (key === 'c' && selectedStrokeIds.length > 0) {
           e.preventDefault();
@@ -454,6 +445,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         } else if (key === 'd' && selectedStrokeIds.length > 0) {
           e.preventDefault();
           handleDuplicate();
+        } else if (key === 'g' && !e.shiftKey && selectedStrokeIds.length >= 2) {
+          e.preventDefault();
+          handleGroup();
+        } else if ((key === 'g' && e.shiftKey) && selectedStrokeIds.length > 0) {
+          e.preventDefault();
+          handleUngroup();
         }
       }
 
@@ -1192,46 +1189,56 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       {/* HUD Overlay layer */}
       <div className="hud-layer">
         {/* Selection Toolbox */}
-        {selectedStrokeIds.length > 0 && transformBox && (
-          <SelectionToolbox
-            boxScreenLeft={transformBox.minX * zoom + panOffset.x}
-            boxScreenRight={transformBox.maxX * zoom + panOffset.x}
-            boxScreenCenterY={(transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y}
-            activeColor={activeColor}
-            onColorChange={(color) => {
-              const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s);
-              setStrokes(updated);
-              socket.emit('undo-stroke', { roomId, strokes: updated });
-            }}
-            onCut={handleCut}
-            onDelete={() => {
-              const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));
-              setStrokes(updated);
-              setSelectedStrokeIds([]);
-              setTransformBox(null);
-              socket.emit('undo-stroke', { roomId, strokes: updated });
-            }}
-            onDeselect={() => {
-              setSelectedStrokeIds([]);
-              setTransformBox(null);
-            }}
-            onIncreaseSize={handleIncreaseSize}
-            onDecreaseSize={handleDecreaseSize}
-            onSetSize={(size) => {
-              if (selectedStrokeIds.length === 0) return;
-              const updated = strokes.map(s => {
-                if (selectedStrokeIds.includes(s.id)) {
-                  return { ...s, size: Math.min(100, Math.max(1, size)) };
-                }
-                return s;
-              });
-              setStrokes(updated);
-              socket.emit('undo-stroke', { roomId, strokes: updated });
-            }}
-            onCopy={handleCopy}
-            onDuplicate={handleDuplicate}
-          />
-        )}
+        {selectedStrokeIds.length > 0 && transformBox && (() => {
+          const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
+          const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
+          const commonGroupId = hasGroupId ? selectedStrokes[0].groupId : undefined;
+          
+          return (
+            <SelectionToolbox
+              boxScreenLeft={transformBox.minX * zoom + panOffset.x}
+              boxScreenRight={transformBox.maxX * zoom + panOffset.x}
+              boxScreenCenterY={(transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y}
+              activeColor={activeColor}
+              onColorChange={(color) => {
+                const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s);
+                setStrokes(updated);
+                socket.emit('undo-stroke', { roomId, strokes: updated });
+              }}
+              onCut={handleCut}
+              onDelete={() => {
+                const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));
+                setStrokes(updated);
+                setSelectedStrokeIds([]);
+                setTransformBox(null);
+                socket.emit('undo-stroke', { roomId, strokes: updated });
+              }}
+              onDeselect={() => {
+                setSelectedStrokeIds([]);
+                setTransformBox(null);
+              }}
+              onIncreaseSize={handleIncreaseSize}
+              onDecreaseSize={handleDecreaseSize}
+              onSetSize={(size) => {
+                if (selectedStrokeIds.length === 0) return;
+                const updated = strokes.map(s => {
+                  if (selectedStrokeIds.includes(s.id)) {
+                    return { ...s, size: Math.min(100, Math.max(1, size)) };
+                  }
+                  return s;
+                });
+                setStrokes(updated);
+                socket.emit('undo-stroke', { roomId, strokes: updated });
+              }}
+              onCopy={handleCopy}
+              onDuplicate={handleDuplicate}
+              onGroup={handleGroup}
+              onUngroup={handleUngroup}
+              selectedCount={selectedStrokeIds.length}
+              isGrouped={hasGroupId}
+            />
+          );
+        })()}
 
         {/* Header HUD */}
         <div className="board-header">

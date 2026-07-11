@@ -1,13 +1,12 @@
-import type { ShapeGenerator } from '@/types';
-import type { Point } from '@/types';
-import { makeStrokeFactory, BASE_SIZE } from '@/utils/shapes';
+import type { ShapeGenerator, Point } from '@/types';
+import { makeStrokeFactory, BASE_SIZE } from '@/utils/shapes/generator';
 
 export const circle: ShapeGenerator = (canvasCenter, opts) => {
   const { x: cx, y: cy } = canvasCenter;
   const steps = 48;
   const points: Point[] = [];
 
-  for (let i = 0; i <= steps; i++) {
+  for (let i = 0; i < steps; i++) {
     const angle = (i / steps) * Math.PI * 2;
     points.push({
       x: cx + BASE_SIZE * Math.cos(angle),
@@ -16,5 +15,5 @@ export const circle: ShapeGenerator = (canvasCenter, opts) => {
   }
 
   const stroke = makeStrokeFactory('circle', opts);
-  return [stroke(points)];
+  return [stroke(points, '', { pathType: 'smooth', closed: true })];
 };

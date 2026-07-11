@@ -7,9 +7,19 @@ export interface Stroke {
   color: string;
   size: number;
   intensity?: number;
+  /**
+   * Freehand strokes are smoothed by default. Inserted geometric shapes can
+   * opt into straight segments so their corners are not rounded away by the
+   * freehand interpolation algorithm.
+   */
+  pathType?: 'smooth' | 'linear';
+  /** Close the path by connecting its final point back to its first point. */
+  closed?: boolean;
   eraserWidth?: number;
   eraserHeight?: number;
   points: Point[];
+  /** Optional group identifier for grouped strokes */
+  groupId?: string;
 }
 
 

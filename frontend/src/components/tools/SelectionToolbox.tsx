@@ -9,6 +9,8 @@ import {
   Scissors,
   ChevronRight,
   RulerIcon,
+  Group,
+  Ungroup,
 } from 'lucide-react';
 import { CHALK_COLORS } from '@/components/tools/ColorPicker';
 
@@ -29,6 +31,12 @@ interface SelectionToolboxProps {
   onCopy: () => void;
   onDuplicate: () => void;
   onCut: () => void;
+  onGroup: () => void;
+  onUngroup: () => void;
+  /** Number of selected strokes */
+  selectedCount: number;
+  /** Whether the selected strokes are already grouped */
+  isGrouped: boolean;
 }
 
 type SubPanel = 'color' | 'size' | null;
@@ -51,6 +59,10 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   onCopy,
   onDuplicate,
   onCut,
+  onGroup,
+  onUngroup,
+  selectedCount,
+  isGrouped,
 }) => {
   const [openSubPanel, setOpenSubPanel] = useState<SubPanel>(null);
   const [brushSize, setBrushSize] = useState<number>(8);
@@ -182,6 +194,36 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           <span className="sel-row-icon"><Scissors size={13} /></span>
           <span className="sel-row-label">Cut</span>
           <kbd className="sel-kbd">Ctrl+X</kbd>
+        </button>
+
+        <div className="sel-divider" />
+
+        {/* ── Group ── */}
+        <button
+          type="button"
+          className="sel-toolbox-row sel-action-row"
+          onMouseEnter={() => handleRowEnter(null)}
+          onClick={() => { onGroup(); }}
+          disabled={selectedCount < 2}
+          style={{ opacity: selectedCount < 2 ? 0.5 : 1, cursor: selectedCount < 2 ? 'not-allowed' : 'pointer' }}
+        >
+          <span className="sel-row-icon"><Group size={13} /></span>
+          <span className="sel-row-label">Group</span>
+          <kbd className="sel-kbd">Ctrl+G</kbd>
+        </button>
+
+        {/* ── Ungroup ── */}
+        <button
+          type="button"
+          className="sel-toolbox-row sel-action-row"
+          onMouseEnter={() => handleRowEnter(null)}
+          onClick={() => { onUngroup(); }}
+          disabled={!isGrouped || selectedCount < 1}
+          style={{ opacity: !isGrouped || selectedCount < 1 ? 0.5 : 1, cursor: !isGrouped || selectedCount < 1 ? 'not-allowed' : 'pointer' }}
+        >
+          <span className="sel-row-icon"><Ungroup size={13} /></span>
+          <span className="sel-row-label">Ungroup</span>
+          <kbd className="sel-kbd">Ctrl+Shift+G</kbd>
         </button>
 
         <div className="sel-divider" />

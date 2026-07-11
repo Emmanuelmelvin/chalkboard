@@ -1,26 +1,23 @@
-import type { ShapeGenerator, ShapeStrokeOptions, CanvasCenter } from './types';
-import type { Point } from '@/types';
-import { makeStrokeFactory, BASE_SIZE } from '../../utils/shapes/generator';
+import type { ShapeGenerator } from '@/types';
+import { makeStrokeFactory, BASE_SIZE } from '@/utils/shapes/generator';
 
 export const arrow: ShapeGenerator = (canvasCenter, opts) => {
   const { x: cx, y: cy } = canvasCenter;
   const startX = cx - BASE_SIZE;
   const endX = cx + BASE_SIZE;
-  const arrowSize = 16;
+  const arrowSize = BASE_SIZE * 0.35;
   const stroke = makeStrokeFactory('arrow', opts);
 
   const shaft = stroke([
     { x: startX, y: cy },
-    { x: endX - arrowSize * 0.5, y: cy },
-  ]);
+    { x: endX, y: cy },
+  ], '', { pathType: 'linear' });
 
   const head = stroke([
+    { x: endX - arrowSize, y: cy - arrowSize * 0.65 },
     { x: endX, y: cy },
-    { x: endX - arrowSize, y: cy - arrowSize * 0.4 },
-    { x: endX - arrowSize * 0.7, y: cy },
-    { x: endX - arrowSize, y: cy + arrowSize * 0.4 },
-    { x: endX, y: cy },
-  ], '-head');
+    { x: endX - arrowSize, y: cy + arrowSize * 0.65 },
+  ], '-head', { pathType: 'linear' });
 
   return [shaft, head];
 };

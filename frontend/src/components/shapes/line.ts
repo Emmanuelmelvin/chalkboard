@@ -8,5 +8,5 @@ export const line: ShapeGenerator = (canvasCenter, opts) => {
   return [stroke([
     { x: cx - BASE_SIZE, y: cy },
     { x: cx + BASE_SIZE, y: cy },
-  ])];
+  ], '', { pathType: 'linear' })];
 };

@@ -12,5 +12,5 @@ export const rectangle: ShapeGenerator = (canvasCenter, opts) => {
     { x: cx + w / 2, y: cy - h / 2 },
     { x: cx + w / 2, y: cy + h / 2 },
     { x: cx - w / 2, y: cy + h / 2 },
-  ])];
+  ], '', { pathType: 'linear', closed: true })];
 };

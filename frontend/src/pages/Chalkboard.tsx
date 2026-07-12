@@ -587,17 +587,24 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   // ── Trim functionality ──
 
-  /** Start trim mode */
+  /** Start trim mode — also snapshot originalPoints so Reset Crop can restore the full shape */
   const handleStartTrim = useCallback(() => {
     if (!transformBox) return;
+    // Save original points on each selected stroke (only once — don't overwrite if already saved)
+    setStrokes(prev => prev.map(s => {
+      if (selectedStrokeIds.includes(s.id) && !s.originalPoints) {
+        return { ...s, originalPoints: [...s.points] };
+      }
+      return s;
+    }));
     setTrimState({
       active: true,
       cropBox: { ...transformBox },
       initialBox: { ...transformBox },
     });
-  }, [transformBox]);
+  }, [transformBox, selectedStrokeIds]);
 
-  /** Apply trim: apply cropBox to selected strokes by cutting their points destructively */
+  /** Apply trim: destructively clip selected strokes to cropBox, keeping originalPoints for reset */
   const handleApplyTrim = useCallback(() => {
     if (!trimState.active || !trimState.cropBox) return;
     
@@ -607,7 +614,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     strokes.forEach(stroke => {
       if (selectedStrokeIds.includes(stroke.id)) {
         const cropped = clipStrokeToRect(stroke, cropBox);
-        updatedStrokes.push(...cropped);
+        // Preserve originalPoints from the parent stroke so the user can reset later
+        const parentOriginal = stroke.originalPoints ?? stroke.points;
+        cropped.forEach(cs => {
+          updatedStrokes.push({ ...cs, originalPoints: [...parentOriginal] });
+        });
       } else {
         updatedStrokes.push(stroke);
       }
@@ -632,19 +643,25 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
   }, [strokes, selectedStrokeIds, socket, roomId, trimState]);
 
-  /** Reset trim: reset cropBox when crop is active, or remove clipBox from legacy strokes */
+  /** Reset crop: if crop mode active → reset box to full bounds; otherwise restore originalPoints */
   const handleResetTrim = useCallback(() => {
     if (trimState.active && trimState.initialBox) {
+      // Crop is in-progress: reset the crop box back to the original full selection bounds
       setTrimState(prev => ({
         ...prev,
         cropBox: { ...prev.initialBox! },
       }));
     } else {
+      // Crop already applied: restore the full original points from before the crop
       if (selectedStrokeIds.length === 0) return;
       const updated = strokes.map(stroke => {
-        if (selectedStrokeIds.includes(stroke.id)) {
-          const { clipBox, ...rest } = stroke;
-          return rest;
+        if (selectedStrokeIds.includes(stroke.id) && stroke.originalPoints) {
+          return {
+            ...stroke,
+            points: [...stroke.originalPoints],
+            // Clear originalPoints once restored so bounding box recalculates correctly
+            originalPoints: undefined,
+          };
         }
         return stroke;
       });
@@ -807,7 +824,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             if (selectedStrokeIds.includes(s.id)) {
               return {
                 ...s,
-                points: s.points.map(p => ({ x: p.x + dx, y: p.y + dy }))
+                points: s.points.map(p => ({ x: p.x + dx, y: p.y + dy })),
+                originalPoints: s.originalPoints
+                  ? s.originalPoints.map(p => ({ x: p.x + dx, y: p.y + dy }))
+                  : undefined,
               };
             }
             return s;
@@ -874,8 +894,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
       // Ctrl+Shift+T: toggle trim/crop mode (only when not in input)
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
-        const key = e.key.toLowerCase();
-        if (key === 't') {
+        if (e.code === 'KeyT') {
           e.preventDefault();
           if (trimState.active) {
             setTrimState({ active: false, cropBox: null, initialBox: null });

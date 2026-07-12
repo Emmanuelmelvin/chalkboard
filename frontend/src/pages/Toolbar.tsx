@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PenTool, Eraser, Hand, MousePointer2 } from 'lucide-react';
+import { PenTool, RectangleHorizontal, Hand, MousePointer2 } from 'lucide-react';
 import ColorPicker from '@/components/tools/ColorPicker';
 import BrushSize from '@/components/tools/BrushSize';
 import BrushIntensity from '@/components/tools/BrushIntensity';
@@ -113,7 +113,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }}
             title="Eraser (Ctrl+E)"
           >
-            <Eraser size={20} />
+            <RectangleHorizontal size={20} />
           </button>
 
           {showEraserSettings && activeTool === 'eraser' && (

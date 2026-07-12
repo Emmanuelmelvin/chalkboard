@@ -24,6 +24,8 @@ export interface Stroke {
   rotation?: number;
   /** Non-destructive crop/clip bounds */
   clipBox?: Rect;
+  /** Original points before a destructive crop — used to restore with Reset Crop */
+  originalPoints?: Point[];
 }
 
 /** Represents a link reference to a canvas area */

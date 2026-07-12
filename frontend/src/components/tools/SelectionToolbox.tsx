@@ -282,13 +282,13 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           <kbd className="sel-kbd">Ctrl+X</kbd>
         </button>
 
-        {/* ── Trim ── */}
+        {/* ── Crop ── */}
         <div
           className={`sel-toolbox-row sel-action-row ${openSubPanel === 'trim' ? 'sel-row-active' : ''}`}
           onMouseEnter={() => handleRowEnter('trim')}
         >
           <span className="sel-row-icon"><Scissors size={13} /></span>
-          <span className="sel-row-label">Trim</span>
+          <span className="sel-row-label">Crop</span>
           <kbd className="sel-kbd" style={{ marginRight: 8 }}>Ctrl+Shift+T</kbd>
           <ChevronRight size={11} className="sel-row-chevron" />
         </div>
@@ -577,7 +577,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           onMouseEnter={clearCloseTimer}
           onMouseLeave={handlePanelLeave}
         >
-          <p className="sel-subpanel-title">Trim / Crop</p>
+          <p className="sel-subpanel-title">Crop</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button
               type="button"

@@ -317,6 +317,9 @@ export const rotateStrokes = (
     return {
       ...stroke,
       points: stroke.points.map(p => rotatePoint(p, center, angleDeg)),
+      originalPoints: stroke.originalPoints
+        ? stroke.originalPoints.map(p => rotatePoint(p, center, angleDeg))
+        : undefined,
       rotation: newRotation,
     };
   });
@@ -341,6 +344,9 @@ export const rotateStrokesTo = (
     return {
       ...stroke,
       points: stroke.points.map(p => rotatePoint(p, center, deltaAngle)),
+      originalPoints: stroke.originalPoints
+        ? stroke.originalPoints.map(p => rotatePoint(p, center, deltaAngle))
+        : undefined,
       rotation: targetAngleDeg,
     };
   });
@@ -366,7 +372,13 @@ export const transformStrokes = (
     points: stroke.points.map(p => ({
       x: newBox.minX + (p.x - originalBox.minX) * scaleX,
       y: newBox.minY + (p.y - originalBox.minY) * scaleY
-    }))
+    })),
+    originalPoints: stroke.originalPoints
+      ? stroke.originalPoints.map(p => ({
+          x: newBox.minX + (p.x - originalBox.minX) * scaleX,
+          y: newBox.minY + (p.y - originalBox.minY) * scaleY
+        }))
+      : undefined,
   }));
 };
 

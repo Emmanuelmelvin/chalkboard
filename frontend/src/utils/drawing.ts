@@ -255,6 +255,70 @@ export const getCombinedBoundingBox = (strokes: Stroke[]): Rect | null => {
   return combined;
 };
 
+/**
+ * Rotate a point around a center by angle (in degrees)
+ */
+export const rotatePoint = (point: Point, center: Point, angleDeg: number): Point => {
+  const angleRad = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos,
+  };
+};
+
+/**
+ * Rotate an array of strokes by an angle (degrees) around their combined center.
+ * Updates the rotation property on each stroke.
+ */
+export const rotateStrokes = (
+  strokes: Stroke[],
+  angleDeg: number
+): Stroke[] => {
+  const box = getCombinedBoundingBox(strokes);
+  if (!box) return strokes;
+  const center: Point = {
+    x: (box.minX + box.maxX) / 2,
+    y: (box.minY + box.maxY) / 2,
+  };
+  return strokes.map(stroke => {
+    const currentRotation = stroke.rotation ?? 0;
+    const newRotation = currentRotation + angleDeg;
+    return {
+      ...stroke,
+      points: stroke.points.map(p => rotatePoint(p, center, angleDeg)),
+      rotation: newRotation,
+    };
+  });
+};
+
+/**
+ * Rotate strokes to an absolute angle (degrees)
+ */
+export const rotateStrokesTo = (
+  strokes: Stroke[],
+  targetAngleDeg: number
+): Stroke[] => {
+  const box = getCombinedBoundingBox(strokes);
+  if (!box) return strokes;
+  const center: Point = {
+    x: (box.minX + box.maxX) / 2,
+    y: (box.minY + box.maxY) / 2,
+  };
+  return strokes.map(stroke => {
+    const currentRotation = stroke.rotation ?? 0;
+    const deltaAngle = targetAngleDeg - currentRotation;
+    return {
+      ...stroke,
+      points: stroke.points.map(p => rotatePoint(p, center, deltaAngle)),
+      rotation: targetAngleDeg,
+    };
+  });
+};
+
 // Apply translation and scaling to strokes
 export const transformStrokes = (
   strokes: Stroke[],

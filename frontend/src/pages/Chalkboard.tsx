@@ -8,7 +8,9 @@ import {
   drawEraserSegment,
   getCombinedBoundingBox,
   isStrokeInRect,
-  transformStrokes
+  transformStrokes,
+  rotateStrokesTo,
+  rotatePoint,
 } from '@/utils/drawing';
 import { getRandomColor } from '@/utils/colors';
 import type { 
@@ -38,8 +40,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [selectionMarquee, setSelectionMarquee] = useState<Rect | null>(null);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [transformBox, setTransformBox] = useState<Rect | null>(null);
-  const [transformMode, setTransformMode] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | null>(null);
-  const [hoveredHandle, setHoveredHandle] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | null>(null);
+  const [transformMode, setTransformMode] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'rotate' | null>(null);
+  const [hoveredHandle, setHoveredHandle] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'rotate' | null>(null);
+  // Live rotation (degrees) applied to the transform-box/banner while a rotate
+  // drag is in progress. The strokes' own points already encode rotation once
+  // the drag ends (rotateStrokesTo mutates them), so this is reset to 0 as
+  // soon as we recompute a fresh axis-aligned box after pointer-up.
+  const [selectionRotation, setSelectionRotation] = useState<number>(0);
   const transformStart = useRef<Point>({ x: 0, y: 0 });
   const initialTransformBox = useRef<Rect | null>(null);
   const initialSelectedStrokes = useRef<Stroke[]>([]);
@@ -145,39 +152,99 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       ctx.restore();
     }
 
-    // Draw transform box
-    if (transformBox && selectedStrokeIds.length > 0) {
-      ctx.save();
-      ctx.strokeStyle = '#3b82f6';
-      ctx.lineWidth = 2 / zoom;
-      ctx.strokeRect(
-        transformBox.minX,
-        transformBox.minY,
-        transformBox.maxX - transformBox.minX,
-        transformBox.maxY - transformBox.minY
-      );
-      // Resize Handles (TL, TR, BL, BR)
-      ctx.fillStyle = '#fff';
-      const hs = 6 / zoom;
-      
-      // TL
-      ctx.fillRect(transformBox.minX - hs, transformBox.minY - hs, hs * 2, hs * 2);
-      ctx.strokeRect(transformBox.minX - hs, transformBox.minY - hs, hs * 2, hs * 2);
-      
-      // TR
-      ctx.fillRect(transformBox.maxX - hs, transformBox.minY - hs, hs * 2, hs * 2);
-      ctx.strokeRect(transformBox.maxX - hs, transformBox.minY - hs, hs * 2, hs * 2);
-      
-      // BL
-      ctx.fillRect(transformBox.minX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
-      ctx.strokeRect(transformBox.minX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
-      
-      // BR
-      ctx.fillRect(transformBox.maxX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
-      ctx.strokeRect(transformBox.maxX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
-      
-      ctx.restore();
-    }
+      // Draw transform box + rotate handle as a single rigid group, rotated
+      // around the box's center by the live selectionRotation. This is what
+      // makes the "banner" (box, resize handles, rotate handle + connector)
+      // visually track the strokes while a rotate drag is in progress.
+      if (transformBox && selectedStrokeIds.length > 0) {
+        const boxCenterX = (transformBox.minX + transformBox.maxX) / 2;
+        const boxCenterY = (transformBox.minY + transformBox.maxY) / 2;
+
+        ctx.save();
+        ctx.translate(boxCenterX, boxCenterY);
+        ctx.rotate((selectionRotation * Math.PI) / 180);
+        ctx.translate(-boxCenterX, -boxCenterY);
+
+        // Draw transform box
+        ctx.save();
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2 / zoom;
+        ctx.strokeRect(
+          transformBox.minX,
+          transformBox.minY,
+          transformBox.maxX - transformBox.minX,
+          transformBox.maxY - transformBox.minY
+        );
+        // Resize Handles (TL, TR, BL, BR)
+        ctx.fillStyle = '#fff';
+        const hs = 6 / zoom;
+
+        // TL
+        ctx.fillRect(transformBox.minX - hs, transformBox.minY - hs, hs * 2, hs * 2);
+        ctx.strokeRect(transformBox.minX - hs, transformBox.minY - hs, hs * 2, hs * 2);
+
+        // TR
+        ctx.fillRect(transformBox.maxX - hs, transformBox.minY - hs, hs * 2, hs * 2);
+        ctx.strokeRect(transformBox.maxX - hs, transformBox.minY - hs, hs * 2, hs * 2);
+
+        // BL
+        ctx.fillRect(transformBox.minX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
+        ctx.strokeRect(transformBox.minX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
+
+        // BR
+        ctx.fillRect(transformBox.maxX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
+        ctx.strokeRect(transformBox.maxX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
+
+        ctx.restore();
+
+        // Draw rotate handle (circle with arrow below transform box)
+        {
+          const centerX = boxCenterX;
+          const rotY = transformBox.maxY + 30 / zoom;
+          const rotRadius = 10 / zoom;
+
+          ctx.save();
+          // Circle
+          ctx.beginPath();
+          ctx.arc(centerX, rotY, rotRadius, 0, Math.PI * 2);
+          ctx.fillStyle = '#3b82f6';
+          ctx.fill();
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1.5 / zoom;
+          ctx.stroke();
+
+          // Arrow (↻)
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1.5 / zoom;
+          ctx.beginPath();
+          ctx.arc(centerX, rotY, rotRadius * 0.55, -Math.PI * 0.8, Math.PI * 0.4);
+          ctx.stroke();
+          // Arrow head
+          const arrowAngle = Math.PI * 0.4;
+          const headSize = 4 / zoom;
+          const ax = centerX + rotRadius * 0.55 * Math.cos(arrowAngle);
+          const ay = rotY + rotRadius * 0.55 * Math.sin(arrowAngle);
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(ax - headSize * Math.cos(arrowAngle - 0.5), ay - headSize * Math.sin(arrowAngle - 0.5));
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(ax - headSize * Math.cos(arrowAngle + 0.5), ay - headSize * Math.sin(arrowAngle + 0.5));
+          ctx.stroke();
+
+          // Connection line from center bottom to rotate handle
+          ctx.beginPath();
+          ctx.moveTo(centerX, transformBox.maxY);
+          ctx.lineTo(centerX, rotY - rotRadius);
+          ctx.strokeStyle = '#3b82f6';
+          ctx.lineWidth = 1.5 / zoom;
+          ctx.setLineDash([4 / zoom, 4 / zoom]);
+          ctx.stroke();
+
+          ctx.restore();
+        }
+
+        ctx.restore(); // outer rotate transform
+      }
 
     // Draw all strokes with smooth curves
     strokes.forEach((stroke) => {
@@ -198,7 +265,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
 
     ctx.restore();
-  }, [strokes, zoom, panOffset, selectionMarquee, transformBox, selectedStrokeIds]);
+  }, [strokes, zoom, panOffset, selectionMarquee, transformBox, selectedStrokeIds, selectionRotation]);
 
   // RequestAnimationFrame draw loop trigger
   useEffect(() => {
@@ -249,6 +316,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setRedoStack([]);
     setSelectedStrokeIds([]);
     setTransformBox(null);
+    setSelectionRotation(0);
     socket.emit('clear-board', { roomId });
   };
 
@@ -291,6 +359,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setStrokes(updated);
     setSelectedStrokeIds([]);
     setTransformBox(null);
+    setSelectionRotation(0);
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, selectedStrokeIds, socket, roomId]);
 
@@ -321,6 +390,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const newIds = pastedStrokes.map(s => s.id);
     setSelectedStrokeIds(newIds);
     setTransformBox(getCombinedBoundingBox(pastedStrokes));
+    setSelectionRotation(0);
 
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, socket, roomId]);
@@ -346,6 +416,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const newIds = duplicated.map(s => s.id);
     setSelectedStrokeIds(newIds);
     setTransformBox(getCombinedBoundingBox(duplicated));
+    setSelectionRotation(0);
 
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, selectedStrokeIds, socket, roomId, zoom]);
@@ -404,6 +475,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const newIds = newStrokes.map(s => s.id);
     setSelectedStrokeIds(newIds);
     setTransformBox(getCombinedBoundingBox(newStrokes));
+    setSelectionRotation(0);
 
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, socket, roomId, zoom, panOffset, activeColor, brushSize, brushIntensity]);
@@ -516,6 +588,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           setStrokes(updated);
           setSelectedStrokeIds([]);
           setTransformBox(null);
+          setSelectionRotation(0);
           socket.emit('undo-stroke', { roomId, strokes: updated });
           return;
         }
@@ -526,6 +599,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         e.preventDefault();
         setSelectedStrokeIds([]);
         setTransformBox(null);
+        setSelectionRotation(0);
         return;
       }
 
@@ -807,8 +881,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         const onBottomEdge = Math.abs(pos.y - transformBox.maxY) <= edgeTolerance &&
           pos.x >= transformBox.minX - edgeTolerance && pos.x <= transformBox.maxX + edgeTolerance;
 
-        let mode: 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'move' | null = null;
-        if (inResizeTL) mode = 'resize-tl';
+        // Detect rotate handle
+        const centerX = (transformBox.minX + transformBox.maxX) / 2;
+        const rotY = transformBox.maxY + 30 / zoom;
+        const rotRadius = 15 / zoom;
+        const inRotate = Math.sqrt((pos.x - centerX) ** 2 + (pos.y - rotY) ** 2) <= rotRadius;
+
+        let mode: 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'move' | 'rotate' | null = null;
+        if (inRotate) mode = 'rotate';
+        else if (inResizeTL) mode = 'resize-tl';
         else if (inResizeTR) mode = 'resize-tr';
         else if (inResizeBL) mode = 'resize-bl';
         else if (inResizeBR) mode = 'resize-br';
@@ -858,17 +939,20 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               } else {
                 setTransformBox(null);
               }
+              setSelectionRotation(0);
             } else {
               // Add the entire group to current selection
               const newSelection = [...new Set([...selectedStrokeIds, ...groupIds])];
               setSelectedStrokeIds(newSelection);
               const selected = strokes.filter(s => newSelection.includes(s.id));
               setTransformBox(getCombinedBoundingBox(selected));
+              setSelectionRotation(0);
             }
           } else {
             // Replace selection with the entire group
             setSelectedStrokeIds(groupIds);
             setTransformBox(getCombinedBoundingBox(groupStrokes));
+            setSelectionRotation(0);
           }
           canvas.setPointerCapture(e.pointerId);
           return;
@@ -885,12 +969,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           } else {
             setTransformBox(null);
           }
+          setSelectionRotation(0);
         } else {
           // Add to selection
           const newSelection = [...selectedStrokeIds, clickedStroke.id];
           setSelectedStrokeIds(newSelection);
           const selected = strokes.filter(s => newSelection.includes(s.id));
           setTransformBox(getCombinedBoundingBox(selected));
+          setSelectionRotation(0);
         }
         canvas.setPointerCapture(e.pointerId);
         return;
@@ -899,6 +985,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       // Start new selection marquee
       setSelectedStrokeIds([]);
       setTransformBox(null);
+      setSelectionRotation(0);
       setSelectionMarquee({ minX: pos.x, minY: pos.y, maxX: pos.x, maxY: pos.y });
       canvas.setPointerCapture(e.pointerId);
       return;
@@ -922,6 +1009,36 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       if (transformMode && initialTransformBox.current) {
         const dx = pos.x - transformStart.current.x;
         const dy = pos.y - transformStart.current.y;
+
+        // ── Rotate mode ──
+        if (transformMode === 'rotate') {
+          const center: Point = {
+            x: (initialTransformBox.current.minX + initialTransformBox.current.maxX) / 2,
+            y: (initialTransformBox.current.minY + initialTransformBox.current.maxY) / 2,
+          };
+          // transformStart is fixed at pointer-down (NOT reassigned each frame),
+          // so this angle is always the TOTAL sweep since the drag began —
+          // that's what makes rotateStrokesTo's absolute-angle math correct.
+          const startAngle = Math.atan2(
+            transformStart.current.y - center.y,
+            transformStart.current.x - center.x
+          );
+          const currentAngle = Math.atan2(pos.y - center.y, pos.x - center.x);
+          const angleDeg = ((currentAngle - startAngle) * 180) / Math.PI;
+
+          const baseRotation = initialSelectedStrokes.current[0]?.rotation ?? 0;
+          const rotated = rotateStrokesTo(initialSelectedStrokes.current, baseRotation + angleDeg);
+
+          setStrokes(prev => prev.map(s => {
+            const r = rotated.find(rs => rs.id === s.id);
+            return r ? r : s;
+          }));
+
+          // Keep the outer banner (box + handles + rotate connector) rotating
+          // in lockstep with the strokes instead of staying frozen.
+          setSelectionRotation(angleDeg);
+          return;
+        }
 
         let newBox = { ...initialTransformBox.current };
         if (transformMode === 'move') {
@@ -998,8 +1115,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         const onBottomEdge = Math.abs(pos.y - transformBox.maxY) <= edgeTolerance &&
           pos.x >= transformBox.minX - edgeTolerance && pos.x <= transformBox.maxX + edgeTolerance;
 
+        // Detect rotate handle hover
+        const centerX = (transformBox.minX + transformBox.maxX) / 2;
+        const rotY = transformBox.maxY + 30 / zoom;
+        const rotRadius = 15 / zoom;
+        const inRotate = Math.sqrt((pos.x - centerX) ** 2 + (pos.y - rotY) ** 2) <= rotRadius;
+
         let hover: typeof hoveredHandle = null;
-        if (inResizeTL) hover = 'resize-tl';
+        if (inRotate) hover = 'rotate';
+        else if (inResizeTL) hover = 'resize-tl';
         else if (inResizeTR) hover = 'resize-tr';
         else if (inResizeBL) hover = 'resize-bl';
         else if (inResizeBR) hover = 'resize-br';
@@ -1036,6 +1160,19 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
     if (activeTool === 'select') {
       if (transformMode) {
+        const wasRotating = transformMode === 'rotate';
+
+        if (wasRotating) {
+          // The strokes' own points now encode the rotation (rotateStrokesTo
+          // mutated them during the drag). Recompute a fresh, true
+          // axis-aligned bounding box around them and drop the temporary
+          // visual rotation offset — otherwise the box would get "double
+          // rotated" the next time someone drags the handle again.
+          const rotatedSelection = strokes.filter(s => selectedStrokeIds.includes(s.id));
+          setTransformBox(getCombinedBoundingBox(rotatedSelection));
+          setSelectionRotation(0);
+        }
+
         socket.emit('undo-stroke', { roomId, strokes }); // We sync entire board for simplicity or a custom event
 
         setTransformMode(null);
@@ -1058,6 +1195,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         if (sIds.length > 0) {
           setSelectedStrokeIds(sIds);
           setTransformBox(getCombinedBoundingBox(selected));
+          setSelectionRotation(0);
         }
 
         setSelectionMarquee(null);
@@ -1274,11 +1412,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 setStrokes(updated);
                 setSelectedStrokeIds([]);
                 setTransformBox(null);
+                setSelectionRotation(0);
                 socket.emit('undo-stroke', { roomId, strokes: updated });
               }}
               onDeselect={() => {
                 setSelectedStrokeIds([]);
                 setTransformBox(null);
+                setSelectionRotation(0);
               }}
               onIncreaseSize={handleIncreaseSize}
               onDecreaseSize={handleDecreaseSize}
@@ -1297,6 +1437,20 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               onDuplicate={handleDuplicate}
               onGroup={handleGroup}
               onUngroup={handleUngroup}
+              onRotate={(angleDeg) => {
+                const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
+                const rotated = rotateStrokesTo(selected, (selected[0]?.rotation ?? 0) + angleDeg);
+                const updated = strokes.map(s => {
+                  const r = rotated.find(rs => rs.id === s.id);
+                  return r ? r : s;
+                });
+                setStrokes(updated);
+                // Keep the banner in sync for button-driven rotation too —
+                // this is the same bug the drag handle had, recomputed here
+                // as a direct AABB since there's no in-progress drag angle.
+                setTransformBox(getCombinedBoundingBox(rotated));
+                socket.emit('undo-stroke', { roomId, strokes: updated });
+              }}
               selectedCount={selectedStrokeIds.length}
               isGrouped={hasGroupId}
             />

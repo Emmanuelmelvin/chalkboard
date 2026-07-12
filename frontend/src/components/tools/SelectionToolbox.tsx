@@ -11,6 +11,7 @@ import {
   RulerIcon,
   Group,
   Ungroup,
+  RotateCw,
 } from 'lucide-react';
 import { CHALK_COLORS } from '@/components/tools/ColorPicker';
 
@@ -33,13 +34,15 @@ interface SelectionToolboxProps {
   onCut: () => void;
   onGroup: () => void;
   onUngroup: () => void;
+  /** Rotate callback: angle in degrees */
+  onRotate?: (angleDeg: number) => void;
   /** Number of selected strokes */
   selectedCount: number;
   /** Whether the selected strokes are already grouped */
   isGrouped: boolean;
 }
 
-type SubPanel = 'color' | 'size' | null;
+type SubPanel = 'color' | 'size' | 'rotate' | null;
 
 const PANEL_WIDTH = 188;
 const PANEL_MARGIN = 16; // gap from selection box edge to panel
@@ -61,6 +64,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   onCut,
   onGroup,
   onUngroup,
+  onRotate,
   selectedCount,
   isGrouped,
 }) => {
@@ -155,6 +159,16 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         >
           <span className="sel-row-icon"><RulerIcon size={13} /></span>
           <span className="sel-row-label">Size</span>
+          <ChevronRight size={11} className="sel-row-chevron" />
+        </div>
+
+        {/* ── Rotate row ── */}
+        <div
+          className={`sel-toolbox-row ${openSubPanel === 'rotate' ? 'sel-row-active' : ''}`}
+          onMouseEnter={() => handleRowEnter('rotate')}
+        >
+          <span className="sel-row-icon"><RotateCw size={13} /></span>
+          <span className="sel-row-label">Rotate</span>
           <ChevronRight size={11} className="sel-row-chevron" />
         </div>
 
@@ -349,6 +363,65 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             />
           </div>
           <p className="sel-size-hint">Use <kbd className="sel-kbd">[ ]</kbd> keys to change size</p>
+        </div>
+      )}
+
+      {/* ── Sub-panel: Rotate ── */}
+      {openSubPanel === 'rotate' && (
+        <div
+          className={`sel-subpanel ${subPanelSide === 'right' ? 'sel-subpanel-right' : 'sel-subpanel-left'}`}
+          onMouseEnter={clearCloseTimer}
+          onMouseLeave={handlePanelLeave}
+        >
+          <p className="sel-subpanel-title">Rotate</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              type="button"
+              className="sel-toolbox-row sel-action-row"
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              onClick={() => onRotate?.(90)}
+            >
+              <RotateCw size={14} style={{ marginRight: 8 }} />
+              Rotate 90° Clockwise
+            </button>
+            <button
+              type="button"
+              className="sel-toolbox-row sel-action-row"
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              onClick={() => onRotate?.(-90)}
+            >
+              <RotateCw size={14} style={{ marginRight: 8, transform: 'scaleX(-1)' }} />
+              Rotate 90° Counter-Clockwise
+            </button>
+            <button
+              type="button"
+              className="sel-toolbox-row sel-action-row"
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              onClick={() => onRotate?.(180)}
+            >
+              <RotateCw size={14} style={{ marginRight: 8 }} />
+              Rotate 180°
+            </button>
+            <button
+              type="button"
+              className="sel-toolbox-row sel-action-row"
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              onClick={() => onRotate?.(45)}
+            >
+              <RotateCw size={14} style={{ marginRight: 8 }} />
+              Rotate 45° Clockwise
+            </button>
+            <button
+              type="button"
+              className="sel-toolbox-row sel-action-row"
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              onClick={() => onRotate?.(-45)}
+            >
+              <RotateCw size={14} style={{ marginRight: 8, transform: 'scaleX(-1)' }} />
+              Rotate 45° Counter-Clockwise
+            </button>
+          </div>
+          <p className="sel-size-hint" style={{ marginTop: 8 }}>Or drag the rotate handle below selection</p>
         </div>
       )}
     </div>

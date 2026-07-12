@@ -20,6 +20,8 @@ export interface Stroke {
   points: Point[];
   /** Optional group identifier for grouped strokes */
   groupId?: string;
+  /** Rotation angle in degrees */
+  rotation?: number;
 }
 
 /** Represents a link reference to a canvas area */

@@ -42,10 +42,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [transformBox, setTransformBox] = useState<Rect | null>(null);
   const [transformMode, setTransformMode] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'rotate' | null>(null);
   const [hoveredHandle, setHoveredHandle] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'rotate' | null>(null);
-  // Live rotation (degrees) applied to the transform-box/banner while a rotate
-  // drag is in progress. The strokes' own points already encode rotation once
-  // the drag ends (rotateStrokesTo mutates them), so this is reset to 0 as
-  // soon as we recompute a fresh axis-aligned box after pointer-up.
+  // Live rotation (degrees) applied to the transform-box/banner. Unlike a
+  // pure "drag delta" value, this always tracks the TOTAL rotation of the
+  // selected strokes (i.e. it should always equal the strokes' own
+  // `rotation` field). Because pure rotation never changes an object's local
+  // extents, `transformBox` is never recomputed on rotate — only this value
+  // changes, so the border stays visually rotated instead of "snapping"
+  // back to axis-aligned after a drag ends.
   const [selectionRotation, setSelectionRotation] = useState<number>(0);
   const transformStart = useRef<Point>({ x: 0, y: 0 });
   const initialTransformBox = useRef<Rect | null>(null);
@@ -88,6 +91,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   // devicePixelRatio kept in a ref so it is stable across renders
   const dprRef = useRef<number>(window.devicePixelRatio || 1);
+
+  // Helper: center point of a Rect (used to rotate pointer coords into the
+  // selection's local, un-rotated space for hit-testing).
+  const boxCenter = (box: Rect): Point => ({
+    x: (box.minX + box.maxX) / 2,
+    y: (box.minY + box.maxY) / 2,
+  });
 
   // Resize handler — sizes the pixel buffer from the canvas element's OWN
   // bounding rect (not the parent's, which includes the 24px wood border).
@@ -155,7 +165,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       // Draw transform box + rotate handle as a single rigid group, rotated
       // around the box's center by the live selectionRotation. This is what
       // makes the "banner" (box, resize handles, rotate handle + connector)
-      // visually track the strokes while a rotate drag is in progress.
+      // visually track the strokes, both while a rotate drag is in progress
+      // and after it ends (selectionRotation persists the total angle).
       if (transformBox && selectedStrokeIds.length > 0) {
         const boxCenterX = (transformBox.minX + transformBox.maxX) / 2;
         const boxCenterY = (transformBox.minY + transformBox.maxY) / 2;
@@ -544,7 +555,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           const rotated = rotateStrokesTo(selected, (selected[0]?.rotation ?? 0) + 90);
           const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; });
           setStrokes(updated);
-          setTransformBox(getCombinedBoundingBox(rotated));
+          // Pure rotation doesn't change local extents — keep transformBox
+          // as-is and just persist the new TOTAL rotation so the border
+          // stays visually rotated instead of snapping back to 0.
+          setSelectionRotation(rotated[0]?.rotation ?? 0);
           socket.emit('undo-stroke', { roomId, strokes: updated });
         } else if (e.key === '[') {
           e.preventDefault();
@@ -552,7 +566,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           const rotated = rotateStrokesTo(selected, (selected[0]?.rotation ?? 0) - 90);
           const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; });
           setStrokes(updated);
-          setTransformBox(getCombinedBoundingBox(rotated));
+          setSelectionRotation(rotated[0]?.rotation ?? 0);
           socket.emit('undo-stroke', { roomId, strokes: updated });
         } else if ((e.shiftKey && (e.key === 'r' || e.key === 'R'))) {
           e.preventDefault();
@@ -892,38 +906,45 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (activeTool === 'select') {
       // Check if clicking inside transform box or handles
       if (transformBox) {
+        // Rotate the pointer position into the selection's local
+        // (un-rotated) space before hit-testing, since transformBox itself
+        // stays axis-aligned while selectionRotation visually rotates it.
+        const localPos = selectionRotation !== 0
+          ? rotatePoint(pos, boxCenter(transformBox), -selectionRotation)
+          : pos;
+
         const handleSize = 15 / zoom;
         const edgeTolerance = 10 / zoom;
         
-        const inResizeTL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
-          pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
+        const inResizeTL = localPos.x >= transformBox.minX - handleSize && localPos.x <= transformBox.minX + handleSize &&
+          localPos.y >= transformBox.minY - handleSize && localPos.y <= transformBox.minY + handleSize;
           
-        const inResizeTR = pos.x >= transformBox.maxX - handleSize && pos.x <= transformBox.maxX + handleSize &&
-          pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
+        const inResizeTR = localPos.x >= transformBox.maxX - handleSize && localPos.x <= transformBox.maxX + handleSize &&
+          localPos.y >= transformBox.minY - handleSize && localPos.y <= transformBox.minY + handleSize;
           
-        const inResizeBL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
-          pos.y >= transformBox.maxY - handleSize && pos.y <= transformBox.maxY + handleSize;
+        const inResizeBL = localPos.x >= transformBox.minX - handleSize && localPos.x <= transformBox.minX + handleSize &&
+          localPos.y >= transformBox.maxY - handleSize && localPos.y <= transformBox.maxY + handleSize;
           
-        const inResizeBR = pos.x >= transformBox.maxX - handleSize && pos.x <= transformBox.maxX + handleSize &&
-          pos.y >= transformBox.maxY - handleSize && pos.y <= transformBox.maxY + handleSize;
+        const inResizeBR = localPos.x >= transformBox.maxX - handleSize && localPos.x <= transformBox.maxX + handleSize &&
+          localPos.y >= transformBox.maxY - handleSize && localPos.y <= transformBox.maxY + handleSize;
 
-        const onLeftEdge = Math.abs(pos.x - transformBox.minX) <= edgeTolerance &&
-          pos.y >= transformBox.minY - edgeTolerance && pos.y <= transformBox.maxY + edgeTolerance;
+        const onLeftEdge = Math.abs(localPos.x - transformBox.minX) <= edgeTolerance &&
+          localPos.y >= transformBox.minY - edgeTolerance && localPos.y <= transformBox.maxY + edgeTolerance;
           
-        const onRightEdge = Math.abs(pos.x - transformBox.maxX) <= edgeTolerance &&
-          pos.y >= transformBox.minY - edgeTolerance && pos.y <= transformBox.maxY + edgeTolerance;
+        const onRightEdge = Math.abs(localPos.x - transformBox.maxX) <= edgeTolerance &&
+          localPos.y >= transformBox.minY - edgeTolerance && localPos.y <= transformBox.maxY + edgeTolerance;
           
-        const onTopEdge = Math.abs(pos.y - transformBox.minY) <= edgeTolerance &&
-          pos.x >= transformBox.minX - edgeTolerance && pos.x <= transformBox.maxX + edgeTolerance;
+        const onTopEdge = Math.abs(localPos.y - transformBox.minY) <= edgeTolerance &&
+          localPos.x >= transformBox.minX - edgeTolerance && localPos.x <= transformBox.maxX + edgeTolerance;
           
-        const onBottomEdge = Math.abs(pos.y - transformBox.maxY) <= edgeTolerance &&
-          pos.x >= transformBox.minX - edgeTolerance && pos.x <= transformBox.maxX + edgeTolerance;
+        const onBottomEdge = Math.abs(localPos.y - transformBox.maxY) <= edgeTolerance &&
+          localPos.x >= transformBox.minX - edgeTolerance && localPos.x <= transformBox.maxX + edgeTolerance;
 
         // Detect rotate handle
         const centerX = (transformBox.minX + transformBox.maxX) / 2;
         const rotY = transformBox.maxY + 30 / zoom;
         const rotRadius = 15 / zoom;
-        const inRotate = Math.sqrt((pos.x - centerX) ** 2 + (pos.y - rotY) ** 2) <= rotRadius;
+        const inRotate = Math.sqrt((localPos.x - centerX) ** 2 + (localPos.y - rotY) ** 2) <= rotRadius;
 
         let mode: 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'move' | 'rotate' | null = null;
         if (inRotate) mode = 'rotate';
@@ -936,14 +957,17 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         else if (onTopEdge) mode = 'resize-t';
         else if (onBottomEdge) mode = 'resize-b';
         else {
-          const inBox = pos.x >= transformBox.minX && pos.x <= transformBox.maxX &&
-            pos.y >= transformBox.minY && pos.y <= transformBox.maxY;
+          const inBox = localPos.x >= transformBox.minX && localPos.x <= transformBox.maxX &&
+            localPos.y >= transformBox.minY && localPos.y <= transformBox.maxY;
           if (inBox) mode = 'move';
         }
 
         if (mode) {
           setTransformMode(mode);
-          transformStart.current = pos;
+          // Rotation math (in handlePointerMove) needs the ACTUAL screen-space
+          // pointer position (not the de-rotated local one) since it measures
+          // the sweep angle around the box's real screen center.
+          transformStart.current = mode === 'rotate' ? pos : localPos;
           initialTransformBox.current = { ...transformBox };
           initialSelectedStrokes.current = strokes.filter(s => selectedStrokeIds.includes(s.id));
           canvas.setPointerCapture(e.pointerId);
@@ -1045,8 +1069,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
     if (activeTool === 'select') {
       if (transformMode && initialTransformBox.current) {
-        const dx = pos.x - transformStart.current.x;
-        const dy = pos.y - transformStart.current.y;
 
         // ── Rotate mode ──
         if (transformMode === 'rotate') {
@@ -1065,7 +1087,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           const angleDeg = ((currentAngle - startAngle) * 180) / Math.PI;
 
           const baseRotation = initialSelectedStrokes.current[0]?.rotation ?? 0;
-          const rotated = rotateStrokesTo(initialSelectedStrokes.current, baseRotation + angleDeg);
+          const totalRotation = baseRotation + angleDeg;
+          const rotated = rotateStrokesTo(initialSelectedStrokes.current, totalRotation);
 
           setStrokes(prev => prev.map(s => {
             const r = rotated.find(rs => rs.id === s.id);
@@ -1073,37 +1096,48 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           }));
 
           // Keep the outer banner (box + handles + rotate connector) rotating
-          // in lockstep with the strokes instead of staying frozen.
-          setSelectionRotation(angleDeg);
+          // in lockstep with the strokes — track the TOTAL rotation, not just
+          // this drag's delta, so it persists correctly across drags.
+          setSelectionRotation(totalRotation);
           return;
         }
 
+        // Non-rotate transform modes operate in the selection's local
+        // (un-rotated) space, so de-rotate the live pointer position too —
+        // it must be computed the same way transformStart was at pointer-down.
+        const boxC = boxCenter(initialTransformBox.current);
+        const localPos = selectionRotation !== 0
+          ? rotatePoint(pos, boxC, -selectionRotation)
+          : pos;
+        const localDx = localPos.x - transformStart.current.x;
+        const localDy = localPos.y - transformStart.current.y;
+
         let newBox = { ...initialTransformBox.current };
         if (transformMode === 'move') {
-          newBox.minX += dx;
-          newBox.maxX += dx;
-          newBox.minY += dy;
-          newBox.maxY += dy;
+          newBox.minX += localDx;
+          newBox.maxX += localDx;
+          newBox.minY += localDy;
+          newBox.maxY += localDy;
         } else if (transformMode === 'resize-br') {
-          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + dx);
-          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + dy);
+          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx);
+          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy);
         } else if (transformMode === 'resize-tl') {
-          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + dx);
-          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + dy);
+          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx);
+          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy);
         } else if (transformMode === 'resize-tr') {
-          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + dx);
-          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + dy);
+          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx);
+          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy);
         } else if (transformMode === 'resize-bl') {
-          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + dx);
-          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + dy);
+          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx);
+          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy);
         } else if (transformMode === 'resize-l') {
-          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + dx);
+          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx);
         } else if (transformMode === 'resize-r') {
-          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + dx);
+          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx);
         } else if (transformMode === 'resize-t') {
-          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + dy);
+          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy);
         } else if (transformMode === 'resize-b') {
-          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + dy);
+          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy);
         }
 
         setTransformBox(newBox);
@@ -1126,38 +1160,44 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
       // Hover detection when activeTool === 'select' and not dragging
       if (transformBox) {
+        // Same de-rotation as pointer-down hit-testing, so hover state lines
+        // up with an already-rotated selection.
+        const localPos = selectionRotation !== 0
+          ? rotatePoint(pos, boxCenter(transformBox), -selectionRotation)
+          : pos;
+
         const handleSize = 15 / zoom;
         const edgeTolerance = 10 / zoom;
 
-        const inResizeTL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
-          pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
+        const inResizeTL = localPos.x >= transformBox.minX - handleSize && localPos.x <= transformBox.minX + handleSize &&
+          localPos.y >= transformBox.minY - handleSize && localPos.y <= transformBox.minY + handleSize;
           
-        const inResizeTR = pos.x >= transformBox.maxX - handleSize && pos.x <= transformBox.maxX + handleSize &&
-          pos.y >= transformBox.minY - handleSize && pos.y <= transformBox.minY + handleSize;
+        const inResizeTR = localPos.x >= transformBox.maxX - handleSize && localPos.x <= transformBox.maxX + handleSize &&
+          localPos.y >= transformBox.minY - handleSize && localPos.y <= transformBox.minY + handleSize;
           
-        const inResizeBL = pos.x >= transformBox.minX - handleSize && pos.x <= transformBox.minX + handleSize &&
-          pos.y >= transformBox.maxY - handleSize && pos.y <= transformBox.maxY + handleSize;
+        const inResizeBL = localPos.x >= transformBox.minX - handleSize && localPos.x <= transformBox.minX + handleSize &&
+          localPos.y >= transformBox.maxY - handleSize && localPos.y <= transformBox.maxY + handleSize;
           
-        const inResizeBR = pos.x >= transformBox.maxX - handleSize && pos.x <= transformBox.maxX + handleSize &&
-          pos.y >= transformBox.maxY - handleSize && pos.y <= transformBox.maxY + handleSize;
+        const inResizeBR = localPos.x >= transformBox.maxX - handleSize && localPos.x <= transformBox.maxX + handleSize &&
+          localPos.y >= transformBox.maxY - handleSize && localPos.y <= transformBox.maxY + handleSize;
 
-        const onLeftEdge = Math.abs(pos.x - transformBox.minX) <= edgeTolerance &&
-          pos.y >= transformBox.minY - edgeTolerance && pos.y <= transformBox.maxY + edgeTolerance;
+        const onLeftEdge = Math.abs(localPos.x - transformBox.minX) <= edgeTolerance &&
+          localPos.y >= transformBox.minY - edgeTolerance && localPos.y <= transformBox.maxY + edgeTolerance;
           
-        const onRightEdge = Math.abs(pos.x - transformBox.maxX) <= edgeTolerance &&
-          pos.y >= transformBox.minY - edgeTolerance && pos.y <= transformBox.maxY + edgeTolerance;
+        const onRightEdge = Math.abs(localPos.x - transformBox.maxX) <= edgeTolerance &&
+          localPos.y >= transformBox.minY - edgeTolerance && localPos.y <= transformBox.maxY + edgeTolerance;
           
-        const onTopEdge = Math.abs(pos.y - transformBox.minY) <= edgeTolerance &&
-          pos.x >= transformBox.minX - edgeTolerance && pos.x <= transformBox.maxX + edgeTolerance;
+        const onTopEdge = Math.abs(localPos.y - transformBox.minY) <= edgeTolerance &&
+          localPos.x >= transformBox.minX - edgeTolerance && localPos.x <= transformBox.maxX + edgeTolerance;
           
-        const onBottomEdge = Math.abs(pos.y - transformBox.maxY) <= edgeTolerance &&
-          pos.x >= transformBox.minX - edgeTolerance && pos.x <= transformBox.maxX + edgeTolerance;
+        const onBottomEdge = Math.abs(localPos.y - transformBox.maxY) <= edgeTolerance &&
+          localPos.x >= transformBox.minX - edgeTolerance && localPos.x <= transformBox.maxX + edgeTolerance;
 
         // Detect rotate handle hover
         const centerX = (transformBox.minX + transformBox.maxX) / 2;
         const rotY = transformBox.maxY + 30 / zoom;
         const rotRadius = 15 / zoom;
-        const inRotate = Math.sqrt((pos.x - centerX) ** 2 + (pos.y - rotY) ** 2) <= rotRadius;
+        const inRotate = Math.sqrt((localPos.x - centerX) ** 2 + (localPos.y - rotY) ** 2) <= rotRadius;
 
         let hover: typeof hoveredHandle = null;
         if (inRotate) hover = 'rotate';
@@ -1170,8 +1210,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         else if (onTopEdge) hover = 'resize-t';
         else if (onBottomEdge) hover = 'resize-b';
         else {
-          const inBox = pos.x >= transformBox.minX && pos.x <= transformBox.maxX &&
-            pos.y >= transformBox.minY && pos.y <= transformBox.maxY;
+          const inBox = localPos.x >= transformBox.minX && localPos.x <= transformBox.maxX &&
+            localPos.y >= transformBox.minY && localPos.y <= transformBox.maxY;
           if (inBox) hover = 'move';
         }
 
@@ -1201,14 +1241,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         const wasRotating = transformMode === 'rotate';
 
         if (wasRotating) {
-          // The strokes' own points now encode the rotation (rotateStrokesTo
-          // mutated them during the drag). Recompute a fresh, true
-          // axis-aligned bounding box around them and drop the temporary
-          // visual rotation offset — otherwise the box would get "double
-          // rotated" the next time someone drags the handle again.
+          // Pure rotation never changes an object's LOCAL extents, so
+          // transformBox does not need to be recomputed here — doing so was
+          // what caused the border to "snap back" to axis-aligned on
+          // release. Just persist the final total rotation angle; the
+          // strokes' own points already encode it (rotateStrokesTo mutated
+          // them during the drag).
           const rotatedSelection = strokes.filter(s => selectedStrokeIds.includes(s.id));
-          setTransformBox(getCombinedBoundingBox(rotatedSelection));
-          setSelectionRotation(0);
+          setSelectionRotation(rotatedSelection[0]?.rotation ?? 0);
         }
 
         socket.emit('undo-stroke', { roomId, strokes }); // We sync entire board for simplicity or a custom event
@@ -1477,13 +1517,17 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               onUngroup={handleUngroup}
               onRotate={(angleDeg) => {
                 const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
-                const rotated = rotateStrokesTo(selected, (selected[0]?.rotation ?? 0) + angleDeg);
+                const totalRotation = (selected[0]?.rotation ?? 0) + angleDeg;
+                const rotated = rotateStrokesTo(selected, totalRotation);
                 const updated = strokes.map(s => {
                   const r = rotated.find(rs => rs.id === s.id);
                   return r ? r : s;
                 });
                 setStrokes(updated);
-                setTransformBox(getCombinedBoundingBox(rotated));
+                // Pure rotation doesn't change local extents — keep
+                // transformBox untouched and persist the total rotation so
+                // the border stays visually rotated.
+                setSelectionRotation(rotated[0]?.rotation ?? totalRotation);
                 socket.emit('undo-stroke', { roomId, strokes: updated });
               }}
               onResetRotation={() => {

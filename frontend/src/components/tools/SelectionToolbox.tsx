@@ -149,17 +149,27 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
 
   const handleDimWChange = (val: string) => {
     setDimW(val);
-    const num = parseInt(val, 10);
-    if (!isNaN(num) && num > 0) {
-      onSetDimensions?.(num, parseInt(dimH, 10) || currentHeight);
-    }
   };
 
   const handleDimHChange = (val: string) => {
     setDimH(val);
-    const num = parseInt(val, 10);
+  };
+
+  const commitDimW = () => {
+    const num = parseInt(dimW, 10);
+    if (!isNaN(num) && num > 0) {
+      onSetDimensions?.(num, parseInt(dimH, 10) || currentHeight);
+    } else {
+      setDimW(String(Math.round(currentWidth)));
+    }
+  };
+
+  const commitDimH = () => {
+    const num = parseInt(dimH, 10);
     if (!isNaN(num) && num > 0) {
       onSetDimensions?.(parseInt(dimW, 10) || currentWidth, num);
+    } else {
+      setDimH(String(Math.round(currentHeight)));
     }
   };
 
@@ -441,12 +451,9 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
                 value={dimW}
                 style={{ flex: 1, width: '100%' }}
                 onChange={(e) => handleDimWChange(e.target.value)}
-                onBlur={() => {
-                  const v = parseInt(dimW, 10);
-                  if (isNaN(v) || v < 1) {
-                    setDimW(String(Math.round(currentWidth)));
-                  }
-                }}
+                onBlur={commitDimW}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+
               />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -458,12 +465,9 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
                 value={dimH}
                 style={{ flex: 1, width: '100%' }}
                 onChange={(e) => handleDimHChange(e.target.value)}
-                onBlur={() => {
-                  const v = parseInt(dimH, 10);
-                  if (isNaN(v) || v < 1) {
-                    setDimH(String(Math.round(currentHeight)));
-                  }
-                }}
+                onBlur={commitDimH}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+
               />
             </div>
           </div>

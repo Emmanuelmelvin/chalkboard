@@ -94,6 +94,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     splitPosition: null,
     keepSide: null,
   });
+  // Highlighted link for banner click navigation
+  const [highlightedLinkId, setHighlightedLinkId] = useState<string | null>(null);
   // Eraser dust puff effects
   const [dustPuffs, setDustPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
   const dustIdCounter = useRef<number>(0);
@@ -103,6 +105,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   // devicePixelRatio kept in a ref so it is stable across renders
   const dprRef = useRef<number>(window.devicePixelRatio || 1);
+  const hasNavigatedToLink = useRef<boolean>(false);
 
   // Helper: center point of a Rect (used to rotate pointer coords into the
   // selection's local, un-rotated space for hit-testing).
@@ -497,7 +500,31 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
     setPanOffset({ x: newPanX, y: newPanY });
     setShowInsertShapes(false);
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('link', link.id);
+    window.history.pushState({}, '', url.toString());
   }, [strokes, zoom]);
+
+  useEffect(() => {
+    if (hasNavigatedToLink.current) return;
+    
+    const url = new URL(window.location.href);
+    const linkId = url.searchParams.get('link');
+    
+    if (!linkId) {
+      hasNavigatedToLink.current = true;
+      return;
+    }
+    
+    if (strokes.length > 0 && links.length > 0) {
+      const link = links.find(l => l.id === linkId);
+      if (link) {
+        hasNavigatedToLink.current = true;
+        handleNavigateToLink(link);
+      }
+    }
+  }, [strokes.length, links, handleNavigateToLink]);
 
   /** Create a new link from the current selection */
   const handleCreateLink = useCallback((tag: string) => {
@@ -518,7 +545,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     }
 
     const newLink: SavedLink = {
-      id: `${socket.id}-link-${Date.now()}`,
+      id: `link-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       tag,
       strokeIds: [...selectedStrokeIds],
       userId: socket.id || 'local',
@@ -847,8 +874,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         }
       }
 
-      // Ctrl+T: toggle trim mode (only when not in input)
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
+      // Ctrl+Shift+T: toggle trim mode (only when not in input)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
         const key = e.key.toLowerCase();
         if (key === 't') {
           e.preventDefault();
@@ -1302,6 +1329,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       return;
     }
 
+    // Trim mode: update split position
+    if (trimState.active) {
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      handleUpdateTrim(pos);
+      return;
+    }
+
     const pos = screenToCanvas(e.clientX, e.clientY);
 
     if (activeTool === 'select') {
@@ -1660,7 +1694,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       {showInsertShapes && (
         <InsertShapes
           onInsertShape={handleInsertShape}
-          onClose={() => setShowInsertShapes(false)}
+          onClose={() => {
+            setShowInsertShapes(false);
+            setHighlightedLinkId(null);
+          }}
           links={links}
           hasSelection={selectedStrokeIds.length > 0}
           onNavigateToLink={handleNavigateToLink}
@@ -1668,6 +1705,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onDeleteLink={handleDeleteLink}
           onRenameLink={handleRenameLink}
           initialTab={insertShapesTab}
+          highlightedLinkId={highlightedLinkId}
         />
       )}
 
@@ -1883,34 +1921,44 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
         {/* Link Banner for selected linked objects */}
         {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
-          const hasLink = links.some(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
-          if (!hasLink) return null;
+          const linkedLink = links.find(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
+          if (!linkedLink) return null;
           
           const bannerX = transformBox.minX * zoom + panOffset.x - 28;
           const bannerY = transformBox.minY * zoom + panOffset.y - 28;
           
           return (
-            <div style={{
-              position: 'absolute',
-              left: bannerX,
-              top: bannerY,
-              zIndex: 300,
-              background: 'rgba(59, 130, 246, 0.9)',
-              borderRadius: '50%',
-              width: 24,
-              height: 24,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'auto',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-              border: '2px solid rgba(255,255,255,0.3)'
-            }} title="This object has a saved link">
+            <button
+              onClick={() => {
+                setHighlightedLinkId(linkedLink.id);
+                setInsertShapesTab('links');
+                setShowInsertShapes(true);
+              }}
+              style={{
+                position: 'absolute',
+                left: bannerX,
+                top: bannerY,
+                zIndex: 300,
+                background: 'rgba(59, 130, 246, 0.9)',
+                borderRadius: '50%',
+                width: 24,
+                height: 24,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'auto',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                border: '2px solid rgba(255,255,255,0.3)',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+              title="Click to view linked location"
+            >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
               </svg>
-            </div>
+            </button>
           );
         })()}
 
@@ -1934,6 +1982,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 setStrokes(updated);
                 socket.emit('undo-stroke', { roomId, strokes: updated });
               }}
+              onTrim={(mode) => handleStartTrim(mode)}
               onCut={handleCut}
               onDelete={() => {
                 const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));

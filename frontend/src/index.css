@@ -1705,6 +1705,11 @@ body {
   transition: background 0.12s ease;
 }
 
+.insert-links-item-highlighted {
+  border: 1px solid rgba(59, 130, 246, 0.8) !important;
+  background: rgba(59, 130, 246, 0.15) !important;
+}
+
 .insert-links-item:hover {
   background: rgba(255, 255, 255, 0.06);
 }

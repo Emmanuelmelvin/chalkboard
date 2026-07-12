@@ -43,6 +43,8 @@ interface SelectionToolboxProps {
   onResetRotation?: () => void;
   /** Set dimensions (width, height) */
   onSetDimensions?: (width: number, height: number) => void;
+  /** Trim callback */
+  onTrim?: (mode: 'horizontal' | 'vertical') => void;
   /** Current rotation angle in degrees */
   currentRotation?: number;
   /** Current bounding box dimensions */
@@ -54,7 +56,7 @@ interface SelectionToolboxProps {
   isGrouped: boolean;
 }
 
-type SubPanel = 'color' | 'size' | 'rotate' | 'dimensions' | null;
+type SubPanel = 'color' | 'size' | 'rotate' | 'dimensions' | 'trim' | null;
 
 const PANEL_WIDTH = 188;
 const PANEL_MARGIN = 16; // gap from selection box edge to panel
@@ -79,6 +81,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   onRotate,
   onResetRotation,
   onSetDimensions,
+  onTrim,
   currentRotation = 0,
   currentWidth = 0,
   currentHeight = 0,
@@ -276,6 +279,17 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           <span className="sel-row-label">Cut</span>
           <kbd className="sel-kbd">Ctrl+X</kbd>
         </button>
+
+        {/* ── Trim ── */}
+        <div
+          className={`sel-toolbox-row sel-action-row ${openSubPanel === 'trim' ? 'sel-row-active' : ''}`}
+          onMouseEnter={() => handleRowEnter('trim')}
+        >
+          <span className="sel-row-icon"><Scissors size={13} /></span>
+          <span className="sel-row-label">Trim</span>
+          <kbd className="sel-kbd" style={{ marginRight: 8 }}>Ctrl+Shift+T</kbd>
+          <ChevronRight size={11} className="sel-row-chevron" />
+        </div>
 
         <div className="sel-divider" />
 
@@ -551,6 +565,37 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             </button>
           </div>
           <p className="sel-size-hint" style={{ marginTop: 8 }}>Or drag the rotate handle below selection</p>
+        </div>
+      )}
+      {/* ── Sub-panel: Trim ── */}
+      {openSubPanel === 'trim' && (
+        <div
+          className={`sel-subpanel ${subPanelSide === 'right' ? 'sel-subpanel-right' : 'sel-subpanel-left'}`}
+          style={{ alignSelf: 'flex-end' }}
+          onMouseEnter={clearCloseTimer}
+          onMouseLeave={handlePanelLeave}
+        >
+          <p className="sel-subpanel-title">Trim</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              type="button"
+              className="sel-toolbox-row sel-action-row"
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              onClick={() => onTrim?.('horizontal')}
+            >
+              <Scissors size={14} style={{ marginRight: 8, transform: 'rotate(90deg)' }} />
+              Horizontal Trim
+            </button>
+            <button
+              type="button"
+              className="sel-toolbox-row sel-action-row"
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              onClick={() => onTrim?.('vertical')}
+            >
+              <Scissors size={14} style={{ marginRight: 8 }} />
+              Vertical Trim
+            </button>
+          </div>
         </div>
       )}
     </div>

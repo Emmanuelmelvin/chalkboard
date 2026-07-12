@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Square,
   Circle,
@@ -40,6 +40,8 @@ interface InsertShapesProps {
   onRenameLink: (linkId: string, newTag: string) => void;
   /** Initial active tab when opening the modal */
   initialTab?: 'shapes' | 'links';
+  /** Link ID to highlight in the list */
+  highlightedLinkId?: string | null;
 }
 
 const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
@@ -71,13 +73,15 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
   onDeleteLink,
   onRenameLink,
   initialTab = 'shapes',
+  highlightedLinkId,
 }) => {
   const [activeTab, setActiveTab] = useState<'shapes' | 'links'>(initialTab);
 
   // Reset tab when initialTab prop changes
-  React.useEffect(() => {
+  useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
+
   const [showCreateInput, setShowCreateInput] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
@@ -213,7 +217,10 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
             ) : (
               <div className="insert-links-list">
                 {links.map((link) => (
-                  <div key={link.id} className="insert-links-item">
+                  <div
+                    key={link.id}
+                    className={`insert-links-item ${highlightedLinkId === link.id ? 'insert-links-item-highlighted' : ''}`}
+                  >
                     {editingLinkId === link.id ? (
                       <div className="insert-links-edit-row">
                         <input

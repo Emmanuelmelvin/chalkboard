@@ -502,6 +502,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       return;
     }
 
+    // Check if any selected stroke is already linked
+    const alreadyLinked = links.some(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
+    if (alreadyLinked) {
+      // One or more selected strokes already have a link — don't create another
+      return;
+    }
+
     const newLink: SavedLink = {
       id: `${socket.id}-link-${Date.now()}`,
       tag,
@@ -748,21 +755,23 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         }
       }
 
-      // Ctrl+L: create a link from the current selection (only when not in input)
+      // Ctrl+L: open links tab directly (only when not in input)
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
         const key = e.key.toLowerCase();
-        if (key === 'l' && selectedStrokeIds.length > 0) {
+        if (key === 'l') {
           e.preventDefault();
-          handleQuickCreateLink();
+          setInsertShapesTab('links');
+          setShowInsertShapes(true);
           return;
         }
       }
 
-      // Ctrl+I: open insert shapes modal (only when not in input)
+      // Ctrl+I: open insert shapes modal on Shapes tab (only when not in input)
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
         const key = e.key.toLowerCase();
         if (key === 'i') {
           e.preventDefault();
+          setInsertShapesTab('shapes');
           setShowInsertShapes(prev => !prev);
           return;
         }
@@ -1526,6 +1535,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onCreateLink={handleCreateLink}
           onDeleteLink={handleDeleteLink}
           onRenameLink={handleRenameLink}
+          initialTab={insertShapesTab}
         />
       )}
 
@@ -1569,18 +1579,54 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
       {/* HUD Overlay layer */}
       <div className="hud-layer">
+        {/* Link Banner for selected linked objects */}
+        {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
+          const hasLink = links.some(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
+          if (!hasLink) return null;
+          
+          const bannerX = transformBox.minX * zoom + panOffset.x - 28;
+          const bannerY = transformBox.minY * zoom + panOffset.y - 28;
+          
+          return (
+            <div style={{
+              position: 'absolute',
+              left: bannerX,
+              top: bannerY,
+              zIndex: 300,
+              background: 'rgba(59, 130, 246, 0.9)',
+              borderRadius: '50%',
+              width: 24,
+              height: 24,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+              border: '2px solid rgba(255,255,255,0.3)'
+            }} title="This object has a saved link">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+            </div>
+          );
+        })()}
+
         {/* Selection Toolbox */}
-        {selectedStrokeIds.length > 0 && transformBox && (() => {
+        {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
           const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
           const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
           //const commonGroupId = hasGroupId ? selectedStrokes[0].groupId : undefined;
+          
+          // Use the actual color of the first selected stroke, not the global activeColor
+          const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
           
           return (
             <SelectionToolbox
               boxScreenLeft={transformBox.minX * zoom + panOffset.x}
               boxScreenRight={transformBox.maxX * zoom + panOffset.x}
               boxScreenCenterY={(transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y}
-              activeColor={activeColor}
+              activeColor={actualColor}
               onColorChange={(color) => {
                 const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s);
                 setStrokes(updated);

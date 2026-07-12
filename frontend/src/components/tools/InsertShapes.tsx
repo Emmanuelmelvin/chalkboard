@@ -38,6 +38,8 @@ interface InsertShapesProps {
   onDeleteLink: (linkId: string) => void;
   /** Rename a saved link */
   onRenameLink: (linkId: string, newTag: string) => void;
+  /** Initial active tab when opening the modal */
+  initialTab?: 'shapes' | 'links';
 }
 
 const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
@@ -68,8 +70,14 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
   onCreateLink,
   onDeleteLink,
   onRenameLink,
+  initialTab = 'shapes',
 }) => {
-  const [activeTab, setActiveTab] = useState<'shapes' | 'links'>('shapes');
+  const [activeTab, setActiveTab] = useState<'shapes' | 'links'>(initialTab);
+
+  // Reset tab when initialTab prop changes
+  React.useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
   const [showCreateInput, setShowCreateInput] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);

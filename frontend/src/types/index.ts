@@ -59,6 +59,17 @@ export interface SavedLink {
   userId: string;
 }
 
+/** Trim mode state for cropping the canvas */
+export interface TrimState {
+  active: boolean;
+  /** 'horizontal' = vertical split line (keeps left or right) */
+  mode: 'horizontal' | 'vertical' | null;
+  /** Position of the split line in canvas coordinates */
+  splitPosition: number | null;
+  /** Which side to keep: 'left' | 'right' for horizontal, 'top' | 'bottom' for vertical */
+  keepSide: 'left' | 'right' | 'top' | 'bottom' | null;
+}
+
 export interface Rect {
   minX: number;
   minY: number;

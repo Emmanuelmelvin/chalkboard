@@ -20,6 +20,7 @@ import type {
   ChalkboardProps,
   Collaborator,
   ShapeType,
+  SavedLink,
  } from '@/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
@@ -82,6 +83,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   // Insert shapes modal
   const [showInsertShapes, setShowInsertShapes] = useState<boolean>(false);
+  const [insertShapesTab, setInsertShapesTab] = useState<'shapes' | 'links'>('shapes');
+  // Saved links
+  const [links, setLinks] = useState<SavedLink[]>([]);
   // Eraser dust puff effects
   const [dustPuffs, setDustPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
   const dustIdCounter = useRef<number>(0);
@@ -461,6 +465,82 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, selectedStrokeIds, socket, roomId]);
 
+  // ── Link management ──
+
+  /** Navigate to a link: center the viewport on the linked strokes */
+  const handleNavigateToLink = useCallback((link: SavedLink) => {
+    const linkedStrokes = strokes.filter(s => link.strokeIds.includes(s.id));
+    if (linkedStrokes.length === 0) return;
+
+    const box = getCombinedBoundingBox(linkedStrokes);
+    if (!box) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+
+    // Center the viewport on the bounding box of the linked strokes
+    const targetCenterX = (box.minX + box.maxX) / 2;
+    const targetCenterY = (box.minY + box.maxY) / 2;
+
+    // Calculate pan offset so the target center is at the viewport center
+    const newPanX = rect.width / 2 - targetCenterX * zoom;
+    const newPanY = rect.height / 2 - targetCenterY * zoom;
+
+    setPanOffset({ x: newPanX, y: newPanY });
+    setShowInsertShapes(false);
+  }, [strokes, zoom]);
+
+  /** Create a new link from the current selection */
+  const handleCreateLink = useCallback((tag: string) => {
+    if (selectedStrokeIds.length === 0) return;
+
+    // Check for duplicate tag
+    const existing = links.find(l => l.tag.toLowerCase() === tag.toLowerCase());
+    if (existing) {
+      // Silently ignore or could show a toast — for now just return
+      return;
+    }
+
+    const newLink: SavedLink = {
+      id: `${socket.id}-link-${Date.now()}`,
+      tag,
+      strokeIds: [...selectedStrokeIds],
+      userId: socket.id || 'local',
+    };
+
+    const updated = [...links, newLink];
+    setLinks(updated);
+    socket.emit('links-update', { roomId, links: updated });
+  }, [selectedStrokeIds, links, socket, roomId]);
+
+  /** Delete a saved link */
+  const handleDeleteLink = useCallback((linkId: string) => {
+    const updated = links.filter(l => l.id !== linkId);
+    setLinks(updated);
+    socket.emit('links-update', { roomId, links: updated });
+  }, [links, socket, roomId]);
+
+  /** Rename a saved link */
+  const handleRenameLink = useCallback((linkId: string, newTag: string) => {
+    // Check for duplicate tag (excluding the link being renamed)
+    const existing = links.find(l => l.id !== linkId && l.tag.toLowerCase() === newTag.toLowerCase());
+    if (existing) return;
+
+    const updated = links.map(l => l.id === linkId ? { ...l, tag: newTag } : l);
+    setLinks(updated);
+    socket.emit('links-update', { roomId, links: updated });
+  }, [links, socket, roomId]);
+
+  /** Create a link from the canvas via Ctrl+L shortcut */
+  const handleQuickCreateLink = useCallback(() => {
+    if (selectedStrokeIds.length === 0) return;
+
+    // Use a simple in-app prompt via the modal — open the modal to the links tab
+    setShowInsertShapes(true);
+    // The modal will show the Add Link input when hasSelection is true
+  }, [selectedStrokeIds]);
+
   // Insert a shape at the center of the current viewport
   const handleInsertShape = useCallback((shape: ShapeType) => {
     const canvas = canvasRef.current;
@@ -668,6 +748,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         }
       }
 
+      // Ctrl+L: create a link from the current selection (only when not in input)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
+        const key = e.key.toLowerCase();
+        if (key === 'l' && selectedStrokeIds.length > 0) {
+          e.preventDefault();
+          handleQuickCreateLink();
+          return;
+        }
+      }
+
       // Ctrl+I: open insert shapes modal (only when not in input)
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
         const key = e.key.toLowerCase();
@@ -775,6 +865,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       });
     });
 
+    // 6. Links sync (multiplayer)
+    socket.on('links-update', ({ links: newLinks }: { links: SavedLink[] }) => {
+      setLinks(newLinks);
+    });
+
     socket.on('user-disconnected', (userId: string) => {
       setCollaborators((prev) => {
         const next = { ...prev };
@@ -791,6 +886,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       socket.off('undo-stroke');
       socket.off('clear-board');
       socket.off('cursor-move');
+      socket.off('links-update');
       socket.off('user-disconnected');
     };
   }, [socket, roomId, userName]);
@@ -1424,6 +1520,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         <InsertShapes
           onInsertShape={handleInsertShape}
           onClose={() => setShowInsertShapes(false)}
+          links={links}
+          hasSelection={selectedStrokeIds.length > 0}
+          onNavigateToLink={handleNavigateToLink}
+          onCreateLink={handleCreateLink}
+          onDeleteLink={handleDeleteLink}
+          onRenameLink={handleRenameLink}
         />
       )}
 

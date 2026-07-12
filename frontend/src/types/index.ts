@@ -48,6 +48,16 @@ export interface CanvasImage {
   userId: string;
 }
 
+/** Represents a saved link referencing one or more strokes on the canvas */
+export interface SavedLink {
+  id: string;
+  /** User-facing name/tag for the link */
+  tag: string;
+  /** IDs of the strokes this link references */
+  strokeIds: string[];
+  /** User who created the link */
+  userId: string;
+}
 
 export interface Rect {
   minX: number;

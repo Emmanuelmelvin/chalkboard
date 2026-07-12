@@ -20,12 +20,13 @@ import type {
   ChalkboardProps,
   Collaborator,
   ShapeType,
-  SavedLink,
+  TrimState,
  } from '@/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
 import { generateShapeStrokes } from '@/utils/shapes';
+import { useLinksStore, type SavedLink } from '@/stores/linksStore';
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
@@ -84,8 +85,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   // Insert shapes modal
   const [showInsertShapes, setShowInsertShapes] = useState<boolean>(false);
   const [insertShapesTab, setInsertShapesTab] = useState<'shapes' | 'links'>('shapes');
-  // Saved links
-  const [links, setLinks] = useState<SavedLink[]>([]);
+  // Saved links from Zustand store
+  const { links, setLinks, addLink, removeLink, renameLink } = useLinksStore();
+  // Trim mode
+  const [trimState, setTrimState] = useState<TrimState>({
+    active: false,
+    mode: null,
+    splitPosition: null,
+    keepSide: null,
+  });
   // Eraser dust puff effects
   const [dustPuffs, setDustPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
   const dustIdCounter = useRef<number>(0);
@@ -543,10 +551,94 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const handleQuickCreateLink = useCallback(() => {
     if (selectedStrokeIds.length === 0) return;
 
-    // Use a simple in-app prompt via the modal — open the modal to the links tab
+    // Open the modal to the links tab
+    setInsertShapesTab('links');
     setShowInsertShapes(true);
-    // The modal will show the Add Link input when hasSelection is true
   }, [selectedStrokeIds]);
+
+  // ── Trim functionality ──
+
+  /** Start trim mode */
+  const handleStartTrim = useCallback((mode: 'horizontal' | 'vertical') => {
+    setTrimState({
+      active: true,
+      mode,
+      splitPosition: null,
+      keepSide: null,
+    });
+  }, []);
+
+  /** Update trim split position during drag */
+  const handleUpdateTrim = useCallback((canvasPos: Point) => {
+    setTrimState(prev => {
+      if (!prev.active || !prev.mode) return prev;
+      return {
+        ...prev,
+        splitPosition: prev.mode === 'horizontal' ? canvasPos.x : canvasPos.y,
+      };
+    });
+  }, []);
+
+  /** Set which side to keep */
+  const handleSetTrimKeepSide = useCallback((side: 'left' | 'right' | 'top' | 'bottom') => {
+    setTrimState(prev => ({
+      ...prev,
+      keepSide: side,
+    }));
+  }, []);
+
+  /** Apply trim: delete strokes on the non-selected side */
+  const handleApplyTrim = useCallback(() => {
+    setTrimState(prev => {
+      if (!prev.active || !prev.mode || prev.splitPosition === null || !prev.keepSide) return prev;
+
+      const splitPos = prev.splitPosition;
+      const mode = prev.mode;
+
+      // Filter strokes based on which side to keep
+      const filteredStrokes = strokes.filter(stroke => {
+        const box = getCombinedBoundingBox([stroke]);
+        if (!box) return true; // Keep strokes with no bounds
+
+        if (mode === 'horizontal') {
+          // Vertical split line - keep left or right
+          if (prev.keepSide === 'left') {
+            return box.maxX <= splitPos; // Keep strokes entirely on the left
+          } else {
+            return box.minX >= splitPos; // Keep strokes entirely on the right
+          }
+        } else {
+          // Horizontal split line - keep top or bottom
+          if (prev.keepSide === 'top') {
+            return box.maxY <= splitPos; // Keep strokes entirely on top
+          } else {
+            return box.minY >= splitPos; // Keep strokes entirely on bottom
+          }
+        }
+      });
+
+      setStrokes(filteredStrokes);
+      socket.emit('undo-stroke', { roomId, strokes: filteredStrokes });
+
+      // Clear trim state
+      return {
+        active: false,
+        mode: null,
+        splitPosition: null,
+        keepSide: null,
+      };
+    });
+  }, [strokes, socket, roomId]);
+
+  /** Cancel trim mode */
+  const handleCancelTrim = useCallback(() => {
+    setTrimState({
+      active: false,
+      mode: null,
+      splitPosition: null,
+      keepSide: null,
+    });
+  }, []);
 
   // Insert a shape at the center of the current viewport
   const handleInsertShape = useCallback((shape: ShapeType) => {
@@ -753,6 +845,40 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           setZoom(z => Math.max(0.15, z - 0.15));
           return;
         }
+      }
+
+      // Ctrl+T: toggle trim mode (only when not in input)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
+        const key = e.key.toLowerCase();
+        if (key === 't') {
+          e.preventDefault();
+          setTrimState(prev => prev.active ? {
+            active: false,
+            mode: null,
+            splitPosition: null,
+            keepSide: null,
+          } : {
+            active: true,
+            mode: 'horizontal',
+            splitPosition: null,
+            keepSide: null,
+          });
+          return;
+        }
+      }
+
+      // Enter: apply trim when in trim mode
+      if (trimState.active && e.key === 'Enter' && document.activeElement?.tagName !== 'INPUT') {
+        e.preventDefault();
+        handleApplyTrim();
+        return;
+      }
+
+      // Escape: cancel trim mode
+      if (trimState.active && e.key === 'Escape') {
+        e.preventDefault();
+        handleCancelTrim();
+        return;
       }
 
       // Ctrl+L: open links tab directly (only when not in input)
@@ -998,6 +1124,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // Trim mode: capture pointer to drag split line
+    if (trimState.active) {
+      canvas.setPointerCapture(e.pointerId);
+      return;
+    }
 
     if (spacePressed || e.button === 1 || activeTool === 'pan') {
       setIsPanning(true);
@@ -1579,6 +1711,176 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
       {/* HUD Overlay layer */}
       <div className="hud-layer">
+        {/* Trim Mode Overlay */}
+        {trimState.active && trimState.splitPosition !== null && (() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return null;
+          const rect = canvas.getBoundingClientRect();
+          
+          const splitPos = trimState.splitPosition;
+          const mode = trimState.mode;
+          
+          // Calculate screen position of the split line
+          let screenPos: number;
+          if (mode === 'horizontal') {
+            screenPos = splitPos * zoom + panOffset.x;
+          } else {
+            screenPos = splitPos * zoom + panOffset.y;
+          }
+          
+          return (
+            <>
+              {/* Blur overlay for the non-selected side */}
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                pointerEvents: 'none',
+                zIndex: 150,
+                display: 'flex',
+              }}>
+                {mode === 'horizontal' ? (
+                  <>
+                    {/* Left side blur */}
+                    <div style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      width: screenPos,
+                      height: '100%',
+                      background: 'rgba(0, 0, 0, 0.3)',
+                      backdropFilter: 'blur(4px)',
+                    }} />
+                    {/* Right side clear */}
+                    <div style={{
+                      position: 'absolute',
+                      left: screenPos,
+                      top: 0,
+                      right: 0,
+                      height: '100%',
+                    }} />
+                  </>
+                ) : (
+                  <>
+                    {/* Top side blur */}
+                    <div style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      width: '100%',
+                      height: screenPos,
+                      background: 'rgba(0, 0, 0, 0.3)',
+                      backdropFilter: 'blur(4px)',
+                    }} />
+                    {/* Bottom side clear */}
+                    <div style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: screenPos,
+                      width: '100%',
+                      bottom: 0,
+                    }} />
+                  </>
+                )}
+              </div>
+              
+              {/* Split line indicator */}
+              <div style={{
+                position: 'absolute',
+                background: '#ef4444',
+                zIndex: 151,
+                pointerEvents: 'none',
+                boxShadow: '0 0 8px rgba(239, 68, 68, 0.6)',
+              }} />              
+              
+              {/* Trim mode banner */}
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                zIndex: 152,
+                background: 'rgba(15, 23, 42, 0.95)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(239, 68, 68, 0.5)',
+                borderRadius: '12px',
+                padding: '16px 24px',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
+                textAlign: 'center',
+                pointerEvents: 'auto',
+              }}>
+                <div style={{ 
+                  color: '#ef4444', 
+                  fontFamily: 'var(--font-sketch)',
+                  fontSize: '14px',
+                  marginBottom: '8px',
+                  letterSpacing: '0.5px'
+                }}>
+                  TRIM MODE
+                </div>
+                <div style={{ 
+                  color: '#cbd5e1', 
+                  fontSize: '12px',
+                  marginBottom: '12px',
+                  fontFamily: 'var(--font-sans)'
+                }}>
+                  Press <strong>Enter</strong> to apply trim<br/>
+                  Press <strong>Esc</strong> to cancel
+                </div>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                  <button
+                    onClick={() => handleSetTrimKeepSide(mode === 'horizontal' ? 'left' : 'top')}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '6px',
+                      color: '#e2e8f0',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    Keep {mode === 'horizontal' ? 'Left' : 'Top'}
+                  </button>
+                  <button
+                    onClick={() => handleSetTrimKeepSide(mode === 'horizontal' ? 'right' : 'bottom')}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '6px',
+                      color: '#e2e8f0',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    Keep {mode === 'horizontal' ? 'Right' : 'Bottom'}
+                  </button>
+                  <button
+                    onClick={handleCancelTrim}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      borderRadius: '6px',
+                      color: '#ef4444',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </>
+          );
+        })()}
+
         {/* Link Banner for selected linked objects */}
         {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
           const hasLink = links.some(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));

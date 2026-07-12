@@ -12,6 +12,9 @@ import {
   Group,
   Ungroup,
   RotateCw,
+  RotateCcw,
+  Undo2,
+  Maximize2,
 } from 'lucide-react';
 import { CHALK_COLORS } from '@/components/tools/ColorPicker';
 
@@ -36,13 +39,22 @@ interface SelectionToolboxProps {
   onUngroup: () => void;
   /** Rotate callback: angle in degrees */
   onRotate?: (angleDeg: number) => void;
+  /** Reset rotation to 0 */
+  onResetRotation?: () => void;
+  /** Set dimensions (width, height) */
+  onSetDimensions?: (width: number, height: number) => void;
+  /** Current rotation angle in degrees */
+  currentRotation?: number;
+  /** Current bounding box dimensions */
+  currentWidth?: number;
+  currentHeight?: number;
   /** Number of selected strokes */
   selectedCount: number;
   /** Whether the selected strokes are already grouped */
   isGrouped: boolean;
 }
 
-type SubPanel = 'color' | 'size' | 'rotate' | null;
+type SubPanel = 'color' | 'size' | 'rotate' | 'dimensions' | null;
 
 const PANEL_WIDTH = 188;
 const PANEL_MARGIN = 16; // gap from selection box edge to panel
@@ -65,13 +77,29 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   onGroup,
   onUngroup,
   onRotate,
+  onResetRotation,
+  onSetDimensions,
+  currentRotation = 0,
+  currentWidth = 0,
+  currentHeight = 0,
   selectedCount,
   isGrouped,
 }) => {
   const [openSubPanel, setOpenSubPanel] = useState<SubPanel>(null);
   const [brushSize, setBrushSize] = useState<number>(8);
+  const [dimW, setDimW] = useState<string>(String(Math.round(currentWidth)));
+  const [dimH, setDimH] = useState<string>(String(Math.round(currentHeight)));
   const rootRef = useRef<HTMLDivElement | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync dimension inputs when currentWidth/currentHeight change
+  useEffect(() => {
+    setDimW(String(Math.round(currentWidth)));
+  }, [currentWidth]);
+
+  useEffect(() => {
+    setDimH(String(Math.round(currentHeight)));
+  }, [currentHeight]);
 
   // Decide left vs right placement
   const viewportW = window.innerWidth;
@@ -119,6 +147,22 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
     return () => document.removeEventListener('mousedown', down);
   }, []);
 
+  const handleDimWChange = (val: string) => {
+    setDimW(val);
+    const num = parseInt(val, 10);
+    if (!isNaN(num) && num > 0) {
+      onSetDimensions?.(num, parseInt(dimH, 10) || currentHeight);
+    }
+  };
+
+  const handleDimHChange = (val: string) => {
+    setDimH(val);
+    const num = parseInt(val, 10);
+    if (!isNaN(num) && num > 0) {
+      onSetDimensions?.(parseInt(dimW, 10) || currentWidth, num);
+    }
+  };
+
   return (
     <div
       ref={rootRef}
@@ -162,6 +206,16 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           <ChevronRight size={11} className="sel-row-chevron" />
         </div>
 
+        {/* ── Dimensions row ── */}
+        <div
+          className={`sel-toolbox-row ${openSubPanel === 'dimensions' ? 'sel-row-active' : ''}`}
+          onMouseEnter={() => handleRowEnter('dimensions')}
+        >
+          <span className="sel-row-icon"><Maximize2 size={13} /></span>
+          <span className="sel-row-label">Dimensions</span>
+          <ChevronRight size={11} className="sel-row-chevron" />
+        </div>
+
         {/* ── Rotate row ── */}
         <div
           className={`sel-toolbox-row ${openSubPanel === 'rotate' ? 'sel-row-active' : ''}`}
@@ -169,6 +223,9 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         >
           <span className="sel-row-icon"><RotateCw size={13} /></span>
           <span className="sel-row-label">Rotate</span>
+          <span style={{ fontSize: 10, color: '#64748b', marginLeft: 'auto' }}>
+            {Math.round(currentRotation)}°
+          </span>
           <ChevronRight size={11} className="sel-row-chevron" />
         </div>
 
@@ -366,6 +423,56 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         </div>
       )}
 
+      {/* ── Sub-panel: Dimensions ── */}
+      {openSubPanel === 'dimensions' && (
+        <div
+          className={`sel-subpanel ${subPanelSide === 'right' ? 'sel-subpanel-right' : 'sel-subpanel-left'}`}
+          onMouseEnter={clearCloseTimer}
+          onMouseLeave={handlePanelLeave}
+        >
+          <p className="sel-subpanel-title">Dimensions</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ fontSize: 11, color: '#94a3b8', minWidth: 20 }}>W</label>
+              <input
+                type="number"
+                className="number-input"
+                min={1}
+                value={dimW}
+                style={{ flex: 1, width: '100%' }}
+                onChange={(e) => handleDimWChange(e.target.value)}
+                onBlur={() => {
+                  const v = parseInt(dimW, 10);
+                  if (isNaN(v) || v < 1) {
+                    setDimW(String(Math.round(currentWidth)));
+                  }
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ fontSize: 11, color: '#94a3b8', minWidth: 20 }}>H</label>
+              <input
+                type="number"
+                className="number-input"
+                min={1}
+                value={dimH}
+                style={{ flex: 1, width: '100%' }}
+                onChange={(e) => handleDimHChange(e.target.value)}
+                onBlur={() => {
+                  const v = parseInt(dimH, 10);
+                  if (isNaN(v) || v < 1) {
+                    setDimH(String(Math.round(currentHeight)));
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <p className="sel-size-hint" style={{ marginTop: 8 }}>
+            Set exact width & height
+          </p>
+        </div>
+      )}
+
       {/* ── Sub-panel: Rotate ── */}
       {openSubPanel === 'rotate' && (
         <div
@@ -373,7 +480,12 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           onMouseEnter={clearCloseTimer}
           onMouseLeave={handlePanelLeave}
         >
-          <p className="sel-subpanel-title">Rotate</p>
+          <p className="sel-subpanel-title">
+            Rotate
+            <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>
+              {Math.round(currentRotation)}°
+            </span>
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button
               type="button"
@@ -382,7 +494,8 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               onClick={() => onRotate?.(90)}
             >
               <RotateCw size={14} style={{ marginRight: 8 }} />
-              Rotate 90° Clockwise
+              Rotate 90° CW
+              <kbd className="sel-kbd" style={{ marginLeft: 'auto' }}>Ctrl+]</kbd>
             </button>
             <button
               type="button"
@@ -390,8 +503,9 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
               onClick={() => onRotate?.(-90)}
             >
-              <RotateCw size={14} style={{ marginRight: 8, transform: 'scaleX(-1)' }} />
-              Rotate 90° Counter-Clockwise
+              <RotateCcw size={14} style={{ marginRight: 8 }} />
+              Rotate 90° CCW
+              <kbd className="sel-kbd" style={{ marginLeft: 'auto' }}>Ctrl+[</kbd>
             </button>
             <button
               type="button"
@@ -409,7 +523,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               onClick={() => onRotate?.(45)}
             >
               <RotateCw size={14} style={{ marginRight: 8 }} />
-              Rotate 45° Clockwise
+              Rotate 45° CW
             </button>
             <button
               type="button"
@@ -417,8 +531,19 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
               onClick={() => onRotate?.(-45)}
             >
-              <RotateCw size={14} style={{ marginRight: 8, transform: 'scaleX(-1)' }} />
-              Rotate 45° Counter-Clockwise
+              <RotateCcw size={14} style={{ marginRight: 8 }} />
+              Rotate 45° CCW
+            </button>
+            <div className="sel-divider" style={{ margin: '4px 0' }} />
+            <button
+              type="button"
+              className="sel-toolbox-row sel-action-row"
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              onClick={() => onResetRotation?.()}
+            >
+              <Undo2 size={14} style={{ marginRight: 8 }} />
+              Reset Rotation
+              <kbd className="sel-kbd" style={{ marginLeft: 'auto' }}>Ctrl+Shift+R</kbd>
             </button>
           </div>
           <p className="sel-size-hint" style={{ marginTop: 8 }}>Or drag the rotate handle below selection</p>

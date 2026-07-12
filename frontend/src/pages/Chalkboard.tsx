@@ -10,6 +10,7 @@ import {
   isStrokeInRect,
   transformStrokes,
   rotateStrokesTo,
+  rotatePoint,
 } from '@/utils/drawing';
 import { getRandomColor } from '@/utils/colors';
 import type { 
@@ -524,14 +525,52 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         }
       }
 
-      // Selection size shortcuts
+      // Selection size shortcuts (unmodified [ ])
       if (selectedStrokeIds.length > 0 && document.activeElement?.tagName !== 'INPUT') {
-        if (e.key === ']' || e.key === '=' || e.key === '+') {
+        if (!(e.ctrlKey || e.metaKey) && (e.key === ']' || e.key === '=' || e.key === '+')) {
           e.preventDefault();
           handleIncreaseSize();
-        } else if (e.key === '[' || e.key === '-') {
+        } else if (!(e.ctrlKey || e.metaKey) && (e.key === '[' || e.key === '-')) {
           e.preventDefault();
           handleDecreaseSize();
+        }
+      }
+
+      // Rotation shortcuts: Ctrl+] = 90 CW, Ctrl+[ = 90 CCW, Ctrl+Shift+R = reset
+      if ((e.ctrlKey || e.metaKey) && selectedStrokeIds.length > 0 && document.activeElement?.tagName !== 'INPUT') {
+        if (e.key === ']') {
+          e.preventDefault();
+          const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
+          const rotated = rotateStrokesTo(selected, (selected[0]?.rotation ?? 0) + 90);
+          const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; });
+          setStrokes(updated);
+          setTransformBox(getCombinedBoundingBox(rotated));
+          socket.emit('undo-stroke', { roomId, strokes: updated });
+        } else if (e.key === '[') {
+          e.preventDefault();
+          const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
+          const rotated = rotateStrokesTo(selected, (selected[0]?.rotation ?? 0) - 90);
+          const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; });
+          setStrokes(updated);
+          setTransformBox(getCombinedBoundingBox(rotated));
+          socket.emit('undo-stroke', { roomId, strokes: updated });
+        } else if ((e.shiftKey && (e.key === 'r' || e.key === 'R'))) {
+          e.preventDefault();
+          const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
+          const box = getCombinedBoundingBox(selected);
+          if (box) {
+            const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
+            const rotated = selected.map(s => ({
+              ...s,
+              points: s.points.map(p => rotatePoint(p, center, -(s.rotation ?? 0))),
+              rotation: 0,
+            }));
+            const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; });
+            setStrokes(updated);
+            setSelectionRotation(0);
+            setTransformBox(getCombinedBoundingBox(rotated));
+            socket.emit('undo-stroke', { roomId, strokes: updated });
+          }
         }
       }
 
@@ -1444,12 +1483,53 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   return r ? r : s;
                 });
                 setStrokes(updated);
-                // Keep the banner in sync for button-driven rotation too —
-                // this is the same bug the drag handle had, recomputed here
-                // as a direct AABB since there's no in-progress drag angle.
                 setTransformBox(getCombinedBoundingBox(rotated));
                 socket.emit('undo-stroke', { roomId, strokes: updated });
               }}
+              onResetRotation={() => {
+                const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
+                const box = getCombinedBoundingBox(selected);
+                if (!box) return;
+                const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
+                const rotated = selected.map(s => {
+                  const currentAngle = s.rotation ?? 0;
+                  return {
+                    ...s,
+                    points: s.points.map(p => rotatePoint(p, center, -currentAngle)),
+                    rotation: 0,
+                  };
+                });
+                const updated = strokes.map(s => {
+                  const r = rotated.find(rs => rs.id === s.id);
+                  return r ? r : s;
+                });
+                setStrokes(updated);
+                setSelectionRotation(0);
+                setTransformBox(getCombinedBoundingBox(rotated));
+                socket.emit('undo-stroke', { roomId, strokes: updated });
+              }}
+              onSetDimensions={(width, height) => {
+                const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
+                const box = getCombinedBoundingBox(selected);
+                if (!box) return;
+                const newBox = {
+                  minX: box.minX,
+                  minY: box.minY,
+                  maxX: box.minX + width,
+                  maxY: box.minY + height,
+                };
+                const transformed = transformStrokes(selected, box, newBox);
+                const updated = strokes.map(s => {
+                  const t = transformed.find(ts => ts.id === s.id);
+                  return t ? t : s;
+                });
+                setStrokes(updated);
+                setTransformBox(newBox);
+                socket.emit('undo-stroke', { roomId, strokes: updated });
+              }}
+              currentRotation={selectionRotation}
+              currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
+              currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
               selectedCount={selectedStrokeIds.length}
               isGrouped={hasGroupId}
             />

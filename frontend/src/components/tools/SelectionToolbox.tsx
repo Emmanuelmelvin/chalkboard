@@ -44,7 +44,8 @@ interface SelectionToolboxProps {
   /** Set dimensions (width, height) */
   onSetDimensions?: (width: number, height: number) => void;
   /** Trim callback */
-  onTrim?: (mode: 'horizontal' | 'vertical') => void;
+  onTrim?: () => void;
+  onResetTrim?: () => void;
   /** Current rotation angle in degrees */
   currentRotation?: number;
   /** Current bounding box dimensions */
@@ -82,6 +83,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   onResetRotation,
   onSetDimensions,
   onTrim,
+  onResetTrim,
   currentRotation = 0,
   currentWidth = 0,
   currentHeight = 0,
@@ -575,27 +577,30 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           onMouseEnter={clearCloseTimer}
           onMouseLeave={handlePanelLeave}
         >
-          <p className="sel-subpanel-title">Trim</p>
+          <p className="sel-subpanel-title">Trim / Crop</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
               style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
-              onClick={() => onTrim?.('horizontal')}
+              onClick={() => onTrim?.()}
             >
-              <Scissors size={14} style={{ marginRight: 8, transform: 'rotate(90deg)' }} />
-              Horizontal Trim
+              <Scissors size={14} style={{ marginRight: 8 }} />
+              Crop Selection
             </button>
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
               style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
-              onClick={() => onTrim?.('vertical')}
+              onClick={() => onResetTrim?.()}
             >
-              <Scissors size={14} style={{ marginRight: 8 }} />
-              Vertical Trim
+              <Undo2 size={14} style={{ marginRight: 8 }} />
+              Reset Crop
             </button>
           </div>
+          <p className="sel-size-hint" style={{ marginTop: 8 }}>
+            Drag edges to crop, Enter to apply
+          </p>
         </div>
       )}
     </div>

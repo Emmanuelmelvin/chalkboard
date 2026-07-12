@@ -11,6 +11,9 @@ import {
   transformStrokes,
   rotateStrokesTo,
   rotatePoint,
+  intersectRects,
+  clipStrokeToRect,
+  eraseStrokePoints,
 } from '@/utils/drawing';
 import { getRandomColor } from '@/utils/colors';
 import type { 
@@ -90,9 +93,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   // Trim mode
   const [trimState, setTrimState] = useState<TrimState>({
     active: false,
-    mode: null,
-    splitPosition: null,
-    keepSide: null,
+    cropBox: null,
+    initialBox: null,
   });
   // Highlighted link for banner click navigation
   const [highlightedLinkId, setHighlightedLinkId] = useState<string | null>(null);
@@ -182,7 +184,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       // makes the "banner" (box, resize handles, rotate handle + connector)
       // visually track the strokes, both while a rotate drag is in progress
       // and after it ends (selectionRotation persists the total angle).
-      if (transformBox && selectedStrokeIds.length > 0) {
+      if (transformBox && selectedStrokeIds.length > 0 && !trimState.active) {
         const boxCenterX = (transformBox.minX + transformBox.maxX) / 2;
         const boxCenterY = (transformBox.minY + transformBox.maxY) / 2;
 
@@ -291,7 +293,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
 
     ctx.restore();
-  }, [strokes, zoom, panOffset, selectionMarquee, transformBox, selectedStrokeIds, selectionRotation]);
+  }, [strokes, zoom, panOffset, selectionMarquee, transformBox, selectedStrokeIds, selectionRotation, trimState]);
 
   // RequestAnimationFrame draw loop trigger
   useEffect(() => {
@@ -586,84 +588,80 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   // ── Trim functionality ──
 
   /** Start trim mode */
-  const handleStartTrim = useCallback((mode: 'horizontal' | 'vertical') => {
+  const handleStartTrim = useCallback(() => {
+    if (!transformBox) return;
     setTrimState({
       active: true,
-      mode,
-      splitPosition: null,
-      keepSide: null,
+      cropBox: { ...transformBox },
+      initialBox: { ...transformBox },
     });
-  }, []);
+  }, [transformBox]);
 
-  /** Update trim split position during drag */
-  const handleUpdateTrim = useCallback((canvasPos: Point) => {
-    setTrimState(prev => {
-      if (!prev.active || !prev.mode) return prev;
-      return {
-        ...prev,
-        splitPosition: prev.mode === 'horizontal' ? canvasPos.x : canvasPos.y,
-      };
-    });
-  }, []);
-
-  /** Set which side to keep */
-  const handleSetTrimKeepSide = useCallback((side: 'left' | 'right' | 'top' | 'bottom') => {
-    setTrimState(prev => ({
-      ...prev,
-      keepSide: side,
-    }));
-  }, []);
-
-  /** Apply trim: delete strokes on the non-selected side */
+  /** Apply trim: apply cropBox to selected strokes by cutting their points destructively */
   const handleApplyTrim = useCallback(() => {
-    setTrimState(prev => {
-      if (!prev.active || !prev.mode || prev.splitPosition === null || !prev.keepSide) return prev;
+    if (!trimState.active || !trimState.cropBox) return;
+    
+    const { cropBox } = trimState;
+    const updatedStrokes: Stroke[] = [];
 
-      const splitPos = prev.splitPosition;
-      const mode = prev.mode;
-
-      // Filter strokes based on which side to keep
-      const filteredStrokes = strokes.filter(stroke => {
-        const box = getCombinedBoundingBox([stroke]);
-        if (!box) return true; // Keep strokes with no bounds
-
-        if (mode === 'horizontal') {
-          // Vertical split line - keep left or right
-          if (prev.keepSide === 'left') {
-            return box.maxX <= splitPos; // Keep strokes entirely on the left
-          } else {
-            return box.minX >= splitPos; // Keep strokes entirely on the right
-          }
-        } else {
-          // Horizontal split line - keep top or bottom
-          if (prev.keepSide === 'top') {
-            return box.maxY <= splitPos; // Keep strokes entirely on top
-          } else {
-            return box.minY >= splitPos; // Keep strokes entirely on bottom
-          }
-        }
-      });
-
-      setStrokes(filteredStrokes);
-      socket.emit('undo-stroke', { roomId, strokes: filteredStrokes });
-
-      // Clear trim state
-      return {
-        active: false,
-        mode: null,
-        splitPosition: null,
-        keepSide: null,
-      };
+    strokes.forEach(stroke => {
+      if (selectedStrokeIds.includes(stroke.id)) {
+        const cropped = clipStrokeToRect(stroke, cropBox);
+        updatedStrokes.push(...cropped);
+      } else {
+        updatedStrokes.push(stroke);
+      }
     });
-  }, [strokes, socket, roomId]);
+
+    setStrokes(updatedStrokes);
+    socket.emit('undo-stroke', { roomId, strokes: updatedStrokes });
+    
+    // Select the newly cropped stroke parts
+    const newSelectedIds = updatedStrokes
+      .filter(s => s.id.includes('-crop-') || selectedStrokeIds.includes(s.id))
+      .map(s => s.id);
+    setSelectedStrokeIds(newSelectedIds);
+
+    const selected = updatedStrokes.filter(s => newSelectedIds.includes(s.id));
+    setTransformBox(getCombinedBoundingBox(selected));
+
+    setTrimState({
+      active: false,
+      cropBox: null,
+      initialBox: null,
+    });
+  }, [strokes, selectedStrokeIds, socket, roomId, trimState]);
+
+  /** Reset trim: reset cropBox when crop is active, or remove clipBox from legacy strokes */
+  const handleResetTrim = useCallback(() => {
+    if (trimState.active && trimState.initialBox) {
+      setTrimState(prev => ({
+        ...prev,
+        cropBox: { ...prev.initialBox! },
+      }));
+    } else {
+      if (selectedStrokeIds.length === 0) return;
+      const updated = strokes.map(stroke => {
+        if (selectedStrokeIds.includes(stroke.id)) {
+          const { clipBox, ...rest } = stroke;
+          return rest;
+        }
+        return stroke;
+      });
+      setStrokes(updated);
+      socket.emit('undo-stroke', { roomId, strokes: updated });
+      
+      const selected = updated.filter(s => selectedStrokeIds.includes(s.id));
+      setTransformBox(getCombinedBoundingBox(selected));
+    }
+  }, [strokes, selectedStrokeIds, socket, roomId, trimState]);
 
   /** Cancel trim mode */
   const handleCancelTrim = useCallback(() => {
     setTrimState({
       active: false,
-      mode: null,
-      splitPosition: null,
-      keepSide: null,
+      cropBox: null,
+      initialBox: null,
     });
   }, []);
 
@@ -874,22 +872,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         }
       }
 
-      // Ctrl+Shift+T: toggle trim mode (only when not in input)
+      // Ctrl+Shift+T: toggle trim/crop mode (only when not in input)
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && document.activeElement?.tagName !== 'INPUT') {
         const key = e.key.toLowerCase();
         if (key === 't') {
           e.preventDefault();
-          setTrimState(prev => prev.active ? {
-            active: false,
-            mode: null,
-            splitPosition: null,
-            keepSide: null,
-          } : {
-            active: true,
-            mode: 'horizontal',
-            splitPosition: null,
-            keepSide: null,
-          });
+          if (trimState.active) {
+            setTrimState({ active: false, cropBox: null, initialBox: null });
+          } else if (transformBox) {
+            handleStartTrim();
+          }
           return;
         }
       }
@@ -960,7 +952,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [strokes, redoStack, setActiveTool, selectedStrokeIds, handleIncreaseSize, handleDecreaseSize, handleCopy, handleCut, handlePaste, handleDuplicate, transformBox, zoom]);
+  }, [strokes, redoStack, setActiveTool, selectedStrokeIds, handleIncreaseSize, handleDecreaseSize, handleCopy, handleCut, handlePaste, handleDuplicate, transformBox, zoom, trimState, handleStartTrim, handleApplyTrim, handleCancelTrim]);
+
+  // Auto-apply crop/trim on tool change
+  useEffect(() => {
+    if (activeTool !== 'select' && trimState.active) {
+      handleApplyTrim();
+    }
+  }, [activeTool, trimState.active, handleApplyTrim]);
 
   // Web Socket listeners
   useEffect(() => {
@@ -1134,8 +1133,40 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const stopDrawing = () => {
     if (!isDrawing) return;
     setIsDrawing(false);
+    
+    const eraserId = currentStrokeId.current;
     currentStrokeId.current = null;
     socket.emit('stroke-end', { roomId });
+
+    if (activeTool === 'eraser' && eraserId) {
+      // Access current state via state setter updater or local reference
+      setStrokes(prevStrokes => {
+        const eraserStroke = prevStrokes.find(s => s.id === eraserId);
+        if (!eraserStroke || eraserStroke.points.length === 0) {
+          return prevStrokes.filter(s => s.id !== eraserId);
+        }
+
+        const eraserPoints = eraserStroke.points;
+        const radius = eraserStroke.eraserWidth && eraserStroke.eraserHeight
+          ? Math.max(eraserStroke.eraserWidth, eraserStroke.eraserHeight) / 2
+          : eraserStroke.size * 2;
+
+        const updated: Stroke[] = [];
+        prevStrokes.forEach(stroke => {
+          if (stroke.id === eraserId) return; // Discard the current eraser stroke
+          if (stroke.tool === 'eraser') {
+            updated.push(stroke);
+            return;
+          }
+          const sliced = eraseStrokePoints(stroke, eraserPoints, radius);
+          updated.push(...sliced);
+        });
+
+        // Broadcast the final sliced board
+        socket.emit('undo-stroke', { roomId, strokes: updated });
+        return updated;
+      });
+    }
   };
 
   // Erase Dust puff trigger
@@ -1152,12 +1183,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Trim mode: capture pointer to drag split line
-    if (trimState.active) {
-      canvas.setPointerCapture(e.pointerId);
-      return;
-    }
-
     if (spacePressed || e.button === 1 || activeTool === 'pan') {
       setIsPanning(true);
       panStart.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
@@ -1168,47 +1193,89 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const pos = screenToCanvas(e.clientX, e.clientY);
 
     if (activeTool === 'select') {
+      if (trimState.active && trimState.cropBox) {
+        const boxToUse = trimState.cropBox;
+        const handleSize = 15 / zoom;
+        const edgeTolerance = 10 / zoom;
+        
+        const inResizeTL = pos.x >= boxToUse.minX - handleSize && pos.x <= boxToUse.minX + handleSize &&
+          pos.y >= boxToUse.minY - handleSize && pos.y <= boxToUse.minY + handleSize;
+          
+        const inResizeTR = pos.x >= boxToUse.maxX - handleSize && pos.x <= boxToUse.maxX + handleSize &&
+          pos.y >= boxToUse.minY - handleSize && pos.y <= boxToUse.minY + handleSize;
+          
+        const inResizeBL = pos.x >= boxToUse.minX - handleSize && pos.x <= boxToUse.minX + handleSize &&
+          pos.y >= boxToUse.maxY - handleSize && pos.y <= boxToUse.maxY + handleSize;
+          
+        const inResizeBR = pos.x >= boxToUse.maxX - handleSize && pos.x <= boxToUse.maxX + handleSize &&
+          pos.y >= boxToUse.maxY - handleSize && pos.y <= boxToUse.maxY + handleSize;
+
+        const onLeftEdge = Math.abs(pos.x - boxToUse.minX) <= edgeTolerance &&
+          pos.y >= boxToUse.minY - edgeTolerance && pos.y <= boxToUse.maxY + edgeTolerance;
+          
+        const onRightEdge = Math.abs(pos.x - boxToUse.maxX) <= edgeTolerance &&
+          pos.y >= boxToUse.minY - edgeTolerance && pos.y <= boxToUse.maxY + edgeTolerance;
+          
+        const onTopEdge = Math.abs(pos.y - boxToUse.minY) <= edgeTolerance &&
+          pos.x >= boxToUse.minX - edgeTolerance && pos.x <= boxToUse.maxX + edgeTolerance;
+          
+        const onBottomEdge = Math.abs(pos.y - boxToUse.maxY) <= edgeTolerance &&
+          pos.x >= boxToUse.minX - edgeTolerance && pos.x <= boxToUse.maxX + edgeTolerance;
+
+        const inBox = pos.x >= boxToUse.minX && pos.x <= boxToUse.maxX &&
+          pos.y >= boxToUse.minY && pos.y <= boxToUse.maxY;
+
+        const clickedInteractive = inResizeTL || inResizeTR || inResizeBL || inResizeBR ||
+          onLeftEdge || onRightEdge || onTopEdge || onBottomEdge || inBox;
+
+        if (!clickedInteractive) {
+          handleApplyTrim();
+          return;
+        }
+      }
+
       // Check if clicking inside transform box or handles
-      if (transformBox) {
+      const boxToUse = trimState.active && trimState.cropBox ? trimState.cropBox : transformBox;
+      if (boxToUse) {
         // Rotate the pointer position into the selection's local
         // (un-rotated) space before hit-testing, since transformBox itself
         // stays axis-aligned while selectionRotation visually rotates it.
-        const localPos = selectionRotation !== 0
-          ? rotatePoint(pos, boxCenter(transformBox), -selectionRotation)
+        const localPos = selectionRotation !== 0 && !trimState.active
+          ? rotatePoint(pos, boxCenter(boxToUse), -selectionRotation)
           : pos;
 
         const handleSize = 15 / zoom;
         const edgeTolerance = 10 / zoom;
         
-        const inResizeTL = localPos.x >= transformBox.minX - handleSize && localPos.x <= transformBox.minX + handleSize &&
-          localPos.y >= transformBox.minY - handleSize && localPos.y <= transformBox.minY + handleSize;
+        const inResizeTL = localPos.x >= boxToUse.minX - handleSize && localPos.x <= boxToUse.minX + handleSize &&
+          localPos.y >= boxToUse.minY - handleSize && localPos.y <= boxToUse.minY + handleSize;
           
-        const inResizeTR = localPos.x >= transformBox.maxX - handleSize && localPos.x <= transformBox.maxX + handleSize &&
-          localPos.y >= transformBox.minY - handleSize && localPos.y <= transformBox.minY + handleSize;
+        const inResizeTR = localPos.x >= boxToUse.maxX - handleSize && localPos.x <= boxToUse.maxX + handleSize &&
+          localPos.y >= boxToUse.minY - handleSize && localPos.y <= boxToUse.minY + handleSize;
           
-        const inResizeBL = localPos.x >= transformBox.minX - handleSize && localPos.x <= transformBox.minX + handleSize &&
-          localPos.y >= transformBox.maxY - handleSize && localPos.y <= transformBox.maxY + handleSize;
+        const inResizeBL = localPos.x >= boxToUse.minX - handleSize && localPos.x <= boxToUse.minX + handleSize &&
+          localPos.y >= boxToUse.maxY - handleSize && localPos.y <= boxToUse.maxY + handleSize;
           
-        const inResizeBR = localPos.x >= transformBox.maxX - handleSize && localPos.x <= transformBox.maxX + handleSize &&
-          localPos.y >= transformBox.maxY - handleSize && localPos.y <= transformBox.maxY + handleSize;
+        const inResizeBR = localPos.x >= boxToUse.maxX - handleSize && localPos.x <= boxToUse.maxX + handleSize &&
+          localPos.y >= boxToUse.maxY - handleSize && localPos.y <= boxToUse.maxY + handleSize;
 
-        const onLeftEdge = Math.abs(localPos.x - transformBox.minX) <= edgeTolerance &&
-          localPos.y >= transformBox.minY - edgeTolerance && localPos.y <= transformBox.maxY + edgeTolerance;
+        const onLeftEdge = Math.abs(localPos.x - boxToUse.minX) <= edgeTolerance &&
+          localPos.y >= boxToUse.minY - edgeTolerance && localPos.y <= boxToUse.maxY + edgeTolerance;
           
-        const onRightEdge = Math.abs(localPos.x - transformBox.maxX) <= edgeTolerance &&
-          localPos.y >= transformBox.minY - edgeTolerance && localPos.y <= transformBox.maxY + edgeTolerance;
+        const onRightEdge = Math.abs(localPos.x - boxToUse.maxX) <= edgeTolerance &&
+          localPos.y >= boxToUse.minY - edgeTolerance && localPos.y <= boxToUse.maxY + edgeTolerance;
           
-        const onTopEdge = Math.abs(localPos.y - transformBox.minY) <= edgeTolerance &&
-          localPos.x >= transformBox.minX - edgeTolerance && localPos.x <= transformBox.maxX + edgeTolerance;
+        const onTopEdge = Math.abs(localPos.y - boxToUse.minY) <= edgeTolerance &&
+          localPos.x >= boxToUse.minX - edgeTolerance && localPos.x <= boxToUse.maxX + edgeTolerance;
           
-        const onBottomEdge = Math.abs(localPos.y - transformBox.maxY) <= edgeTolerance &&
-          localPos.x >= transformBox.minX - edgeTolerance && localPos.x <= transformBox.maxX + edgeTolerance;
+        const onBottomEdge = Math.abs(localPos.y - boxToUse.maxY) <= edgeTolerance &&
+          localPos.x >= boxToUse.minX - edgeTolerance && localPos.x <= boxToUse.maxX + edgeTolerance;
 
-        // Detect rotate handle
-        const centerX = (transformBox.minX + transformBox.maxX) / 2;
-        const rotY = transformBox.maxY + 30 / zoom;
+        // Detect rotate handle (disable in trim mode)
+        const centerX = (boxToUse.minX + boxToUse.maxX) / 2;
+        const rotY = boxToUse.maxY + 30 / zoom;
         const rotRadius = 15 / zoom;
-        const inRotate = Math.sqrt((localPos.x - centerX) ** 2 + (localPos.y - rotY) ** 2) <= rotRadius;
+        const inRotate = !trimState.active && Math.sqrt((localPos.x - centerX) ** 2 + (localPos.y - rotY) ** 2) <= rotRadius;
 
         let mode: 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'move' | 'rotate' | null = null;
         if (inRotate) mode = 'rotate';
@@ -1221,8 +1288,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         else if (onTopEdge) mode = 'resize-t';
         else if (onBottomEdge) mode = 'resize-b';
         else {
-          const inBox = localPos.x >= transformBox.minX && localPos.x <= transformBox.maxX &&
-            localPos.y >= transformBox.minY && localPos.y <= transformBox.maxY;
+          const inBox = localPos.x >= boxToUse.minX && localPos.x <= boxToUse.maxX &&
+            localPos.y >= boxToUse.minY && localPos.y <= boxToUse.maxY;
           if (inBox) mode = 'move';
         }
 
@@ -1232,7 +1299,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           // pointer position (not the de-rotated local one) since it measures
           // the sweep angle around the box's real screen center.
           transformStart.current = mode === 'rotate' ? pos : localPos;
-          initialTransformBox.current = { ...transformBox };
+          initialTransformBox.current = { ...boxToUse };
           initialSelectedStrokes.current = strokes.filter(s => selectedStrokeIds.includes(s.id));
           canvas.setPointerCapture(e.pointerId);
           return;
@@ -1329,12 +1396,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       return;
     }
 
-    // Trim mode: update split position
-    if (trimState.active) {
-      const pos = screenToCanvas(e.clientX, e.clientY);
-      handleUpdateTrim(pos);
-      return;
-    }
+    // Trim mode split position dragging is no longer used.
+    // Instead, dragging handles adjusts trimState.cropBox directly in the activeTool === 'select' block below.
 
     const pos = screenToCanvas(e.clientX, e.clientY);
 
@@ -1384,6 +1447,39 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         const localDy = localPos.y - transformStart.current.y;
 
         let newBox = { ...initialTransformBox.current };
+
+        // In trim/crop mode, drag handles adjust the cropBox instead of scaling strokes
+        if (trimState.active) {
+          if (trimState.initialBox) {
+            // Don't allow move in crop mode, only resize
+            if (transformMode !== 'move') {
+              if (transformMode === 'resize-br') {
+                newBox.maxX = Math.min(trimState.initialBox.maxX, Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx));
+                newBox.maxY = Math.min(trimState.initialBox.maxY, Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy));
+              } else if (transformMode === 'resize-tl') {
+                newBox.minX = Math.max(trimState.initialBox.minX, Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx));
+                newBox.minY = Math.max(trimState.initialBox.minY, Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy));
+              } else if (transformMode === 'resize-tr') {
+                newBox.maxX = Math.min(trimState.initialBox.maxX, Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx));
+                newBox.minY = Math.max(trimState.initialBox.minY, Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy));
+              } else if (transformMode === 'resize-bl') {
+                newBox.minX = Math.max(trimState.initialBox.minX, Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx));
+                newBox.maxY = Math.min(trimState.initialBox.maxY, Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy));
+              } else if (transformMode === 'resize-l') {
+                newBox.minX = Math.max(trimState.initialBox.minX, Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx));
+              } else if (transformMode === 'resize-r') {
+                newBox.maxX = Math.min(trimState.initialBox.maxX, Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx));
+              } else if (transformMode === 'resize-t') {
+                newBox.minY = Math.max(trimState.initialBox.minY, Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy));
+              } else if (transformMode === 'resize-b') {
+                newBox.maxY = Math.min(trimState.initialBox.maxY, Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy));
+              }
+            }
+            setTrimState(prev => ({ ...prev, cropBox: newBox }));
+          }
+          return;
+        }
+
         if (transformMode === 'move') {
           newBox.minX += localDx;
           newBox.maxX += localDx;
@@ -1430,45 +1526,46 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       }
 
       // Hover detection when activeTool === 'select' and not dragging
-      if (transformBox) {
+      const boxToUse = trimState.active && trimState.cropBox ? trimState.cropBox : transformBox;
+      if (boxToUse) {
         // Same de-rotation as pointer-down hit-testing, so hover state lines
         // up with an already-rotated selection.
-        const localPos = selectionRotation !== 0
-          ? rotatePoint(pos, boxCenter(transformBox), -selectionRotation)
+        const localPos = selectionRotation !== 0 && !trimState.active
+          ? rotatePoint(pos, boxCenter(boxToUse), -selectionRotation)
           : pos;
 
         const handleSize = 15 / zoom;
         const edgeTolerance = 10 / zoom;
 
-        const inResizeTL = localPos.x >= transformBox.minX - handleSize && localPos.x <= transformBox.minX + handleSize &&
-          localPos.y >= transformBox.minY - handleSize && localPos.y <= transformBox.minY + handleSize;
+        const inResizeTL = localPos.x >= boxToUse.minX - handleSize && localPos.x <= boxToUse.minX + handleSize &&
+          localPos.y >= boxToUse.minY - handleSize && localPos.y <= boxToUse.minY + handleSize;
           
-        const inResizeTR = localPos.x >= transformBox.maxX - handleSize && localPos.x <= transformBox.maxX + handleSize &&
-          localPos.y >= transformBox.minY - handleSize && localPos.y <= transformBox.minY + handleSize;
+        const inResizeTR = localPos.x >= boxToUse.maxX - handleSize && localPos.x <= boxToUse.maxX + handleSize &&
+          localPos.y >= boxToUse.minY - handleSize && localPos.y <= boxToUse.minY + handleSize;
           
-        const inResizeBL = localPos.x >= transformBox.minX - handleSize && localPos.x <= transformBox.minX + handleSize &&
-          localPos.y >= transformBox.maxY - handleSize && localPos.y <= transformBox.maxY + handleSize;
+        const inResizeBL = localPos.x >= boxToUse.minX - handleSize && localPos.x <= boxToUse.minX + handleSize &&
+          localPos.y >= boxToUse.maxY - handleSize && localPos.y <= boxToUse.maxY + handleSize;
           
-        const inResizeBR = localPos.x >= transformBox.maxX - handleSize && localPos.x <= transformBox.maxX + handleSize &&
-          localPos.y >= transformBox.maxY - handleSize && localPos.y <= transformBox.maxY + handleSize;
+        const inResizeBR = localPos.x >= boxToUse.maxX - handleSize && localPos.x <= boxToUse.maxX + handleSize &&
+          localPos.y >= boxToUse.maxY - handleSize && localPos.y <= boxToUse.maxY + handleSize;
 
-        const onLeftEdge = Math.abs(localPos.x - transformBox.minX) <= edgeTolerance &&
-          localPos.y >= transformBox.minY - edgeTolerance && localPos.y <= transformBox.maxY + edgeTolerance;
+        const onLeftEdge = Math.abs(localPos.x - boxToUse.minX) <= edgeTolerance &&
+          localPos.y >= boxToUse.minY - edgeTolerance && localPos.y <= boxToUse.maxY + edgeTolerance;
           
-        const onRightEdge = Math.abs(localPos.x - transformBox.maxX) <= edgeTolerance &&
-          localPos.y >= transformBox.minY - edgeTolerance && localPos.y <= transformBox.maxY + edgeTolerance;
+        const onRightEdge = Math.abs(localPos.x - boxToUse.maxX) <= edgeTolerance &&
+          localPos.y >= boxToUse.minY - edgeTolerance && localPos.y <= boxToUse.maxY + edgeTolerance;
           
-        const onTopEdge = Math.abs(localPos.y - transformBox.minY) <= edgeTolerance &&
-          localPos.x >= transformBox.minX - edgeTolerance && localPos.x <= transformBox.maxX + edgeTolerance;
+        const onTopEdge = Math.abs(localPos.y - boxToUse.minY) <= edgeTolerance &&
+          localPos.x >= boxToUse.minX - edgeTolerance && localPos.x <= boxToUse.maxX + edgeTolerance;
           
-        const onBottomEdge = Math.abs(localPos.y - transformBox.maxY) <= edgeTolerance &&
-          localPos.x >= transformBox.minX - edgeTolerance && localPos.x <= transformBox.maxX + edgeTolerance;
+        const onBottomEdge = Math.abs(localPos.y - boxToUse.maxY) <= edgeTolerance &&
+          localPos.x >= boxToUse.minX - edgeTolerance && localPos.x <= boxToUse.maxX + edgeTolerance;
 
-        // Detect rotate handle hover
-        const centerX = (transformBox.minX + transformBox.maxX) / 2;
-        const rotY = transformBox.maxY + 30 / zoom;
+        // Detect rotate handle hover (disable in trim mode)
+        const centerX = (boxToUse.minX + boxToUse.maxX) / 2;
+        const rotY = boxToUse.maxY + 30 / zoom;
         const rotRadius = 15 / zoom;
-        const inRotate = Math.sqrt((localPos.x - centerX) ** 2 + (localPos.y - rotY) ** 2) <= rotRadius;
+        const inRotate = !trimState.active && Math.sqrt((localPos.x - centerX) ** 2 + (localPos.y - rotY) ** 2) <= rotRadius;
 
         let hover: typeof hoveredHandle = null;
         if (inRotate) hover = 'rotate';
@@ -1481,8 +1578,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         else if (onTopEdge) hover = 'resize-t';
         else if (onBottomEdge) hover = 'resize-b';
         else {
-          const inBox = localPos.x >= transformBox.minX && localPos.x <= transformBox.maxX &&
-            localPos.y >= transformBox.minY && localPos.y <= transformBox.maxY;
+          const inBox = localPos.x >= boxToUse.minX && localPos.x <= boxToUse.maxX &&
+            localPos.y >= boxToUse.minY && localPos.y <= boxToUse.maxY;
           if (inBox) hover = 'move';
         }
 
@@ -1510,6 +1607,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (activeTool === 'select') {
       if (transformMode) {
         const wasRotating = transformMode === 'rotate';
+
+        if (trimState.active) {
+          setTransformMode(null);
+          if (canvas) canvas.releasePointerCapture(e.pointerId);
+          return;
+        }
 
         if (wasRotating) {
           // Pure rotation never changes an object's LOCAL extents, so
@@ -1749,159 +1852,165 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
       {/* HUD Overlay layer */}
       <div className="hud-layer">
-        {/* Trim Mode Overlay */}
-        {trimState.active && trimState.splitPosition !== null && (() => {
+        {/* Trim/Crop Mode Overlay */}
+        {trimState.active && trimState.cropBox && (() => {
           const canvas = canvasRef.current;
           if (!canvas) return null;
-          const rect = canvas.getBoundingClientRect();
           
-          const splitPos = trimState.splitPosition;
-          const mode = trimState.mode;
-          
-          // Calculate screen position of the split line
-          let screenPos: number;
-          if (mode === 'horizontal') {
-            screenPos = splitPos * zoom + panOffset.x;
-          } else {
-            screenPos = splitPos * zoom + panOffset.y;
-          }
+          const cropBox = trimState.cropBox;
+          const initBox = trimState.initialBox;
+          if (!initBox) return null;
+
+          // Convert canvas coords to screen coords
+          const screenLeft = cropBox.minX * zoom + panOffset.x;
+          const screenTop = cropBox.minY * zoom + panOffset.y;
+          const screenRight = cropBox.maxX * zoom + panOffset.x;
+          const screenBottom = cropBox.maxY * zoom + panOffset.y;
+
+          // Full selection bounds in screen coords
+          const fullLeft = initBox.minX * zoom + panOffset.x;
+          const fullTop = initBox.minY * zoom + panOffset.y;
+          const fullRight = initBox.maxX * zoom + panOffset.x;
+          const fullBottom = initBox.maxY * zoom + panOffset.y;
           
           return (
             <>
-              {/* Blur overlay for the non-selected side */}
+              {/* 4-pane blur overlay outside crop box but inside selection */}
+              {/* Top */}
               <div style={{
                 position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
+                left: fullLeft, top: fullTop,
+                width: fullRight - fullLeft,
+                height: Math.max(0, screenTop - fullTop),
+                background: 'rgba(0, 0, 0, 0.45)',
+                backdropFilter: 'blur(3px)',
                 pointerEvents: 'none',
                 zIndex: 150,
-                display: 'flex',
-              }}>
-                {mode === 'horizontal' ? (
-                  <>
-                    {/* Left side blur */}
-                    <div style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      width: screenPos,
-                      height: '100%',
-                      background: 'rgba(0, 0, 0, 0.3)',
-                      backdropFilter: 'blur(4px)',
-                    }} />
-                    {/* Right side clear */}
-                    <div style={{
-                      position: 'absolute',
-                      left: screenPos,
-                      top: 0,
-                      right: 0,
-                      height: '100%',
-                    }} />
-                  </>
-                ) : (
-                  <>
-                    {/* Top side blur */}
-                    <div style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      width: '100%',
-                      height: screenPos,
-                      background: 'rgba(0, 0, 0, 0.3)',
-                      backdropFilter: 'blur(4px)',
-                    }} />
-                    {/* Bottom side clear */}
-                    <div style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: screenPos,
-                      width: '100%',
-                      bottom: 0,
-                    }} />
-                  </>
-                )}
-              </div>
-              
-              {/* Split line indicator */}
+              }} />
+              {/* Bottom */}
               <div style={{
                 position: 'absolute',
-                background: '#ef4444',
-                zIndex: 151,
+                left: fullLeft, top: screenBottom,
+                width: fullRight - fullLeft,
+                height: Math.max(0, fullBottom - screenBottom),
+                background: 'rgba(0, 0, 0, 0.45)',
+                backdropFilter: 'blur(3px)',
                 pointerEvents: 'none',
-                boxShadow: '0 0 8px rgba(239, 68, 68, 0.6)',
-              }} />              
-              
-              {/* Trim mode banner */}
+                zIndex: 150,
+              }} />
+              {/* Left */}
               <div style={{
                 position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
+                left: fullLeft, top: screenTop,
+                width: Math.max(0, screenLeft - fullLeft),
+                height: screenBottom - screenTop,
+                background: 'rgba(0, 0, 0, 0.45)',
+                backdropFilter: 'blur(3px)',
+                pointerEvents: 'none',
+                zIndex: 150,
+              }} />
+              {/* Right */}
+              <div style={{
+                position: 'absolute',
+                left: screenRight, top: screenTop,
+                width: Math.max(0, fullRight - screenRight),
+                height: screenBottom - screenTop,
+                background: 'rgba(0, 0, 0, 0.45)',
+                backdropFilter: 'blur(3px)',
+                pointerEvents: 'none',
+                zIndex: 150,
+              }} />
+              
+              {/* Crop border frame */}
+              <div style={{
+                position: 'absolute',
+                left: screenLeft, top: screenTop,
+                width: screenRight - screenLeft,
+                height: screenBottom - screenTop,
+                border: '2px dashed rgba(59, 130, 246, 0.8)',
+                borderRadius: 2,
+                pointerEvents: 'none',
+                zIndex: 151,
+                boxShadow: '0 0 12px rgba(59, 130, 246, 0.3)',
+              }} />
+
+              {/* Corner handles */}
+              {[
+                { left: screenLeft - 5, top: screenTop - 5 },
+                { left: screenRight - 5, top: screenTop - 5 },
+                { left: screenLeft - 5, top: screenBottom - 5 },
+                { left: screenRight - 5, top: screenBottom - 5 },
+              ].map((pos, i) => (
+                <div key={i} style={{
+                  position: 'absolute',
+                  left: pos.left, top: pos.top,
+                  width: 10, height: 10,
+                  background: '#3b82f6',
+                  border: '2px solid #fff',
+                  borderRadius: 2,
+                  pointerEvents: 'none',
+                  zIndex: 152,
+                }} />
+              ))}
+
+              {/* Trim/Crop mode banner */}
+              <div style={{
+                position: 'absolute',
+                left: (screenLeft + screenRight) / 2,
+                top: screenTop - 60,
+                transform: 'translateX(-50%)',
                 zIndex: 152,
                 background: 'rgba(15, 23, 42, 0.95)',
                 backdropFilter: 'blur(12px)',
-                border: '1px solid rgba(239, 68, 68, 0.5)',
+                border: '1px solid rgba(59, 130, 246, 0.5)',
                 borderRadius: '12px',
-                padding: '16px 24px',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
-                textAlign: 'center',
+                padding: '10px 18px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
                 pointerEvents: 'auto',
+                whiteSpace: 'nowrap',
               }}>
-                <div style={{ 
-                  color: '#ef4444', 
-                  fontFamily: 'var(--font-sketch)',
-                  fontSize: '14px',
-                  marginBottom: '8px',
-                  letterSpacing: '0.5px'
-                }}>
-                  TRIM MODE
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div style={{ 
+                    color: '#3b82f6', 
+                    fontFamily: 'var(--font-sketch)',
+                    fontSize: '13px',
+                    letterSpacing: '0.5px',
+                    textAlign: 'left',
+                  }}>
+                    CROP MODE
+                  </div>
+                  <div style={{ 
+                    color: '#94a3b8', 
+                    fontSize: '10px',
+                    fontFamily: 'var(--font-sans)',
+                  }}>
+                    Enter to apply · Esc to cancel
+                  </div>
                 </div>
-                <div style={{ 
-                  color: '#cbd5e1', 
-                  fontSize: '12px',
-                  marginBottom: '12px',
-                  fontFamily: 'var(--font-sans)'
-                }}>
-                  Press <strong>Enter</strong> to apply trim<br/>
-                  Press <strong>Esc</strong> to cancel
-                </div>
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', gap: '6px' }}>
                   <button
-                    onClick={() => handleSetTrimKeepSide(mode === 'horizontal' ? 'left' : 'top')}
+                    onClick={handleApplyTrim}
                     style={{
-                      padding: '6px 12px',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      padding: '5px 10px',
+                      background: 'rgba(59, 130, 246, 0.25)',
+                      border: '1px solid rgba(59, 130, 246, 0.5)',
                       borderRadius: '6px',
-                      color: '#e2e8f0',
+                      color: '#60a5fa',
                       cursor: 'pointer',
                       fontSize: '11px',
+                      fontWeight: 600,
                       fontFamily: 'var(--font-sans)',
                     }}
                   >
-                    Keep {mode === 'horizontal' ? 'Left' : 'Top'}
-                  </button>
-                  <button
-                    onClick={() => handleSetTrimKeepSide(mode === 'horizontal' ? 'right' : 'bottom')}
-                    style={{
-                      padding: '6px 12px',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      borderRadius: '6px',
-                      color: '#e2e8f0',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                      fontFamily: 'var(--font-sans)',
-                    }}
-                  >
-                    Keep {mode === 'horizontal' ? 'Right' : 'Bottom'}
+                    Apply
                   </button>
                   <button
                     onClick={handleCancelTrim}
                     style={{
-                      padding: '6px 12px',
+                      padding: '5px 10px',
                       background: 'rgba(239, 68, 68, 0.2)',
                       border: '1px solid rgba(239, 68, 68, 0.4)',
                       borderRadius: '6px',
@@ -1982,7 +2091,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 setStrokes(updated);
                 socket.emit('undo-stroke', { roomId, strokes: updated });
               }}
-              onTrim={(mode) => handleStartTrim(mode)}
+              onTrim={() => handleStartTrim()}
+              onResetTrim={handleResetTrim}
               onCut={handleCut}
               onDelete={() => {
                 const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));
@@ -1993,6 +2103,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 socket.emit('undo-stroke', { roomId, strokes: updated });
               }}
               onDeselect={() => {
+                if (trimState.active) {
+                  handleApplyTrim();
+                }
                 setSelectedStrokeIds([]);
                 setTransformBox(null);
                 setSelectionRotation(0);

@@ -115,6 +115,19 @@ export const drawChalkStroke = (
 ) => {
   if (stroke.points.length === 0) return;
 
+  ctx.save();
+
+  if (stroke.clipBox) {
+    ctx.beginPath();
+    ctx.rect(
+      stroke.clipBox.minX,
+      stroke.clipBox.minY,
+      stroke.clipBox.maxX - stroke.clipBox.minX,
+      stroke.clipBox.maxY - stroke.clipBox.minY
+    );
+    ctx.clip();
+  }
+
   if (stroke.points.length === 1) {
     const point = stroke.points[0];
     drawChalkSegment(
@@ -127,6 +140,7 @@ export const drawChalkStroke = (
       stroke.size,
       stroke.intensity
     );
+    ctx.restore();
     return;
   }
 
@@ -134,7 +148,6 @@ export const drawChalkStroke = (
   const closed = stroke.closed ?? false;
   const intensity = stroke.intensity ?? 0.85;
 
-  ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
@@ -195,6 +208,15 @@ export const drawEraserSegment = (
   ctx.restore();
 };
 
+export const intersectRects = (r1: Rect, r2: Rect): Rect | null => {
+  const minX = Math.max(r1.minX, r2.minX);
+  const minY = Math.max(r1.minY, r2.minY);
+  const maxX = Math.min(r1.maxX, r2.maxX);
+  const maxY = Math.min(r1.maxY, r2.maxY);
+  if (minX > maxX || minY > maxY) return null;
+  return { minX, minY, maxX, maxY };
+};
+
 // Calculate bounding box of a single stroke
 export const getStrokeBoundingBox = (stroke: Stroke): Rect | null => {
   if (stroke.points.length === 0) return null;
@@ -212,12 +234,17 @@ export const getStrokeBoundingBox = (stroke: Stroke): Rect | null => {
 
   // Expand slightly by brush size so it encompasses the line thickness
   const padding = stroke.size;
-  return {
+  const box = {
     minX: minX - padding,
     minY: minY - padding,
     maxX: maxX + padding,
     maxY: maxY + padding,
   };
+
+  if (stroke.clipBox) {
+    return intersectRects(box, stroke.clipBox);
+  }
+  return box;
 };
 
 // Check if two rectangles intersect
@@ -341,4 +368,177 @@ export const transformStrokes = (
       y: newBox.minY + (p.y - originalBox.minY) * scaleY
     }))
   }));
+};
+
+// Liang-Barsky line clipping
+// Returns null if the segment is entirely outside, or { p1: Point, p2: Point } of the clipped segment.
+export const clipSegment = (p1: Point, p2: Point, rect: Rect): { p1: Point, p2: Point } | null => {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+
+  const clipTest = (p: number, q: number): boolean => {
+    if (p === 0) {
+      if (q < 0) return false;
+    } else {
+      const r = q / p;
+      if (p < 0) {
+        if (r > t1) return false;
+        else if (r > t0) t0 = r;
+      } else {
+        if (r < t0) return false;
+        else if (r < t1) t1 = r;
+      }
+    }
+    return true;
+  };
+
+  if (!clipTest(-dx, p1.x - rect.minX)) return null;
+  if (!clipTest(dx, rect.maxX - p1.x)) return null;
+  if (!clipTest(-dy, p1.y - rect.minY)) return null;
+  if (!clipTest(dy, rect.maxY - p1.y)) return null;
+
+  return {
+    p1: { x: p1.x + t0 * dx, y: p1.y + t0 * dy },
+    p2: { x: p1.x + t1 * dx, y: p1.y + t1 * dy }
+  };
+};
+
+// Crop/clip the points of a stroke to a rectangle
+export const clipStrokeToRect = (stroke: Stroke, rect: Rect): Stroke[] => {
+  if (stroke.points.length === 0) return [];
+  if (stroke.points.length === 1) {
+    const p = stroke.points[0];
+    const inside = p.x >= rect.minX && p.x <= rect.maxX && p.y >= rect.minY && p.y <= rect.maxY;
+    return inside ? [stroke] : [];
+  }
+
+  const newStrokes: Stroke[] = [];
+  let currentPoints: Point[] = [];
+  
+  const points = [...stroke.points];
+  if (stroke.closed) {
+    points.push(stroke.points[0]);
+  }
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const clipped = clipSegment(p1, p2, rect);
+
+    if (clipped) {
+      if (currentPoints.length === 0) {
+        currentPoints.push(clipped.p1);
+      } else {
+        const lastPt = currentPoints[currentPoints.length - 1];
+        const dist = Math.hypot(clipped.p1.x - lastPt.x, clipped.p1.y - lastPt.y);
+        if (dist > 0.1) {
+          newStrokes.push({
+            ...stroke,
+            id: `${stroke.id}-crop-${newStrokes.length}-${Date.now()}`,
+            points: currentPoints,
+            closed: false,
+          });
+          currentPoints = [clipped.p1];
+        }
+      }
+      currentPoints.push(clipped.p2);
+    } else {
+      if (currentPoints.length > 0) {
+        newStrokes.push({
+          ...stroke,
+          id: `${stroke.id}-crop-${newStrokes.length}-${Date.now()}`,
+          points: currentPoints,
+          closed: false,
+        });
+        currentPoints = [];
+      }
+    }
+  }
+
+  if (currentPoints.length > 0) {
+    const remainsClosed = stroke.closed && currentPoints.length === points.length;
+    newStrokes.push({
+      ...stroke,
+      id: `${stroke.id}-crop-${newStrokes.length}-${Date.now()}`,
+      points: remainsClosed ? currentPoints.slice(0, -1) : currentPoints,
+      closed: remainsClosed,
+    });
+  }
+
+  return newStrokes;
+};
+
+// Calculate exact distance from point p to line segment ab
+export const pointToSegmentDistance = (p: Point, a: Point, b: Point): number => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const l2 = dx * dx + dy * dy;
+  if (l2 === 0) {
+    return Math.hypot(p.x - a.x, p.y - a.y);
+  }
+  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+};
+
+// Destructively erase points of a stroke that intersect the eraser path
+export const eraseStrokePoints = (stroke: Stroke, eraserPoints: Point[], radius: number): Stroke[] => {
+  if (stroke.points.length === 0) return [];
+  if (stroke.points.length === 1) {
+    const pt = stroke.points[0];
+    const isPointErased = eraserPoints.some((ep, idx) => {
+      if (idx === eraserPoints.length - 1) {
+        return Math.hypot(pt.x - ep.x, pt.y - ep.y) <= radius;
+      }
+      const nextEp = eraserPoints[idx + 1];
+      return pointToSegmentDistance(pt, ep, nextEp) <= radius;
+    });
+    return isPointErased ? [] : [stroke];
+  }
+
+  // 1. Determine which points of the stroke are erased
+  const pointsStatus = stroke.points.map(pt => {
+    return eraserPoints.some((ep, idx) => {
+      if (idx === eraserPoints.length - 1) {
+        return Math.hypot(pt.x - ep.x, pt.y - ep.y) <= radius;
+      }
+      const nextEp = eraserPoints[idx + 1];
+      return pointToSegmentDistance(pt, ep, nextEp) <= radius;
+    });
+  });
+
+  // 2. Split kept points into new strokes
+  const newStrokes: Stroke[] = [];
+  let currentPoints: Point[] = [];
+
+  for (let i = 0; i < stroke.points.length; i++) {
+    const isPointErased = pointsStatus[i];
+
+    if (!isPointErased) {
+      currentPoints.push(stroke.points[i]);
+    } else {
+      if (currentPoints.length > 0) {
+        newStrokes.push({
+          ...stroke,
+          id: `${stroke.id}-split-${newStrokes.length}-${Date.now()}`,
+          points: currentPoints,
+          closed: false,
+        });
+        currentPoints = [];
+      }
+    }
+  }
+
+  if (currentPoints.length > 0) {
+    newStrokes.push({
+      ...stroke,
+      id: `${stroke.id}-split-${newStrokes.length}-${Date.now()}`,
+      points: currentPoints,
+      closed: stroke.closed && newStrokes.length === 0 && currentPoints.length === stroke.points.length,
+    });
+  }
+
+  return newStrokes;
 };

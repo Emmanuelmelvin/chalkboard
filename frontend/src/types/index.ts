@@ -22,6 +22,8 @@ export interface Stroke {
   groupId?: string;
   /** Rotation angle in degrees */
   rotation?: number;
+  /** Non-destructive crop/clip bounds */
+  clipBox?: Rect;
 }
 
 /** Represents a link reference to a canvas area */
@@ -62,12 +64,8 @@ export interface SavedLink {
 /** Trim mode state for cropping the canvas */
 export interface TrimState {
   active: boolean;
-  /** 'horizontal' = vertical split line (keeps left or right) */
-  mode: 'horizontal' | 'vertical' | null;
-  /** Position of the split line in canvas coordinates */
-  splitPosition: number | null;
-  /** Which side to keep: 'left' | 'right' for horizontal, 'top' | 'bottom' for vertical */
-  keepSide: 'left' | 'right' | 'top' | 'bottom' | null;
+  cropBox: Rect | null;
+  initialBox: Rect | null;
 }
 
 export interface Rect {

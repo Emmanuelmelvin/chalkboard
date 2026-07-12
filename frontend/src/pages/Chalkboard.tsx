@@ -10,7 +10,6 @@ import {
   isStrokeInRect,
   transformStrokes,
   rotateStrokesTo,
-  rotatePoint,
 } from '@/utils/drawing';
 import { getRandomColor } from '@/utils/colors';
 import type { 

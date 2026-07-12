@@ -1739,8 +1739,31 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       `.trim());
       return `url("data:image/svg+xml;utf8,${penSvg}") 3 20, crosshair`;
     }
+    if (activeTool === 'eraser') {
+      // Scale the eraser dimensions by zoom, clamped to a reasonable cursor size
+      const MAX_CURSOR = 128;
+      const w = Math.min(Math.max(Math.round(eraserWidth * zoom), 8), MAX_CURSOR);
+      const h = Math.min(Math.max(Math.round(eraserHeight * zoom), 4), MAX_CURSOR);
+      const svgW = w + 4; // +4 for border breathing room
+      const svgH = h + 4;
+      // Hotspot at center of rectangle
+      const hx = Math.round(svgW / 2);
+      const hy = Math.round(svgH / 2);
+      const eraserSvg = encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}">` +
+          // Drop shadow
+          `<rect x="3" y="3" width="${w}" height="${h}" rx="2" fill="rgba(0,0,0,0.35)"/>` +
+          // White fill with slight transparency
+          `<rect x="2" y="2" width="${w}" height="${h}" rx="2" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-dasharray="3 2"/>` +
+          // Center crosshair dot
+          `<circle cx="${hx}" cy="${hy}" r="1.5" fill="rgba(255,255,255,0.9)"/>` +
+        `</svg>`
+      );
+      return `url("data:image/svg+xml;utf8,${eraserSvg}") ${hx} ${hy}, crosshair`;
+    }
     return 'crosshair';
   };
+
 
   return (
     <div className="board-container" ref={containerRef}>

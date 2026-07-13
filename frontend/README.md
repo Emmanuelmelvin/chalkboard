@@ -121,44 +121,5 @@ A saved reference to one object or a group of objects, tagged with a memorable n
 ### Multiplayer sync
 Every mutating store action emits its result over the shared `roomId` Socket.IO channel after the change is finalized (not per animation frame). Incoming events are applied through the same store actions used locally, so there's a single, consistent path for how strokes, links, and selection state change — whether the change originated locally, from a collaborator, or from the AI agent.
 
-## Directory structure
-
-```
-src/
-├── components/
-│   ├── Chalkboard.tsx        # composition root
-│   ├── tools/
-│   │   ├── SelectionToolbox.tsx
-│   │   ├── InsertShapes.tsx  # Shapes / Links tabs
-│   │   ├── ColorPicker.tsx
-│   │   └── ActionSticks.tsx
-│   └── ui/                   # Card, Button, etc.
-├── hooks/
-│   ├── useCanvasRenderer.ts
-│   ├── useCanvasInteraction.ts
-│   ├── useKeyboardShortcuts.ts
-│   └── useBoardSocket.ts
-├── store/
-│   └── useBoardStore.ts      # Zustand store + actions
-├── toolbox/
-│   ├── geometry.ts           # bounding box, rotation, point math
-│   ├── strokes.ts            # stroke transform helpers
-│   └── hitTest.ts            # transform-box hit-testing
-├── commands/
-│   └── boardCommands.ts      # flat, React-free API for the AI agent
-├── utils/
-│   ├── drawing.ts            # canvas draw routines (chalk, eraser)
-│   ├── shapes.ts             # shape-to-stroke generation
-│   └── colors.ts
-└── types/
-    └── index.ts              # Stroke, Rect, Point, CanvasLink, etc.
-```
-
-## Getting started
-
-```bash
-pnpm install
-pnpm dev
-```
 
 The app expects a running Socket.IO backend (see the backend README) and connects using a `roomId` provided via the room join flow.

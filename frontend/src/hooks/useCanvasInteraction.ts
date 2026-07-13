@@ -162,7 +162,7 @@ export function useCanvasInteraction(
   const stopDrawing = useCallback(() => {
     if (!isDrawing) return;
     setIsDrawing(false);
-    
+
     const eraserId = currentStrokeId.current;
     currentStrokeId.current = null;
     socket?.emit('stroke-end', { roomId });
@@ -254,7 +254,7 @@ export function useCanvasInteraction(
         if (clickedStroke.groupId) {
           const groupStrokes = strokes.filter((s) => s.groupId === clickedStroke.groupId);
           const groupIds = groupStrokes.map((s) => s.id);
-          
+
           if (e.ctrlKey || e.metaKey) {
             if (selectedStrokeIds.includes(clickedStroke.id)) {
               const newSelection = selectedStrokeIds.filter((id) => !groupIds.includes(id));
@@ -281,7 +281,7 @@ export function useCanvasInteraction(
           canvas.setPointerCapture(e.pointerId);
           return;
         }
-        
+
         if (selectedStrokeIds.includes(clickedStroke.id)) {
           const newSelection = selectedStrokeIds.filter((id) => id !== clickedStroke.id);
           setSelectedStrokeIds(newSelection);
@@ -433,7 +433,7 @@ export function useCanvasInteraction(
       }
 
       if (selectionMarquee) {
-        setSelectionMarquee((prev) => (prev ? { ...prev, maxX: pos.x, maxY: pos.y } : null));
+        setSelectionMarquee({ ...selectionMarquee, maxX: pos.x, maxY: pos.y });
         return;
       }
 

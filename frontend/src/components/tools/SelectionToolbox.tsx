@@ -26,7 +26,9 @@ interface SelectionToolboxProps {
   /** Canvas-space Y of the vertical center of the transform box in screen coords */
   boxScreenCenterY: number;
   activeColor: string;
+  activeFillColor?: string;
   onColorChange: (color: string) => void;
+  onFillColorChange?: (fillColor: string) => void;
   onDelete: () => void;
   onDeselect: () => void;
   onIncreaseSize: () => void;
@@ -68,7 +70,9 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   boxScreenRight,
   boxScreenCenterY,
   activeColor,
+  activeFillColor = 'transparent',
   onColorChange,
+  onFillColorChange,
   onDelete,
   onDeselect,
   onIncreaseSize,
@@ -91,6 +95,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   isGrouped,
 }) => {
   const [openSubPanel, setOpenSubPanel] = useState<SubPanel>(null);
+  const [colorMode, setColorMode] = useState<'stroke' | 'fill'>('stroke');
   const [brushSize, setBrushSize] = useState<number>(8);
   const [dimW, setDimW] = useState<string>(String(Math.round(currentWidth)));
   const [dimH, setDimH] = useState<string>(String(Math.round(currentHeight)));

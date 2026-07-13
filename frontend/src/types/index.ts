@@ -20,6 +20,8 @@ export interface Stroke {
   points: Point[];
   /** Optional group identifier for grouped strokes */
   groupId?: string;
+  /** Fill color for shapes (e.g. "transparent" or a hex color) */
+  fillColor?: string;
   /** Rotation angle in degrees */
   rotation?: number;
   /** Non-destructive crop/clip bounds */

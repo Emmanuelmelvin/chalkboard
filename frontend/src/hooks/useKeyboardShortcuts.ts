@@ -31,6 +31,7 @@ export function useKeyboardShortcuts() {
     setSpacePressed,
     setInsertShapesTab,
     setShowInsertShapes,
+    setShowSelectionToolbox,
     setActiveTool,
   } = useBoardStore();
 
@@ -205,6 +206,16 @@ export function useKeyboardShortcuts() {
         }
       }
 
+      // Ctrl+O: toggle selection toolbox (only when not in input)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && !inInput) {
+        const key = e.key.toLowerCase();
+        if (key === 'o') {
+          e.preventDefault();
+          setShowSelectionToolbox((prev) => !prev);
+          return;
+        }
+      }
+
       // Keyboard tool selection (Ctrl + key or Cmd + key)
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
         const key = e.key.toLowerCase();
@@ -236,6 +247,6 @@ export function useKeyboardShortcuts() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [setSpacePressed, setInsertShapesTab, setShowInsertShapes, setActiveTool]);
+  }, [setSpacePressed, setInsertShapesTab, setShowInsertShapes, setShowSelectionToolbox, setActiveTool]);
 }
 export default useKeyboardShortcuts;

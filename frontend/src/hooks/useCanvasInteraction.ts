@@ -69,6 +69,9 @@ export function useCanvasInteraction(
   const panStart = useRef<Point>({ x: 0, y: 0 });
   const cursorPosRef = useRef<Point>({ x: 0, y: 0 });
   const dustIdCounter = useRef<number>(0);
+  const marqueeStartPos = useRef<Point | null>(null);
+  const isMarqueeDragging = useRef<boolean>(false);
+  const MARQUEE_THRESHOLD = 5; // screen pixels before marquee appears
 
   // Screen to Canvas coordinate conversion
   const screenToCanvas = useCallback(
@@ -293,7 +296,10 @@ export function useCanvasInteraction(
           }
           setSelectionRotation(0);
         } else {
-          const newSelection = [...selectedStrokeIds, clickedStroke.id];
+          // Replace selection unless Ctrl is held to extend
+          const newSelection = (e.ctrlKey || e.metaKey)
+            ? [...selectedStrokeIds, clickedStroke.id]
+            : [clickedStroke.id];
           setSelectedStrokeIds(newSelection);
           const selected = strokes.filter((s) => newSelection.includes(s.id));
           setTransformBox(getCombinedBoundingBox(selected));
@@ -306,7 +312,8 @@ export function useCanvasInteraction(
       setSelectedStrokeIds([]);
       setTransformBox(null);
       setSelectionRotation(0);
-      setSelectionMarquee({ minX: pos.x, minY: pos.y, maxX: pos.x, maxY: pos.y });
+      // Don't create marquee yet - wait for drag beyond threshold
+      marqueeStartPos.current = pos;
       canvas.setPointerCapture(e.pointerId);
       return;
     }
@@ -432,8 +439,27 @@ export function useCanvasInteraction(
         return;
       }
 
-      if (selectionMarquee) {
-        setSelectionMarquee({ ...selectionMarquee, maxX: pos.x, maxY: pos.y });
+      // Use ref to avoid stale closure issues with selectionMarquee
+      if (isMarqueeDragging.current) {
+        setSelectionMarquee({ minX: marqueeStartPos.current!.x, minY: marqueeStartPos.current!.y, maxX: pos.x, maxY: pos.y });
+        return;
+      }
+
+      // Check if we should start a marquee (drag beyond threshold)
+      if (marqueeStartPos.current) {
+        const dxCanvas = pos.x - marqueeStartPos.current.x;
+        const dyCanvas = pos.y - marqueeStartPos.current.y;
+        // Convert screen pixel threshold to canvas units
+        const thresholdCanvas = MARQUEE_THRESHOLD / zoom;
+        if (Math.abs(dxCanvas) > thresholdCanvas || Math.abs(dyCanvas) > thresholdCanvas) {
+          isMarqueeDragging.current = true;
+          setSelectionMarquee({
+            minX: Math.min(marqueeStartPos.current.x, pos.x),
+            minY: Math.min(marqueeStartPos.current.y, pos.y),
+            maxX: Math.max(marqueeStartPos.current.x, pos.x),
+            maxY: Math.max(marqueeStartPos.current.y, pos.y),
+          });
+        }
         return;
       }
 
@@ -490,6 +516,36 @@ export function useCanvasInteraction(
         return;
       }
 
+      // Check ref-based marquee dragging first (avoids stale closure)
+      if (isMarqueeDragging.current) {
+        isMarqueeDragging.current = false;
+        marqueeStartPos.current = null;
+        // Read marquee from store directly for final selection
+        const storeState = useBoardStore.getState();
+        const marquee = storeState.selectionMarquee;
+        if (marquee) {
+          const normMarquee = {
+            minX: Math.min(marquee.minX, marquee.maxX),
+            minY: Math.min(marquee.minY, marquee.maxY),
+            maxX: Math.max(marquee.minX, marquee.maxX),
+            maxY: Math.max(marquee.minY, marquee.maxY),
+          };
+
+          const selected = strokes.filter((s) => isStrokeInRect(s, normMarquee));
+          const sIds = selected.map((s) => s.id);
+
+          if (sIds.length > 0) {
+            setSelectedStrokeIds(sIds);
+            setTransformBox(getCombinedBoundingBox(selected));
+            setSelectionRotation(0);
+          }
+
+          setSelectionMarquee(null);
+        }
+        if (canvas) canvas.releasePointerCapture(e.pointerId);
+        return;
+      }
+
       if (selectionMarquee) {
         const normMarquee = {
           minX: Math.min(selectionMarquee.minX, selectionMarquee.maxX),
@@ -508,6 +564,13 @@ export function useCanvasInteraction(
         }
 
         setSelectionMarquee(null);
+        if (canvas) canvas.releasePointerCapture(e.pointerId);
+        return;
+      }
+
+      // Clean up marquee start pos if user just clicked without dragging
+      if (marqueeStartPos.current) {
+        marqueeStartPos.current = null;
         if (canvas) canvas.releasePointerCapture(e.pointerId);
         return;
       }

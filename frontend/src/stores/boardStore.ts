@@ -56,6 +56,7 @@ export interface BoardState {
 
   // ── UI helpers used by some tools ──────────────────────────────────────
   showInsertShapes: boolean;
+  showSelectionToolbox: boolean;
   insertShapesTab: 'shapes' | 'links';
   highlightedLinkId: string | null;
   isCopied: boolean;
@@ -84,6 +85,7 @@ export interface BoardState {
   setCursorPos: (pos: Point) => void;
   setCanvas: (canvas: HTMLCanvasElement | null) => void;
   setShowInsertShapes: (show: boolean | ((prev: boolean) => boolean)) => void;
+  setShowSelectionToolbox: (show: boolean | ((prev: boolean) => boolean)) => void;
   setInsertShapesTab: (tab: 'shapes' | 'links') => void;
   setHighlightedLinkId: (id: string | null) => void;
   setIsCopied: (copied: boolean) => void;
@@ -143,6 +145,7 @@ export const useBoardStore = create<BoardState>((set, _) => ({
   canvas: null,
 
   showInsertShapes: false,
+  showSelectionToolbox: true,
   insertShapesTab: 'shapes',
   highlightedLinkId: null,
   isCopied: false,
@@ -192,6 +195,13 @@ export const useBoardStore = create<BoardState>((set, _) => ({
           ? showInsertShapes(state.showInsertShapes)
           : showInsertShapes,
     })),
+  setShowSelectionToolbox: (showSelectionToolbox) =>
+    set((state) => ({
+      showSelectionToolbox:
+        typeof showSelectionToolbox === 'function'
+          ? showSelectionToolbox(state.showSelectionToolbox)
+          : showSelectionToolbox,
+    })),
   setInsertShapesTab: (insertShapesTab) => set({ insertShapesTab }),
   setHighlightedLinkId: (highlightedLinkId) => set({ highlightedLinkId }),
   setIsCopied: (isCopied) => set({ isCopied }),
@@ -225,6 +235,7 @@ export const useBoardStore = create<BoardState>((set, _) => ({
       trimState: { ...initialTrimState },
       cursorPos: { x: 0, y: 0 },
       showInsertShapes: false,
+      showSelectionToolbox: false,
       insertShapesTab: 'shapes',
       highlightedLinkId: null,
       isCopied: false,

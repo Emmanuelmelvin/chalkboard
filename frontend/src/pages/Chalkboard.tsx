@@ -11,12 +11,11 @@ import {
   transformStrokes,
   rotateStrokesTo,
   rotatePoint,
-  intersectRects,
   clipStrokeToRect,
   eraseStrokePoints,
 } from '@/utils/drawing';
 import { getRandomColor } from '@/utils/colors';
-import type { 
+import type {
   Rect,
   Point,
   Stroke,
@@ -24,12 +23,52 @@ import type {
   Collaborator,
   ShapeType,
   TrimState,
- } from '@/types';
+} from '@/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
-import { generateShapeStrokes } from '@/utils/shapes';
 import { useLinksStore, type SavedLink } from '@/stores/linksStore';
+import { useBoardStore } from '@/stores/boardStore';
+import {
+  handleUndo,
+  handleRedo,
+  handleClear,
+  canUndo,
+  canRedo,
+  handleCopy,
+  handleCut,
+  handlePaste,
+  handleDuplicate,
+  handleDelete,
+  handleDeselect,
+  handleGroup,
+  handleUngroup,
+  handleIncreaseSize,
+  handleDecreaseSize,
+  handleSetSize,
+  handleColorChange,
+  handleSetDimensions,
+  handleStartTrim,
+  handleApplyTrim,
+  handleResetTrim,
+  handleCancelTrim,
+  handleToggleTrim,
+  handleRotate,
+  handleResetRotation,
+  handleNudgeDirection,
+  handlePanDirection,
+  handleZoomIn,
+  handleZoomOut,
+  handleResetPanZoom,
+  handleInsertShape as toolboxInsertShape,
+  handleCreateLink,
+  handleDeleteLink,
+  handleRenameLink,
+  handleNavigateToLink,
+  handleOpenLinksTab,
+  handleOpenShapesModal,
+  getLinks,
+} from '@/components/toolbox';
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
@@ -682,35 +721,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
   }, []);
 
-  // Insert a shape at the center of the current viewport
+  /** Insert a shape via the toolbox (called by InsertShapes modal) */
   const handleInsertShape = useCallback((shape: ShapeType) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    // Center of the visible canvas in canvas coordinates
-    const centerX = (rect.width / 2 - panOffset.x) / zoom;
-    const centerY = (rect.height / 2 - panOffset.y) / zoom;
-
-    const newStrokes = generateShapeStrokes(shape, { x: centerX, y: centerY }, {
-      id: `${socket.id}-${Date.now()}`,
-      userId: socket.id || 'local',
-      color: activeColor,
-      size: brushSize,
-      intensity: brushIntensity,
-    });
-
-    const updated = [...strokes, ...newStrokes];
-    setStrokes(updated);
-    setShowInsertShapes(false);
-
-    // Auto-select the inserted shape
-    const newIds = newStrokes.map(s => s.id);
-    setSelectedStrokeIds(newIds);
-    setTransformBox(getCombinedBoundingBox(newStrokes));
-    setSelectionRotation(0);
-
-    socket.emit('undo-stroke', { roomId, strokes: updated });
-  }, [strokes, socket, roomId, zoom, panOffset, activeColor, brushSize, brushIntensity]);
+    toolboxInsertShape(shape);
+  }, [toolboxInsertShape]);
 
   // Keyboard shortcuts and Spacebar pan listeners
   useEffect(() => {
@@ -776,9 +790,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           const rotated = rotateStrokesTo(selected, (selected[0]?.rotation ?? 0) + 90);
           const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; });
           setStrokes(updated);
-          // Pure rotation doesn't change local extents — keep transformBox
-          // as-is and just persist the new TOTAL rotation so the border
-          // stays visually rotated instead of snapping back to 0.
           setSelectionRotation(rotated[0]?.rotation ?? 0);
           socket.emit('undo-stroke', { roomId, strokes: updated });
         } else if (e.key === '[') {
@@ -2117,7 +2128,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
           const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
           const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
-          //const commonGroupId = hasGroupId ? selectedStrokes[0].groupId : undefined;
           
           // Use the actual color of the first selected stroke, not the global activeColor
           const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
@@ -2178,9 +2188,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   return r ? r : s;
                 });
                 setStrokes(updated);
-                // Pure rotation doesn't change local extents — keep
-                // transformBox untouched and persist the total rotation so
-                // the border stays visually rotated.
                 setSelectionRotation(rotated[0]?.rotation ?? totalRotation);
                 socket.emit('undo-stroke', { roomId, strokes: updated });
               }}

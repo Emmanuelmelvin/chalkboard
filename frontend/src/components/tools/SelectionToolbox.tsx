@@ -363,12 +363,59 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           onMouseLeave={handlePanelLeave}
         >
           <p className="sel-subpanel-title">Color</p>
+          {/* Stroke / Fill toggle */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 10, background: 'rgba(255,255,255,0.06)', borderRadius: 6, padding: 3 }}>
+            <button
+              type="button"
+              onClick={() => setColorMode('stroke')}
+              style={{
+                flex: 1,
+                padding: '4px 8px',
+                borderRadius: 4,
+                border: 'none',
+                background: colorMode === 'stroke' ? 'rgba(59,130,246,0.3)' : 'transparent',
+                color: colorMode === 'stroke' ? '#60a5fa' : '#94a3b8',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 600,
+                fontFamily: 'var(--font-sans)',
+                transition: 'all 0.15s',
+              }}
+            >
+              Stroke
+            </button>
+            <button
+              type="button"
+              onClick={() => setColorMode('fill')}
+              style={{
+                flex: 1,
+                padding: '4px 8px',
+                borderRadius: 4,
+                border: 'none',
+                background: colorMode === 'fill' ? 'rgba(59,130,246,0.3)' : 'transparent',
+                color: colorMode === 'fill' ? '#60a5fa' : '#94a3b8',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 600,
+                fontFamily: 'var(--font-sans)',
+                transition: 'all 0.15s',
+              }}
+            >
+              Fill
+            </button>
+          </div>
           {/* Native color picker */}
           <input
             type="color"
             className="native-color-picker"
-            value={activeColor}
-            onChange={(e) => onColorChange(e.target.value)}
+            value={colorMode === 'stroke' ? activeColor : activeFillColor === 'transparent' ? '#ffffff' : activeFillColor}
+            onChange={(e) => {
+              if (colorMode === 'stroke') {
+                onColorChange(e.target.value);
+              } else {
+                onFillColorChange?.(e.target.value);
+              }
+            }}
             title="Custom Color"
             style={{ height: 32, borderRadius: 6, marginBottom: 10 }}
           />
@@ -378,13 +425,30 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               <button
                 key={c.name}
                 type="button"
-                className={`sel-swatch ${activeColor.toLowerCase() === c.value.toLowerCase() ? 'sel-swatch-active' : ''}`}
+                className={`sel-swatch ${(colorMode === 'stroke' ? activeColor : activeFillColor).toLowerCase() === c.value.toLowerCase() ? 'sel-swatch-active' : ''}`}
                 style={{ background: c.value }}
                 title={c.name}
-                onClick={() => onColorChange(c.value)}
+                onClick={() => {
+                  if (colorMode === 'stroke') {
+                    onColorChange(c.value);
+                  } else {
+                    onFillColorChange?.(c.value);
+                  }
+                }}
               />
             ))}
           </div>
+          {/* Transparent option for fill */}
+          {colorMode === 'fill' && (
+            <button
+              type="button"
+              className="sel-toolbox-row sel-action-row"
+              style={{ justifyContent: 'center', marginTop: 8, padding: '6px 12px', borderRadius: 6 }}
+              onClick={() => onFillColorChange?.('transparent')}
+            >
+              <span style={{ fontSize: 11 }}>No Fill (Transparent)</span>
+            </button>
+          )}
         </div>
       )}
 

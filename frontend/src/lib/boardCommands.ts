@@ -19,6 +19,7 @@ import { useLinksStore } from '@/stores/linksStore';
 import { getCombinedBoundingBox } from '@/lib/geometry';
 import { rotateStrokesTo, transformStrokes, clipStrokeToRect } from '@/lib/strokes';
 import { generateShapeStrokes } from '@/utils/shapes';
+import type { Socket } from 'socket.io-client';
 import type { Stroke, ShapeType, Point, SavedLink } from '@/types';
 
 
@@ -1379,7 +1380,7 @@ export function cancelTrim(): CommandResult {
  */
 export function initSession(opts: {
     roomId: string;
-    socket: any;
+    socket: Socket;
     userId?: string;
 }): CommandResult {
     getBoard().initSession(opts);

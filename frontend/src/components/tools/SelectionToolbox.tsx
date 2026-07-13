@@ -99,11 +99,13 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
 
   // Sync dimension inputs when currentWidth/currentHeight change
   useEffect(() => {
-    setDimW(String(Math.round(currentWidth)));
+    const timer = window.setTimeout(() => setDimW(String(Math.round(currentWidth))), 0);
+    return () => window.clearTimeout(timer);
   }, [currentWidth]);
 
   useEffect(() => {
-    setDimH(String(Math.round(currentHeight)));
+    const timer = window.setTimeout(() => setDimH(String(Math.round(currentHeight))), 0);
+    return () => window.clearTimeout(timer);
   }, [currentHeight]);
 
   // Decide left vs right placement

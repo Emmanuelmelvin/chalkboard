@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Square,
   Circle,
@@ -16,15 +16,19 @@ import {
   Plus,
   Shapes,
   Link,
+  Puzzle,
   Trash2,
   Edit3,
   Check,
 } from 'lucide-react';
 
 import type { ShapeType, SavedLink } from '@/types';
+import type { PluginToolContribution } from '@/plugins/types';
 
 interface InsertShapesProps {
   onInsertShape: (shape: ShapeType) => void;
+  pluginTools: PluginToolContribution[];
+  onRunPluginTool: (commandId: string) => void;
   onClose: () => void;
   /** Saved links for the current room */
   links: SavedLink[];
@@ -39,7 +43,7 @@ interface InsertShapesProps {
   /** Rename a saved link */
   onRenameLink: (linkId: string, newTag: string) => void;
   /** Initial active tab when opening the modal */
-  initialTab?: 'shapes' | 'links';
+  initialTab?: 'shapes' | 'links' | 'plugins';
   /** Link ID to highlight in the list */
   highlightedLinkId?: string | null;
 }
@@ -65,6 +69,8 @@ const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
 
 const InsertShapes: React.FC<InsertShapesProps> = ({
   onInsertShape,
+  pluginTools,
+  onRunPluginTool,
   onClose,
   links,
   hasSelection,
@@ -75,12 +81,8 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
   initialTab = 'shapes',
   highlightedLinkId,
 }) => {
-  const [activeTab, setActiveTab] = useState<'shapes' | 'links'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'shapes' | 'links' | 'plugins'>(initialTab);
 
-  // Reset tab when initialTab prop changes
-  useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab]);
 
   const [showCreateInput, setShowCreateInput] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -153,6 +155,13 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
             <Link size={14} />
             <span>Links</span>
           </button>
+          <button
+            className={`insert-shapes-tab ${activeTab === 'plugins' ? 'active' : ''}`}
+            onClick={() => setActiveTab('plugins')}
+          >
+            <Puzzle size={14} />
+            <span>Plugins</span>
+          </button>
         </div>
 
         {/* Shapes Tab */}
@@ -169,6 +178,32 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
                 <span>{s.label}</span>
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Plugins Tab */}
+        {activeTab === 'plugins' && (
+          <div className="insert-plugins-content">
+            {pluginTools.length === 0 ? (
+              <div className="insert-links-empty">
+                <Puzzle size={24} />
+                <p>No plugins are installed yet.</p>
+              </div>
+            ) : (
+              <div className="insert-shapes-grid">
+                {pluginTools.map((tool) => (
+                  <button
+                    key={tool.id}
+                    className="insert-shape-btn"
+                    onClick={() => onRunPluginTool(tool.command)}
+                    title={tool.description ?? tool.label}
+                  >
+                    {tool.icon ?? <Puzzle size={20} />}
+                    <span>{tool.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

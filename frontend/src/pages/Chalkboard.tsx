@@ -4,35 +4,31 @@ import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import {
-  drawChalkStroke,
-  drawEraserSegment,
-} from '@/utils/drawing';
-import {
-  boxCenter,
   getCombinedBoundingBox,
-  isStrokeInRect,
   rotatePoint,
 } from '@/lib/geometry';
 import {
   transformStrokes,
   rotateStrokesTo,
   clipStrokeToRect,
-  eraseStrokePoints,
 } from '@/lib/strokes';
 import { getRandomColor } from '@/utils/colors';
 import type {
-  Rect,
-  Point,
   Stroke,
-  ChalkboardProps,
-  Collaborator,
   ShapeType,
+  Collaborator,
+  ChalkboardProps,
+  SavedLink,
 } from '@/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
-import { useLinksStore, type SavedLink } from '@/stores/linksStore';
+import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
+import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
+import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useBoardSocket } from '@/hooks/useBoardSocket';
 import {
   handleUndo,
   handleRedo,
@@ -72,7 +68,6 @@ import {
   handleOpenLinksTab,
   handleOpenShapesModal,
   getLinks,
-  hitTestTransformBox,
 } from '@/components/toolbox';
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
@@ -110,52 +105,38 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     initSession,
     setCanvas,
     setCursorPos,
+    spacePressed,
+    setSpacePressed,
   } = useBoardStore();
 
   // ── Local-only state (drag gestures, transient UI — not needed by agents) ─
-  const [transformMode, setTransformMode] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'rotate' | null>(null);
-  const [hoveredHandle, setHoveredHandle] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'rotate' | null>(null);
-  const [isPanning, setIsPanning] = useState<boolean>(false);
-  const [spacePressed, setSpacePressed] = useState<boolean>(false);
-  const [isDrawing, setIsDrawing] = useState<boolean>(false);
-  const [collaborators, setCollaborators] = useState<Record<string, Collaborator>>({});
-  const [userCursorColor] = useState<string>(() => getRandomColor());
-  const [dustPuffs, setDustPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
-  const dustIdCounter = useRef<number>(0);
+  // (collaborators and userCursorColor now come from useBoardSocket)
 
   // ── Saved links (separate store, kept separate from board store) ─────────
   const { links, setLinks } = useLinksStore();
 
-  // ── Pure-gesture refs (only live between pointerDown and pointerUp) ──────
-  const transformStart = useRef<Point>({ x: 0, y: 0 });
-  const initialTransformBox = useRef<Rect | null>(null);
-  const initialSelectedStrokes = useRef<Stroke[]>([]);
-  const currentStrokeId = useRef<string | null>(null);
-  const panStart = useRef<Point>({ x: 0, y: 0 });
-
-  // Tracks the latest canvas-space cursor position so Ctrl+V can paste there.
-  // Kept as a ref for performance (no re-render on every pointer move);
-  // also synced to the store so toolbox paste-at-cursor works outside React.
-  const cursorPosRef = useRef<Point>({ x: 0, y: 0 });
-
-  // devicePixelRatio kept in a ref so it is stable across renders
-  const dprRef = useRef<number>(window.devicePixelRatio || 1);
   const hasNavigatedToLink = useRef<boolean>(false);
 
-  // boxCenter is imported from @/lib/geometry
+  // Mount the canvas renderer loop and resize listener
+  useCanvasRenderer(canvasRef);
 
-  // Resize handler — sizes the pixel buffer from the canvas element's OWN
-  // bounding rect (not the parent's, which includes the 24px wood border).
-  // We also multiply by devicePixelRatio so the buffer is sharp on retina.
-  const resizeCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    dprRef.current = dpr;
-    const rect = canvas.getBoundingClientRect();   // ← canvas own rect, not parent
-    canvas.width  = Math.round(rect.width  * dpr);
-    canvas.height = Math.round(rect.height * dpr);
-  }, []);
+  // Mount the canvas interaction handlers and gesture state
+  const {
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handleWheel,
+    transformMode,
+    hoveredHandle,
+    isPanning,
+    dustPuffs,
+  } = useCanvasInteraction(canvasRef);
+
+  // Mount keyboard shortcuts
+  useKeyboardShortcuts();
+
+  // Mount WebSocket listeners and get collaborator state for the HUD
+  const { collaborators, userCursorColor } = useBoardSocket(socket, roomId, userName);
 
   // Sync socket + roomId into the store so toolbox agents can emit events
   useEffect(() => {
@@ -167,185 +148,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setCanvas(canvasRef.current);
     return () => setCanvas(null);
   }, [setCanvas]);
-
-  // Single shared function: screen (clientX/Y) → logical canvas coordinates.
-  // Subtracts the canvas's own left/top, then divides by dpr so the result
-  // lines up with the pan/zoom transform applied in drawBoard.
-  const screenToCanvas = useCallback(
-    (screenX: number, screenY: number): Point => {
-      const canvas = canvasRef.current;
-      if (!canvas) return { x: 0, y: 0 };
-      const rect = canvas.getBoundingClientRect();
-      // cssX/cssY are in CSS pixels (same space as panOffset / zoom)
-      const cssX = screenX - rect.left;
-      const cssY = screenY - rect.top;
-      return {
-        x: (cssX - panOffset.x) / zoom,
-        y: (cssY - panOffset.y) / zoom,
-      };
-    },
-    [panOffset, zoom]
-  );
-
-  // Draw the entire board state (cached/cleared then redrawn)
-  const drawBoard = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Clear visible screen
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    ctx.save();
-    // Scale by dpr first so every logical unit maps to the correct number of
-    // physical pixels, then apply pan & zoom in CSS-pixel space.
-    const dpr = dprRef.current;
-    ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, panOffset.x * dpr, panOffset.y * dpr);
-
-    // Draw selection marquee
-    if (selectionMarquee) {
-      ctx.save();
-      ctx.strokeStyle = '#3b82f6';
-      ctx.lineWidth = 2 / zoom;
-      ctx.setLineDash([5 / zoom, 5 / zoom]);
-      ctx.strokeRect(
-        selectionMarquee.minX,
-        selectionMarquee.minY,
-        selectionMarquee.maxX - selectionMarquee.minX,
-        selectionMarquee.maxY - selectionMarquee.minY
-      );
-      ctx.restore();
-    }
-
-      // Draw transform box + rotate handle as a single rigid group, rotated
-      // around the box's center by the live selectionRotation. This is what
-      // makes the "banner" (box, resize handles, rotate handle + connector)
-      // visually track the strokes, both while a rotate drag is in progress
-      // and after it ends (selectionRotation persists the total angle).
-      if (transformBox && selectedStrokeIds.length > 0 && !trimState.active) {
-        const boxCenterX = (transformBox.minX + transformBox.maxX) / 2;
-        const boxCenterY = (transformBox.minY + transformBox.maxY) / 2;
-
-        ctx.save();
-        ctx.translate(boxCenterX, boxCenterY);
-        ctx.rotate((selectionRotation * Math.PI) / 180);
-        ctx.translate(-boxCenterX, -boxCenterY);
-
-        // Draw transform box
-        ctx.save();
-        ctx.strokeStyle = '#3b82f6';
-        ctx.lineWidth = 2 / zoom;
-        ctx.strokeRect(
-          transformBox.minX,
-          transformBox.minY,
-          transformBox.maxX - transformBox.minX,
-          transformBox.maxY - transformBox.minY
-        );
-        // Resize Handles (TL, TR, BL, BR)
-        ctx.fillStyle = '#fff';
-        const hs = 6 / zoom;
-
-        // TL
-        ctx.fillRect(transformBox.minX - hs, transformBox.minY - hs, hs * 2, hs * 2);
-        ctx.strokeRect(transformBox.minX - hs, transformBox.minY - hs, hs * 2, hs * 2);
-
-        // TR
-        ctx.fillRect(transformBox.maxX - hs, transformBox.minY - hs, hs * 2, hs * 2);
-        ctx.strokeRect(transformBox.maxX - hs, transformBox.minY - hs, hs * 2, hs * 2);
-
-        // BL
-        ctx.fillRect(transformBox.minX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
-        ctx.strokeRect(transformBox.minX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
-
-        // BR
-        ctx.fillRect(transformBox.maxX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
-        ctx.strokeRect(transformBox.maxX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
-
-        ctx.restore();
-
-        // Draw rotate handle (circle with arrow below transform box)
-        {
-          const centerX = boxCenterX;
-          const rotY = transformBox.maxY + 30 / zoom;
-          const rotRadius = 10 / zoom;
-
-          ctx.save();
-          // Circle
-          ctx.beginPath();
-          ctx.arc(centerX, rotY, rotRadius, 0, Math.PI * 2);
-          ctx.fillStyle = '#3b82f6';
-          ctx.fill();
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1.5 / zoom;
-          ctx.stroke();
-
-          // Arrow (↻)
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1.5 / zoom;
-          ctx.beginPath();
-          ctx.arc(centerX, rotY, rotRadius * 0.55, -Math.PI * 0.8, Math.PI * 0.4);
-          ctx.stroke();
-          // Arrow head
-          const arrowAngle = Math.PI * 0.4;
-          const headSize = 4 / zoom;
-          const ax = centerX + rotRadius * 0.55 * Math.cos(arrowAngle);
-          const ay = rotY + rotRadius * 0.55 * Math.sin(arrowAngle);
-          ctx.beginPath();
-          ctx.moveTo(ax, ay);
-          ctx.lineTo(ax - headSize * Math.cos(arrowAngle - 0.5), ay - headSize * Math.sin(arrowAngle - 0.5));
-          ctx.moveTo(ax, ay);
-          ctx.lineTo(ax - headSize * Math.cos(arrowAngle + 0.5), ay - headSize * Math.sin(arrowAngle + 0.5));
-          ctx.stroke();
-
-          // Connection line from center bottom to rotate handle
-          ctx.beginPath();
-          ctx.moveTo(centerX, transformBox.maxY);
-          ctx.lineTo(centerX, rotY - rotRadius);
-          ctx.strokeStyle = '#3b82f6';
-          ctx.lineWidth = 1.5 / zoom;
-          ctx.setLineDash([4 / zoom, 4 / zoom]);
-          ctx.stroke();
-
-          ctx.restore();
-        }
-
-        ctx.restore(); // outer rotate transform
-      }
-
-    // Draw all strokes with smooth curves
-    strokes.forEach((stroke) => {
-      if (stroke.points.length < 1) return;
-      const pts = stroke.points;
-
-      if (stroke.tool === 'chalk') {
-        drawChalkStroke(ctx, stroke);
-      } else {
-        if (pts.length === 1) {
-          drawEraserSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
-        } else {
-          for (let i = 1; i < pts.length; i++) {
-            drawEraserSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
-          }
-        }
-      }
-    });
-
-    ctx.restore();
-  }, [strokes, zoom, panOffset, selectionMarquee, transformBox, selectedStrokeIds, selectionRotation, trimState]);
-
-  // RequestAnimationFrame draw loop trigger
-  useEffect(() => {
-    let frameId = requestAnimationFrame(drawBoard);
-    return () => cancelAnimationFrame(frameId);
-  }, [drawBoard]);
-
-  // Handle Resize
-  useEffect(() => {
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-    return () => window.removeEventListener('resize', resizeCanvas);
-  }, [resizeCanvas]);
 
   // Local Undo/Redo/Clear
   const handleUndo = useCallback(() => {
@@ -437,7 +239,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
     // Compute the bounding box of the copied strokes so we know their origin
     const srcBox = getCombinedBoundingBox(cb);
-    const cursor = cursorPosRef.current;
+    const cursor = useBoardStore.getState().cursorPos;
 
     // Translate so the top-left of the pasted group sits at the cursor
     const dx = srcBox ? cursor.x - srcBox.minX : 0;
@@ -468,7 +270,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (selectedStrokeIds.length === 0) return;
     const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
     const offset = 20 / zoom;
-    
+
     const duplicated: Stroke[] = selected.map(s => {
       const newId = `${socket.id}-${Date.now()}-${Math.random()}`;
       return {
@@ -492,7 +294,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const handleGroup = useCallback(() => {
     if (selectedStrokeIds.length < 2) return;
-    
+
     const groupId = `${socket.id}-${Date.now()}`;
     const updated = strokes.map(s => {
       if (selectedStrokeIds.includes(s.id)) {
@@ -500,21 +302,21 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       }
       return s;
     });
-    
+
     setStrokes(updated);
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, selectedStrokeIds, socket, roomId]);
 
   const handleUngroup = useCallback(() => {
     if (selectedStrokeIds.length === 0) return;
-    
+
     const updated = strokes.map(s => {
       if (selectedStrokeIds.includes(s.id) && s.groupId) {
         return { ...s, groupId: undefined };
       }
       return s;
     });
-    
+
     setStrokes(updated);
     socket.emit('undo-stroke', { roomId, strokes: updated });
   }, [strokes, selectedStrokeIds, socket, roomId]);
@@ -551,15 +353,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   useEffect(() => {
     if (hasNavigatedToLink.current) return;
-    
+
     const url = new URL(window.location.href);
     const linkId = url.searchParams.get('link');
-    
+
     if (!linkId) {
       hasNavigatedToLink.current = true;
       return;
     }
-    
+
     if (strokes.length > 0 && links.length > 0) {
       const link = links.find(l => l.id === linkId);
       if (link) {
@@ -648,7 +450,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   /** Apply trim: destructively clip selected strokes to cropBox, keeping originalPoints for reset */
   const handleApplyTrim = useCallback(() => {
     if (!trimState.active || !trimState.cropBox) return;
-    
+
     const { cropBox } = trimState;
     const updatedStrokes: Stroke[] = [];
 
@@ -667,7 +469,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
     setStrokes(updatedStrokes);
     socket.emit('undo-stroke', { roomId, strokes: updatedStrokes });
-    
+
     // Select the newly cropped stroke parts
     const newSelectedIds = updatedStrokes
       .filter(s => s.id.includes('-crop-') || selectedStrokeIds.includes(s.id))
@@ -708,7 +510,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       });
       setStrokes(updated);
       socket.emit('undo-stroke', { roomId, strokes: updated });
-      
+
       const selected = updated.filter(s => selectedStrokeIds.includes(s.id));
       setTransformBox(getCombinedBoundingBox(selected));
     }
@@ -1093,512 +895,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
   };
 
-  // Local/Network Drawing triggers
-  const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (isPanning || spacePressed || e.button === 1 || e.button === 2 || activeTool === 'pan') return; // ignore right, middle click, panning
-
-    setIsDrawing(true);
-    const pos = screenToCanvas(e.clientX, e.clientY);
-    const strokeId = `${socket.id}-${Date.now()}`;
-    currentStrokeId.current = strokeId;
-
-    const newStroke: Stroke = {
-      id: strokeId,
-      userId: socket.id || 'local',
-      tool: activeTool as 'chalk' | 'eraser',
-      color: activeColor,
-      size: brushSize,
-      intensity: brushIntensity,
-      eraserWidth: activeTool === 'eraser' ? eraserWidth : undefined,
-      eraserHeight: activeTool === 'eraser' ? eraserHeight : undefined,
-      points: [pos],
-    };
-
-    setStrokes((prev) => [...prev, newStroke]);
-    setRedoStack([]); // reset redo on new draw
-
-    socket.emit('stroke-start', {
-      roomId,
-      strokeId,
-      tool: activeTool as 'chalk' | 'eraser',
-      color: activeColor,
-      size: brushSize,
-      intensity: brushIntensity,
-      eraserWidth: activeTool === 'eraser' ? eraserWidth : undefined,
-      eraserHeight: activeTool === 'eraser' ? eraserHeight : undefined,
-      startPoint: pos,
-    });
-  };
-
-  const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const pos = screenToCanvas(e.clientX, e.clientY);
-
-    // Keep cursor position up to date for paste-at-cursor.
-    // The ref is used in the component (no re-render); the store is for toolbox agents.
-    cursorPosRef.current = pos;
-    setCursorPos(pos);
-
-    // Broadcast cursor movement
-    socket.emit('cursor-move', { roomId, cursor: pos });
-
-    if (!isDrawing || !currentStrokeId.current) return;
-
-    // Local append
-    setStrokes((prev) =>
-      prev.map((s) => (s.id === currentStrokeId.current ? { ...s, points: [...s.points, pos] } : s))
-    );
-
-    // Eraser dust feedback
-    if (activeTool === 'eraser' && Math.random() < 0.25) {
-      triggerDustPuff(e.clientX, e.clientY);
-    }
-
-    // Broadcast coordinate
-    socket.emit('stroke-draw', {
-      roomId,
-      strokeId: currentStrokeId.current,
-      point: pos,
-    });
-  };
-
-  const stopDrawing = () => {
-    if (!isDrawing) return;
-    setIsDrawing(false);
-    
-    const eraserId = currentStrokeId.current;
-    currentStrokeId.current = null;
-    socket.emit('stroke-end', { roomId });
-
-    if (activeTool === 'eraser' && eraserId) {
-      // Access current state via state setter updater or local reference
-      setStrokes(prevStrokes => {
-        const eraserStroke = prevStrokes.find(s => s.id === eraserId);
-        if (!eraserStroke || eraserStroke.points.length === 0) {
-          return prevStrokes.filter(s => s.id !== eraserId);
-        }
-
-        const eraserPoints = eraserStroke.points;
-        const radius = eraserStroke.eraserWidth && eraserStroke.eraserHeight
-          ? Math.max(eraserStroke.eraserWidth, eraserStroke.eraserHeight) / 2
-          : eraserStroke.size * 2;
-
-        const updated: Stroke[] = [];
-        prevStrokes.forEach(stroke => {
-          if (stroke.id === eraserId) return; // Discard the current eraser stroke
-          if (stroke.tool === 'eraser') {
-            updated.push(stroke);
-            return;
-          }
-          const sliced = eraseStrokePoints(stroke, eraserPoints, radius);
-          updated.push(...sliced);
-        });
-
-        // Broadcast the final sliced board
-        socket.emit('undo-stroke', { roomId, strokes: updated });
-        return updated;
-      });
-    }
-  };
-
-  // Erase Dust puff trigger
-  const triggerDustPuff = (clientX: number, clientY: number) => {
-    const id = dustIdCounter.current++;
-    setDustPuffs((prev) => [...prev, { id, x: clientX, y: clientY }]);
-    setTimeout(() => {
-      setDustPuffs((prev) => prev.filter((p) => p.id !== id));
-    }, 800);
-  };
-
-  // Local/Network Pan & Zoom triggers
-  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    if (spacePressed || e.button === 1 || activeTool === 'pan') {
-      setIsPanning(true);
-      panStart.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
-      canvas.setPointerCapture(e.pointerId);
-      return;
-    }
-
-    const pos = screenToCanvas(e.clientX, e.clientY);
-
-    if (activeTool === 'select') {
-      if (trimState.active && trimState.cropBox) {
-        const boxToUse = trimState.cropBox;
-        const clickedInteractive = hitTestTransformBox(pos, boxToUse, 0, zoom, true) !== null;
-
-        if (!clickedInteractive) {
-          handleApplyTrim();
-          return;
-        }
-      }
-
-      // Check if clicking inside transform box or handles
-      const boxToUse = trimState.active && trimState.cropBox ? trimState.cropBox : transformBox;
-      if (boxToUse) {
-        const mode = hitTestTransformBox(
-          pos,
-          boxToUse,
-          trimState.active ? 0 : selectionRotation,
-          zoom,
-          trimState.active
-        );
-
-        if (mode) {
-          setTransformMode(mode);
-          // Rotation math (in handlePointerMove) needs the ACTUAL screen-space
-          // pointer position (not the de-rotated local one) since it measures
-          // the sweep angle around the box's real screen center.
-          const localPos = selectionRotation !== 0 && !trimState.active
-            ? rotatePoint(pos, boxCenter(boxToUse), -selectionRotation)
-            : pos;
-          transformStart.current = mode === 'rotate' ? pos : localPos;
-          initialTransformBox.current = { ...boxToUse };
-          initialSelectedStrokes.current = strokes.filter(s => selectedStrokeIds.includes(s.id));
-          canvas.setPointerCapture(e.pointerId);
-          return;
-        }
-      }
-
-      // Check if clicking on a stroke (for group selection)
-      const clickedStroke = strokes.find(s => isStrokeInRect(s, {
-        minX: pos.x - 5 / zoom,
-        minY: pos.y - 5 / zoom,
-        maxX: pos.x + 5 / zoom,
-        maxY: pos.y + 5 / zoom
-      }));
-
-      if (clickedStroke) {
-        // If the clicked stroke is part of a group, handle group selection
-        if (clickedStroke.groupId) {
-          const groupStrokes = strokes.filter(s => s.groupId === clickedStroke.groupId);
-          const groupIds = groupStrokes.map(s => s.id);
-          
-          // If Ctrl/Cmd is held, add/remove the group from current selection
-          if (e.ctrlKey || e.metaKey) {
-            if (selectedStrokeIds.includes(clickedStroke.id)) {
-              // Remove the entire group from selection
-              const newSelection = selectedStrokeIds.filter(id => !groupIds.includes(id));
-              setSelectedStrokeIds(newSelection);
-              if (newSelection.length > 0) {
-                const selected = strokes.filter(s => newSelection.includes(s.id));
-                setTransformBox(getCombinedBoundingBox(selected));
-              } else {
-                setTransformBox(null);
-              }
-              setSelectionRotation(0);
-            } else {
-              // Add the entire group to current selection
-              const newSelection = [...new Set([...selectedStrokeIds, ...groupIds])];
-              setSelectedStrokeIds(newSelection);
-              const selected = strokes.filter(s => newSelection.includes(s.id));
-              setTransformBox(getCombinedBoundingBox(selected));
-              setSelectionRotation(0);
-            }
-          } else {
-            // Replace selection with the entire group
-            setSelectedStrokeIds(groupIds);
-            setTransformBox(getCombinedBoundingBox(groupStrokes));
-            setSelectionRotation(0);
-          }
-          canvas.setPointerCapture(e.pointerId);
-          return;
-        }
-        
-        // Toggle selection for non-grouped strokes
-        if (selectedStrokeIds.includes(clickedStroke.id)) {
-          // Deselect if already selected
-          const newSelection = selectedStrokeIds.filter(id => id !== clickedStroke.id);
-          setSelectedStrokeIds(newSelection);
-          if (newSelection.length > 0) {
-            const selected = strokes.filter(s => newSelection.includes(s.id));
-            setTransformBox(getCombinedBoundingBox(selected));
-          } else {
-            setTransformBox(null);
-          }
-          setSelectionRotation(0);
-        } else {
-          // Add to selection
-          const newSelection = [...selectedStrokeIds, clickedStroke.id];
-          setSelectedStrokeIds(newSelection);
-          const selected = strokes.filter(s => newSelection.includes(s.id));
-          setTransformBox(getCombinedBoundingBox(selected));
-          setSelectionRotation(0);
-        }
-        canvas.setPointerCapture(e.pointerId);
-        return;
-      }
-
-      // Start new selection marquee
-      setSelectedStrokeIds([]);
-      setTransformBox(null);
-      setSelectionRotation(0);
-      setSelectionMarquee({ minX: pos.x, minY: pos.y, maxX: pos.x, maxY: pos.y });
-      canvas.setPointerCapture(e.pointerId);
-      return;
-    }
-
-    startDrawing(e);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (isPanning) {
-      setPanOffset({
-        x: e.clientX - panStart.current.x,
-        y: e.clientY - panStart.current.y,
-      });
-      return;
-    }
-
-    // Trim mode split position dragging is no longer used.
-    // Instead, dragging handles adjusts trimState.cropBox directly in the activeTool === 'select' block below.
-
-    const pos = screenToCanvas(e.clientX, e.clientY);
-
-    if (activeTool === 'select') {
-      if (transformMode && initialTransformBox.current) {
-
-        // ── Rotate mode ──
-        if (transformMode === 'rotate') {
-          const center: Point = {
-            x: (initialTransformBox.current.minX + initialTransformBox.current.maxX) / 2,
-            y: (initialTransformBox.current.minY + initialTransformBox.current.maxY) / 2,
-          };
-          // transformStart is fixed at pointer-down (NOT reassigned each frame),
-          // so this angle is always the TOTAL sweep since the drag began —
-          // that's what makes rotateStrokesTo's absolute-angle math correct.
-          const startAngle = Math.atan2(
-            transformStart.current.y - center.y,
-            transformStart.current.x - center.x
-          );
-          const currentAngle = Math.atan2(pos.y - center.y, pos.x - center.x);
-          const angleDeg = ((currentAngle - startAngle) * 180) / Math.PI;
-
-          const baseRotation = initialSelectedStrokes.current[0]?.rotation ?? 0;
-          const totalRotation = baseRotation + angleDeg;
-          const rotated = rotateStrokesTo(initialSelectedStrokes.current, totalRotation);
-
-          setStrokes(prev => prev.map(s => {
-            const r = rotated.find(rs => rs.id === s.id);
-            return r ? r : s;
-          }));
-
-          // Keep the outer banner (box + handles + rotate connector) rotating
-          // in lockstep with the strokes — track the TOTAL rotation, not just
-          // this drag's delta, so it persists correctly across drags.
-          setSelectionRotation(totalRotation);
-          return;
-        }
-
-        // Non-rotate transform modes operate in the selection's local
-        // (un-rotated) space, so de-rotate the live pointer position too —
-        // it must be computed the same way transformStart was at pointer-down.
-        const boxC = boxCenter(initialTransformBox.current);
-        const localPos = selectionRotation !== 0
-          ? rotatePoint(pos, boxC, -selectionRotation)
-          : pos;
-        const localDx = localPos.x - transformStart.current.x;
-        const localDy = localPos.y - transformStart.current.y;
-
-        let newBox = { ...initialTransformBox.current };
-
-        // In trim/crop mode, drag handles adjust the cropBox instead of scaling strokes
-        if (trimState.active) {
-          if (trimState.initialBox) {
-            // Don't allow move in crop mode, only resize
-            if (transformMode !== 'move') {
-              if (transformMode === 'resize-br') {
-                newBox.maxX = Math.min(trimState.initialBox.maxX, Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx));
-                newBox.maxY = Math.min(trimState.initialBox.maxY, Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy));
-              } else if (transformMode === 'resize-tl') {
-                newBox.minX = Math.max(trimState.initialBox.minX, Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx));
-                newBox.minY = Math.max(trimState.initialBox.minY, Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy));
-              } else if (transformMode === 'resize-tr') {
-                newBox.maxX = Math.min(trimState.initialBox.maxX, Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx));
-                newBox.minY = Math.max(trimState.initialBox.minY, Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy));
-              } else if (transformMode === 'resize-bl') {
-                newBox.minX = Math.max(trimState.initialBox.minX, Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx));
-                newBox.maxY = Math.min(trimState.initialBox.maxY, Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy));
-              } else if (transformMode === 'resize-l') {
-                newBox.minX = Math.max(trimState.initialBox.minX, Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx));
-              } else if (transformMode === 'resize-r') {
-                newBox.maxX = Math.min(trimState.initialBox.maxX, Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx));
-              } else if (transformMode === 'resize-t') {
-                newBox.minY = Math.max(trimState.initialBox.minY, Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy));
-              } else if (transformMode === 'resize-b') {
-                newBox.maxY = Math.min(trimState.initialBox.maxY, Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy));
-              }
-            }
-            setTrimState(prev => ({ ...prev, cropBox: newBox }));
-          }
-          return;
-        }
-
-        if (transformMode === 'move') {
-          newBox.minX += localDx;
-          newBox.maxX += localDx;
-          newBox.minY += localDy;
-          newBox.maxY += localDy;
-        } else if (transformMode === 'resize-br') {
-          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx);
-          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy);
-        } else if (transformMode === 'resize-tl') {
-          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx);
-          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy);
-        } else if (transformMode === 'resize-tr') {
-          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx);
-          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy);
-        } else if (transformMode === 'resize-bl') {
-          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx);
-          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy);
-        } else if (transformMode === 'resize-l') {
-          newBox.minX = Math.min(newBox.maxX - 10, initialTransformBox.current.minX + localDx);
-        } else if (transformMode === 'resize-r') {
-          newBox.maxX = Math.max(newBox.minX + 10, initialTransformBox.current.maxX + localDx);
-        } else if (transformMode === 'resize-t') {
-          newBox.minY = Math.min(newBox.maxY - 10, initialTransformBox.current.minY + localDy);
-        } else if (transformMode === 'resize-b') {
-          newBox.maxY = Math.max(newBox.minY + 10, initialTransformBox.current.maxY + localDy);
-        }
-
-        setTransformBox(newBox);
-
-        // Transform the strokes locally
-        const transformed = transformStrokes(initialSelectedStrokes.current, initialTransformBox.current, newBox);
-
-        setStrokes(prev => prev.map(s => {
-          const t = transformed.find(ts => ts.id === s.id);
-          return t ? t : s;
-        }));
-
-        return;
-      }
-
-      if (selectionMarquee) {
-        setSelectionMarquee(prev => prev ? { ...prev, maxX: pos.x, maxY: pos.y } : null);
-        return;
-      }
-
-      // Hover detection when activeTool === 'select' and not dragging
-      const boxToUse = trimState.active && trimState.cropBox ? trimState.cropBox : transformBox;
-      if (boxToUse) {
-        const hover = hitTestTransformBox(
-          pos,
-          boxToUse,
-          trimState.active ? 0 : selectionRotation,
-          zoom,
-          trimState.active
-        );
-
-        if (hover !== hoveredHandle) {
-          setHoveredHandle(hover);
-        }
-      } else {
-        if (hoveredHandle !== null) {
-          setHoveredHandle(null);
-        }
-      }
-    }
-
-    draw(e);
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (isPanning) {
-      setIsPanning(false);
-      if (canvas) canvas.releasePointerCapture(e.pointerId);
-      return;
-    }
-
-    if (activeTool === 'select') {
-      if (transformMode) {
-        const wasRotating = transformMode === 'rotate';
-
-        if (trimState.active) {
-          setTransformMode(null);
-          if (canvas) canvas.releasePointerCapture(e.pointerId);
-          return;
-        }
-
-        if (wasRotating) {
-          // Pure rotation never changes an object's LOCAL extents, so
-          // transformBox does not need to be recomputed here — doing so was
-          // what caused the border to "snap back" to axis-aligned on
-          // release. Just persist the final total rotation angle; the
-          // strokes' own points already encode it (rotateStrokesTo mutated
-          // them during the drag).
-          const rotatedSelection = strokes.filter(s => selectedStrokeIds.includes(s.id));
-          setSelectionRotation(rotatedSelection[0]?.rotation ?? 0);
-        }
-
-        socket.emit('undo-stroke', { roomId, strokes }); // We sync entire board for simplicity or a custom event
-
-        setTransformMode(null);
-        if (canvas) canvas.releasePointerCapture(e.pointerId);
-        return;
-      }
-
-      if (selectionMarquee) {
-        // Finalize selection
-        const normMarquee = {
-          minX: Math.min(selectionMarquee.minX, selectionMarquee.maxX),
-          minY: Math.min(selectionMarquee.minY, selectionMarquee.maxY),
-          maxX: Math.max(selectionMarquee.minX, selectionMarquee.maxX),
-          maxY: Math.max(selectionMarquee.minY, selectionMarquee.maxY),
-        };
-
-        const selected = strokes.filter(s => isStrokeInRect(s, normMarquee));
-        const sIds = selected.map(s => s.id);
-
-        if (sIds.length > 0) {
-          setSelectedStrokeIds(sIds);
-          setTransformBox(getCombinedBoundingBox(selected));
-          setSelectionRotation(0);
-        }
-
-        setSelectionMarquee(null);
-        if (canvas) canvas.releasePointerCapture(e.pointerId);
-        return;
-      }
-    }
-
-    stopDrawing();
-  };
-
-  // Scroll wheel for Zooming (centered on pointer location)
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const zoomIntensity = 0.1;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    // Convert pointer location relative to absolute canvas origin before zoom change
-    const wheelPos = {
-      x: (mouseX - panOffset.x) / zoom,
-      y: (mouseY - panOffset.y) / zoom,
-    };
-
-    // Calculate new zoom factor
-    const zoomFactor = e.deltaY < 0 ? 1 + zoomIntensity : 1 - zoomIntensity;
-    const nextZoom = Math.min(Math.max(zoom * zoomFactor, 0.15), 4); // limits: [0.15x, 4x]
-
-    // Shift pan offset to center on pointer coordinate after zoom changes
-    const nextPanOffset = {
-      x: mouseX - wheelPos.x * nextZoom,
-      y: mouseY - wheelPos.y * nextZoom,
-    };
-
-    setZoom(nextZoom);
-    setPanOffset(nextPanOffset);
-  };
 
 
 
@@ -1643,12 +939,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       const hy = Math.round(svgH / 2);
       const eraserSvg = encodeURIComponent(
         `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}">` +
-          // Drop shadow
-          `<rect x="3" y="3" width="${w}" height="${h}" rx="2" fill="rgba(0,0,0,0.35)"/>` +
-          // White fill with slight transparency
-          `<rect x="2" y="2" width="${w}" height="${h}" rx="2" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-dasharray="3 2"/>` +
-          // Center crosshair dot
-          `<circle cx="${hx}" cy="${hy}" r="1.5" fill="rgba(255,255,255,0.9)"/>` +
+        // Drop shadow
+        `<rect x="3" y="3" width="${w}" height="${h}" rx="2" fill="rgba(0,0,0,0.35)"/>` +
+        // White fill with slight transparency
+        `<rect x="2" y="2" width="${w}" height="${h}" rx="2" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-dasharray="3 2"/>` +
+        // Center crosshair dot
+        `<circle cx="${hx}" cy="${hy}" r="1.5" fill="rgba(255,255,255,0.9)"/>` +
         `</svg>`
       );
       return `url("data:image/svg+xml;utf8,${eraserSvg}") ${hx} ${hy}, crosshair`;
@@ -1790,7 +1086,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         {trimState.active && trimState.cropBox && (() => {
           const canvas = canvasRef.current;
           if (!canvas) return null;
-          
+
           const cropBox = trimState.cropBox;
           const initBox = trimState.initialBox;
           if (!initBox) return null;
@@ -1806,7 +1102,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           const fullTop = initBox.minY * zoom + panOffset.y;
           const fullRight = initBox.maxX * zoom + panOffset.x;
           const fullBottom = initBox.maxY * zoom + panOffset.y;
-          
+
           return (
             <>
               {/* 4-pane blur overlay outside crop box but inside selection */}
@@ -1854,7 +1150,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 pointerEvents: 'none',
                 zIndex: 150,
               }} />
-              
+
               {/* Crop border frame */}
               <div style={{
                 position: 'absolute',
@@ -1907,8 +1203,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 whiteSpace: 'nowrap',
               }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <div style={{ 
-                    color: '#3b82f6', 
+                  <div style={{
+                    color: '#3b82f6',
                     fontFamily: 'var(--font-sketch)',
                     fontSize: '13px',
                     letterSpacing: '0.5px',
@@ -1916,8 +1212,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   }}>
                     CROP MODE
                   </div>
-                  <div style={{ 
-                    color: '#94a3b8', 
+                  <div style={{
+                    color: '#94a3b8',
                     fontSize: '10px',
                     fontFamily: 'var(--font-sans)',
                   }}>
@@ -1966,10 +1262,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
           const linkedLink = links.find(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
           if (!linkedLink) return null;
-          
+
           const bannerX = transformBox.minX * zoom + panOffset.x - 28;
           const bannerY = transformBox.minY * zoom + panOffset.y - 28;
-          
+
           return (
             <button
               onClick={() => {
@@ -1998,8 +1294,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               title="Click to view linked location"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
               </svg>
             </button>
           );
@@ -2009,10 +1305,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
           const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
           const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
-          
+
           // Use the actual color of the first selected stroke, not the global activeColor
           const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
-          
+
           return (
             <SelectionToolbox
               boxScreenLeft={transformBox.minX * zoom + panOffset.x}

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
@@ -24,6 +24,7 @@ import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useBoardSocket } from '@/hooks/useBoardSocket';
+import { createPluginAPI, pluginRegistry, registerInstalledPlugins } from '@/plugins';
 import {
   handleUndo,
   handleRedo,
@@ -81,10 +82,19 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   } = useBoardStore();
 
   const { links } = useLinksStore();
+  const pluginApi = useMemo(() => createPluginAPI(), []);
+  const pluginTools = useMemo(() => {
+    registerInstalledPlugins();
+    return pluginRegistry.getTools();
+  }, []);
 
   const hasNavigatedToLink = useRef<boolean>(false);
 
   useCanvasRenderer(canvasRef);
+
+  useEffect(() => {
+    void pluginRegistry.activateAll(pluginApi);
+  }, [pluginApi]);
 
   const {
     handlePointerDown,
@@ -205,6 +215,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
       {showInsertShapes && (
         <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
+          pluginTools={pluginTools}
+          onRunPluginTool={(commandId: string) => pluginRegistry.executeCommand(commandId)}
           onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
           links={links} hasSelection={selectedStrokeIds.length > 0} onNavigateToLink={handleNavigateToLink}
           onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
@@ -218,8 +230,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       </button>
       <div className="hud-layer">
         {trimState.active && trimState.cropBox && (() => {
-          const canvas = canvasRef.current;
-          if (!canvas) return null;
           const cropBox = trimState.cropBox;
           const initBox = trimState.initialBox;
           if (!initBox) return null;

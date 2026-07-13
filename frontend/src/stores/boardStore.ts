@@ -37,6 +37,7 @@ export interface BoardState {
    */
   selectionRotation: number;
   selectionMarquee: Rect | null;
+  showSelectionToolbox: boolean;
 
   // ── Clipboard (agent-accessible paste buffer) ──────────────────────────
   clipboard: Stroke[];
@@ -56,8 +57,7 @@ export interface BoardState {
 
   // ── UI helpers used by some tools ──────────────────────────────────────
   showInsertShapes: boolean;
-  showSelectionToolbox: boolean;
-  insertShapesTab: 'shapes' | 'links';
+  insertShapesTab: 'shapes' | 'links' | 'plugins';
   highlightedLinkId: string | null;
   isCopied: boolean;
   spacePressed: boolean;
@@ -85,8 +85,7 @@ export interface BoardState {
   setCursorPos: (pos: Point) => void;
   setCanvas: (canvas: HTMLCanvasElement | null) => void;
   setShowInsertShapes: (show: boolean | ((prev: boolean) => boolean)) => void;
-  setShowSelectionToolbox: (show: boolean | ((prev: boolean) => boolean)) => void;
-  setInsertShapesTab: (tab: 'shapes' | 'links') => void;
+  setInsertShapesTab: (tab: 'shapes' | 'links' | 'plugins') => void;
   setHighlightedLinkId: (id: string | null) => void;
   setIsCopied: (copied: boolean) => void;
   setSpacePressed: (spacePressed: boolean) => void;
@@ -114,7 +113,7 @@ const initialTrimState: TrimState = {
   initialBox: null,
 };
 
-export const useBoardStore = create<BoardState>((set, _) => ({
+export const useBoardStore = create<BoardState>((set) => ({
   roomId: '',
   socket: null,
   userId: 'local',

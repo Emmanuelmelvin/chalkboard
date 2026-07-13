@@ -484,7 +484,7 @@ export function useCanvasInteraction(
     }
 
     draw(e);
-  }, [isPanning, screenToCanvas, activeTool, transformMode, selectionRotation, trimState, transformBox, strokes, selectedStrokeIds, setStrokes, setSelectionRotation, setTransformBox, setSelectionMarquee, hoveredHandle, draw]);
+  }, [isPanning, screenToCanvas, activeTool, transformMode, selectionRotation, trimState, transformBox, setStrokes, setSelectionRotation, setTransformBox, setSelectionMarquee, selectionMarquee, setPanOffset, setTrimState, hoveredHandle, zoom, draw]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;

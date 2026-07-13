@@ -36,7 +36,7 @@ function App() {
     <Switch>
       {/* Dynamic room route */}
       <Route path="/room/:roomId">
-        {(params: any) => {
+        {(params: { roomId: string }) => {
           const roomId = params.roomId.toLowerCase();
 
           if (userName) {

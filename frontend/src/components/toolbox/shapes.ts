@@ -7,7 +7,7 @@
  */
 
 import { generateShapeStrokes } from '@/utils/shapes';
-import { getCombinedBoundingBox } from '@/utils/drawing';
+import { getCombinedBoundingBox } from '@/lib/geometry';
 import { getBoard } from '@/stores/boardStore';
 import type { ShapeType } from '@/types';
 

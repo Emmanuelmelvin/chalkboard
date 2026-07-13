@@ -6,7 +6,7 @@
  * board store so paste works across tool invocations without React state.
  */
 
-import { getCombinedBoundingBox } from '@/utils/drawing';
+import { getCombinedBoundingBox } from '@/lib/geometry';
 import { getBoard } from '@/stores/boardStore';
 import type { Stroke } from '@/types';
 

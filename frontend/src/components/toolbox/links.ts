@@ -7,7 +7,7 @@
  * and synced via socket events for multiplayer.
  */
 
-import { getCombinedBoundingBox } from '@/utils/drawing';
+import { getCombinedBoundingBox } from '@/lib/geometry';
 import { getBoard } from '@/stores/boardStore';
 import { useLinksStore } from '@/stores/linksStore';
 import type { SavedLink } from '@/types';

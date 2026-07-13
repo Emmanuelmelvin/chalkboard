@@ -59,6 +59,7 @@ export interface BoardState {
   insertShapesTab: 'shapes' | 'links';
   highlightedLinkId: string | null;
   isCopied: boolean;
+  spacePressed: boolean;
 
   // ── Setters ────────────────────────────────────────────────────────────
   setRoomId: (roomId: string) => void;
@@ -86,6 +87,7 @@ export interface BoardState {
   setInsertShapesTab: (tab: 'shapes' | 'links') => void;
   setHighlightedLinkId: (id: string | null) => void;
   setIsCopied: (copied: boolean) => void;
+  setSpacePressed: (spacePressed: boolean) => void;
 
   /**
    * Clear selection UI state (ids, transform box, rotation).
@@ -144,6 +146,7 @@ export const useBoardStore = create<BoardState>((set, _) => ({
   insertShapesTab: 'shapes',
   highlightedLinkId: null,
   isCopied: false,
+  spacePressed: false,
 
   setRoomId: (roomId) => set({ roomId }),
   setSocket: (socket) => set({ socket }),
@@ -192,6 +195,7 @@ export const useBoardStore = create<BoardState>((set, _) => ({
   setInsertShapesTab: (insertShapesTab) => set({ insertShapesTab }),
   setHighlightedLinkId: (highlightedLinkId) => set({ highlightedLinkId }),
   setIsCopied: (isCopied) => set({ isCopied }),
+  setSpacePressed: (spacePressed) => set({ spacePressed }),
 
   clearSelection: () =>
     set({
@@ -225,6 +229,7 @@ export const useBoardStore = create<BoardState>((set, _) => ({
       highlightedLinkId: null,
       isCopied: false,
       activeTool: 'chalk',
+      spacePressed: false,
     }),
 }));
 

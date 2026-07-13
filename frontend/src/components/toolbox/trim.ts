@@ -6,7 +6,8 @@
  * resetting a crop, and cancelling crop mode.
  */
 
-import { clipStrokeToRect, getCombinedBoundingBox } from '@/utils/drawing';
+import { getCombinedBoundingBox } from '@/lib/geometry';
+import { clipStrokeToRect } from '@/lib/strokes';
 import { getBoard } from '@/stores/boardStore';
 import type { Stroke } from '@/types';
 

@@ -7,7 +7,8 @@
  * stored in the Zustand board store.
  */
 
-import { getCombinedBoundingBox, transformStrokes } from '@/utils/drawing';
+import { getCombinedBoundingBox } from '@/lib/geometry';
+import { transformStrokes } from '@/lib/strokes';
 import { getBoard } from '@/stores/boardStore';
 import { handleApplyTrim } from './trim';
 

@@ -89,3 +89,8 @@ export {
   handleInsertShape,
   handleOpenShapesModal,
 } from '@/components/toolbox/shapes';
+
+// ── Hit Testing ────────────────────────────────────────────────────────
+export {
+  hitTestTransformBox,
+} from '@/components/toolbox/hitTest';

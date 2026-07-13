@@ -10,8 +10,8 @@
 import {
   getCombinedBoundingBox,
   rotatePoint,
-  rotateStrokesTo,
-} from '@/utils/drawing';
+} from '@/lib/geometry';
+import { rotateStrokesTo } from '@/lib/strokes';
 import { getBoard } from '@/stores/boardStore';
 
 /**

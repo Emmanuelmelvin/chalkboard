@@ -6,14 +6,19 @@ import Button from '@/components/ui/Button';
 import {
   drawChalkStroke,
   drawEraserSegment,
+} from '@/utils/drawing';
+import {
+  boxCenter,
   getCombinedBoundingBox,
   isStrokeInRect,
+  rotatePoint,
+} from '@/lib/geometry';
+import {
   transformStrokes,
   rotateStrokesTo,
-  rotatePoint,
   clipStrokeToRect,
   eraseStrokePoints,
-} from '@/utils/drawing';
+} from '@/lib/strokes';
 import { getRandomColor } from '@/utils/colors';
 import type {
   Rect,
@@ -22,7 +27,6 @@ import type {
   ChalkboardProps,
   Collaborator,
   ShapeType,
-  TrimState,
 } from '@/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
@@ -68,6 +72,7 @@ import {
   handleOpenLinksTab,
   handleOpenShapesModal,
   getLinks,
+  hitTestTransformBox,
 } from '@/components/toolbox';
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
@@ -79,81 +84,65 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Drawing settings
-  const [activeTool, setActiveTool] = useState<'chalk' | 'eraser' | 'pan' | 'select'>('chalk');
-  const [selectionMarquee, setSelectionMarquee] = useState<Rect | null>(null);
-  const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
-  const [transformBox, setTransformBox] = useState<Rect | null>(null);
+  // ── Zustand board store (single source of truth for all board state) ───
+  const {
+    activeTool, setActiveTool,
+    selectionMarquee, setSelectionMarquee,
+    selectedStrokeIds, setSelectedStrokeIds,
+    transformBox, setTransformBox,
+    selectionRotation, setSelectionRotation,
+    activeColor, setActiveColor,
+    brushSize, setBrushSize,
+    brushIntensity, setBrushIntensity,
+    eraserWidth, setEraserWidth,
+    eraserHeight, setEraserHeight,
+    panOffset, setPanOffset,
+    zoom, setZoom,
+    strokes, setStrokes,
+    redoStack, setRedoStack,
+    trimState, setTrimState,
+    showInsertShapes, setShowInsertShapes,
+    insertShapesTab, setInsertShapesTab,
+    highlightedLinkId, setHighlightedLinkId,
+    isCopied, setIsCopied,
+    clipboard, setClipboard,
+    clearSelection,
+    initSession,
+    setCanvas,
+    setCursorPos,
+  } = useBoardStore();
+
+  // ── Local-only state (drag gestures, transient UI — not needed by agents) ─
   const [transformMode, setTransformMode] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'rotate' | null>(null);
   const [hoveredHandle, setHoveredHandle] = useState<'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'rotate' | null>(null);
-  // Live rotation (degrees) applied to the transform-box/banner. Unlike a
-  // pure "drag delta" value, this always tracks the TOTAL rotation of the
-  // selected strokes (i.e. it should always equal the strokes' own
-  // `rotation` field). Because pure rotation never changes an object's local
-  // extents, `transformBox` is never recomputed on rotate — only this value
-  // changes, so the border stays visually rotated instead of "snapping"
-  // back to axis-aligned after a drag ends.
-  const [selectionRotation, setSelectionRotation] = useState<number>(0);
-  const transformStart = useRef<Point>({ x: 0, y: 0 });
-  const initialTransformBox = useRef<Rect | null>(null);
-  const initialSelectedStrokes = useRef<Stroke[]>([]);
-  const clipboardRef = useRef<Stroke[]>([]);
-  const [activeColor, setActiveColor] = useState<string>('#ffffff');
-  const [brushSize, setBrushSize] = useState<number>(5);
-  const [brushIntensity, setBrushIntensity] = useState<number>(1.0);
-  const [eraserWidth, setEraserWidth] = useState<number>(40);
-  const [eraserHeight, setEraserHeight] = useState<number>(20);
-
-  // Navigation (Pan & Zoom)
-  const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState<number>(0.5);
   const [isPanning, setIsPanning] = useState<boolean>(false);
-  const panStart = useRef<Point>({ x: 0, y: 0 });
-
-  // Keyboard state for Space + Drag Panning
   const [spacePressed, setSpacePressed] = useState<boolean>(false);
-
-  // Stroke lists (local & synced)
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
-  const [redoStack, setRedoStack] = useState<Stroke[]>([]);
-  const currentStrokeId = useRef<string | null>(null);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
-
-  // Collaborators & Cursors
   const [collaborators, setCollaborators] = useState<Record<string, Collaborator>>({});
-  const [isCopied, setIsCopied] = useState<boolean>(false);
   const [userCursorColor] = useState<string>(() => getRandomColor());
-
-  // Insert shapes modal
-  const [showInsertShapes, setShowInsertShapes] = useState<boolean>(false);
-  const [insertShapesTab, setInsertShapesTab] = useState<'shapes' | 'links'>('shapes');
-  // Saved links from Zustand store
-  const { links, setLinks, addLink, removeLink, renameLink } = useLinksStore();
-  // Trim mode
-  const [trimState, setTrimState] = useState<TrimState>({
-    active: false,
-    cropBox: null,
-    initialBox: null,
-  });
-  // Highlighted link for banner click navigation
-  const [highlightedLinkId, setHighlightedLinkId] = useState<string | null>(null);
-  // Eraser dust puff effects
   const [dustPuffs, setDustPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
   const dustIdCounter = useRef<number>(0);
 
-  // Tracks the latest canvas-space cursor position so Ctrl+V can paste there
+  // ── Saved links (separate store, kept separate from board store) ─────────
+  const { links, setLinks } = useLinksStore();
+
+  // ── Pure-gesture refs (only live between pointerDown and pointerUp) ──────
+  const transformStart = useRef<Point>({ x: 0, y: 0 });
+  const initialTransformBox = useRef<Rect | null>(null);
+  const initialSelectedStrokes = useRef<Stroke[]>([]);
+  const currentStrokeId = useRef<string | null>(null);
+  const panStart = useRef<Point>({ x: 0, y: 0 });
+
+  // Tracks the latest canvas-space cursor position so Ctrl+V can paste there.
+  // Kept as a ref for performance (no re-render on every pointer move);
+  // also synced to the store so toolbox paste-at-cursor works outside React.
   const cursorPosRef = useRef<Point>({ x: 0, y: 0 });
 
   // devicePixelRatio kept in a ref so it is stable across renders
   const dprRef = useRef<number>(window.devicePixelRatio || 1);
   const hasNavigatedToLink = useRef<boolean>(false);
 
-  // Helper: center point of a Rect (used to rotate pointer coords into the
-  // selection's local, un-rotated space for hit-testing).
-  const boxCenter = (box: Rect): Point => ({
-    x: (box.minX + box.maxX) / 2,
-    y: (box.minY + box.maxY) / 2,
-  });
+  // boxCenter is imported from @/lib/geometry
 
   // Resize handler — sizes the pixel buffer from the canvas element's OWN
   // bounding rect (not the parent's, which includes the 24px wood border).
@@ -167,6 +156,17 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     canvas.width  = Math.round(rect.width  * dpr);
     canvas.height = Math.round(rect.height * dpr);
   }, []);
+
+  // Sync socket + roomId into the store so toolbox agents can emit events
+  useEffect(() => {
+    initSession({ roomId, socket, userId: socket.id ?? 'local' });
+  }, [roomId, socket, initSession]);
+
+  // Register the canvas element in the store so toolbox handlers can access it
+  useEffect(() => {
+    setCanvas(canvasRef.current);
+    return () => setCanvas(null);
+  }, [setCanvas]);
 
   // Single shared function: screen (clientX/Y) → logical canvas coordinates.
   // Subtracts the canvas's own left/top, then divides by dpr so the result
@@ -414,13 +414,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const handleCopy = useCallback(() => {
     if (selectedStrokeIds.length === 0) return;
     const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
-    clipboardRef.current = selected;
-  }, [strokes, selectedStrokeIds]);
+    setClipboard(selected);
+  }, [strokes, selectedStrokeIds, setClipboard]);
 
   const handleCut = useCallback(() => {
     if (selectedStrokeIds.length === 0) return;
     const selected = strokes.filter(s => selectedStrokeIds.includes(s.id));
-    clipboardRef.current = selected;
+    setClipboard(selected);
 
     const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));
     setStrokes(updated);
@@ -428,20 +428,22 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setTransformBox(null);
     setSelectionRotation(0);
     socket.emit('undo-stroke', { roomId, strokes: updated });
-  }, [strokes, selectedStrokeIds, socket, roomId]);
+  }, [strokes, selectedStrokeIds, socket, roomId, setClipboard]);
 
   const handlePaste = useCallback(() => {
-    if (clipboardRef.current.length === 0) return;
+    // Read clipboard via getState() — avoids stale closure without adding to deps
+    const cb = useBoardStore.getState().clipboard;
+    if (cb.length === 0) return;
 
     // Compute the bounding box of the copied strokes so we know their origin
-    const srcBox = getCombinedBoundingBox(clipboardRef.current);
+    const srcBox = getCombinedBoundingBox(cb);
     const cursor = cursorPosRef.current;
 
     // Translate so the top-left of the pasted group sits at the cursor
     const dx = srcBox ? cursor.x - srcBox.minX : 0;
     const dy = srcBox ? cursor.y - srcBox.minY : 0;
 
-    const pastedStrokes: Stroke[] = clipboardRef.current.map(s => {
+    const pastedStrokes: Stroke[] = cb.map(s => {
       const newId = `${socket.id}-${Date.now()}-${Math.random()}`;
       return {
         ...s,
@@ -1134,8 +1136,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
     const pos = screenToCanvas(e.clientX, e.clientY);
 
-    // Keep cursor position up to date for paste-at-cursor
+    // Keep cursor position up to date for paste-at-cursor.
+    // The ref is used in the component (no re-render); the store is for toolbox agents.
     cursorPosRef.current = pos;
+    setCursorPos(pos);
 
     // Broadcast cursor movement
     socket.emit('cursor-move', { roomId, cursor: pos });
@@ -1225,38 +1229,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (activeTool === 'select') {
       if (trimState.active && trimState.cropBox) {
         const boxToUse = trimState.cropBox;
-        const handleSize = 15 / zoom;
-        const edgeTolerance = 10 / zoom;
-        
-        const inResizeTL = pos.x >= boxToUse.minX - handleSize && pos.x <= boxToUse.minX + handleSize &&
-          pos.y >= boxToUse.minY - handleSize && pos.y <= boxToUse.minY + handleSize;
-          
-        const inResizeTR = pos.x >= boxToUse.maxX - handleSize && pos.x <= boxToUse.maxX + handleSize &&
-          pos.y >= boxToUse.minY - handleSize && pos.y <= boxToUse.minY + handleSize;
-          
-        const inResizeBL = pos.x >= boxToUse.minX - handleSize && pos.x <= boxToUse.minX + handleSize &&
-          pos.y >= boxToUse.maxY - handleSize && pos.y <= boxToUse.maxY + handleSize;
-          
-        const inResizeBR = pos.x >= boxToUse.maxX - handleSize && pos.x <= boxToUse.maxX + handleSize &&
-          pos.y >= boxToUse.maxY - handleSize && pos.y <= boxToUse.maxY + handleSize;
-
-        const onLeftEdge = Math.abs(pos.x - boxToUse.minX) <= edgeTolerance &&
-          pos.y >= boxToUse.minY - edgeTolerance && pos.y <= boxToUse.maxY + edgeTolerance;
-          
-        const onRightEdge = Math.abs(pos.x - boxToUse.maxX) <= edgeTolerance &&
-          pos.y >= boxToUse.minY - edgeTolerance && pos.y <= boxToUse.maxY + edgeTolerance;
-          
-        const onTopEdge = Math.abs(pos.y - boxToUse.minY) <= edgeTolerance &&
-          pos.x >= boxToUse.minX - edgeTolerance && pos.x <= boxToUse.maxX + edgeTolerance;
-          
-        const onBottomEdge = Math.abs(pos.y - boxToUse.maxY) <= edgeTolerance &&
-          pos.x >= boxToUse.minX - edgeTolerance && pos.x <= boxToUse.maxX + edgeTolerance;
-
-        const inBox = pos.x >= boxToUse.minX && pos.x <= boxToUse.maxX &&
-          pos.y >= boxToUse.minY && pos.y <= boxToUse.maxY;
-
-        const clickedInteractive = inResizeTL || inResizeTR || inResizeBL || inResizeBR ||
-          onLeftEdge || onRightEdge || onTopEdge || onBottomEdge || inBox;
+        const clickedInteractive = hitTestTransformBox(pos, boxToUse, 0, zoom, true) !== null;
 
         if (!clickedInteractive) {
           handleApplyTrim();
@@ -1267,67 +1240,22 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       // Check if clicking inside transform box or handles
       const boxToUse = trimState.active && trimState.cropBox ? trimState.cropBox : transformBox;
       if (boxToUse) {
-        // Rotate the pointer position into the selection's local
-        // (un-rotated) space before hit-testing, since transformBox itself
-        // stays axis-aligned while selectionRotation visually rotates it.
-        const localPos = selectionRotation !== 0 && !trimState.active
-          ? rotatePoint(pos, boxCenter(boxToUse), -selectionRotation)
-          : pos;
-
-        const handleSize = 15 / zoom;
-        const edgeTolerance = 10 / zoom;
-        
-        const inResizeTL = localPos.x >= boxToUse.minX - handleSize && localPos.x <= boxToUse.minX + handleSize &&
-          localPos.y >= boxToUse.minY - handleSize && localPos.y <= boxToUse.minY + handleSize;
-          
-        const inResizeTR = localPos.x >= boxToUse.maxX - handleSize && localPos.x <= boxToUse.maxX + handleSize &&
-          localPos.y >= boxToUse.minY - handleSize && localPos.y <= boxToUse.minY + handleSize;
-          
-        const inResizeBL = localPos.x >= boxToUse.minX - handleSize && localPos.x <= boxToUse.minX + handleSize &&
-          localPos.y >= boxToUse.maxY - handleSize && localPos.y <= boxToUse.maxY + handleSize;
-          
-        const inResizeBR = localPos.x >= boxToUse.maxX - handleSize && localPos.x <= boxToUse.maxX + handleSize &&
-          localPos.y >= boxToUse.maxY - handleSize && localPos.y <= boxToUse.maxY + handleSize;
-
-        const onLeftEdge = Math.abs(localPos.x - boxToUse.minX) <= edgeTolerance &&
-          localPos.y >= boxToUse.minY - edgeTolerance && localPos.y <= boxToUse.maxY + edgeTolerance;
-          
-        const onRightEdge = Math.abs(localPos.x - boxToUse.maxX) <= edgeTolerance &&
-          localPos.y >= boxToUse.minY - edgeTolerance && localPos.y <= boxToUse.maxY + edgeTolerance;
-          
-        const onTopEdge = Math.abs(localPos.y - boxToUse.minY) <= edgeTolerance &&
-          localPos.x >= boxToUse.minX - edgeTolerance && localPos.x <= boxToUse.maxX + edgeTolerance;
-          
-        const onBottomEdge = Math.abs(localPos.y - boxToUse.maxY) <= edgeTolerance &&
-          localPos.x >= boxToUse.minX - edgeTolerance && localPos.x <= boxToUse.maxX + edgeTolerance;
-
-        // Detect rotate handle (disable in trim mode)
-        const centerX = (boxToUse.minX + boxToUse.maxX) / 2;
-        const rotY = boxToUse.maxY + 30 / zoom;
-        const rotRadius = 15 / zoom;
-        const inRotate = !trimState.active && Math.sqrt((localPos.x - centerX) ** 2 + (localPos.y - rotY) ** 2) <= rotRadius;
-
-        let mode: 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'resize-l' | 'resize-r' | 'resize-t' | 'resize-b' | 'move' | 'rotate' | null = null;
-        if (inRotate) mode = 'rotate';
-        else if (inResizeTL) mode = 'resize-tl';
-        else if (inResizeTR) mode = 'resize-tr';
-        else if (inResizeBL) mode = 'resize-bl';
-        else if (inResizeBR) mode = 'resize-br';
-        else if (onLeftEdge) mode = 'resize-l';
-        else if (onRightEdge) mode = 'resize-r';
-        else if (onTopEdge) mode = 'resize-t';
-        else if (onBottomEdge) mode = 'resize-b';
-        else {
-          const inBox = localPos.x >= boxToUse.minX && localPos.x <= boxToUse.maxX &&
-            localPos.y >= boxToUse.minY && localPos.y <= boxToUse.maxY;
-          if (inBox) mode = 'move';
-        }
+        const mode = hitTestTransformBox(
+          pos,
+          boxToUse,
+          trimState.active ? 0 : selectionRotation,
+          zoom,
+          trimState.active
+        );
 
         if (mode) {
           setTransformMode(mode);
           // Rotation math (in handlePointerMove) needs the ACTUAL screen-space
           // pointer position (not the de-rotated local one) since it measures
           // the sweep angle around the box's real screen center.
+          const localPos = selectionRotation !== 0 && !trimState.active
+            ? rotatePoint(pos, boxCenter(boxToUse), -selectionRotation)
+            : pos;
           transformStart.current = mode === 'rotate' ? pos : localPos;
           initialTransformBox.current = { ...boxToUse };
           initialSelectedStrokes.current = strokes.filter(s => selectedStrokeIds.includes(s.id));
@@ -1558,60 +1486,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       // Hover detection when activeTool === 'select' and not dragging
       const boxToUse = trimState.active && trimState.cropBox ? trimState.cropBox : transformBox;
       if (boxToUse) {
-        // Same de-rotation as pointer-down hit-testing, so hover state lines
-        // up with an already-rotated selection.
-        const localPos = selectionRotation !== 0 && !trimState.active
-          ? rotatePoint(pos, boxCenter(boxToUse), -selectionRotation)
-          : pos;
-
-        const handleSize = 15 / zoom;
-        const edgeTolerance = 10 / zoom;
-
-        const inResizeTL = localPos.x >= boxToUse.minX - handleSize && localPos.x <= boxToUse.minX + handleSize &&
-          localPos.y >= boxToUse.minY - handleSize && localPos.y <= boxToUse.minY + handleSize;
-          
-        const inResizeTR = localPos.x >= boxToUse.maxX - handleSize && localPos.x <= boxToUse.maxX + handleSize &&
-          localPos.y >= boxToUse.minY - handleSize && localPos.y <= boxToUse.minY + handleSize;
-          
-        const inResizeBL = localPos.x >= boxToUse.minX - handleSize && localPos.x <= boxToUse.minX + handleSize &&
-          localPos.y >= boxToUse.maxY - handleSize && localPos.y <= boxToUse.maxY + handleSize;
-          
-        const inResizeBR = localPos.x >= boxToUse.maxX - handleSize && localPos.x <= boxToUse.maxX + handleSize &&
-          localPos.y >= boxToUse.maxY - handleSize && localPos.y <= boxToUse.maxY + handleSize;
-
-        const onLeftEdge = Math.abs(localPos.x - boxToUse.minX) <= edgeTolerance &&
-          localPos.y >= boxToUse.minY - edgeTolerance && localPos.y <= boxToUse.maxY + edgeTolerance;
-          
-        const onRightEdge = Math.abs(localPos.x - boxToUse.maxX) <= edgeTolerance &&
-          localPos.y >= boxToUse.minY - edgeTolerance && localPos.y <= boxToUse.maxY + edgeTolerance;
-          
-        const onTopEdge = Math.abs(localPos.y - boxToUse.minY) <= edgeTolerance &&
-          localPos.x >= boxToUse.minX - edgeTolerance && localPos.x <= boxToUse.maxX + edgeTolerance;
-          
-        const onBottomEdge = Math.abs(localPos.y - boxToUse.maxY) <= edgeTolerance &&
-          localPos.x >= boxToUse.minX - edgeTolerance && localPos.x <= boxToUse.maxX + edgeTolerance;
-
-        // Detect rotate handle hover (disable in trim mode)
-        const centerX = (boxToUse.minX + boxToUse.maxX) / 2;
-        const rotY = boxToUse.maxY + 30 / zoom;
-        const rotRadius = 15 / zoom;
-        const inRotate = !trimState.active && Math.sqrt((localPos.x - centerX) ** 2 + (localPos.y - rotY) ** 2) <= rotRadius;
-
-        let hover: typeof hoveredHandle = null;
-        if (inRotate) hover = 'rotate';
-        else if (inResizeTL) hover = 'resize-tl';
-        else if (inResizeTR) hover = 'resize-tr';
-        else if (inResizeBL) hover = 'resize-bl';
-        else if (inResizeBR) hover = 'resize-br';
-        else if (onLeftEdge) hover = 'resize-l';
-        else if (onRightEdge) hover = 'resize-r';
-        else if (onTopEdge) hover = 'resize-t';
-        else if (onBottomEdge) hover = 'resize-b';
-        else {
-          const inBox = localPos.x >= boxToUse.minX && localPos.x <= boxToUse.maxX &&
-            localPos.y >= boxToUse.minY && localPos.y <= boxToUse.maxY;
-          if (inBox) hover = 'move';
-        }
+        const hover = hitTestTransformBox(
+          pos,
+          boxToUse,
+          trimState.active ? 0 : selectionRotation,
+          zoom,
+          trimState.active
+        );
 
         if (hover !== hoveredHandle) {
           setHoveredHandle(hover);

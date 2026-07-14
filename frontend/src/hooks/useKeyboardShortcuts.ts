@@ -36,7 +36,7 @@ export function useKeyboardShortcuts() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const { selectedStrokeIds, trimState, transformBox } = getBoard();
+      const { selectedStrokeIds, trimState } = getBoard();
       const inInput = document.activeElement?.tagName === 'INPUT';
 
       if (e.code === 'Space') {

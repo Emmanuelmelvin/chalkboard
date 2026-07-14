@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
@@ -24,6 +24,7 @@ import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useBoardSocket } from '@/hooks/useBoardSocket';
+import { createPluginAPI, pluginRegistry, registerInstalledPlugins } from '@/plugins';
 import {
   handleUndo,
   handleRedo,
@@ -80,10 +81,21 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   } = useBoardStore();
 
   const { links } = useLinksStore();
+  const pluginApi = useMemo(() => createPluginAPI(), []);
+  const pluginManifests = useMemo(() => {
+    registerInstalledPlugins();
+    return pluginRegistry.getManifests();
+  }, []);
+  const pluginTools = useMemo(() => pluginRegistry.getTools(), []);
+  const pluginSelectionTools = useMemo(() => pluginRegistry.getSelectionTools(), []);
 
   const hasNavigatedToLink = useRef<boolean>(false);
 
   useCanvasRenderer(canvasRef);
+
+  useEffect(() => {
+    void pluginRegistry.activateAll(pluginApi);
+  }, [pluginApi]);
 
   const {
     handlePointerDown,
@@ -204,6 +216,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
       {showInsertShapes && (
         <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
+          pluginManifests={pluginManifests}
+          pluginTools={pluginTools}
+          onRunPluginTool={(commandId: string, formValues?: Record<string, string>) => pluginRegistry.executeCommand(commandId, { formValues })}
           onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
           links={links} hasSelection={selectedStrokeIds.length > 0} onNavigateToLink={handleNavigateToLink}
           onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
@@ -217,8 +232,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       </button>
       <div className="hud-layer">
         {trimState.active && trimState.cropBox && (() => {
-          const canvas = canvasRef.current;
-          if (!canvas) return null;
           const cropBox = trimState.cropBox;
           const initBox = trimState.initialBox;
           if (!initBox) return null;
@@ -289,6 +302,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               onSetDimensions={(width, height) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const newBox = { minX: box.minX, minY: box.minY, maxX: box.minX + width, maxY: box.minY + height }; const transformed = transformStrokes(selected, box, newBox); const updated = strokes.map(s => { const t = transformed.find(ts => ts.id === s.id); return t ? t : s; }); setStrokes(updated); setTransformBox(newBox); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
               currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
               currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
+              pluginSelectionTools={pluginSelectionTools}
+              onRunPluginSelectionTool={(commandId) => pluginRegistry.executeCommand(commandId)}
               selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
           );
         })()}

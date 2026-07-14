@@ -5,6 +5,7 @@ export interface ChalkColor {
   value: string;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const CHALK_COLORS: ChalkColor[] = [
   { name: 'white', value: '#ffffff' },
   { name: 'black', value: '#1a1a1a' },

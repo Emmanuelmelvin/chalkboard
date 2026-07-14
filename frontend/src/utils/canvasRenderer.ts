@@ -162,6 +162,18 @@ export function drawBoardOnCanvas(
     if (stroke.points.length < 1) return;
     const pts = stroke.points;
 
+    if (stroke.text) {
+      const minX = Math.min(...pts.map((p) => p.x));
+      const minY = Math.min(...pts.map((p) => p.y));
+      ctx.save();
+      ctx.fillStyle = stroke.color;
+      ctx.font = `${stroke.fontSize ?? 28}px "Comic Sans MS", "Chalkboard SE", cursive`;
+      ctx.textBaseline = 'top';
+      ctx.fillText(stroke.text, minX, minY);
+      ctx.restore();
+      return;
+    }
+
     if (stroke.tool === 'chalk') {
       drawChalkStroke(ctx, stroke);
     } else {

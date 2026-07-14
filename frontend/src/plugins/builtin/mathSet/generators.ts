@@ -4,8 +4,6 @@ const VENN_RADIUS = 90;
 const GRID_SIZE = 320;
 const GRID_STEP = 40;
 
-<<<<<<< HEAD
-=======
 export interface MathSetLabels {
   leftSet?: string;
   rightSet?: string;
@@ -18,7 +16,6 @@ export interface MathSetLabels {
   symbol?: string;
 }
 
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
 function makeStroke(
   opts: ShapeStrokeOptions,
   name: string,
@@ -54,11 +51,6 @@ function linePoints(start: Point, end: Point): Point[] {
   return [start, end];
 }
 
-<<<<<<< HEAD
-export function createTwoSetVennDiagramStrokes(
-  center: Point,
-  opts: ShapeStrokeOptions
-=======
 function makeTextStroke(
   opts: ShapeStrokeOptions,
   name: string,
@@ -85,7 +77,6 @@ export function createTwoSetVennDiagramStrokes(
   center: Point,
   opts: ShapeStrokeOptions,
   labels: MathSetLabels = {}
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
 ): Stroke[] {
   const offset = VENN_RADIUS * 0.55;
   return [
@@ -97,22 +88,15 @@ export function createTwoSetVennDiagramStrokes(
       pathType: 'linear',
       closed: true,
     }),
-<<<<<<< HEAD
-=======
     makeTextStroke(opts, 'label-a', labels.leftSet || 'A', center.x - offset - 20, center.y - VENN_RADIUS - 34, 28),
     makeTextStroke(opts, 'label-b', labels.rightSet || 'B', center.x + offset - 20, center.y - VENN_RADIUS - 34, 28),
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
   ];
 }
 
 export function createThreeSetVennDiagramStrokes(
   center: Point,
-<<<<<<< HEAD
-  opts: ShapeStrokeOptions
-=======
   opts: ShapeStrokeOptions,
   labels: MathSetLabels = {}
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
 ): Stroke[] {
   const horizontalOffset = VENN_RADIUS * 0.58;
   const verticalOffset = VENN_RADIUS * 0.42;
@@ -129,23 +113,16 @@ export function createThreeSetVennDiagramStrokes(
       pathType: 'linear',
       closed: true,
     }),
-<<<<<<< HEAD
-=======
     makeTextStroke(opts, 'label-a', labels.leftSet || 'A', center.x - horizontalOffset - 24, center.y - verticalOffset - VENN_RADIUS - 30, 26),
     makeTextStroke(opts, 'label-b', labels.rightSet || 'B', center.x + horizontalOffset - 24, center.y - verticalOffset - VENN_RADIUS - 30, 26),
     makeTextStroke(opts, 'label-c', labels.bottomSet || 'C', center.x - 12, center.y + verticalOffset + VENN_RADIUS + 8, 26),
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
   ];
 }
 
 export function createNumberLineStrokes(
   center: Point,
-<<<<<<< HEAD
-  opts: ShapeStrokeOptions
-=======
   opts: ShapeStrokeOptions,
   labels: MathSetLabels = {}
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
 ): Stroke[] {
   const halfWidth = 260;
   const tickCount = 12;
@@ -175,14 +152,6 @@ export function createNumberLineStrokes(
     ), { pathType: 'linear' }));
   }
 
-<<<<<<< HEAD
-  return strokes;
-}
-
-export function createCoordinateGridStrokes(
-  center: Point,
-  opts: ShapeStrokeOptions
-=======
   strokes.push(makeTextStroke(opts, 'number-line-min', labels.min || '-6', center.x - halfWidth - 8, center.y + 26, 22));
   strokes.push(makeTextStroke(opts, 'number-line-max', labels.max || '6', center.x + halfWidth - 8, center.y + 26, 22));
   if (labels.title) strokes.push(makeTextStroke(opts, 'number-line-title', labels.title, center.x - 80, center.y - 70, 24));
@@ -201,7 +170,6 @@ export function createCoordinateGridStrokes(
   center: Point,
   opts: ShapeStrokeOptions,
   labels: MathSetLabels = {}
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
 ): Stroke[] {
   const strokes: Stroke[] = [];
   const half = GRID_SIZE / 2;
@@ -222,10 +190,7 @@ export function createCoordinateGridStrokes(
     index += 1;
   }
 
-<<<<<<< HEAD
-=======
   strokes.push(makeTextStroke(opts, 'x-axis-label', labels.xAxis || 'x', center.x + half + 12, center.y - 10, 22));
   strokes.push(makeTextStroke(opts, 'y-axis-label', labels.yAxis || 'y', center.x + 10, center.y - half - 30, 22));
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
   return strokes;
 }

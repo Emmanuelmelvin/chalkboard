@@ -3,6 +3,7 @@ import type {
   ChalkboardPluginAPI,
   PluginCommandHandler,
   PluginManifest,
+  PluginSelectionToolContribution,
   PluginToolContribution,
 } from '@/plugins/types';
 
@@ -48,6 +49,17 @@ export class PluginRegistry {
     return [...this.manifests.values()].flatMap((manifest) =>
       manifest.contributes.tools?.map((tool) => ({
         ...tool,
+        pluginId: manifest.id,
+        description: tool.description ?? manifest.description,
+      })) ?? []
+    );
+  }
+
+  getSelectionTools(): PluginSelectionToolContribution[] {
+    return [...this.manifests.values()].flatMap((manifest) =>
+      manifest.contributes.selectionTools?.map((tool) => ({
+        ...tool,
+        pluginId: manifest.id,
         description: tool.description ?? manifest.description,
       })) ?? []
     );

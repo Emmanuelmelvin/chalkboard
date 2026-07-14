@@ -10,13 +10,35 @@ export type PluginPermission =
   | 'ui:modal'
   | 'room:sync';
 
+export interface PluginToolFormField {
+  id: string;
+  label: string;
+  placeholder?: string;
+  defaultValue?: string;
+}
+
 export interface PluginToolContribution {
   id: string;
   label: string;
   description?: string;
   icon?: ReactNode;
   command: string;
+  pluginId?: string;
+  formFields?: PluginToolFormField[];
 }
+
+export interface PluginSelectionToolContribution {
+  id: string;
+  label: string;
+  description?: string;
+  command: string;
+  pluginId?: string;
+}
+
+export interface PluginCommandPayload {
+  formValues?: Record<string, string>;
+}
+
 
 export interface PluginCommandContribution {
   id: string;
@@ -27,6 +49,7 @@ export interface PluginCommandContribution {
 export interface PluginContributions {
   tools?: PluginToolContribution[];
   commands?: PluginCommandContribution[];
+  selectionTools?: PluginSelectionToolContribution[];
 }
 
 export interface PluginManifest {
@@ -42,6 +65,8 @@ export interface PluginManifest {
 export interface InsertStrokeOptions {
   select?: boolean;
   closeInsertPanel?: boolean;
+  group?: boolean;
+  pluginId?: string;
 }
 
 export interface PluginViewport {
@@ -56,6 +81,7 @@ export interface PluginBoardAPI {
   getViewport(): PluginViewport;
   getViewportCenter(): Point | null;
   insertStrokes(strokes: Stroke[], options?: InsertStrokeOptions): boolean;
+  updateStrokes(strokes: Stroke[]): boolean;
 }
 
 export interface PluginSelectionAPI {

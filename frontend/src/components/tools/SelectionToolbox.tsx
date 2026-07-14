@@ -17,6 +17,7 @@ import {
   Maximize2,
 } from 'lucide-react';
 import { CHALK_COLORS } from '@/components/tools/ColorPicker';
+import type { PluginSelectionToolContribution } from '@/plugins/types';
 
 interface SelectionToolboxProps {
   /** Canvas-space X of the right edge of the transform box in screen coords */
@@ -57,6 +58,8 @@ interface SelectionToolboxProps {
   selectedCount: number;
   /** Whether the selected strokes are already grouped */
   isGrouped: boolean;
+  pluginSelectionTools?: PluginSelectionToolContribution[];
+  onRunPluginSelectionTool?: (commandId: string) => void;
 }
 
 type SubPanel = 'color' | 'size' | 'rotate' | 'dimensions' | 'trim' | null;
@@ -93,6 +96,8 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   currentHeight = 0,
   selectedCount,
   isGrouped,
+  pluginSelectionTools = [],
+  onRunPluginSelectionTool,
 }) => {
   const [openSubPanel, setOpenSubPanel] = useState<SubPanel>(null);
   const [colorMode, setColorMode] = useState<'stroke' | 'fill'>('stroke');
@@ -329,6 +334,25 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           <span className="sel-row-label">Ungroup</span>
           <kbd className="sel-kbd">Ctrl+Shift+G</kbd>
         </button>
+
+        {pluginSelectionTools.length > 0 && (
+          <div className="selection-plugin-tools">
+            {pluginSelectionTools.map((tool) => (
+              <button
+                key={tool.id}
+                type="button"
+                className="sel-toolbox-row sel-action-row"
+                onMouseEnter={() => handleRowEnter(null)}
+                onClick={() => onRunPluginSelectionTool?.(tool.command)}
+                title={tool.description ?? tool.label}
+              >
+                <span className="sel-row-icon"><SquareStack size={13} /></span>
+                <span className="sel-row-label">{tool.label}</span>
+                <span className="selection-plugin-badge">Plugin</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="sel-divider" />
 

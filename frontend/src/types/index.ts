@@ -20,6 +20,12 @@ export interface Stroke {
   points: Point[];
   /** Optional group identifier for grouped strokes */
   groupId?: string;
+  /** Plugin that created this stroke, if any */
+  pluginId?: string;
+  /** Optional text rendered by the canvas renderer */
+  text?: string;
+  /** Optional font size for text strokes */
+  fontSize?: number;
   /** Rotation angle in degrees */
   rotation?: number;
   /** Non-destructive crop/clip bounds */

@@ -82,10 +82,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const { links } = useLinksStore();
   const pluginApi = useMemo(() => createPluginAPI(), []);
-  const pluginTools = useMemo(() => {
+  const pluginManifests = useMemo(() => {
     registerInstalledPlugins();
-    return pluginRegistry.getTools();
+    return pluginRegistry.getManifests();
   }, []);
+  const pluginTools = useMemo(() => pluginRegistry.getTools(), []);
+  const pluginSelectionTools = useMemo(() => pluginRegistry.getSelectionTools(), []);
 
   const hasNavigatedToLink = useRef<boolean>(false);
 
@@ -214,8 +216,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
       {showInsertShapes && (
         <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
+          pluginManifests={pluginManifests}
           pluginTools={pluginTools}
-          onRunPluginTool={(commandId: string) => pluginRegistry.executeCommand(commandId)}
+          onRunPluginTool={(commandId: string, formValues?: Record<string, string>) => pluginRegistry.executeCommand(commandId, { formValues })}
           onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
           links={links} hasSelection={selectedStrokeIds.length > 0} onNavigateToLink={handleNavigateToLink}
           onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
@@ -299,6 +302,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               onSetDimensions={(width, height) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const newBox = { minX: box.minX, minY: box.minY, maxX: box.minX + width, maxY: box.minY + height }; const transformed = transformStrokes(selected, box, newBox); const updated = strokes.map(s => { const t = transformed.find(ts => ts.id === s.id); return t ? t : s; }); setStrokes(updated); setTransformBox(newBox); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
               currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
               currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
+              pluginSelectionTools={pluginSelectionTools}
+              onRunPluginSelectionTool={(commandId) => pluginRegistry.executeCommand(commandId)}
               selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
           );
         })()}

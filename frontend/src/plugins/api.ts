@@ -18,12 +18,19 @@ function insertStrokes(strokes: Stroke[], options: InsertStrokeOptions = {}): bo
 
   if (!socket || strokes.length === 0) return false;
 
-  const updated = [...existingStrokes, ...strokes];
+  const groupId = options.group ? `${socket.id ?? 'local'}-plugin-${Date.now()}` : undefined;
+  const preparedStrokes = strokes.map((stroke) => ({
+    ...stroke,
+    groupId: groupId ?? stroke.groupId,
+    pluginId: options.pluginId ?? stroke.pluginId,
+  }));
+
+  const updated = [...existingStrokes, ...preparedStrokes];
   setStrokes(updated);
 
   if (options.select ?? true) {
-    setSelectedStrokeIds(strokes.map((stroke) => stroke.id));
-    setTransformBox(getCombinedBoundingBox(strokes));
+    setSelectedStrokeIds(preparedStrokes.map((stroke) => stroke.id));
+    setTransformBox(getCombinedBoundingBox(preparedStrokes));
     setSelectionRotation(0);
   }
 
@@ -55,6 +62,13 @@ export function createPluginAPI(): ChalkboardPluginAPI {
         };
       },
       insertStrokes,
+      updateStrokes: (updatedStrokes) => {
+        const { socket, roomId, setStrokes } = getBoard();
+        if (!socket) return false;
+        setStrokes(updatedStrokes);
+        socket.emit('undo-stroke', { roomId, strokes: updatedStrokes });
+        return true;
+      },
     },
     selection: {
       getSelectedStrokeIds: () => getBoard().selectedStrokeIds,

@@ -15,6 +15,8 @@ export interface Stroke {
   pathType?: 'smooth' | 'linear';
   /** Close the path by connecting its final point back to its first point. */
   closed?: boolean;
+  /** Fill color for closed shapes (transparent means no fill) */
+  fillColor?: string;
   eraserWidth?: number;
   eraserHeight?: number;
   points: Point[];
@@ -128,6 +130,7 @@ export interface ShapeStrokeOptions {
   color: string;
   size: number;
   intensity: number;
+  fillColor?: string;
 }
 
 export interface CanvasCenter {

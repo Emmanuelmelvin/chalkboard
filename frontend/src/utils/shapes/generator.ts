@@ -35,7 +35,7 @@ export function generatePolygon(
  * so each individual shape file only has to supply points.
  */
 export function makeStrokeFactory(shapeName: string, opts: ShapeStrokeOptions) {
-  const { id, userId, color, size, intensity } = opts;
+  const { id, userId, color, size, intensity, fillColor } = opts;
   return (
     points: Point[],
     suffix = '',
@@ -47,6 +47,7 @@ export function makeStrokeFactory(shapeName: string, opts: ShapeStrokeOptions) {
     color,
     size,
     intensity,
+    fillColor,
     ...pathOptions,
     points,
   });

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo } from 'react';
-import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes } from 'lucide-react';
+import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes, Eye, EyeOff } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -78,6 +78,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     initSession,
     setCanvas,
     spacePressed,
+    activeFillColor, setActiveFillColor,
+    showSelectionToolbox, setShowSelectionToolbox,
   } = useBoardStore();
 
   const { links } = useLinksStore();
@@ -214,6 +216,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       })}
       <canvas ref={canvasRef} className="chalk-canvas" style={{ cursor: getCanvasCursor() }}
         onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
+      
       {showInsertShapes && (
         <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
           pluginManifests={pluginManifests}
@@ -224,7 +227,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
           initialTab={insertShapesTab} highlightedLinkId={highlightedLinkId} />
       )}
-      <button className="insert-shapes-fab" onClick={() => setShowInsertShapes(prev => !prev)} title="Insert Shape (Ctrl+1)"
+      <button
+        className="insert-shapes-fab"
+        onClick={() => setShowInsertShapes(prev => !prev)}
+        title="Insert Shape (Ctrl+1)"
         style={{ position: 'absolute', left: '48px', top: '50%', transform: 'translateY(-50%)', zIndex: 100, pointerEvents: 'auto', width: 44, height: 44, borderRadius: '50%', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.08)', color: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)', transition: 'all 0.2s ease' }}
         onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.85)'; e.currentTarget.style.color = '#fff'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(15, 23, 42, 0.75)'; e.currentTarget.style.color = '#cbd5e1'; }}>
@@ -269,11 +275,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
           const linkedLink = links.find(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
           if (!linkedLink) return null;
-          const bannerX = transformBox.minX * zoom + panOffset.x - 28;
-          const bannerY = transformBox.minY * zoom + panOffset.y - 28;
+          const LINK_PADDING = 12;
+          const linkX = transformBox.minX * zoom + panOffset.x - LINK_PADDING - 24;
+          const linkY = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y - 12;
+
           return (
             <button onClick={() => { setHighlightedLinkId(linkedLink.id); setInsertShapesTab('links'); setShowInsertShapes(true); }}
-              style={{ position: 'absolute', left: bannerX, top: bannerY, zIndex: 300, background: 'rgba(59,130,246,0.9)', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', border: '2px solid rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0 }}
+              style={{ position: 'absolute', left: linkX, top: linkY, zIndex: 300, background: 'rgba(59,130,246,0.9)', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', border: '2px solid rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0 }}
               title="Click to view linked location">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
@@ -282,31 +290,78 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             </button>
           );
         })()}
+
         {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
           const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
           const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
           const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
+          const actualFillColor = selectedStrokes.length > 0 ? (selectedStrokes[0].fillColor ?? 'transparent') : activeFillColor;
+
+          // Compute panel position (mirrors SelectionToolbox logic)
+          const BOX_SCREEN_LEFT = transformBox.minX * zoom + panOffset.x;
+          const BOX_SCREEN_RIGHT = transformBox.maxX * zoom + panOffset.x;
+          const BOX_SCREEN_CENTER_Y = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y;
+
           return (
-            <SelectionToolbox
-              boxScreenLeft={transformBox.minX * zoom + panOffset.x} boxScreenRight={transformBox.maxX * zoom + panOffset.x}
-              boxScreenCenterY={(transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y} activeColor={actualColor}
-              onColorChange={(color) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-              onTrim={handleStartTrim} onResetTrim={handleResetTrim} onCut={handleCut}
-              onDelete={() => { const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id)); setStrokes(updated); setSelectedStrokeIds([]); setTransformBox(null); setSelectionRotation(0); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-              onDeselect={() => { if (trimState.active) handleApplyTrim(); setSelectedStrokeIds([]); setTransformBox(null); setSelectionRotation(0); }}
-              onIncreaseSize={handleIncreaseSize} onDecreaseSize={handleDecreaseSize}
-              onSetSize={(size) => { if (selectedStrokeIds.length === 0) return; const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, size: Math.min(100, Math.max(1, size)) } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-              onCopy={handleCopy} onDuplicate={handleDuplicate} onGroup={handleGroup} onUngroup={handleUngroup}
-              onRotate={(angleDeg) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const totalRotation = (selected[0]?.rotation ?? 0) + angleDeg; const rotated = rotateStrokesTo(selected, totalRotation); const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; }); setStrokes(updated); setSelectionRotation(rotated[0]?.rotation ?? totalRotation); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-              onResetRotation={() => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }; const rotated = selected.map(s => { const currentAngle = s.rotation ?? 0; return { ...s, points: s.points.map(p => rotatePoint(p, center, -currentAngle)), rotation: 0 }; }); const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; }); setStrokes(updated); setSelectionRotation(0); setTransformBox(getCombinedBoundingBox(rotated)); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-              onSetDimensions={(width, height) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const newBox = { minX: box.minX, minY: box.minY, maxX: box.minX + width, maxY: box.minY + height }; const transformed = transformStrokes(selected, box, newBox); const updated = strokes.map(s => { const t = transformed.find(ts => ts.id === s.id); return t ? t : s; }); setStrokes(updated); setTransformBox(newBox); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-              currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
-              currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
-              pluginSelectionTools={pluginSelectionTools}
-              onRunPluginSelectionTool={(commandId) => pluginRegistry.executeCommand(commandId)}
-              selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
+            <>
+              {showSelectionToolbox && (
+                <SelectionToolbox
+                  boxScreenLeft={BOX_SCREEN_LEFT} 
+                  boxScreenRight={BOX_SCREEN_RIGHT}
+                  boxScreenCenterY={BOX_SCREEN_CENTER_Y} 
+                  activeColor={actualColor}
+                  activeFillColor={actualFillColor}
+                  onColorChange={(color) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                  onFillColorChange={(fillColor) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, fillColor } : s); setStrokes(updated); setActiveFillColor(fillColor); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                  onTrim={handleStartTrim} onResetTrim={handleResetTrim} onCut={handleCut}
+                  onDelete={() => { const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id)); setStrokes(updated); setSelectedStrokeIds([]); setTransformBox(null); setSelectionRotation(0); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                  onDeselect={() => { if (trimState.active) handleApplyTrim(); setSelectedStrokeIds([]); setTransformBox(null); setSelectionRotation(0); }}
+                  onIncreaseSize={handleIncreaseSize} onDecreaseSize={handleDecreaseSize}
+                  onSetSize={(size) => { if (selectedStrokeIds.length === 0) return; const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, size: Math.min(100, Math.max(1, size)) } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                  onCopy={handleCopy} onDuplicate={handleDuplicate} onGroup={handleGroup} onUngroup={handleUngroup}
+                  onRotate={(angleDeg) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const totalRotation = (selected[0]?.rotation ?? 0) + angleDeg; const rotated = rotateStrokesTo(selected, totalRotation); const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; }); setStrokes(updated); setSelectionRotation(rotated[0]?.rotation ?? totalRotation); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                  onResetRotation={() => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }; const rotated = selected.map(s => { const currentAngle = s.rotation ?? 0; return { ...s, points: s.points.map(p => rotatePoint(p, center, -currentAngle)), rotation: 0 }; }); const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; }); setStrokes(updated); setSelectionRotation(0); setTransformBox(getCombinedBoundingBox(rotated)); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                  onSetDimensions={(width, height) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const newBox = { minX: box.minX, minY: box.minY, maxX: box.minX + width, maxY: box.minY + height }; const transformed = transformStrokes(selected, box, newBox); const updated = strokes.map(s => { const t = transformed.find(ts => ts.id === s.id); return t ? t : s; }); setStrokes(updated); setTransformBox(newBox); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                  currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
+                  currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
+                  pluginSelectionTools={pluginSelectionTools}
+                  onRunPluginSelectionTool={(commandId) => pluginRegistry.executeCommand(commandId)}
+                  selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
+              )}
+              {/* ── Selection toolbox toggle button ── */}
+              <button
+                onClick={() => setShowSelectionToolbox(prev => !prev)}
+                title={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
+                style={{
+                  position: 'absolute',
+                  left: BOX_SCREEN_RIGHT + 14,
+                  top: BOX_SCREEN_CENTER_Y - 14,
+                  zIndex: 2001,
+                  pointerEvents: 'auto',
+                  width: 28,
+                  height: 28,
+                  borderRadius: '6px',
+                  background: showSelectionToolbox ? 'rgba(59,130,246,0.3)' : 'rgba(15,23,42,0.75)',
+                  backdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: showSelectionToolbox ? '#60a5fa' : '#94a3b8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  fontSize: 12,
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(59,130,246,0.4)'; e.currentTarget.style.color = '#fff'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = showSelectionToolbox ? 'rgba(59,130,246,0.3)' : 'rgba(15,23,42,0.75)'; e.currentTarget.style.color = showSelectionToolbox ? '#60a5fa' : '#94a3b8'; }}
+              >
+                {showSelectionToolbox ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </>
           );
         })()}
+
         <div className="board-header">
           <Card className="board-title"><h1>Chalkboard</h1><span>Room Code: {roomId}</span></Card>
           <Card style={{ display: 'flex', flexDirection: 'row', gap: '12px', alignItems: 'center', padding: '8px' }}>
@@ -323,24 +378,43 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             <Button variant="primary" className="hud-panel" onClick={onLeaveRoom} style={{ padding: '8px 18px', height: 'fit-content' }}>Exit</Button>
           </div>
         </div>
+
         {Object.keys(collaborators).length > 0 && (
           <Card className="users-panel">
-            <h3><Users size={12} style={{ inlineSize: 'auto', marginRight: '4px', verticalAlign: 'middle' }} /> Classmates ({Object.keys(collaborators).length + 1})</h3>
+            <h3>
+              <Users
+                size={12}
+                style={{ inlineSize: 'auto', marginRight: '4px', verticalAlign: 'middle' }} />
+              Classmates
+              ({Object.keys(collaborators).length + 1})
+            </h3>
             <div className="user-item"><span className="user-dot" style={{ color: userCursorColor, backgroundColor: userCursorColor }} /><span className="user-name">{userName} (You)</span></div>
             {Object.entries(collaborators).map(([id, coll]) => (
               <div key={id} className="user-item"><span className="user-dot" style={{ color: coll.color, backgroundColor: coll.color }} /><span className="user-name">{coll.name}</span></div>
             ))}
           </Card>
         )}
+
         <div className="zoom-indicator">
           <Button variant="icon" onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))} style={{ padding: 2 }}><Minus size={12} /></Button>
           <span style={{ margin: '0 4px', width: '36px', textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
           <Button variant="icon" onClick={() => setZoom((z) => Math.min(5, z + 0.1))} style={{ padding: 2 }}><Plus size={12} /></Button>
           <Button variant="icon" onClick={resetPanZoom} title="Reset Pan/Zoom" style={{ padding: 2, marginLeft: 4 }}><Maximize2 size={12} /></Button>
         </div>
-        <Toolbar activeTool={activeTool} activeColor={activeColor} brushSize={brushSize} brushIntensity={brushIntensity}
-          eraserWidth={eraserWidth} eraserHeight={eraserHeight} onToolChange={setActiveTool} onColorChange={setActiveColor}
-          onBrushSizeChange={setBrushSize} onIntensityChange={setBrushIntensity} onEraserWidthChange={setEraserWidth} onEraserHeightChange={setEraserHeight} />
+
+        <Toolbar
+          activeTool={activeTool}
+          activeColor={activeColor}
+          brushSize={brushSize}
+          brushIntensity={brushIntensity}
+          eraserWidth={eraserWidth}
+          eraserHeight={eraserHeight}
+          onToolChange={setActiveTool}
+          onColorChange={setActiveColor}
+          onBrushSizeChange={setBrushSize}
+          onIntensityChange={setBrushIntensity}
+          onEraserWidthChange={setEraserWidth}
+          onEraserHeightChange={setEraserHeight} />
       </div>
     </div>
   );

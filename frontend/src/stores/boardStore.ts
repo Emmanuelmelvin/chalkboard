@@ -19,6 +19,7 @@ export interface BoardState {
   // ── Drawing settings ───────────────────────────────────────────────────
   activeTool: 'chalk' | 'eraser' | 'pan' | 'select';
   activeColor: string;
+  activeFillColor: string;
   brushSize: number;
   brushIntensity: number;
   eraserWidth: number;
@@ -60,6 +61,7 @@ export interface BoardState {
   highlightedLinkId: string | null;
   isCopied: boolean;
   spacePressed: boolean;
+  showSelectionToolbox: boolean;
 
   // ── Setters ────────────────────────────────────────────────────────────
   setRoomId: (roomId: string) => void;
@@ -67,6 +69,7 @@ export interface BoardState {
   setUserId: (userId: string) => void;
   setActiveTool: (tool: BoardState['activeTool']) => void;
   setActiveColor: (color: string) => void;
+  setActiveFillColor: (color: string) => void;
   setBrushSize: (size: number) => void;
   setBrushIntensity: (intensity: number) => void;
   setEraserWidth: (w: number) => void;
@@ -88,6 +91,7 @@ export interface BoardState {
   setHighlightedLinkId: (id: string | null) => void;
   setIsCopied: (copied: boolean) => void;
   setSpacePressed: (spacePressed: boolean) => void;
+  setShowSelectionToolbox: (show: boolean | ((prev: boolean) => boolean)) => void;
 
   /**
    * Clear selection UI state (ids, transform box, rotation).
@@ -119,6 +123,7 @@ export const useBoardStore = create<BoardState>((set) => ({
 
   activeTool: 'chalk',
   activeColor: '#ffffff',
+  activeFillColor: 'transparent',
   brushSize: 5,
   brushIntensity: 1.0,
   eraserWidth: 40,
@@ -147,12 +152,14 @@ export const useBoardStore = create<BoardState>((set) => ({
   highlightedLinkId: null,
   isCopied: false,
   spacePressed: false,
+  showSelectionToolbox: true,
 
   setRoomId: (roomId) => set({ roomId }),
   setSocket: (socket) => set({ socket }),
   setUserId: (userId) => set({ userId }),
   setActiveTool: (activeTool) => set({ activeTool }),
   setActiveColor: (activeColor) => set({ activeColor }),
+  setActiveFillColor: (activeFillColor) => set({ activeFillColor }),
   setBrushSize: (brushSize) => set({ brushSize }),
   setBrushIntensity: (brushIntensity) => set({ brushIntensity }),
   setEraserWidth: (eraserWidth) => set({ eraserWidth }),
@@ -196,6 +203,13 @@ export const useBoardStore = create<BoardState>((set) => ({
   setHighlightedLinkId: (highlightedLinkId) => set({ highlightedLinkId }),
   setIsCopied: (isCopied) => set({ isCopied }),
   setSpacePressed: (spacePressed) => set({ spacePressed }),
+  setShowSelectionToolbox: (showSelectionToolbox) =>
+    set((state) => ({
+      showSelectionToolbox:
+        typeof showSelectionToolbox === 'function'
+          ? showSelectionToolbox(state.showSelectionToolbox)
+          : showSelectionToolbox,
+    })),
 
   clearSelection: () =>
     set({
@@ -230,6 +244,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       isCopied: false,
       activeTool: 'chalk',
       spacePressed: false,
+      showSelectionToolbox: true,
     }),
 }));
 

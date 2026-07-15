@@ -23,14 +23,6 @@ import {
 } from 'lucide-react';
 
 import type { ShapeType, SavedLink } from '@/types';
-<<<<<<< HEAD
-import type { PluginToolContribution } from '@/plugins/types';
-
-interface InsertShapesProps {
-  onInsertShape: (shape: ShapeType) => void;
-  pluginTools: PluginToolContribution[];
-  onRunPluginTool: (commandId: string) => void;
-=======
 import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
 
 interface InsertShapesProps {
@@ -38,7 +30,6 @@ interface InsertShapesProps {
   pluginManifests: PluginManifest[];
   pluginTools: PluginToolContribution[];
   onRunPluginTool: (commandId: string, formValues?: Record<string, string>) => void;
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
   onClose: () => void;
   /** Saved links for the current room */
   links: SavedLink[];
@@ -79,10 +70,7 @@ const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
 
 const InsertShapes: React.FC<InsertShapesProps> = ({
   onInsertShape,
-<<<<<<< HEAD
-=======
   pluginManifests,
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
   pluginTools,
   onRunPluginTool,
   onClose,
@@ -244,24 +232,6 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
         {/* Plugins Tab */}
         {activeTab === 'plugins' && (
           <div className="insert-plugins-content">
-<<<<<<< HEAD
-            {pluginTools.length === 0 ? (
-              <div className="insert-links-empty">
-                <Puzzle size={24} />
-                <p>No plugins are installed yet.</p>
-              </div>
-            ) : (
-              <div className="insert-shapes-grid">
-                {pluginTools.map((tool) => (
-                  <button
-                    key={tool.id}
-                    className="insert-shape-btn"
-                    onClick={() => onRunPluginTool(tool.command)}
-                    title={tool.description ?? tool.label}
-                  >
-                    {tool.icon ?? <Puzzle size={20} />}
-                    <span>{tool.label}</span>
-=======
             <input
               className="insert-links-input"
               type="search"
@@ -288,7 +258,6 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
                       <strong>{plugin.name}</strong>
                       <small>{plugin.description}</small>
                     </span>
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
                   </button>
                 ))}
               </div>

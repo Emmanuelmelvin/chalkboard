@@ -1032,8 +1032,6 @@ The bundled Mathematical Set plugin currently contributes these tools:
 - `Coordinate Grid`
 
 Each tool inserts normal Chalkboard strokes, selects the inserted strokes, closes the insert panel, and broadcasts the updated stroke list to the current room through the existing board synchronization flow.
-<<<<<<< HEAD
-=======
 
 ### 25.1 Follow-up UX Enhancements
 
@@ -1042,4 +1040,3 @@ The plugin UX has been expanded so the Insert panel now lists plugins first, sim
 Plugin contributions now support selection toolbar actions through `selectionTools`, so plugins can add contextual actions for selected canvas content. Plugin-generated insertions can also opt into grouped insertion and plugin metadata, allowing multi-stroke plugin objects such as Venn diagrams and number lines to move together and identify themselves as plugin-created content.
 
 The Mathematical Set plugin now renders set symbols, configurable Venn labels, number-line labels/titles, and coordinate-grid axis labels using text strokes. Inserted Mathematical Set objects are grouped automatically and tagged with the built-in plugin identifier.
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6

@@ -72,7 +72,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     redoStack,
     trimState,
     showInsertShapes, setShowInsertShapes,
-    showSelectionToolbox, setShowSelectionToolbox,
     insertShapesTab, setInsertShapesTab,
     highlightedLinkId, setHighlightedLinkId,
     isCopied, setIsCopied,
@@ -287,7 +286,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
           const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
           const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
-          const actualFillColor = selectedStrokes.length > 0 ? (selectedStrokes[0].fillColor ?? 'transparent') : 'transparent';
           return (
             <SelectionToolbox
               boxScreenLeft={transformBox.minX * zoom + panOffset.x} boxScreenRight={transformBox.maxX * zoom + panOffset.x}

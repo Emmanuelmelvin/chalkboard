@@ -8,6 +8,7 @@
 
 import { getCombinedBoundingBox } from '@/lib/geometry';
 import { getBoard } from '@/stores/boardStore';
+import { useLinksStore } from '@/stores/linksStore';
 import type { Stroke } from '@/types';
 
 /**
@@ -54,6 +55,15 @@ export function handleCut(): boolean {
     clearSelection,
   } = getBoard();
   if (selectedStrokeIds.length === 0 || !socket) return false;
+
+  // Remove any links that reference the cut strokes
+  const deletedIds = new Set(selectedStrokeIds);
+  const { links, removeLink } = useLinksStore.getState();
+  links.forEach(l => {
+    if (l.strokeIds.some(id => deletedIds.has(id))) {
+      removeLink(l.id);
+    }
+  });
 
   const selected = strokes.filter((s) => selectedStrokeIds.includes(s.id));
   setClipboard(selected);

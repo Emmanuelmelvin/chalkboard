@@ -8,6 +8,7 @@
  */
 
 import { getBoard } from '@/stores/boardStore';
+import { useLinksStore } from '@/stores/linksStore';
 import type { Stroke } from '@/types';
 
 /**
@@ -101,6 +102,8 @@ export function handleClear(): void {
   setStrokes([]);
   setRedoStack([]);
   clearSelection();
+  // Clear all links since all strokes are being removed
+  useLinksStore.getState().clearLinks();
   socket?.emit('clear-board', { roomId });
 }
 

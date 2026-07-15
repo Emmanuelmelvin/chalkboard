@@ -3,6 +3,7 @@ import { useBoardStore, getBoard } from '@/stores/boardStore';
 import {
   handleUndo,
   handleRedo,
+  handleDelete,
   handleCopy,
   handleCut,
   handlePaste,
@@ -127,13 +128,7 @@ export function useKeyboardShortcuts() {
       if (selectedStrokeIds.length > 0 && !inInput) {
         if (e.key === 'Delete' || e.key === 'Del' || e.key === 'Backspace') {
           e.preventDefault();
-          const { strokes, setStrokes, setSelectedStrokeIds, setTransformBox, setSelectionRotation, socket, roomId } = getBoard();
-          const updated = strokes.filter((s) => !selectedStrokeIds.includes(s.id));
-          setStrokes(updated);
-          setSelectedStrokeIds([]);
-          setTransformBox(null);
-          setSelectionRotation(0);
-          socket?.emit('undo-stroke', { roomId, strokes: updated });
+          handleDelete();
           return;
         }
       }

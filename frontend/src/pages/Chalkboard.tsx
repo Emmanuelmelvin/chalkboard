@@ -82,7 +82,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     showSelectionToolbox, setShowSelectionToolbox,
   } = useBoardStore();
 
-  const { links } = useLinksStore();
+  const { links, removeLink } = useLinksStore();
   const pluginApi = useMemo(() => createPluginAPI(), []);
   const pluginManifests = useMemo(() => {
     registerInstalledPlugins();
@@ -314,7 +314,21 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   onColorChange={(color) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
                   onFillColorChange={(fillColor) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, fillColor } : s); setStrokes(updated); setActiveFillColor(fillColor); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
                   onTrim={handleStartTrim} onResetTrim={handleResetTrim} onCut={handleCut}
-                  onDelete={() => { const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id)); setStrokes(updated); setSelectedStrokeIds([]); setTransformBox(null); setSelectionRotation(0); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                  onDelete={() => {
+                    // Remove any links that reference the deleted strokes
+                    const deletedIds = new Set(selectedStrokeIds);
+                    links.forEach(l => {
+                      if (l.strokeIds.some(id => deletedIds.has(id))) {
+                        removeLink(l.id);
+                      }
+                    });
+                    const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));
+                    setStrokes(updated);
+                    setSelectedStrokeIds([]);
+                    setTransformBox(null);
+                    setSelectionRotation(0);
+                    socket.emit('undo-stroke', { roomId, strokes: updated });
+                  }}
                   onDeselect={() => { if (trimState.active) handleApplyTrim(); setSelectedStrokeIds([]); setTransformBox(null); setSelectionRotation(0); }}
                   onIncreaseSize={handleIncreaseSize} onDecreaseSize={handleDecreaseSize}
                   onSetSize={(size) => { if (selectedStrokeIds.length === 0) return; const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, size: Math.min(100, Math.max(1, size)) } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}

@@ -10,10 +10,12 @@
 import { getCombinedBoundingBox } from '@/lib/geometry';
 import { transformStrokes } from '@/lib/strokes';
 import { getBoard } from '@/stores/boardStore';
+import { useLinksStore } from '@/stores/linksStore';
 import { handleApplyTrim } from './trim';
 
 /**
  * Delete all currently selected strokes from the board and clear selection.
+ * Also removes any links that reference the deleted strokes.
  *
  * @returns `true` if strokes were deleted, `false` if selection was empty.
  *
@@ -33,6 +35,15 @@ export function handleDelete(): boolean {
     clearSelection,
   } = getBoard();
   if (selectedStrokeIds.length === 0 || !socket) return false;
+
+  // Remove any links that reference the deleted strokes
+  const deletedIds = new Set(selectedStrokeIds);
+  const { links, removeLink } = useLinksStore.getState();
+  links.forEach(l => {
+    if (l.strokeIds.some(id => deletedIds.has(id))) {
+      removeLink(l.id);
+    }
+  });
 
   const updated = strokes.filter((s) => !selectedStrokeIds.includes(s.id));
   setStrokes(updated);

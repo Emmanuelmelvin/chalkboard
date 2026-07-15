@@ -390,14 +390,14 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         >
           <p className="sel-subpanel-title">Color</p>
           {/* Stroke / Fill toggle */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 10, background: 'rgba(255,255,255,0.06)', borderRadius: 6, padding: 3 }}>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 10, background: 'rgba(255,255,255,0.06)', borderRadius: 0, padding: 3 }}>
             <button
               type="button"
               onClick={() => setColorMode('stroke')}
               style={{
                 flex: 1,
                 padding: '4px 8px',
-                borderRadius: 4,
+                borderRadius: 0,
                 border: 'none',
                 background: colorMode === 'stroke' ? 'rgba(59,130,246,0.3)' : 'transparent',
                 color: colorMode === 'stroke' ? '#60a5fa' : '#94a3b8',
@@ -416,7 +416,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               style={{
                 flex: 1,
                 padding: '4px 8px',
-                borderRadius: 4,
+                borderRadius: 0,
                 border: 'none',
                 background: colorMode === 'fill' ? 'rgba(59,130,246,0.3)' : 'transparent',
                 color: colorMode === 'fill' ? '#60a5fa' : '#94a3b8',
@@ -443,7 +443,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               }
             }}
             title="Custom Color"
-            style={{ height: 32, borderRadius: 6, marginBottom: 10 }}
+            style={{ height: 32, borderRadius: 0, marginBottom: 10 }}
           />
           {/* Swatches */}
           <div className="sel-swatch-grid">
@@ -469,7 +469,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', marginTop: 8, padding: '6px 12px', borderRadius: 6 }}
+              style={{ justifyContent: 'center', marginTop: 8, padding: '6px 12px', borderRadius: 0 }}
               onClick={() => onFillColorChange?.('transparent')}
             >
               <span style={{ fontSize: 11 }}>No Fill (Transparent)</span>
@@ -605,7 +605,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
               onClick={() => onRotate?.(90)}
             >
               <RotateCw size={14} style={{ marginRight: 8 }} />
@@ -615,7 +615,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
               onClick={() => onRotate?.(-90)}
             >
               <RotateCcw size={14} style={{ marginRight: 8 }} />
@@ -625,7 +625,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
               onClick={() => onRotate?.(180)}
             >
               <RotateCw size={14} style={{ marginRight: 8 }} />
@@ -634,7 +634,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
               onClick={() => onRotate?.(45)}
             >
               <RotateCw size={14} style={{ marginRight: 8 }} />
@@ -643,7 +643,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
               onClick={() => onRotate?.(-45)}
             >
               <RotateCcw size={14} style={{ marginRight: 8 }} />
@@ -653,7 +653,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
               onClick={() => onResetRotation?.()}
             >
               <Undo2 size={14} style={{ marginRight: 8 }} />
@@ -677,7 +677,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
               onClick={() => onTrim?.()}
             >
               <Scissors size={14} style={{ marginRight: 8 }} />
@@ -686,7 +686,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 6, width: '100%' }}
+              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
               onClick={() => onResetTrim?.()}
             >
               <Undo2 size={14} style={{ marginRight: 8 }} />

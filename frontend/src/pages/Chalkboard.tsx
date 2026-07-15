@@ -238,7 +238,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         className="insert-shapes-fab"
         onClick={() => setShowInsertShapes(prev => !prev)}
         title="Insert Shape (Ctrl+1)"
-        style={{ position: 'absolute', left: '48px', top: '50%', transform: 'translateY(-50%)', zIndex: 100, pointerEvents: 'auto', width: 44, height: 44, borderRadius: '50%', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.08)', color: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)', transition: 'all 0.2s ease' }}
+        style={{ position: 'absolute', left: '48px', top: '50%', transform: 'translateY(-50%)', zIndex: 100, pointerEvents: 'auto', width: 44, height: 44, borderRadius: '0', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.08)', color: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)', transition: 'all 0.2s ease' }}
         onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.85)'; e.currentTarget.style.color = '#fff'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(15, 23, 42, 0.75)'; e.currentTarget.style.color = '#cbd5e1'; }}>
         <Shapes size={20} />
@@ -262,18 +262,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               <div style={{ position: 'absolute', left: fullLeft, top: screenBottom, width: fullRight - fullLeft, height: Math.max(0, fullBottom - screenBottom), background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)', pointerEvents: 'none', zIndex: 150 }} />
               <div style={{ position: 'absolute', left: fullLeft, top: screenTop, width: Math.max(0, screenLeft - fullLeft), height: screenBottom - screenTop, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)', pointerEvents: 'none', zIndex: 150 }} />
               <div style={{ position: 'absolute', left: screenRight, top: screenTop, width: Math.max(0, fullRight - screenRight), height: screenBottom - screenTop, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)', pointerEvents: 'none', zIndex: 150 }} />
-              <div style={{ position: 'absolute', left: screenLeft, top: screenTop, width: screenRight - screenLeft, height: screenBottom - screenTop, border: '2px dashed rgba(59,130,246,0.8)', borderRadius: 2, pointerEvents: 'none', zIndex: 151, boxShadow: '0 0 12px rgba(59,130,246,0.3)' }} />
+              <div style={{ position: 'absolute', left: screenLeft, top: screenTop, width: screenRight - screenLeft, height: screenBottom - screenTop, border: '2px dashed rgba(59,130,246,0.8)', borderRadius: 0, pointerEvents: 'none', zIndex: 151, boxShadow: '0 0 12px rgba(59,130,246,0.3)' }} />
               {[{ left: screenLeft - 5, top: screenTop - 5 }, { left: screenRight - 5, top: screenTop - 5 }, { left: screenLeft - 5, top: screenBottom - 5 }, { left: screenRight - 5, top: screenBottom - 5 }].map((pos, i) => (
-                <div key={i} style={{ position: 'absolute', left: pos.left, top: pos.top, width: 10, height: 10, background: '#3b82f6', border: '2px solid #fff', borderRadius: 2, pointerEvents: 'none', zIndex: 152 }} />
+                <div key={i} style={{ position: 'absolute', left: pos.left, top: pos.top, width: 10, height: 10, background: '#3b82f6', border: '2px solid #fff', borderRadius: 0, pointerEvents: 'none', zIndex: 152 }} />
               ))}
-              <div style={{ position: 'absolute', left: (screenLeft + screenRight) / 2, top: screenTop - 60, transform: 'translateX(-50%)', zIndex: 152, background: 'rgba(15,23,42,0.95)', backdropFilter: 'blur(12px)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '12px', padding: '10px 18px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', gap: '14px', pointerEvents: 'auto', whiteSpace: 'nowrap' }}>
+              <div style={{ position: 'absolute', left: (screenLeft + screenRight) / 2, top: screenTop - 60, transform: 'translateX(-50%)', zIndex: 152, background: 'rgba(15,23,42,0.95)', backdropFilter: 'blur(12px)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '0', padding: '10px 18px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', gap: '14px', pointerEvents: 'auto', whiteSpace: 'nowrap' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <div style={{ color: '#3b82f6', fontFamily: 'var(--font-sketch)', fontSize: '13px', letterSpacing: '0.5px', textAlign: 'left' }}>CROP MODE</div>
                   <div style={{ color: '#94a3b8', fontSize: '10px', fontFamily: 'var(--font-sans)' }}>Enter to apply · Esc to cancel</div>
                 </div>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <button onClick={handleApplyTrim} style={{ padding: '5px 10px', background: 'rgba(59,130,246,0.25)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '6px', color: '#60a5fa', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>Apply</button>
-                  <button onClick={handleCancelTrim} style={{ padding: '5px 10px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '6px', color: '#ef4444', cursor: 'pointer', fontSize: '11px', fontFamily: 'var(--font-sans)' }}>Cancel</button>
+                  <button onClick={handleApplyTrim} style={{ padding: '5px 10px', background: 'rgba(59,130,246,0.25)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '0', color: '#60a5fa', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>Apply</button>
+                  <button onClick={handleCancelTrim} style={{ padding: '5px 10px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0', color: '#ef4444', cursor: 'pointer', fontSize: '11px', fontFamily: 'var(--font-sans)' }}>Cancel</button>
                 </div>
               </div>
             </>
@@ -288,7 +288,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
           return (
             <button onClick={() => { setHighlightedLinkId(linkedLink.id); setInsertShapesTab('links'); setShowInsertShapes(true); }}
-              style={{ position: 'absolute', left: linkX, top: linkY, zIndex: 300, background: 'rgba(59,130,246,0.9)', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', border: '2px solid rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0 }}
+              style={{ position: 'absolute', left: linkX, top: linkY, zIndex: 300, background: 'rgba(59,130,246,0.9)', borderRadius: '0', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', border: '2px solid rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0 }}
               title="Click to view linked location">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
@@ -361,7 +361,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   pointerEvents: 'auto',
                   width: 28,
                   height: 28,
-                  borderRadius: '6px',
+                  borderRadius: '0',
                   background: showSelectionToolbox ? 'rgba(59,130,246,0.3)' : 'rgba(15,23,42,0.75)',
                   backdropFilter: 'blur(8px)',
                   border: '1px solid rgba(255,255,255,0.1)',

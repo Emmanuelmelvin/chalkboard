@@ -83,19 +83,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const { links } = useLinksStore();
   const pluginApi = useMemo(() => createPluginAPI(), []);
-<<<<<<< HEAD
-  const pluginTools = useMemo(() => {
-    registerInstalledPlugins();
-    return pluginRegistry.getTools();
-  }, []);
-=======
   const pluginManifests = useMemo(() => {
     registerInstalledPlugins();
     return pluginRegistry.getManifests();
   }, []);
   const pluginTools = useMemo(() => pluginRegistry.getTools(), []);
   const pluginSelectionTools = useMemo(() => pluginRegistry.getSelectionTools(), []);
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
 
   const hasNavigatedToLink = useRef<boolean>(false);
 
@@ -224,14 +217,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
       {showInsertShapes && (
         <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
-<<<<<<< HEAD
-          pluginTools={pluginTools}
-          onRunPluginTool={(commandId: string) => pluginRegistry.executeCommand(commandId)}
-=======
           pluginManifests={pluginManifests}
           pluginTools={pluginTools}
           onRunPluginTool={(commandId: string, formValues?: Record<string, string>) => pluginRegistry.executeCommand(commandId, { formValues })}
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
           onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
           links={links} hasSelection={selectedStrokeIds.length > 0} onNavigateToLink={handleNavigateToLink}
           onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
@@ -301,69 +289,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
           const actualFillColor = selectedStrokes.length > 0 ? (selectedStrokes[0].fillColor ?? 'transparent') : 'transparent';
           return (
-<<<<<<< HEAD
-            <>
-              {/* Toggle button for selection toolbox */}
-              <button
-                onClick={() => setShowSelectionToolbox((prev) => !prev)}
-                title={`${showSelectionToolbox ? 'Hide' : 'Show'} toolbox (Ctrl+O)`}
-                style={{
-                  position: 'absolute',
-                  left: transformBox.maxX * zoom + panOffset.x + 8,
-                  top: (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y - 14,
-                  zIndex: 2001,
-                  pointerEvents: 'auto',
-                  width: 28,
-                  height: 28,
-                  borderRadius: '6px',
-                  background: showSelectionToolbox
-                    ? 'rgba(59,130,246,0.3)'
-                    : 'rgba(15,23,42,0.85)',
-                  backdropFilter: 'blur(8px)',
-                  border: showSelectionToolbox
-                    ? '1px solid rgba(59,130,246,0.5)'
-                    : '1px solid rgba(255,255,255,0.1)',
-                  color: showSelectionToolbox ? '#60a5fa' : '#94a3b8',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  padding: 0,
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  {showSelectionToolbox
-                    ? <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
-                    : <><polyline points="9 18 15 12 9 6" /></>
-                  }
-                </svg>
-              </button>
-              {showSelectionToolbox && (
-                <SelectionToolbox
-                  boxScreenLeft={transformBox.minX * zoom + panOffset.x} boxScreenRight={transformBox.maxX * zoom + panOffset.x}
-                  boxScreenCenterY={(transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y} activeColor={actualColor}
-                  activeFillColor={actualFillColor}
-                  onColorChange={(color) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onFillColorChange={(fillColor) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, fillColor } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onTrim={handleStartTrim} onResetTrim={handleResetTrim} onCut={handleCut}
-                  onDelete={() => { const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id)); setStrokes(updated); setSelectedStrokeIds([]); setTransformBox(null); setSelectionRotation(0); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onDeselect={() => { if (trimState.active) handleApplyTrim(); setSelectedStrokeIds([]); setTransformBox(null); setSelectionRotation(0); }}
-                  onIncreaseSize={handleIncreaseSize} onDecreaseSize={handleDecreaseSize}
-                  onSetSize={(size) => { if (selectedStrokeIds.length === 0) return; const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, size: Math.min(100, Math.max(1, size)) } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onCopy={handleCopy} onDuplicate={handleDuplicate} onGroup={handleGroup} onUngroup={handleUngroup}
-                  onRotate={(angleDeg) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const totalRotation = (selected[0]?.rotation ?? 0) + angleDeg; const rotated = rotateStrokesTo(selected, totalRotation); const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; }); setStrokes(updated); setSelectionRotation(rotated[0]?.rotation ?? totalRotation); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onResetRotation={() => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }; const rotated = selected.map(s => { const currentAngle = s.rotation ?? 0; return { ...s, points: s.points.map(p => rotatePoint(p, center, -currentAngle)), rotation: 0 }; }); const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; }); setStrokes(updated); setSelectionRotation(0); setTransformBox(getCombinedBoundingBox(rotated)); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onSetDimensions={(width, height) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const newBox = { minX: box.minX, minY: box.minY, maxX: box.minX + width, maxY: box.minY + height }; const transformed = transformStrokes(selected, box, newBox); const updated = strokes.map(s => { const t = transformed.find(ts => ts.id === s.id); return t ? t : s; }); setStrokes(updated); setTransformBox(newBox); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
-                  currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
-                  selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
-              )}
-            </>
-=======
             <SelectionToolbox
               boxScreenLeft={transformBox.minX * zoom + panOffset.x} boxScreenRight={transformBox.maxX * zoom + panOffset.x}
               boxScreenCenterY={(transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y} activeColor={actualColor}
@@ -382,7 +307,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               pluginSelectionTools={pluginSelectionTools}
               onRunPluginSelectionTool={(commandId) => pluginRegistry.executeCommand(commandId)}
               selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
->>>>>>> 06fc3634bb49ab4c7658a86650b57ef2e5a266c6
           );
         })()}
         <div className="board-header">

@@ -123,12 +123,19 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     return () => setCanvas(null);
   }, [setCanvas]);
 
-  // Auto-apply crop/trim on tool change
+  // Auto-apply crop/trim on tool change, and deselect when leaving select tool
   useEffect(() => {
-    if (activeTool !== 'select' && trimState.active) {
-      handleApplyTrim();
+    if (activeTool !== 'select') {
+      if (trimState.active) {
+        handleApplyTrim();
+      }
+      if (selectedStrokeIds.length > 0) {
+        setSelectedStrokeIds([]);
+        setTransformBox(null);
+        setSelectionRotation(0);
+      }
     }
-  }, [activeTool, trimState.active]);
+  }, [activeTool]);
 
   // Navigate to link from URL on initial load
   useEffect(() => {

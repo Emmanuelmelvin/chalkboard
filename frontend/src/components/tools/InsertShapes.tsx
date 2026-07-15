@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Square,
   Circle,
@@ -164,17 +164,36 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
     );
   };
 
-  const handlePluginDragMove = (e: React.PointerEvent) => {
+  const handlePluginDragMove = useCallback((e: PointerEvent) => {
     if (!dragStart) return;
     setPluginModalPos({
       x: dragStart.x + e.clientX - dragStart.pointerX,
       y: dragStart.y + e.clientY - dragStart.pointerY,
     });
-  };
+  }, [dragStart]);
+
+  const handlePluginDragEnd = useCallback(() => {
+    setDragStart(null);
+  }, []);
+
+  useEffect(() => {
+    if (!dragStart) return;
+    window.addEventListener('pointermove', handlePluginDragMove);
+    window.addEventListener('pointerup', handlePluginDragEnd);
+    return () => {
+      window.removeEventListener('pointermove', handlePluginDragMove);
+      window.removeEventListener('pointerup', handlePluginDragEnd);
+    };
+  }, [dragStart, handlePluginDragMove, handlePluginDragEnd]);
 
   const openPluginModal = (pluginId: string) => {
     setOpenPluginId(pluginId);
     setPluginModalPos({ x: Math.min(window.innerWidth - 380, 420), y: 120 });
+  };
+
+  const handleHeaderPointerDown = (e: React.PointerEvent) => {
+    setDragStart({ pointerX: e.clientX, pointerY: e.clientY, x: pluginModalPos.x, y: pluginModalPos.y });
+    e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   return (
@@ -374,15 +393,10 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
           className="plugin-floating-modal"
           style={{ left: pluginModalPos.x, top: pluginModalPos.y }}
           onClick={(e) => e.stopPropagation()}
-          onPointerMove={handlePluginDragMove}
-          onPointerUp={() => setDragStart(null)}
         >
           <div
             className="plugin-floating-header"
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              setDragStart({ pointerX: e.clientX, pointerY: e.clientY, x: pluginModalPos.x, y: pluginModalPos.y });
-            }}
+            onPointerDown={handleHeaderPointerDown}
           >
             <span className="insert-plugin-logo">{openPlugin.name.slice(0, 1)}</span>
             <div>

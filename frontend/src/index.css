@@ -1582,6 +1582,14 @@ body {
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* ── Insert Plugins Tab Content ── */
+.insert-plugins-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 140px;
+}
+
 /* ── Insert Links Tab Content ── */
 .insert-links-content {
   display: flex;

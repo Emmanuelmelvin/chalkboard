@@ -16,7 +16,7 @@
 
 import { getBoard, type BoardState } from '@/stores/boardStore';
 import { useLinksStore } from '@/stores/linksStore';
-import { getCombinedBoundingBox } from '@/lib/geometry';
+import { getCombinedBoundingBox, getSelectionBoundingBox } from '@/lib/geometry';
 import { rotateStrokesTo, transformStrokes, clipStrokeToRect } from '@/lib/strokes';
 import { generateShapeStrokes } from '@/utils/shapes';
 import type { Socket } from 'socket.io-client';
@@ -191,7 +191,7 @@ export function selectStrokes(ids: string[]): CommandResult {
     const selected = strokes.filter((s) => ids.includes(s.id));
     setSelectedStrokeIds(ids);
     setTransformBox(
-        selected.length > 0 ? getCombinedBoundingBox(selected) : null
+        selected.length > 0 ? getSelectionBoundingBox(selected) : null
     );
     setSelectionRotation(selected[0]?.rotation ?? 0);
     return { ok: true };

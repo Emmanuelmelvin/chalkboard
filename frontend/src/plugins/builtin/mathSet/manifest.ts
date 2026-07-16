@@ -44,13 +44,10 @@ export const mathSetManifest: PluginManifest = {
       {
         id: 'math-set.number-line',
         label: 'Number Line',
-        description: 'Insert a grouped number line with configurable end labels and title.',
+        description: 'Insert a number line for one-sided or chained inequalities with endpoint labels.',
         command: 'mathSet.insertNumberLine',
         formFields: [
-          { id: 'equation', label: 'Inequality / equation', defaultValue: 'x ≥ 0', placeholder: 'e.g. x > 3 or x ≤ -2' },
-          { id: 'min', label: 'Left label', defaultValue: '-6' },
-          { id: 'max', label: 'Right label', defaultValue: '6' },
-          { id: 'title', label: 'Title', placeholder: 'Integers, domain, range...' },
+          { id: 'equation', label: 'Inequality / equation', defaultValue: 'x >= 0', placeholder: 'e.g. x > 3, x <= -2, or x >= 5 <= -1' },
         ],
       },
       {

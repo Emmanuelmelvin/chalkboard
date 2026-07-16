@@ -1,4 +1,4 @@
-import { getCombinedBoundingBox } from '@/lib/geometry';
+import { getSelectionBoundingBox } from '@/lib/geometry';
 import { getBoard } from '@/stores/boardStore';
 import { pluginRegistry } from '@/plugins/registry';
 import type { ChalkboardPluginAPI, InsertStrokeOptions } from '@/plugins/types';
@@ -30,7 +30,7 @@ function insertStrokes(strokes: Stroke[], options: InsertStrokeOptions = {}): bo
 
   if (options.select ?? true) {
     setSelectedStrokeIds(preparedStrokes.map((stroke) => stroke.id));
-    setTransformBox(getCombinedBoundingBox(preparedStrokes));
+    setTransformBox(getSelectionBoundingBox(preparedStrokes));
     setSelectionRotation(0);
   }
 
@@ -76,7 +76,7 @@ export function createPluginAPI(): ChalkboardPluginAPI {
         const board = getBoard();
         const selected = board.strokes.filter((stroke) => ids.includes(stroke.id));
         board.setSelectedStrokeIds(ids);
-        board.setTransformBox(getCombinedBoundingBox(selected));
+        board.setTransformBox(getSelectionBoundingBox(selected));
         board.setSelectionRotation(0);
       },
       clear: () => getBoard().clearSelection(),

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { getCombinedBoundingBox } from '@/lib/geometry';
+import { getNumberLineDomain, parseNumberLineExpression } from '@/plugins/builtin/mathSet/generators';
 import type { Stroke } from '@/types';
 import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
 
@@ -25,9 +26,45 @@ interface TagPreviewProps {
   placement: 'top' | 'bottom';
 }
 
+const NumberLinePreview: React.FC<{ values: Record<string, string> }> = ({ values }) => {
+  const equation = values.equation || 'x >= 0';
+  const endpoints = parseNumberLineExpression(equation).sort((a, b) => a.value - b.value);
+  const { min, max, tickCount } = getNumberLineDomain(endpoints);
+  const span = Math.max(1, max - min);
+  const xFor = (value: number) => 18 + ((value - min) / span) * 224;
+  const lower = endpoints[0];
+  const upper = endpoints[endpoints.length - 1];
+  const between = endpoints.length > 1 && lower.direction === 'right' && upper.direction === 'left';
+  const outside = endpoints.length > 1 && lower.direction === 'left' && upper.direction === 'right';
+  const solutionSegments = between
+    ? [[xFor(lower.value) + 7, xFor(upper.value) - 7]]
+    : outside
+      ? [[18, xFor(lower.value) - 7], [xFor(upper.value) + 7, 242]]
+      : endpoints.flatMap((endpoint) => endpoint.direction === 'right'
+        ? [[xFor(endpoint.value) + 7, 242]]
+        : endpoint.direction === 'left' ? [[18, xFor(endpoint.value) - 7]] : []);
+
+  return (
+    <div className="number-line-preview" aria-label="Number line preview">
+      <svg viewBox="0 0 260 140" role="img">
+        <line x1="18" y1="55" x2="242" y2="55" stroke="#cbd5e1" strokeWidth="2" />
+        <path d="M18 55l8-5v10zM242 55l-8-5v10z" fill="#cbd5e1" />
+        {Array.from({ length: tickCount + 1 }, (_, index) => {
+          const x = 18 + (224 * index) / tickCount;
+          const value = min + ((max - min) * index) / tickCount;
+          return <g key={index}><line x1={x} y1="47" x2={x} y2="63" stroke="#cbd5e1" strokeWidth="1.5" /><text x={x} y="82" textAnchor="middle" fill="#cbd5e1" fontSize="9">{Number.isInteger(value) ? value : value.toFixed(1)}</text></g>;
+        })}
+        {solutionSegments.map(([start, end], index) => <line key={`solution-${index}`} x1={start} y1="55" x2={end} y2="55" stroke="#60a5fa" strokeWidth="4" strokeLinecap="round" />)}
+        {endpoints.map((endpoint, index) => <g key={`endpoint-${index}`}><circle cx={xFor(endpoint.value)} cy="55" r="6" fill={endpoint.inclusive ? '#60a5fa' : '#0f172a'} stroke="#93c5fd" strokeWidth="2" /><text x={xFor(endpoint.value)} y="101" textAnchor="middle" fill="#93c5fd" fontSize="10">{endpoint.value}</text></g>)}
+        <text x="130" y="126" textAnchor="middle" fill="#f8fafc" fontSize="12">{equation}</text>
+      </svg>
+    </div>
+  );
+};
+
 const MathToolPreview: React.FC<{ toolId: string; values: Record<string, string> }> = ({ toolId, values }) => (
   <div className="math-tool-preview" aria-label="Tool preview">
-    {toolId.includes('two-set-venn') ? <svg viewBox="0 0 260 130"><circle cx="105" cy="65" r="42" /><circle cx="155" cy="65" r="42" /><text x="70" y="25">{values.leftSet || 'A'}</text><text x="175" y="25">{values.rightSet || 'B'}</text><text x="82" y="70">{values.leftValue || '1'}</text><text x="126" y="70">{values.intersectionValue || '2'}</text><text x="168" y="70">{values.rightValue || '3'}</text></svg> : toolId.includes('three-set-venn') ? <svg viewBox="0 0 260 150"><circle cx="105" cy="62" r="42" /><circle cx="155" cy="62" r="42" /><circle cx="130" cy="94" r="42" /><text x="70" y="20">{values.leftSet || 'A'}</text><text x="190" y="20">{values.rightSet || 'B'}</text><text x="130" y="145">{values.bottomSet || 'C'}</text><text x="82" y="62">{values.leftValue || '1'}</text><text x="178" y="62">{values.rightValue || '2'}</text><text x="130" y="116">{values.bottomValue || '3'}</text><text x="112" y="45">{values.leftRightValue || '4'}</text><text x="103" y="100">{values.leftBottomValue || '5'}</text><text x="153" y="100">{values.rightBottomValue || '6'}</text><text x="130" y="75">{values.centerValue || '7'}</text></svg> : <div className="math-tool-preview-generic">{values.title || values.symbol || 'Preview of inserted chalk object'}</div>}
+    {toolId.includes('number-line') ? <NumberLinePreview values={values} /> : toolId.includes('two-set-venn') ? <svg viewBox="0 0 260 130"><circle cx="105" cy="65" r="42" /><circle cx="155" cy="65" r="42" /><text x="70" y="25">{values.leftSet || 'A'}</text><text x="175" y="25">{values.rightSet || 'B'}</text><text x="82" y="70">{values.leftValue || '1'}</text><text x="130" y="70">{values.intersectionValue || '2'}</text><text x="168" y="70">{values.rightValue || '3'}</text></svg> : toolId.includes('three-set-venn') ? <svg viewBox="0 0 260 150"><circle cx="105" cy="62" r="42" /><circle cx="155" cy="62" r="42" /><circle cx="130" cy="94" r="42" /><text x="70" y="20">{values.leftSet || 'A'}</text><text x="190" y="20">{values.rightSet || 'B'}</text><text x="130" y="145">{values.bottomSet || 'C'}</text><text x="82" y="62">{values.leftValue || '1'}</text><text x="178" y="62">{values.rightValue || '2'}</text><text x="130" y="116">{values.bottomValue || '3'}</text><text x="130" y="42">{values.leftRightValue || '4'}</text><text x="108" y="103">{values.leftBottomValue || '5'}</text><text x="152" y="103">{values.rightBottomValue || '6'}</text><text x="130" y="78">{values.centerValue || '7'}</text></svg> : <div className="math-tool-preview-generic">{values.title || values.symbol || 'Preview of inserted chalk object'}</div>}
   </div>
 );
 

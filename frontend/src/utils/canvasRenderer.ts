@@ -3,7 +3,6 @@ import {
   drawEraserSegment,
 } from '@/utils/drawing';
 import type { Stroke, Point, Rect, TrimState } from '@/types';
-import { getCombinedBoundingBox } from '@/lib/geometry';
 
 interface RenderState {
   strokes: Stroke[];
@@ -54,11 +53,10 @@ export function drawBoardOnCanvas(
   // Selection guides are painted after board content so opaque fills cannot
   // cover the handles while an object is being moved or resized.
   const drawSelectionOverlay = () => {
-  // Tags are grouped with their object for transforms, but the visual frame
-  // should remain around the object itself rather than the label above/below it.
-  const frameBox = getCombinedBoundingBox(strokes.filter((stroke) =>
-    selectedStrokeIds.includes(stroke.id) && stroke.pluginId !== 'chalkboard.tag'
-  )) ?? transformBox;
+  // Keep the original, axis-aligned box for the full duration of a rotation.
+  // Rebuilding it from rotated strokes produces an axis-aligned bounding box
+  // and rotating that box a second time makes the marquee drift out of alignment.
+  const frameBox = transformBox;
   // Draw selection marquee
   if (selectionMarquee) {
     ctx.save();
@@ -77,11 +75,10 @@ export function drawBoardOnCanvas(
   // Draw transform box + rotate handle as a single rigid group, rotated
   // around the box's center by the live selectionRotation.
   if (frameBox && selectedStrokeIds.length > 0 && !trimState.active) {
-    // Transforms (including the attached tag) rotate around the full
-    // selection center. Keep the visible object frame in sync with that
-    // same pivot so it never appears to wobble or detach during rotation.
-    const boxCenterX = (transformBox!.minX + transformBox!.maxX) / 2;
-    const boxCenterY = (transformBox!.minY + transformBox!.maxY) / 2;
+    // Use the same stable bounds and pivot that were captured when the
+    // selection was made.
+    const boxCenterX = (frameBox.minX + frameBox.maxX) / 2;
+    const boxCenterY = (frameBox.minY + frameBox.maxY) / 2;
 
     ctx.save();
     ctx.translate(boxCenterX, boxCenterY);

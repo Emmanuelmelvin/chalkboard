@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useBoardStore } from '@/stores/boardStore';
 import {
   boxCenter,
-  getCombinedBoundingBox,
+  getSelectionBoundingBox,
   isStrokeInRect,
   rotatePoint,
 } from '@/lib/geometry';
@@ -264,7 +264,7 @@ export function useCanvasInteraction(
               setSelectedStrokeIds(newSelection);
               if (newSelection.length > 0) {
                 const selected = strokes.filter((s) => newSelection.includes(s.id));
-                setTransformBox(getCombinedBoundingBox(selected));
+                setTransformBox(getSelectionBoundingBox(selected));
               } else {
                 setTransformBox(null);
               }
@@ -273,12 +273,12 @@ export function useCanvasInteraction(
               const newSelection = [...new Set([...selectedStrokeIds, ...groupIds])];
               setSelectedStrokeIds(newSelection);
               const selected = strokes.filter((s) => newSelection.includes(s.id));
-              setTransformBox(getCombinedBoundingBox(selected));
+              setTransformBox(getSelectionBoundingBox(selected));
               setSelectionRotation(0);
             }
           } else {
             setSelectedStrokeIds(groupIds);
-            setTransformBox(getCombinedBoundingBox(groupStrokes));
+            setTransformBox(getSelectionBoundingBox(groupStrokes));
             setSelectionRotation(0);
           }
           canvas.setPointerCapture(e.pointerId);
@@ -290,7 +290,7 @@ export function useCanvasInteraction(
           setSelectedStrokeIds(newSelection);
           if (newSelection.length > 0) {
             const selected = strokes.filter((s) => newSelection.includes(s.id));
-            setTransformBox(getCombinedBoundingBox(selected));
+            setTransformBox(getSelectionBoundingBox(selected));
           } else {
             setTransformBox(null);
           }
@@ -302,7 +302,7 @@ export function useCanvasInteraction(
             : [clickedStroke.id];
           setSelectedStrokeIds(newSelection);
           const selected = strokes.filter((s) => newSelection.includes(s.id));
-          setTransformBox(getCombinedBoundingBox(selected));
+          setTransformBox(getSelectionBoundingBox(selected));
           setSelectionRotation(0);
         }
         canvas.setPointerCapture(e.pointerId);
@@ -348,7 +348,10 @@ export function useCanvasInteraction(
 
           const baseRotation = initialSelectedStrokes.current[0]?.rotation ?? 0;
           const totalRotation = baseRotation + angleDeg;
-          const rotated = rotateStrokesTo(initialSelectedStrokes.current, totalRotation);
+          const rotatable = initialSelectedStrokes.current.filter((stroke) => stroke.pluginId !== 'chalkboard.tag');
+          // Tags are labels, not part of the rotated artwork. Preserve both
+          // their position and orientation while the selected object rotates.
+          const rotated = rotateStrokesTo(rotatable, totalRotation);
 
           setStrokes((prev) =>
             prev.map((s) => {
@@ -536,7 +539,7 @@ export function useCanvasInteraction(
 
           if (sIds.length > 0) {
             setSelectedStrokeIds(sIds);
-            setTransformBox(getCombinedBoundingBox(selected));
+            setTransformBox(getSelectionBoundingBox(selected));
             setSelectionRotation(0);
           }
 
@@ -559,7 +562,7 @@ export function useCanvasInteraction(
 
         if (sIds.length > 0) {
           setSelectedStrokeIds(sIds);
-          setTransformBox(getCombinedBoundingBox(selected));
+          setTransformBox(getSelectionBoundingBox(selected));
           setSelectionRotation(0);
         }
 

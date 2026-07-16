@@ -110,6 +110,12 @@ export const getCombinedBoundingBox = (strokes: Stroke[]): Rect | null => {
   return combined;
 };
 
+/** Tags annotate an object and do not contribute to its selection marquee. */
+export const getSelectionBoundingBox = (strokes: Stroke[]): Rect | null => {
+  const objectStrokes = strokes.filter((stroke) => stroke.pluginId !== 'chalkboard.tag');
+  return getCombinedBoundingBox(objectStrokes.length > 0 ? objectStrokes : strokes);
+};
+
 /**
  * Rotate a point around a center by angle (in degrees)
  */

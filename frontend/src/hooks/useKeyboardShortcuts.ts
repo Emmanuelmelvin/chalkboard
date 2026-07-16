@@ -38,14 +38,21 @@ export function useKeyboardShortcuts() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const activeElement = document.activeElement as HTMLElement | null;
+      const inInput = activeElement?.tagName === 'INPUT'
+        || activeElement?.tagName === 'TEXTAREA'
+        || activeElement?.tagName === 'SELECT'
+        || activeElement?.isContentEditable === true;
+
+      // Let native inputs and rich-text editors own their keyboard events.
+      // In particular, Space must insert a space instead of panning the board.
+      if (inInput) return;
+
       const { selectedStrokeIds, trimState } = getBoard();
-      const inInput = document.activeElement?.tagName === 'INPUT';
 
       if (e.code === 'Space') {
         setSpacePressed(true);
-        if (!inInput) {
-          e.preventDefault();
-        }
+        e.preventDefault();
       }
 
       // Keyboard Undo / Redo

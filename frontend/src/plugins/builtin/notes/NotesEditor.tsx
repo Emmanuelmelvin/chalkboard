@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlignCenter, AlignLeft, AlignRight, Bold, Check, Italic, List, ListOrdered,
   Strikethrough, Underline, X,
@@ -19,7 +19,7 @@ const NotesEditor: React.FC = () => {
   const [hasText, setHasText] = useState(false);
   const [fontFamily, setFontFamily] = useState('Arial');
   const [fontSize, setFontSize] = useState('24');
-  const [textColor, setTextColor] = useState('#0f172a');
+  const [textColor, setTextColor] = useState('#ffffff');
   const [backgroundColor, setBackgroundColor] = useState('#fff7d6');
   const [backgroundTransparent, setBackgroundTransparent] = useState(true);
   const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right'>('left');
@@ -28,16 +28,23 @@ const NotesEditor: React.FC = () => {
 
   const note = request?.noteId ? strokes.find((stroke) => stroke.id === request.noteId) : undefined;
 
+  useLayoutEffect(() => {
+    if (!request) return;
+    const initialHtml = sanitizeNoteHtml(note?.noteHtml ?? DEFAULT_HTML) || DEFAULT_HTML;
+    htmlRef.current = initialHtml;
+    if (editorRef.current && editorRef.current.innerHTML !== initialHtml) {
+      editorRef.current.innerHTML = initialHtml;
+    }
+  }, [request, note]);
+
   useEffect(() => {
     if (!request) return;
     const initialHtml = sanitizeNoteHtml(note?.noteHtml ?? DEFAULT_HTML) || DEFAULT_HTML;
     const timer = window.setTimeout(() => {
-      htmlRef.current = initialHtml;
-      if (editorRef.current) editorRef.current.innerHTML = initialHtml;
       setHasText(Boolean(plainTextFromHtml(initialHtml).trim()));
       setFontFamily(note?.noteFontFamily ?? 'Arial');
       setFontSize(String(note?.fontSize ?? 24));
-      setTextColor(note?.noteTextColor ?? note?.color ?? '#0f172a');
+      setTextColor(note?.noteTextColor ?? note?.color ?? '#ffffff');
       setBackgroundColor(note?.noteBackgroundColor ?? '#fff7d6');
       setBackgroundTransparent(
         note?.noteBackgroundTransparent
@@ -153,14 +160,19 @@ const NotesEditor: React.FC = () => {
 
         <div
           ref={editorRef}
+          key={request.requestId}
           className="notes-editor-content"
           contentEditable
           suppressContentEditableWarning
           spellCheck
           style={{ fontFamily, fontSize: `${fontSize}px`, color: textColor, backgroundColor: backgroundTransparent ? 'transparent' : backgroundColor, textAlign }}
           onInput={syncEditor}
-          onKeyDown={(event) => { if (event.key === 'Escape') setNoteEditorRequest(null); if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); void save(); } }}
-          dangerouslySetInnerHTML={{ __html: DEFAULT_HTML }}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            if (event.key === 'Escape') setNoteEditorRequest(null);
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); void save(); }
+          }}
+          onKeyUp={(event) => event.stopPropagation()}
         />
 
         <footer className="notes-editor-footer">

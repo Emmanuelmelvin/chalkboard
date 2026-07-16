@@ -875,7 +875,7 @@ interface MatrixBlockLayout {
   padding: number;
 }
 
-function getMatrixBlockLayout(matrix: string[][], label = 'A'): MatrixBlockLayout {
+function getMatrixBlockLayout(matrix: string[][], label = ''): MatrixBlockLayout {
   const dimensions = Math.max(matrix.length, matrix[0]?.length ?? 1);
   const fontSize = Math.max(14, Math.min(28, 32 - dimensions * 2));
   const longestCell = Math.max(1, ...matrix.flat().map((value) => value.length));
@@ -883,8 +883,9 @@ function getMatrixBlockLayout(matrix: string[][], label = 'A'): MatrixBlockLayou
   const rowHeight = Math.max(32, fontSize * 1.55);
   const padding = 18;
   const matrixWidth = matrix[0].length * cellWidth + padding * 2;
-  const labelWidth = Math.max(20, `${label} =`.length * fontSize * 0.62);
-  const labelGap = 12;
+  const hasLabel = Boolean(label.trim());
+  const labelWidth = hasLabel ? Math.max(20, `${label} =`.length * fontSize * 0.62) : 0;
+  const labelGap = hasLabel ? 12 : 0;
   return {
     width: labelWidth + labelGap + matrixWidth,
     matrixWidth,
@@ -936,8 +937,8 @@ function createMatrixBlock(
   const strokes: Stroke[] = [
     makeMatrixBracket(opts, `${name}-left-bracket`, matrixX, top, bottom, 'left', determinant),
     makeMatrixBracket(opts, `${name}-right-bracket`, right, top, bottom, 'right', determinant),
-    makeTextStroke(opts, `${name}-label`, `${label} =`, x, labelY, layout.fontSize),
   ];
+  if (label.trim()) strokes.push(makeTextStroke(opts, `${name}-label`, `${label} =`, x, labelY, layout.fontSize));
 
   matrix.forEach((row, rowIndex) => row.forEach((value, columnIndex) => {
     const cellCenter = matrixX + layout.padding + layout.cellWidth * (columnIndex + 0.5);
@@ -953,7 +954,7 @@ export function createMatrixStrokes(
   labels: MathSetLabels = {}
 ): Stroke[] {
   const matrix = parseMatrixValues(labels.matrixValues).map((row) => row.map((value) => value.trim() || '0'));
-  const label = labels.matrixLabel?.trim() || 'A';
+  const label = labels.matrixLabel?.trim() || '';
   const mode: MatrixMode = labels.operation === 'determinant' || labels.operation === 'row-operation'
     ? labels.operation
     : 'display';
@@ -967,12 +968,13 @@ export function createMatrixStrokes(
     if (!result) return [];
     const resultMatrix = result.matrix.map((row) => row.map(formatMatrixNumber));
     const leftLayout = getMatrixBlockLayout(matrix, label);
-    const rightLayout = getMatrixBlockLayout(resultMatrix, `${label}'`);
+    const rightLabel = label ? `${label}'` : '';
+    const rightLayout = getMatrixBlockLayout(resultMatrix, rightLabel);
     const gap = 88;
     const totalWidth = leftLayout.width + gap + rightLayout.width;
     const top = center.y - Math.max(leftLayout.height, rightLayout.height) / 2;
     const leftBlock = createMatrixBlock(opts, 'matrix-original', matrix, center.x - totalWidth / 2, top, label);
-    const rightBlock = createMatrixBlock(opts, 'matrix-result', resultMatrix, center.x + totalWidth / 2 - rightLayout.width, top, `${label}'`);
+    const rightBlock = createMatrixBlock(opts, 'matrix-result', resultMatrix, center.x + totalWidth / 2 - rightLayout.width, top, rightLabel);
     return [
       ...leftBlock.strokes,
       ...rightBlock.strokes,
@@ -988,7 +990,7 @@ export function createMatrixStrokes(
   const block = createMatrixBlock(opts, 'matrix', matrix, center.x - layout.width / 2, top, label, mode === 'determinant');
   if (mode === 'determinant' && numeric) {
     const determinant = calculateMatrixDeterminant(numeric);
-    block.strokes.push(makeCenteredMatrixText(opts, 'matrix-determinant', `det(${label}) = ${formatMatrixNumber(determinant ?? 0)}`, center.x, top + layout.height + 26, 20));
+    block.strokes.push(makeCenteredMatrixText(opts, 'matrix-determinant', `${label ? `det(${label})` : 'det'} = ${formatMatrixNumber(determinant ?? 0)}`, center.x, top + layout.height + 26, 20));
   }
   return block.strokes;
 }

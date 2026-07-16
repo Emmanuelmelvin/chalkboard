@@ -305,9 +305,9 @@ const CoordinateGridPreview: React.FC<{ values: Record<string, string> }> = ({ v
   );
 };
 
-const MatrixPreviewMatrix: React.FC<{ matrix: string[][]; label: string; determinant?: boolean }> = ({ matrix, label, determinant = false }) => (
+const MatrixPreviewMatrix: React.FC<{ matrix: string[][]; label?: string; determinant?: boolean }> = ({ matrix, label, determinant = false }) => (
   <div className="matrix-preview-matrix">
-    <span className="matrix-preview-label">{label} =</span>
+    {label && <span className="matrix-preview-label">{label} =</span>}
     <span className="matrix-preview-delimiter">{determinant ? '|' : '['}</span>
     <div className="matrix-preview-grid" style={{ gridTemplateColumns: `repeat(${matrix[0]?.length ?? 1}, minmax(0, 1fr))` }}>
       {matrix.flatMap((row, rowIndex) => row.map((value, columnIndex) => <span key={`${rowIndex}-${columnIndex}`}>{value || '0'}</span>))}
@@ -322,22 +322,23 @@ const MatrixPreview: React.FC<{ values: Record<string, string> }> = ({ values })
   const error = validateMatrixRequest(values);
   const numeric = parseNumericMatrix(matrix);
   const rowResult = mode === 'row-operation' ? getMatrixRowOperationResult(values) : null;
+  const label = values.matrixLabel?.trim() || '';
 
   return (
     <div className="matrix-preview" aria-label="Matrix preview">
       {error ? <div className="matrix-preview-error">{error}</div> : (
         <>
           <div className="matrix-preview-layout">
-            <MatrixPreviewMatrix matrix={matrix} label={values.matrixLabel || 'A'} determinant={mode === 'determinant'} />
+            <MatrixPreviewMatrix matrix={matrix} label={label || undefined} determinant={mode === 'determinant'} />
             {mode === 'row-operation' && rowResult && (
               <>
                 <span className="matrix-preview-arrow">→</span>
-                <MatrixPreviewMatrix matrix={rowResult.matrix.map((row) => row.map(formatMatrixNumber))} label={`${values.matrixLabel || 'A'}'`} />
+                <MatrixPreviewMatrix matrix={rowResult.matrix.map((row) => row.map(formatMatrixNumber))} label={label ? `${label}'` : undefined} />
               </>
             )}
           </div>
           {mode === 'determinant' && numeric && (
-            <strong className="matrix-preview-result">det({values.matrixLabel || 'A'}) = {formatMatrixNumber(calculateMatrixDeterminant(numeric) ?? 0)}</strong>
+            <strong className="matrix-preview-result">{label ? `det(${label})` : 'det'} = {formatMatrixNumber(calculateMatrixDeterminant(numeric) ?? 0)}</strong>
           )}
           {mode === 'row-operation' && rowResult && <small className="matrix-preview-operation">{rowResult.description}</small>}
         </>

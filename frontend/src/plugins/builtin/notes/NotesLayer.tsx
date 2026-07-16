@@ -35,7 +35,7 @@ const NotesLayer: React.FC = () => {
               height: height * zoom,
               padding: padding * zoom,
               color: note.noteTextColor ?? note.color,
-              backgroundColor: note.noteBackgroundColor ?? '#fff7d6',
+              backgroundColor: note.noteBackgroundColor ?? 'transparent',
               fontFamily: note.noteFontFamily ?? 'Arial',
               fontSize: (note.fontSize ?? 24) * zoom,
               textAlign: note.textAlign ?? 'left',
@@ -50,4 +50,3 @@ const NotesLayer: React.FC = () => {
 };
 
 export default NotesLayer;
-

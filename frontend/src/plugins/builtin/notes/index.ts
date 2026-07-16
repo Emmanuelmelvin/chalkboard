@@ -10,7 +10,7 @@ const DEFAULT_NOTE_HEIGHT = 220;
 const DEFAULT_NOTE_FONT_SIZE = 24;
 const DEFAULT_NOTE_FONT_FAMILY = 'Arial';
 const DEFAULT_NOTE_TEXT_COLOR = '#0f172a';
-const DEFAULT_NOTE_BACKGROUND = '#fff7d6';
+const DEFAULT_NOTE_BACKGROUND = 'transparent';
 
 interface NotesCommitPayload extends PluginCommandPayload {
   noteId?: string;
@@ -156,4 +156,3 @@ export const notesPlugin: ChalkboardPlugin = {
 
 export { notesManifest } from '@/plugins/builtin/notes/manifest';
 export { sanitizeNoteHtml, plainTextFromHtml } from '@/plugins/builtin/notes/sanitize';
-

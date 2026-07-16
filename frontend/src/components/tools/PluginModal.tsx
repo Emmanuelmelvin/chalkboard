@@ -310,7 +310,7 @@ const MatrixPreviewMatrix: React.FC<{ matrix: string[][]; label: string; determi
     <span className="matrix-preview-label">{label} =</span>
     <span className="matrix-preview-delimiter">{determinant ? '|' : '['}</span>
     <div className="matrix-preview-grid" style={{ gridTemplateColumns: `repeat(${matrix[0]?.length ?? 1}, minmax(0, 1fr))` }}>
-      {matrix.flatMap((row) => row.map((value, index) => <span key={`${index}-${value}`}>{value || '0'}</span>))}
+      {matrix.flatMap((row, rowIndex) => row.map((value, columnIndex) => <span key={`${rowIndex}-${columnIndex}`}>{value || '0'}</span>))}
     </div>
     <span className="matrix-preview-delimiter">{determinant ? '|' : ']'}</span>
   </div>

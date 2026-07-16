@@ -2,12 +2,18 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, X } from 'lucide-react';
 import { getCombinedBoundingBox } from '@/lib/geometry';
 import {
+  calculateMatrixDeterminant,
   evaluateGraphExpression,
+  formatMatrixNumber,
   getGraphRange,
+  getMatrixRowOperationResult,
   getNumberLineDomain,
+  parseMatrixValues,
+  parseNumericMatrix,
   parseCoordinatePoints,
   parseGraphEquation,
   parseNumberLineExpression,
+  validateMatrixRequest,
 } from '@/plugins/builtin/mathSet/generators';
 import type { Stroke } from '@/types';
 import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
@@ -31,6 +37,41 @@ const parseGridRows = (value: string | undefined): DataGridRow[] => {
   } catch {
     return [{ label: '', value: '' }];
   }
+};
+
+const MatrixGridField: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
+  const matrix = parseMatrixValues(value);
+  const update = (next: string[][]) => onChange(JSON.stringify(next));
+  const updateCell = (rowIndex: number, columnIndex: number, nextValue: string) => {
+    const next = matrix.map((row) => [...row]);
+    next[rowIndex][columnIndex] = nextValue;
+    update(next);
+  };
+
+  return (
+    <div className="matrix-grid-field">
+      <div className="matrix-grid-toolbar">
+        <span>{matrix.length} × {matrix[0]?.length ?? 0}</span>
+        <div className="matrix-grid-actions">
+          <button type="button" onClick={() => update([...matrix, Array.from({ length: matrix[0].length }, () => '')])}>+ Row</button>
+          <button type="button" onClick={() => update(matrix.map((row) => [...row, '']))}>+ Column</button>
+          <button type="button" disabled={matrix.length <= 1} onClick={() => update(matrix.slice(0, -1))}>− Row</button>
+          <button type="button" disabled={(matrix[0]?.length ?? 1) <= 1} onClick={() => update(matrix.map((row) => row.slice(0, -1)))}>− Column</button>
+        </div>
+      </div>
+      <div className="matrix-grid" style={{ gridTemplateColumns: `repeat(${matrix[0]?.length ?? 1}, minmax(0, 1fr))` }}>
+        {matrix.flatMap((row, rowIndex) => row.map((cell, columnIndex) => (
+          <input
+            key={`${rowIndex}-${columnIndex}`}
+            aria-label={`Matrix row ${rowIndex + 1}, column ${columnIndex + 1}`}
+            value={cell}
+            placeholder="0"
+            onChange={(event) => updateCell(rowIndex, columnIndex, event.target.value)}
+          />
+        )))}
+      </div>
+    </div>
+  );
 };
 
 const StatisticsPreview: React.FC<{ values: Record<string, string>; summaryOnly: boolean }> = ({ values, summaryOnly }) => {
@@ -264,9 +305,50 @@ const CoordinateGridPreview: React.FC<{ values: Record<string, string> }> = ({ v
   );
 };
 
+const MatrixPreviewMatrix: React.FC<{ matrix: string[][]; label: string; determinant?: boolean }> = ({ matrix, label, determinant = false }) => (
+  <div className="matrix-preview-matrix">
+    <span className="matrix-preview-label">{label} =</span>
+    <span className="matrix-preview-delimiter">{determinant ? '|' : '['}</span>
+    <div className="matrix-preview-grid" style={{ gridTemplateColumns: `repeat(${matrix[0]?.length ?? 1}, minmax(0, 1fr))` }}>
+      {matrix.flatMap((row) => row.map((value, index) => <span key={`${index}-${value}`}>{value || '0'}</span>))}
+    </div>
+    <span className="matrix-preview-delimiter">{determinant ? '|' : ']'}</span>
+  </div>
+);
+
+const MatrixPreview: React.FC<{ values: Record<string, string> }> = ({ values }) => {
+  const matrix = parseMatrixValues(values.matrixValues).map((row) => row.map((value) => value.trim() || '0'));
+  const mode = values.operation === 'determinant' || values.operation === 'row-operation' ? values.operation : 'display';
+  const error = validateMatrixRequest(values);
+  const numeric = parseNumericMatrix(matrix);
+  const rowResult = mode === 'row-operation' ? getMatrixRowOperationResult(values) : null;
+
+  return (
+    <div className="matrix-preview" aria-label="Matrix preview">
+      {error ? <div className="matrix-preview-error">{error}</div> : (
+        <>
+          <div className="matrix-preview-layout">
+            <MatrixPreviewMatrix matrix={matrix} label={values.matrixLabel || 'A'} determinant={mode === 'determinant'} />
+            {mode === 'row-operation' && rowResult && (
+              <>
+                <span className="matrix-preview-arrow">→</span>
+                <MatrixPreviewMatrix matrix={rowResult.matrix.map((row) => row.map(formatMatrixNumber))} label={`${values.matrixLabel || 'A'}'`} />
+              </>
+            )}
+          </div>
+          {mode === 'determinant' && numeric && (
+            <strong className="matrix-preview-result">det({values.matrixLabel || 'A'}) = {formatMatrixNumber(calculateMatrixDeterminant(numeric) ?? 0)}</strong>
+          )}
+          {mode === 'row-operation' && rowResult && <small className="matrix-preview-operation">{rowResult.description}</small>}
+        </>
+      )}
+    </div>
+  );
+};
+
 const MathToolPreview: React.FC<{ toolId: string; values: Record<string, string> }> = ({ toolId, values }) => (
   <div className="math-tool-preview" aria-label="Tool preview">
-    {toolId.includes('coordinate-grid') ? <CoordinateGridPreview values={values} /> : toolId.includes('graph') ? <GraphPreview values={values} /> : toolId.includes('number-line') ? <NumberLinePreview values={values} /> : toolId.includes('two-set-venn') ? <svg viewBox="0 0 260 130"><circle cx="105" cy="65" r="42" /><circle cx="155" cy="65" r="42" /><text x="70" y="25">{values.leftSet || 'A'}</text><text x="175" y="25">{values.rightSet || 'B'}</text><text x="82" y="70">{values.leftValue || '1'}</text><text x="130" y="70">{values.intersectionValue || '2'}</text><text x="168" y="70">{values.rightValue || '3'}</text></svg> : toolId.includes('three-set-venn') ? <svg viewBox="0 0 260 150"><circle cx="105" cy="62" r="42" /><circle cx="155" cy="62" r="42" /><circle cx="130" cy="94" r="42" /><text x="70" y="20">{values.leftSet || 'A'}</text><text x="190" y="20">{values.rightSet || 'B'}</text><text x="130" y="145">{values.bottomSet || 'C'}</text><text x="82" y="62">{values.leftValue || '1'}</text><text x="178" y="62">{values.rightValue || '2'}</text><text x="130" y="116">{values.bottomValue || '3'}</text><text x="130" y="42">{values.leftRightValue || '4'}</text><text x="108" y="103">{values.leftBottomValue || '5'}</text><text x="152" y="103">{values.rightBottomValue || '6'}</text><text x="130" y="78">{values.centerValue || '7'}</text></svg> : <div className="math-tool-preview-generic">{values.title || values.symbol || 'Preview of inserted chalk object'}</div>}
+    {toolId.includes('matrix') ? <MatrixPreview values={values} /> : toolId.includes('coordinate-grid') ? <CoordinateGridPreview values={values} /> : toolId.includes('graph') ? <GraphPreview values={values} /> : toolId.includes('number-line') ? <NumberLinePreview values={values} /> : toolId.includes('two-set-venn') ? <svg viewBox="0 0 260 130"><circle cx="105" cy="65" r="42" /><circle cx="155" cy="65" r="42" /><text x="70" y="25">{values.leftSet || 'A'}</text><text x="175" y="25">{values.rightSet || 'B'}</text><text x="82" y="70">{values.leftValue || '1'}</text><text x="130" y="70">{values.intersectionValue || '2'}</text><text x="168" y="70">{values.rightValue || '3'}</text></svg> : toolId.includes('three-set-venn') ? <svg viewBox="0 0 260 150"><circle cx="105" cy="62" r="42" /><circle cx="155" cy="62" r="42" /><circle cx="130" cy="94" r="42" /><text x="70" y="20">{values.leftSet || 'A'}</text><text x="190" y="20">{values.rightSet || 'B'}</text><text x="130" y="145">{values.bottomSet || 'C'}</text><text x="82" y="62">{values.leftValue || '1'}</text><text x="178" y="62">{values.rightValue || '2'}</text><text x="130" y="116">{values.bottomValue || '3'}</text><text x="130" y="42">{values.leftRightValue || '4'}</text><text x="108" y="103">{values.leftBottomValue || '5'}</text><text x="152" y="103">{values.rightBottomValue || '6'}</text><text x="130" y="78">{values.centerValue || '7'}</text></svg> : <div className="math-tool-preview-generic">{values.title || values.symbol || 'Preview of inserted chalk object'}</div>}
   </div>
 );
 
@@ -487,10 +569,14 @@ const PluginModal: React.FC<PluginModalProps> = ({
           const tagText = values.label ?? '';
           const placement = values.placement === 'top' ? 'top' : 'bottom';
           const isGraphTool = tool.id === 'math-set.graph';
+          const isMatrixTool = tool.id === 'math-set.matrix';
           const hasStatisticValues = parseStatisticRows(values.dataset).some((row) => Number.isFinite(Number(row.value)));
+          const matrixError = isMatrixTool ? validateMatrixRequest(values) : null;
           const canSubmit = isTagPlugin
             ? selectedStrokes.length > 0 && tagText.trim().length > 0
-            : !isStatisticsPlugin || hasStatisticValues;
+            : isMatrixTool
+              ? !matrixError
+              : !isStatisticsPlugin || hasStatisticValues;
 
           return (
             <div key={tool.id} className="plugin-tool-card">
@@ -514,7 +600,10 @@ const PluginModal: React.FC<PluginModalProps> = ({
               {!isTagPlugin && !isStatisticsPlugin && tool.id !== 'math-set.set-builder' && tool.id !== 'math-set.operation' && <MathToolPreview toolId={tool.id} values={values} />}
               {isStatisticsPlugin && <StatisticsPreview values={values} summaryOnly={tool.command === 'statistics.insertSummary'} />}
 
-              {(tool.formFields ?? []).map((field) => (
+              {(tool.formFields ?? []).map((field) => {
+                const isMatrixOperationField = ['rowOperation', 'rowTarget', 'rowSource', 'factor'].includes(field.id);
+                if (isMatrixTool && isMatrixOperationField && values.operation !== 'row-operation') return null;
+                return (
                 <label key={field.id} className="plugin-form-field">
                   <span>{field.label}</span>
                   {isTagPlugin && field.id === 'placement' ? (
@@ -534,6 +623,8 @@ const PluginModal: React.FC<PluginModalProps> = ({
                     <SetBuilderField value={values[field.id] ?? ''} onChange={(next) => setToolFieldValue(tool.id, field.id, next)} />
                   ) : field.type === 'set-members' ? (
                     <SetMembersField value={values[field.id] ?? ''} onChange={(next) => setToolFieldValue(tool.id, field.id, next)} />
+                  ) : field.type === 'matrix-grid' ? (
+                    <MatrixGridField value={values[field.id] ?? ''} onChange={(next) => setToolFieldValue(tool.id, field.id, next)} />
                   ) : field.type === 'data-grid' ? (
                     <div className="statistics-data-grid">
                       <div className="statistics-data-grid-head"><span>Label</span><span>Value</span><span aria-hidden="true" /></div>
@@ -598,7 +689,9 @@ const PluginModal: React.FC<PluginModalProps> = ({
                     </div>
                   )}
                 </label>
-              ))}
+                );
+              })}
+              {matrixError && <div className="plugin-validation-error" role="alert">{matrixError}</div>}
               <button
                 type="button"
                 className="insert-links-add-btn"

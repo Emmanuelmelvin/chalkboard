@@ -20,6 +20,9 @@ import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
 import PluginModal from '@/components/tools/PluginModal';
+import NotesLayer from '@/plugins/builtin/notes/NotesLayer';
+import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
+import { NOTES_PLUGIN_ID } from '@/plugins/builtin/notes';
 import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
@@ -82,6 +85,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     spacePressed,
     activeFillColor, setActiveFillColor,
     showSelectionToolbox, setShowSelectionToolbox,
+    noteEditorRequest,
   } = useBoardStore();
 
   const { links, removeLink } = useLinksStore();
@@ -98,6 +102,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const hasNavigatedToLink = useRef<boolean>(false);
   const openPluginModal = (pluginId: string, ids = selectedStrokeIds) => {
     setShowInsertShapes(false);
+    if (pluginId === NOTES_PLUGIN_ID) {
+      void pluginRegistry.executeCommand('notes.create');
+      return;
+    }
     setActivePluginModals((current) => current.some((modal) => modal.pluginId === pluginId)
       ? current
       : [...current, { pluginId, selectionStrokeIds: [...ids] }]);
@@ -240,6 +248,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       })}
       <canvas ref={canvasRef} className="chalk-canvas" style={{ cursor: getCanvasCursor() }}
         onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
+      <NotesLayer />
       
       {showInsertShapes && (
         <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
@@ -470,6 +479,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onClose={() => setActivePluginModals((current) => current.filter((item) => item.pluginId !== modal.pluginId))}
           onRunPluginTool={(commandId, formValues, selectionIds) => pluginRegistry.executeCommand(commandId, { formValues, selectionStrokeIds: selectionIds })} />;
       })}
+      {noteEditorRequest && <NotesEditor />}
     </div>
   );
 };

@@ -77,6 +77,8 @@ export const transformStrokes = (
       x: newBox.minX + (p.x - originalBox.minX) * scaleX,
       y: newBox.minY + (p.y - originalBox.minY) * scaleY
     })),
+    noteWidth: stroke.noteWidth === undefined ? undefined : stroke.noteWidth * Math.abs(scaleX),
+    noteHeight: stroke.noteHeight === undefined ? undefined : stroke.noteHeight * Math.abs(scaleY),
     originalPoints: stroke.originalPoints
       ? stroke.originalPoints.map(p => ({
           x: newBox.minX + (p.x - originalBox.minX) * scaleX,

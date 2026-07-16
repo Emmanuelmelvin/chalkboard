@@ -1,6 +1,11 @@
 import type { PluginManifest } from '@/plugins/types';
 import { SET_SYMBOLS } from '@/plugins/builtin/mathSet/symbols';
 
+const DEFAULT_MATRIX = JSON.stringify([
+  ['1', '2'],
+  ['3', '4'],
+]);
+
 export const mathSetManifest: PluginManifest = {
   id: 'chalkboard.math-set',
   name: 'Mathematical Set',
@@ -116,6 +121,41 @@ export const mathSetManifest: PluginManifest = {
           { id: 'rightMembers', label: 'Right elements', type: 'set-members', defaultValue: JSON.stringify(['3', '4', '5']) },
         ],
       },
+      {
+        id: 'math-set.matrix',
+        label: 'Matrix Tool',
+        description: 'Create an adjustable matrix, calculate its determinant, or apply an elementary row operation.',
+        command: 'mathSet.insertMatrix',
+        formFields: [
+          { id: 'matrixLabel', label: 'Matrix label', defaultValue: 'A' },
+          { id: 'matrixValues', label: 'Matrix entries', type: 'matrix-grid', defaultValue: DEFAULT_MATRIX },
+          {
+            id: 'operation',
+            label: 'Action',
+            type: 'select',
+            defaultValue: 'display',
+            options: [
+              { value: 'display', label: 'Display matrix' },
+              { value: 'determinant', label: 'Calculate determinant' },
+              { value: 'row-operation', label: 'Apply row operation' },
+            ],
+          },
+          {
+            id: 'rowOperation',
+            label: 'Row operation',
+            type: 'select',
+            defaultValue: 'swap',
+            options: [
+              { value: 'swap', label: 'Swap rows' },
+              { value: 'scale', label: 'Scale a row' },
+              { value: 'replace', label: 'Replace a row' },
+            ],
+          },
+          { id: 'rowTarget', label: 'Target row', defaultValue: '1', type: 'number' },
+          { id: 'rowSource', label: 'Source / second row', defaultValue: '2', type: 'number' },
+          { id: 'factor', label: 'Factor', defaultValue: '2', type: 'number' },
+        ],
+      },
     ],
     commands: [
       { id: 'mathSet.insertTwoSetVenn', title: 'Mathematical Set: Insert 2-Set Venn Diagram' },
@@ -126,6 +166,7 @@ export const mathSetManifest: PluginManifest = {
       { id: 'mathSet.insertSetSymbol', title: 'Mathematical Set: Insert Set Symbol' },
       { id: 'mathSet.insertSetBuilder', title: 'Mathematical Set: Insert Set Builder Expression' },
       { id: 'mathSet.insertSetOperation', title: 'Mathematical Set: Insert Set Operation' },
+      { id: 'mathSet.insertMatrix', title: 'Mathematical Set: Insert Matrix' },
       { id: 'mathSet.normalizeSelection', title: 'Mathematical Set: Normalize Selected Math Chalk' },
     ],
     selectionTools: [

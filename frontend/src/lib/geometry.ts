@@ -33,6 +33,15 @@ export const getStrokeBoundingBox = (stroke: Stroke): Rect | null => {
     if (p.y > maxY) maxY = p.y;
   }
 
+  if (stroke.noteHtml) {
+    return {
+      minX,
+      minY,
+      maxX,
+      maxY,
+    };
+  }
+
   if (stroke.text) {
     const fontSize = stroke.fontSize ?? 28;
     const textWidth = Math.max(fontSize * 2, maxX - minX);

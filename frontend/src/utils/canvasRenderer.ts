@@ -172,6 +172,10 @@ export function drawBoardOnCanvas(
     if (stroke.points.length < 1) return;
     const pts = stroke.points;
 
+    if (stroke.noteHtml) {
+      return;
+    }
+
     if (stroke.text) {
       const minX = Math.min(...pts.map((p) => p.x));
       const minY = Math.min(...pts.map((p) => p.y));

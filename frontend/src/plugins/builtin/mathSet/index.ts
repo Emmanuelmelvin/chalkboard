@@ -6,8 +6,10 @@ import {
   createSetSymbolStroke,
   createSetBuilderStroke,
   createSetOperationStroke,
+  createMatrixStrokes,
   createThreeSetVennDiagramStrokes,
   createTwoSetVennDiagramStrokes,
+  validateMatrixRequest,
   type MathSetLabels,
 } from '@/plugins/builtin/mathSet/generators';
 import type { ChalkboardPlugin, ChalkboardPluginAPI, PluginCommandPayload } from '@/plugins/types';
@@ -28,13 +30,19 @@ function makeStrokeOptions(api: ChalkboardPluginAPI, commandId: string): ShapeSt
 function registerInsertCommand(
   api: ChalkboardPluginAPI,
   commandId: string,
-  generator: MathSetGenerator
+  generator: MathSetGenerator,
+  validate?: (labels: MathSetLabels) => string | null
 ): void {
   api.commands.register(commandId, (payload?: unknown) => {
     const commandPayload = payload as PluginCommandPayload | undefined;
     const center = api.board.getViewportCenter();
     if (!center) return false;
     const labels = commandPayload?.formValues ?? {};
+    const validationMessage = validate?.(labels);
+    if (validationMessage) {
+      api.ui.showToast(validationMessage);
+      return false;
+    }
     const selectedIds = commandPayload?.selectionStrokeIds ?? [];
     if (selectedIds.length > 0) {
       const existing = api.board.getStrokes();
@@ -66,6 +74,7 @@ export const mathSetPlugin: ChalkboardPlugin = {
     registerInsertCommand(api, 'mathSet.insertSetSymbol', createSetSymbolStroke);
     registerInsertCommand(api, 'mathSet.insertSetBuilder', createSetBuilderStroke);
     registerInsertCommand(api, 'mathSet.insertSetOperation', createSetOperationStroke);
+    registerInsertCommand(api, 'mathSet.insertMatrix', createMatrixStrokes, validateMatrixRequest);
 
     api.commands.register('mathSet.normalizeSelection', () => {
       const selectedIds = api.selection.getSelectedStrokeIds();

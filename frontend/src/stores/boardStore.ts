@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Socket } from 'socket.io-client';
-import type { Point, Rect, Stroke, TrimState } from '@/types';
+import type { NoteEditorRequest, Point, Rect, Stroke, TrimState } from '@/types';
 
 /**
  * Core chalkboard board state shared by the UI and the agent-callable toolbox.
@@ -62,6 +62,7 @@ export interface BoardState {
   isCopied: boolean;
   spacePressed: boolean;
   showSelectionToolbox: boolean;
+  noteEditorRequest: NoteEditorRequest | null;
 
   // ── Setters ────────────────────────────────────────────────────────────
   setRoomId: (roomId: string) => void;
@@ -92,6 +93,7 @@ export interface BoardState {
   setIsCopied: (copied: boolean) => void;
   setSpacePressed: (spacePressed: boolean) => void;
   setShowSelectionToolbox: (show: boolean | ((prev: boolean) => boolean)) => void;
+  setNoteEditorRequest: (request: NoteEditorRequest | null) => void;
 
   /**
    * Clear selection UI state (ids, transform box, rotation).
@@ -153,6 +155,7 @@ export const useBoardStore = create<BoardState>((set) => ({
   isCopied: false,
   spacePressed: false,
   showSelectionToolbox: true,
+  noteEditorRequest: null,
 
   setRoomId: (roomId) => set({ roomId }),
   setSocket: (socket) => set({ socket }),
@@ -205,11 +208,12 @@ export const useBoardStore = create<BoardState>((set) => ({
   setSpacePressed: (spacePressed) => set({ spacePressed }),
   setShowSelectionToolbox: (showSelectionToolbox) =>
     set((state) => ({
-      showSelectionToolbox:
+        showSelectionToolbox:
         typeof showSelectionToolbox === 'function'
           ? showSelectionToolbox(state.showSelectionToolbox)
           : showSelectionToolbox,
     })),
+  setNoteEditorRequest: (noteEditorRequest) => set({ noteEditorRequest }),
 
   clearSelection: () =>
     set({
@@ -245,6 +249,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       activeTool: 'chalk',
       spacePressed: false,
       showSelectionToolbox: true,
+      noteEditorRequest: null,
     }),
 }));
 

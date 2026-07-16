@@ -125,6 +125,260 @@ body {
   display: block;
 }
 
+/* Rich Notes are rendered as a DOM layer so browser text selection and formatting remain reliable. */
+.notes-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.canvas-note {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.3;
+  white-space: normal;
+  word-break: break-word;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  border-radius: 4px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  transform-origin: center center;
+}
+
+.canvas-note p,
+.canvas-note div,
+.canvas-note h1,
+.canvas-note h2,
+.canvas-note h3 {
+  margin: 0 0 0.35em;
+}
+
+.canvas-note ul,
+.canvas-note ol {
+  margin: 0.2em 0;
+  padding-left: 1.25em;
+}
+
+.canvas-note-selected {
+  outline: 2px solid rgba(96, 165, 250, 0.85);
+  outline-offset: 2px;
+}
+
+.notes-editor-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(2, 6, 23, 0.48);
+  backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+
+.notes-editor {
+  width: min(720px, calc(100vw - 40px));
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  color: #e2e8f0;
+}
+
+.notes-editor-header,
+.notes-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+}
+
+.notes-editor-header {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.notes-editor-header strong,
+.notes-editor-header small {
+  display: block;
+}
+
+.notes-editor-header strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.notes-editor-header small,
+.notes-editor-footer span {
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.notes-editor-icon-button,
+.notes-editor-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.notes-editor-icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+.notes-editor-icon-button:hover,
+.notes-editor-toolbar button:hover {
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(37, 99, 235, 0.22);
+  color: #fff;
+}
+
+.notes-editor-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.notes-editor-toolbar button {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+}
+
+.notes-editor-toolbar select,
+.notes-editor-toolbar input[type='number'] {
+  height: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.notes-editor-toolbar select {
+  width: 112px;
+  padding: 0 5px;
+}
+
+.notes-editor-size {
+  width: 48px;
+  padding: 0 4px;
+}
+
+.notes-color-input {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 3px;
+  color: #f8fafc;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.notes-color-input input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.notes-highlight-icon {
+  color: #facc15;
+  font-size: 18px;
+}
+
+.notes-editor-divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 3px;
+  background: rgba(148, 163, 184, 0.25);
+}
+
+.notes-editor-content {
+  min-height: 270px;
+  max-height: 50vh;
+  overflow: auto;
+  padding: 22px;
+  outline: none;
+  line-height: 1.4;
+}
+
+.notes-editor-content:focus {
+  box-shadow: inset 0 0 0 2px rgba(96, 165, 250, 0.45);
+}
+
+.notes-editor-content p,
+.notes-editor-content div,
+.notes-editor-content h1,
+.notes-editor-content h2,
+.notes-editor-content h3 {
+  margin: 0 0 0.4em;
+}
+
+.notes-editor-content ul,
+.notes-editor-content ol {
+  margin-top: 0.2em;
+  margin-bottom: 0.4em;
+  padding-left: 1.3em;
+}
+
+.notes-editor-footer {
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.notes-editor-footer > div {
+  display: flex;
+  gap: 8px;
+}
+
+.notes-editor-cancel,
+.notes-editor-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 11px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.notes-editor-cancel {
+  background: transparent;
+  color: #cbd5e1;
+}
+
+.notes-editor-save {
+  border-color: rgba(96, 165, 250, 0.65);
+  background: rgba(37, 99, 235, 0.55);
+  color: #fff;
+}
+
+.notes-editor-save:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 /* Floating HUD Panels */
 .hud-layer {
   position: absolute;
@@ -2028,6 +2282,7 @@ body {
 .plugin-floating-modal { z-index: 2500; }
 .plugin-floating-modal.tag-plugin-modal { width: 320px; max-width: min(320px, calc(100vw - 24px)); }
 .plugin-floating-modal.math-set-plugin-modal { width: 380px; max-width: min(380px, calc(100vw - 24px)); }
+.plugin-floating-modal.math-set-plugin-modal:has(.matrix-grid-field) { width: 460px; max-width: min(460px, calc(100vw - 24px)); }
 .plugin-floating-modal.statistics-plugin-modal { width: 430px; max-width: min(430px, calc(100vw - 24px)); }
 .math-set-plugin-modal .plugin-tool-card { display: flex; flex-wrap: wrap; flex-direction: row; align-items: center; }
 .math-set-plugin-modal .plugin-tool-heading,
@@ -2037,6 +2292,7 @@ body {
 .math-set-plugin-modal .plugin-form-field { flex: 1 1 140px; width: auto !important; margin-right: 8px; display: flex; flex-direction: column; align-items: stretch; }
 .math-set-plugin-modal .plugin-form-field > span { white-space: normal; min-height: 2.2em; }
 .math-set-plugin-modal .plugin-form-field:has(.math-symbol-grid) { flex-basis: 100%; }
+.math-set-plugin-modal .plugin-form-field:has(.matrix-grid-field) { flex-basis: 100%; }
 .math-symbol-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .math-symbol-option { min-height: 42px; border: 1px solid rgba(148,163,184,.35); background: rgba(15,23,42,.65); color: #e2e8f0; cursor: pointer; font-size: 22px; line-height: 1; }
 .math-symbol-option:hover { border-color: rgba(96,165,250,.8); background: rgba(30,41,59,.9); }
@@ -2055,6 +2311,14 @@ body {
 .math-set-member-chips { display: flex; flex-wrap: wrap; gap: 5px; min-height: 32px; }
 .math-set-member-chips button { border: 1px solid rgba(96,165,250,.5); background: rgba(37,99,235,.22); color: #dbeafe; border-radius: 14px; padding: 5px 9px; cursor: pointer; }
 .math-set-member-chips button span { margin-left: 6px; color: #93c5fd; }
+.matrix-grid-field { width: 100%; display: flex; flex-direction: column; gap: 7px; }
+.matrix-grid-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #cbd5e1; font-size: 11px; }
+.matrix-grid-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.matrix-grid-actions button { border: 1px solid rgba(148,163,184,.35); background: rgba(15,23,42,.7); color: #cbd5e1; padding: 4px 7px; cursor: pointer; font-size: 10px; }
+.matrix-grid-actions button:hover { border-color: rgba(96,165,250,.8); color: #fff; }
+.matrix-grid-actions button:disabled { opacity: .4; cursor: not-allowed; }
+.matrix-grid { display: grid; gap: 5px; padding: 9px 24px; border: 1px solid rgba(148,163,184,.3); background: rgba(2,6,23,.4); }
+.matrix-grid input { min-width: 0; text-align: center; padding: 7px 4px; }
 .math-set-expression-preview { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; min-height: 74px; margin: 10px 0; padding: 12px; border: 1px solid rgba(148,163,184,.25); background: rgba(2,6,23,.45); color: #f8fafc; }
 .math-set-expression-preview span, .math-set-expression-preview b { padding: 5px 8px; border: 1px solid rgba(96,165,250,.45); background: rgba(37,99,235,.2); font-size: 18px; }
 .math-set-expression-preview strong { font-size: 20px; }
@@ -2083,6 +2347,17 @@ body {
 .math-tool-preview svg circle { fill: rgba(96,165,250,.16); stroke: #93c5fd; stroke-width: 2; }
 .math-tool-preview svg text { fill: #f8fafc; font-size: 12px; text-anchor: middle; }
 .math-tool-preview-generic { min-height: 70px; display: grid; place-items: center; color: #cbd5e1; }
+.matrix-preview { min-height: 108px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #f8fafc; }
+.matrix-preview-layout { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; overflow-x: auto; }
+.matrix-preview-matrix { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.matrix-preview-label { color: #bfdbfe; font-weight: 700; font-size: 14px; }
+.matrix-preview-delimiter { color: #93c5fd; font-size: 45px; font-weight: 300; line-height: .75; }
+.matrix-preview-grid { display: grid; gap: 3px 10px; min-width: 58px; }
+.matrix-preview-grid span { min-width: 18px; text-align: center; font-size: 13px; }
+.matrix-preview-arrow { color: #93c5fd; font-size: 18px; }
+.matrix-preview-result { color: #f8fafc; font-size: 14px; }
+.matrix-preview-operation { color: #bfdbfe; font-size: 11px; }
+.matrix-preview-error, .plugin-validation-error { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid rgba(248,113,113,.45); background: rgba(127,29,29,.2); color: #fecaca; font-size: 11px; line-height: 1.35; }
 .graph-equation-symbols { display: flex; gap: 4px; margin-top: 6px; }
 .graph-equation-symbols button { border: 1px solid rgba(148,163,184,.35); background: rgba(30,41,59,.7); color: #cbd5e1; border-radius: 3px; padding: 3px 7px; cursor: pointer; font-size: 12px; }
 .graph-equation-symbols button:hover { border-color: rgba(96,165,250,.75); color: #fff; }

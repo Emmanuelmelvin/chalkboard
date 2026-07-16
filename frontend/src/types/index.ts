@@ -26,6 +26,16 @@ export interface Stroke {
   pluginId?: string;
   /** Optional text rendered by the canvas renderer */
   text?: string;
+  /** Sanitized rich-text HTML for a Notes plugin object */
+  noteHtml?: string;
+  /** Canvas-space dimensions for a rich note object */
+  noteWidth?: number;
+  noteHeight?: number;
+  /** Rich note presentation settings */
+  noteFontFamily?: string;
+  noteTextColor?: string;
+  noteBackgroundColor?: string;
+  notePadding?: number;
   /** Optional font size for text strokes */
   fontSize?: number;
   /** Horizontal alignment for text inside its point bounds */
@@ -138,6 +148,13 @@ export interface ShapeStrokeOptions {
 export interface CanvasCenter {
   x: number;
   y: number;
+}
+
+export interface NoteEditorRequest {
+  requestId: string;
+  mode: 'create' | 'edit';
+  noteId?: string;
+  position?: Point;
 }
 
 export type ShapeGenerator = (

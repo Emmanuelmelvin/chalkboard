@@ -2041,6 +2041,23 @@ body {
 .math-symbol-option { min-height: 42px; border: 1px solid rgba(148,163,184,.35); background: rgba(15,23,42,.65); color: #e2e8f0; cursor: pointer; font-size: 22px; line-height: 1; }
 .math-symbol-option:hover { border-color: rgba(96,165,250,.8); background: rgba(30,41,59,.9); }
 .math-symbol-option.active { border-color: #60a5fa; background: rgba(37,99,235,.35); box-shadow: 0 0 0 1px #60a5fa; color: #fff; }
+.math-set-builder-field, .math-set-members-field { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.math-set-builder-blocks { display: flex; flex-wrap: wrap; gap: 5px; min-height: 44px; padding: 8px; border: 1px solid rgba(148,163,184,.3); background: rgba(2,6,23,.4); }
+.math-set-builder-block { border: 1px solid rgba(96,165,250,.55); background: rgba(37,99,235,.25); color: #dbeafe; border-radius: 4px; padding: 7px 10px; font-size: 16px; cursor: pointer; }
+.math-set-builder-block:hover { border-color: #fca5a5; background: rgba(127,29,29,.35); }
+.math-set-builder-palette { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.math-set-builder-palette button { min-height: 28px; border: 1px solid rgba(148,163,184,.3); background: rgba(15,23,42,.7); color: #cbd5e1; cursor: pointer; font-size: 15px; }
+.math-set-builder-palette button:hover { border-color: #60a5fa; color: #fff; }
+.math-set-builder-add, .math-set-member-add { display: flex; gap: 5px; }
+.math-set-builder-add input, .math-set-member-add input { flex: 1; min-width: 0; }
+.math-set-builder-add button, .math-set-member-add button { border: 1px solid rgba(96,165,250,.5); background: rgba(30,64,175,.25); color: #dbeafe; padding: 6px 10px; cursor: pointer; }
+.math-set-builder-add button:disabled, .math-set-member-add button:disabled { opacity: .45; cursor: not-allowed; }
+.math-set-member-chips { display: flex; flex-wrap: wrap; gap: 5px; min-height: 32px; }
+.math-set-member-chips button { border: 1px solid rgba(96,165,250,.5); background: rgba(37,99,235,.22); color: #dbeafe; border-radius: 14px; padding: 5px 9px; cursor: pointer; }
+.math-set-member-chips button span { margin-left: 6px; color: #93c5fd; }
+.math-set-expression-preview { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; min-height: 74px; margin: 10px 0; padding: 12px; border: 1px solid rgba(148,163,184,.25); background: rgba(2,6,23,.45); color: #f8fafc; }
+.math-set-expression-preview span, .math-set-expression-preview b { padding: 5px 8px; border: 1px solid rgba(96,165,250,.45); background: rgba(37,99,235,.2); font-size: 18px; }
+.math-set-expression-preview strong { font-size: 20px; }
 .plugin-shared-output { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid rgba(96,165,250,.5); background: rgba(30,64,175,.18); color: #dbeafe; padding: 8px 10px; cursor: pointer; text-align: left; }
 .plugin-shared-output strong { font-size: 22px; line-height: 1; }
 .statistics-plugin-modal .plugin-form-field:has(.statistics-data-grid) { flex-basis: 100%; }

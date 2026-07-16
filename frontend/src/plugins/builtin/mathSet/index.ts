@@ -4,6 +4,8 @@ import {
   createGraphStrokes,
   createNumberLineStrokes,
   createSetSymbolStroke,
+  createSetBuilderStroke,
+  createSetOperationStroke,
   createThreeSetVennDiagramStrokes,
   createTwoSetVennDiagramStrokes,
   type MathSetLabels,
@@ -62,6 +64,8 @@ export const mathSetPlugin: ChalkboardPlugin = {
     registerInsertCommand(api, 'mathSet.insertCoordinateGrid', createCoordinateGridStrokes);
     registerInsertCommand(api, 'mathSet.insertGraph', createGraphStrokes);
     registerInsertCommand(api, 'mathSet.insertSetSymbol', createSetSymbolStroke);
+    registerInsertCommand(api, 'mathSet.insertSetBuilder', createSetBuilderStroke);
+    registerInsertCommand(api, 'mathSet.insertSetOperation', createSetOperationStroke);
 
     api.commands.register('mathSet.normalizeSelection', () => {
       const selectedIds = api.selection.getSelectedStrokeIds();

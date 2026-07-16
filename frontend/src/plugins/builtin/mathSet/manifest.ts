@@ -88,6 +88,34 @@ export const mathSetManifest: PluginManifest = {
           { id: 'symbol', label: 'Choose a symbol', defaultValue: '∈', type: 'symbol-grid', options: SET_SYMBOLS.map((symbol) => ({ value: symbol, label: symbol })) },
         ],
       },
+      {
+        id: 'math-set.set-builder',
+        label: 'Set Builder',
+        description: 'Compose a set-builder expression from draggable-style notation blocks.',
+        command: 'mathSet.insertSetBuilder',
+        formFields: [
+          { id: 'setName', label: 'Set name', defaultValue: 'A' },
+          {
+            id: 'setBuilder',
+            label: 'Set-builder expression',
+            type: 'set-builder',
+            defaultValue: JSON.stringify(['{', 'x', '∈', 'ℝ', '|', 'x', '>', '2', '}']),
+          },
+        ],
+      },
+      {
+        id: 'math-set.operation',
+        label: 'Set Operation',
+        description: 'Combine two sets with union, intersection, difference, symmetric difference, or Cartesian product.',
+        command: 'mathSet.insertSetOperation',
+        formFields: [
+          { id: 'leftSetName', label: 'Left set', defaultValue: 'A' },
+          { id: 'leftMembers', label: 'Left elements', type: 'set-members', defaultValue: JSON.stringify(['1', '2', '3']) },
+          { id: 'operation', label: 'Operation', type: 'symbol-grid', defaultValue: '∪', options: ['∪', '∩', '∖', '△', '×'].map((symbol) => ({ value: symbol, label: symbol })) },
+          { id: 'rightSetName', label: 'Right set', defaultValue: 'B' },
+          { id: 'rightMembers', label: 'Right elements', type: 'set-members', defaultValue: JSON.stringify(['3', '4', '5']) },
+        ],
+      },
     ],
     commands: [
       { id: 'mathSet.insertTwoSetVenn', title: 'Mathematical Set: Insert 2-Set Venn Diagram' },
@@ -96,6 +124,8 @@ export const mathSetManifest: PluginManifest = {
       { id: 'mathSet.insertCoordinateGrid', title: 'Mathematical Set: Insert Coordinate Grid' },
       { id: 'mathSet.insertGraph', title: 'Mathematical Set: Insert Graph' },
       { id: 'mathSet.insertSetSymbol', title: 'Mathematical Set: Insert Set Symbol' },
+      { id: 'mathSet.insertSetBuilder', title: 'Mathematical Set: Insert Set Builder Expression' },
+      { id: 'mathSet.insertSetOperation', title: 'Mathematical Set: Insert Set Operation' },
       { id: 'mathSet.normalizeSelection', title: 'Mathematical Set: Normalize Selected Math Chalk' },
     ],
     selectionTools: [

@@ -17,6 +17,13 @@ export interface MathSetLabels {
   points?: string;
   symbol?: string;
   equation?: string;
+  setName?: string;
+  setBuilder?: string;
+  leftSetName?: string;
+  rightSetName?: string;
+  leftMembers?: string;
+  rightMembers?: string;
+  operation?: string;
   leftValue?: string;
   intersectionValue?: string;
   rightValue?: string;
@@ -78,6 +85,19 @@ function makeTextStroke(
     text,
     fontSize,
   };
+}
+
+function parseTokenList(value: string | undefined, fallback: string[]): string[] {
+  try {
+    const parsed = value ? JSON.parse(value) : null;
+    return Array.isArray(parsed) && parsed.length ? parsed.map(String) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function parseMemberList(value: string | undefined): string[] {
+  return parseTokenList(value, []).map((item) => item.trim()).filter(Boolean);
 }
 
 function centeredTextX(text: string, fontSize: number, centerX: number): number {
@@ -298,6 +318,64 @@ export function createSetSymbolStroke(
 export interface GraphEquation {
   expression: string;
   relation: '=' | '>' | '<' | '>=' | '<=';
+}
+
+export function createSetBuilderStroke(
+  center: Point,
+  opts: ShapeStrokeOptions,
+  labels: MathSetLabels = {}
+): Stroke[] {
+  const tokens = parseTokenList(labels.setBuilder, ['{', 'x', '∈', 'ℝ', '|', 'x', '>', '2', '}']);
+  const setName = labels.setName?.trim() || 'A';
+  const tokenFontSize = 28;
+  const gap = 8;
+  const widths = tokens.map((token) => Math.max(28, token.length * tokenFontSize * 0.65 + 18));
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * Math.max(0, tokens.length - 1);
+  let x = center.x - totalWidth / 2;
+  const y = center.y - 25;
+  const strokes: Stroke[] = [makeTextStroke(opts, 'set-builder-name', `${setName} =`, x - 70, y + 4, 28)];
+  tokens.forEach((token, index) => {
+    const width = widths[index];
+    strokes.push(makeStroke(opts, `set-builder-block-${index}`, [
+      { x, y }, { x: x + width, y }, { x: x + width, y: y + 44 }, { x, y: y + 44 },
+    ], { pathType: 'linear', closed: true, fillColor: 'rgba(96,165,250,.12)' }));
+    strokes.push(makeTextStroke(opts, `set-builder-token-${index}`, token, x + 9, y + 7, tokenFontSize));
+    x += width + gap;
+  });
+  return strokes;
+}
+
+function setOperationResult(left: string[], right: string[], operation: string): string[] {
+  const rightSet = new Set(right);
+  const leftSet = new Set(left);
+  if (operation === '∩') return left.filter((item) => rightSet.has(item));
+  if (operation === '∖') return left.filter((item) => !rightSet.has(item));
+  if (operation === '△') return [...left.filter((item) => !rightSet.has(item)), ...right.filter((item) => !leftSet.has(item))];
+  if (operation === '×') return left.flatMap((item) => right.map((other) => `(${item}, ${other})`));
+  return [...left, ...right.filter((item) => !leftSet.has(item))];
+}
+
+export function createSetOperationStroke(
+  center: Point,
+  opts: ShapeStrokeOptions,
+  labels: MathSetLabels = {}
+): Stroke[] {
+  const leftName = labels.leftSetName?.trim() || 'A';
+  const rightName = labels.rightSetName?.trim() || 'B';
+  const operation = labels.operation || '∪';
+  const left = parseMemberList(labels.leftMembers);
+  const right = parseMemberList(labels.rightMembers);
+  const result = setOperationResult(left, right, operation);
+  const leftText = `${leftName} = {${left.join(', ')}}`;
+  const rightText = `${rightName} = {${right.join(', ')}}`;
+  const resultText = `{${result.join(', ')}}`;
+  return [
+    makeTextStroke(opts, 'set-operation-left', leftText, center.x - 250, center.y - 55, 23),
+    makeTextStroke(opts, 'set-operation-symbol', operation, center.x - 18, center.y - 55, 32),
+    makeTextStroke(opts, 'set-operation-right', rightText, center.x + 22, center.y - 55, 23),
+    makeTextStroke(opts, 'set-operation-result-label', `${leftName} ${operation} ${rightName} =`, center.x - 170, center.y + 24, 23),
+    makeTextStroke(opts, 'set-operation-result', resultText, center.x + 40, center.y + 24, 23),
+  ];
 }
 
 export interface GraphRange {

@@ -59,6 +59,70 @@ const StatisticsPreview: React.FC<{ values: Record<string, string>; summaryOnly:
   );
 };
 
+const parseStringList = (value: string | undefined, fallback: string[]): string[] => {
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed) && parsed.length ? parsed.map(String) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const SetBuilderField: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
+  const tokens = parseStringList(value, ['{', 'x', '∈', 'ℝ', '|', 'x', '>', '2', '}']);
+  const [draft, setDraft] = useState('');
+  const palette = ['∈', '∉', '⊂', '⊆', '∪', '∩', 'ℕ', 'ℤ', 'ℚ', 'ℝ', 'ℂ', '{', '}', '|', '=', '>', '<', '≥', '≤', '∅'];
+  const update = (next: string[]) => onChange(JSON.stringify(next));
+  return (
+    <div className="math-set-builder-field">
+      <div className="math-set-builder-blocks" aria-label="Set-builder blocks">
+        {tokens.map((token, index) => <button key={`${token}-${index}`} type="button" className="math-set-builder-block" title="Remove block" onClick={() => update(tokens.filter((_, tokenIndex) => tokenIndex !== index))}>{token}</button>)}
+      </div>
+      <div className="math-set-builder-palette" aria-label="Set-builder symbol palette">
+        {palette.map((token) => <button key={token} type="button" onClick={() => update([...tokens, token])}>{token}</button>)}
+      </div>
+      <div className="math-set-builder-add">
+        <input value={draft} placeholder="Add a value" aria-label="Add set-builder value" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && draft.trim()) { update([...tokens, draft.trim()]); setDraft(''); } }} />
+        <button type="button" disabled={!draft.trim()} onClick={() => { update([...tokens, draft.trim()]); setDraft(''); }}>Add</button>
+      </div>
+    </div>
+  );
+};
+
+const SetMembersField: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
+  const members = parseStringList(value, ['1', '2', '3']);
+  const [draft, setDraft] = useState('');
+  const update = (next: string[]) => onChange(JSON.stringify(next));
+  return (
+    <div className="math-set-members-field">
+      <div className="math-set-member-chips" aria-label="Set elements">
+        {members.map((member, index) => <button key={`${member}-${index}`} type="button" title="Remove element" onClick={() => update(members.filter((_, memberIndex) => memberIndex !== index))}>{member}<span>×</span></button>)}
+      </div>
+      <div className="math-set-member-add">
+        <input value={draft} placeholder="Add element" aria-label="Add set element" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && draft.trim()) { update([...members, draft.trim()]); setDraft(''); } }} />
+        <button type="button" disabled={!draft.trim()} onClick={() => { update([...members, draft.trim()]); setDraft(''); }}>Add</button>
+      </div>
+    </div>
+  );
+};
+
+const SetBuilderPreview: React.FC<{ values: Record<string, string> }> = ({ values }) => (
+  <div className="math-set-expression-preview" aria-label="Set-builder preview">
+    <strong>{values.setName || 'A'} =</strong>
+    {parseStringList(values.setBuilder, ['{', 'x', '∈', 'ℝ', '|', 'x', '>', '2', '}']).map((token, index) => <span key={`${token}-${index}`}>{token}</span>)}
+  </div>
+);
+
+const SetOperationPreview: React.FC<{ values: Record<string, string> }> = ({ values }) => (
+  <div className="math-set-expression-preview" aria-label="Set operation preview">
+    <strong>{values.leftSetName || 'A'}</strong>
+    <span>({parseStringList(values.leftMembers, ['1', '2', '3']).join(', ')})</span>
+    <b>{values.operation || '∪'}</b>
+    <strong>{values.rightSetName || 'B'}</strong>
+    <span>({parseStringList(values.rightMembers, ['3', '4', '5']).join(', ')})</span>
+  </div>
+);
+
 interface PluginModalProps {
   plugin: PluginManifest;
   tools: PluginToolContribution[];
@@ -445,7 +509,9 @@ const PluginModal: React.FC<PluginModalProps> = ({
                   Use selected symbol <strong>{sharedOutput}</strong>
                 </button>
               )}
-              {!isTagPlugin && !isStatisticsPlugin && <MathToolPreview toolId={tool.id} values={values} />}
+              {!isTagPlugin && !isStatisticsPlugin && tool.id === 'math-set.set-builder' && <SetBuilderPreview values={values} />}
+              {!isTagPlugin && !isStatisticsPlugin && tool.id === 'math-set.operation' && <SetOperationPreview values={values} />}
+              {!isTagPlugin && !isStatisticsPlugin && tool.id !== 'math-set.set-builder' && tool.id !== 'math-set.operation' && <MathToolPreview toolId={tool.id} values={values} />}
               {isStatisticsPlugin && <StatisticsPreview values={values} summaryOnly={tool.command === 'statistics.insertSummary'} />}
 
               {(tool.formFields ?? []).map((field) => (
@@ -464,6 +530,10 @@ const PluginModal: React.FC<PluginModalProps> = ({
                         </button>
                       ))}
                     </div>
+                  ) : field.type === 'set-builder' ? (
+                    <SetBuilderField value={values[field.id] ?? ''} onChange={(next) => setToolFieldValue(tool.id, field.id, next)} />
+                  ) : field.type === 'set-members' ? (
+                    <SetMembersField value={values[field.id] ?? ''} onChange={(next) => setToolFieldValue(tool.id, field.id, next)} />
                   ) : field.type === 'data-grid' ? (
                     <div className="statistics-data-grid">
                       <div className="statistics-data-grid-head"><span>Label</span><span>Value</span><span aria-hidden="true" /></div>

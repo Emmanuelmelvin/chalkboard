@@ -12,7 +12,7 @@ const socket: Socket = io({
 
 function App() {
   const [userName, setUserName] = useState<string | null>(null);
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const handleJoinRoom = (name: string, room: string) => {
     setUserName(name);
@@ -20,8 +20,10 @@ function App() {
     // Connect to WebSocket backend
     socket.connect();
 
-    // Redirect to the chalkboard room path
-    setLocation(`/room/${room}`);
+    // Redirect to the chalkboard room path while preserving deep-link query params.
+    const query = window.location.search;
+    const targetPath = `/room/${room}`;
+    setLocation(`${targetPath}${location.startsWith(targetPath) ? query : ''}`);
   };
 
   const handleLeaveRoom = () => {

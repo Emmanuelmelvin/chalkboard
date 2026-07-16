@@ -1851,3 +1851,163 @@ body {
   align-items: center;
 }
 
+
+/* ── Plugin Insert UI ── */
+.insert-plugins-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.insert-plugin-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.12s ease;
+}
+
+.insert-plugin-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.insert-plugin-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  background: rgba(59, 130, 246, 0.25);
+  border: 1px solid rgba(147, 197, 253, 0.25);
+  color: #bfdbfe;
+  font-family: var(--font-sketch);
+  font-size: 16px;
+  text-transform: uppercase;
+}
+
+.insert-plugin-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.insert-plugin-copy strong,
+.plugin-floating-header strong {
+  color: #f8fafc;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.insert-plugin-copy small,
+.plugin-floating-header small {
+  color: #94a3b8;
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plugin-floating-modal {
+  position: fixed;
+  z-index: 260;
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 24px));
+  display: flex;
+  flex-direction: column;
+  background: rgba(12, 17, 30, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+  color: #e2e8f0;
+  pointer-events: auto;
+}
+
+.plugin-floating-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.plugin-floating-header:active {
+  cursor: grabbing;
+}
+
+.plugin-floating-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.plugin-tool-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.plugin-tool-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.plugin-tool-heading span {
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.plugin-tool-heading small,
+.plugin-tool-card p,
+.plugin-form-field span {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.plugin-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plugin-form-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  outline: none;
+}
+
+.plugin-form-field input:focus {
+  border-color: rgba(59, 130, 246, 0.5);
+}

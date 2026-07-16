@@ -235,7 +235,7 @@ export function useCanvasInteraction(
 
         if (mode) {
           setTransformMode(mode);
-          const localPos = selectionRotation !== 0 && !trimState.active
+          const localPos = selectionRotation !== 0 && !trimState.active && mode !== 'move'
             ? rotatePoint(pos, boxCenter(boxToUse), -selectionRotation)
             : pos;
           transformStart.current = mode === 'rotate' ? pos : localPos;
@@ -362,7 +362,7 @@ export function useCanvasInteraction(
         }
 
         const boxC = boxCenter(initialTransformBox.current);
-        const localPos = selectionRotation !== 0
+        const localPos = selectionRotation !== 0 && transformMode !== 'move'
           ? rotatePoint(pos, boxC, -selectionRotation)
           : pos;
         const localDx = localPos.x - transformStart.current.x;

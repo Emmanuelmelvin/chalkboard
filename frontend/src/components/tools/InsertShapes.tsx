@@ -164,12 +164,17 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
     );
   };
 
+  const clampPluginModalPosition = (x: number, y: number) => ({
+    x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 432)),
+    y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 120)),
+  });
+
   const handlePluginDragMove = useCallback((e: PointerEvent) => {
     if (!dragStart) return;
-    setPluginModalPos({
-      x: dragStart.x + e.clientX - dragStart.pointerX,
-      y: dragStart.y + e.clientY - dragStart.pointerY,
-    });
+    setPluginModalPos(clampPluginModalPosition(
+      dragStart.x + e.clientX - dragStart.pointerX,
+      dragStart.y + e.clientY - dragStart.pointerY
+    ));
   }, [dragStart]);
 
   const handlePluginDragEnd = useCallback(() => {
@@ -188,7 +193,7 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
 
   const openPluginModal = (pluginId: string) => {
     setOpenPluginId(pluginId);
-    setPluginModalPos({ x: Math.min(window.innerWidth - 380, 420), y: 120 });
+    setPluginModalPos(clampPluginModalPosition(420, 120));
   };
 
   const handleHeaderPointerDown = (e: React.PointerEvent) => {

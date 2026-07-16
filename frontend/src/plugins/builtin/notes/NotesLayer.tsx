@@ -23,11 +23,13 @@ const NotesLayer: React.FC = () => {
         const width = note.noteWidth ?? 360;
         const height = note.noteHeight ?? 220;
         const padding = note.notePadding ?? 18;
+        const isTransparent = note.noteBackgroundTransparent
+          ?? (!note.noteBackgroundColor || note.noteBackgroundColor === 'transparent' || note.noteBackgroundColor === '#fff7d6');
         const isSelected = selectedStrokeIds.includes(note.id);
         return (
           <div
             key={note.id}
-            className={`canvas-note ${isSelected ? 'canvas-note-selected' : ''}`}
+            className={`canvas-note ${isTransparent ? 'canvas-note-transparent' : ''} ${isSelected ? 'canvas-note-selected' : ''}`}
             style={{
               left: center.x * zoom + panOffset.x,
               top: center.y * zoom + panOffset.y,
@@ -35,7 +37,7 @@ const NotesLayer: React.FC = () => {
               height: height * zoom,
               padding: padding * zoom,
               color: note.noteTextColor ?? note.color,
-              backgroundColor: note.noteBackgroundColor ?? 'transparent',
+              backgroundColor: isTransparent ? 'transparent' : note.noteBackgroundColor,
               fontFamily: note.noteFontFamily ?? 'Arial',
               fontSize: (note.fontSize ?? 24) * zoom,
               textAlign: note.textAlign ?? 'left',

@@ -35,6 +35,8 @@ export interface Stroke {
   noteFontFamily?: string;
   noteTextColor?: string;
   noteBackgroundColor?: string;
+  /** Whether the note should inherit the board background instead of painting one */
+  noteBackgroundTransparent?: boolean;
   notePadding?: number;
   /** Optional font size for text strokes */
   fontSize?: number;

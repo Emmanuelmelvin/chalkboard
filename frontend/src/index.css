@@ -166,6 +166,11 @@ body {
   outline-offset: 2px;
 }
 
+.canvas-note-transparent {
+  border: 0;
+  box-shadow: none;
+}
+
 .notes-editor-backdrop {
   position: absolute;
   inset: 0;
@@ -2340,6 +2345,14 @@ body {
 .plugin-floating-modal.math-set-plugin-modal { width: 380px; max-width: min(380px, calc(100vw - 24px)); }
 .plugin-floating-modal.math-set-plugin-modal:has(.matrix-grid-field) { width: 460px; max-width: min(460px, calc(100vw - 24px)); }
 .plugin-floating-modal.statistics-plugin-modal { width: 430px; max-width: min(430px, calc(100vw - 24px)); }
+.plugin-floating-modal.notes-plugin-modal {
+  width: 480px;
+  height: 420px;
+  min-width: 360px;
+  min-height: 300px;
+  max-width: min(480px, calc(100vw - 24px));
+  max-height: min(520px, calc(100vh - 24px));
+}
 .math-set-plugin-modal .plugin-tool-card { display: flex; flex-wrap: wrap; flex-direction: row; align-items: center; }
 .math-set-plugin-modal .plugin-tool-heading,
 .math-set-plugin-modal .plugin-tool-card > p,

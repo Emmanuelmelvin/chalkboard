@@ -20,6 +20,7 @@ interface NotesCommitPayload extends PluginCommandPayload {
   fontSize?: number;
   textColor?: string;
   backgroundColor?: string;
+  backgroundTransparent?: boolean;
   textAlign?: 'left' | 'center' | 'right';
 }
 
@@ -61,6 +62,7 @@ function makeNoteStroke(api: ChalkboardPluginAPI, values: NotesCommitPayload): S
   const fontSize = Math.min(96, Math.max(10, Number(values.fontSize) || DEFAULT_NOTE_FONT_SIZE));
   const textColor = values.textColor || DEFAULT_NOTE_TEXT_COLOR;
   const backgroundColor = values.backgroundColor || DEFAULT_NOTE_BACKGROUND;
+  const backgroundTransparent = values.backgroundTransparent ?? backgroundColor === 'transparent';
 
   return {
     id: `${api.board.getUserId()}-note-${Date.now()}`,
@@ -79,6 +81,7 @@ function makeNoteStroke(api: ChalkboardPluginAPI, values: NotesCommitPayload): S
     fontSize,
     noteTextColor: textColor,
     noteBackgroundColor: backgroundColor,
+    noteBackgroundTransparent: backgroundTransparent,
     notePadding: 18,
     textAlign: values.textAlign || 'left',
     pluginId: NOTES_PLUGIN_ID,
@@ -138,6 +141,7 @@ export const notesPlugin: ChalkboardPlugin = {
           noteFontFamily: values.fontFamily || stroke.noteFontFamily || DEFAULT_NOTE_FONT_FAMILY,
           noteTextColor: values.textColor || stroke.noteTextColor || stroke.color,
           noteBackgroundColor: values.backgroundColor || stroke.noteBackgroundColor || DEFAULT_NOTE_BACKGROUND,
+          noteBackgroundTransparent: values.backgroundTransparent ?? values.backgroundColor === 'transparent',
           textAlign: values.textAlign || stroke.textAlign || 'left',
         } : stroke);
         const ok = api.board.updateStrokes(updated);

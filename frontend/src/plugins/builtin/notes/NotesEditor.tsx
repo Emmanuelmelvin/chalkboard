@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlignCenter, AlignLeft, AlignRight, Bold, Check, Italic, List, ListOrdered,
   Strikethrough, Underline, X,
@@ -6,25 +6,9 @@ import {
 import { useBoardStore } from '@/stores/boardStore';
 import { pluginRegistry } from '@/plugins/registry';
 import { plainTextFromHtml, sanitizeNoteHtml } from '@/plugins/builtin/notes/sanitize';
+import PluginIcon from '@/components/tools/PluginIcons';
 
 const DEFAULT_HTML = '<p><br></p>';
-
-interface EditorRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-function getInitialEditorRect(): EditorRect {
-  if (typeof window === 'undefined') return { x: 40, y: 40, width: 720, height: 560 };
-  return {
-    x: Math.max(16, (window.innerWidth - 720) / 2),
-    y: Math.max(16, (window.innerHeight - 560) / 2),
-    width: Math.min(720, window.innerWidth - 32),
-    height: Math.min(560, window.innerHeight - 32),
-  };
-}
 
 const NotesEditor: React.FC = () => {
   const request = useBoardStore((state) => state.noteEditorRequest);
@@ -39,9 +23,8 @@ const NotesEditor: React.FC = () => {
   const [backgroundColor, setBackgroundColor] = useState('#fff7d6');
   const [backgroundTransparent, setBackgroundTransparent] = useState(true);
   const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right'>('left');
-  const [panelRect, setPanelRect] = useState<EditorRect>(getInitialEditorRect);
-  const dragRef = useRef<{ pointerX: number; pointerY: number; x: number; y: number } | null>(null);
-  const resizeRef = useRef<{ pointerX: number; pointerY: number; width: number; height: number; x: number; y: number } | null>(null);
+  const [position, setPosition] = useState({ x: 420, y: 120 });
+  const [dragStart, setDragStart] = useState<{ pointerX: number; pointerY: number; x: number; y: number } | null>(null);
 
   const note = request?.noteId ? strokes.find((stroke) => stroke.id === request.noteId) : undefined;
 
@@ -56,14 +39,15 @@ const NotesEditor: React.FC = () => {
       setFontSize(String(note?.fontSize ?? 24));
       setTextColor(note?.noteTextColor ?? note?.color ?? '#0f172a');
       setBackgroundColor(note?.noteBackgroundColor ?? '#fff7d6');
-      setBackgroundTransparent(!note?.noteBackgroundColor || note.noteBackgroundColor === 'transparent');
+      setBackgroundTransparent(
+        note?.noteBackgroundTransparent
+          ?? (!note?.noteBackgroundColor || note.noteBackgroundColor === 'transparent' || note.noteBackgroundColor === '#fff7d6'),
+      );
       setTextAlign(note?.textAlign ?? 'left');
       editorRef.current?.focus();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [request, note]);
-
-  if (!request) return null;
 
   const syncEditor = () => {
     const html = editorRef.current?.innerHTML ?? '';
@@ -79,59 +63,37 @@ const NotesEditor: React.FC = () => {
 
   const preventToolbarBlur = (event: React.MouseEvent) => event.preventDefault();
 
-  const handleDragStart = (event: React.PointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('button, input, select, label')) return;
-    dragRef.current = {
-      pointerX: event.clientX,
-      pointerY: event.clientY,
-      x: panelRect.x,
-      y: panelRect.y,
+  const clampPosition = useCallback((x: number, y: number) => ({
+    x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 492)),
+    y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 120)),
+  }), []);
+
+  const handleDragMove = useCallback((event: PointerEvent) => {
+    if (!dragStart) return;
+    setPosition(clampPosition(
+      dragStart.x + event.clientX - dragStart.pointerX,
+      dragStart.y + event.clientY - dragStart.pointerY,
+    ));
+  }, [clampPosition, dragStart]);
+
+  const handleDragEnd = useCallback(() => setDragStart(null), []);
+
+  useEffect(() => {
+    if (!dragStart) return;
+    window.addEventListener('pointermove', handleDragMove);
+    window.addEventListener('pointerup', handleDragEnd);
+    return () => {
+      window.removeEventListener('pointermove', handleDragMove);
+      window.removeEventListener('pointerup', handleDragEnd);
     };
+  }, [dragStart, handleDragEnd, handleDragMove]);
+
+  if (!request) return null;
+
+  const handleHeaderPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    setDragStart({ pointerX: event.clientX, pointerY: event.clientY, x: position.x, y: position.y });
     event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const handleDragMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const nextX = drag.x + event.clientX - drag.pointerX;
-    const nextY = drag.y + event.clientY - drag.pointerY;
-    setPanelRect((current) => ({
-      ...current,
-      x: Math.max(8, Math.min(window.innerWidth - current.width - 8, nextX)),
-      y: Math.max(8, Math.min(window.innerHeight - current.height - 8, nextY)),
-    }));
-  };
-
-  const handleResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    resizeRef.current = {
-      pointerX: event.clientX,
-      pointerY: event.clientY,
-      width: panelRect.width,
-      height: panelRect.height,
-      x: panelRect.x,
-      y: panelRect.y,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const handleResizeMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const resize = resizeRef.current;
-    if (!resize) return;
-    const maxWidth = Math.max(420, window.innerWidth - resize.x - 16);
-    const maxHeight = Math.max(360, window.innerHeight - resize.y - 16);
-    setPanelRect((current) => ({
-      ...current,
-      width: Math.min(maxWidth, Math.max(420, resize.width + event.clientX - resize.pointerX)),
-      height: Math.min(maxHeight, Math.max(360, resize.height + event.clientY - resize.pointerY)),
-    }));
-  };
-
-  const stopPointerAction = (event: React.PointerEvent<HTMLDivElement>) => {
-    dragRef.current = null;
-    resizeRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
   const save = async () => {
@@ -144,23 +106,27 @@ const NotesEditor: React.FC = () => {
       fontSize: Number(fontSize),
       textColor,
       backgroundColor: backgroundTransparent ? 'transparent' : backgroundColor,
+      backgroundTransparent,
       textAlign,
     });
     if (!didSave) setHasText(false);
   };
 
   return (
-    <div className="notes-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNoteEditorRequest(null); }}>
-      <section className="notes-editor" role="dialog" aria-modal="true" aria-label="Notes editor" style={{ left: panelRect.x, top: panelRect.y, width: panelRect.width, height: panelRect.height }}>
-        <header className="notes-editor-header" onPointerDown={handleDragStart} onPointerMove={handleDragMove} onPointerUp={stopPointerAction} onPointerCancel={stopPointerAction}>
+      <section className="plugin-floating-modal notes-editor notes-plugin-modal" role="dialog" aria-modal="true" aria-label="Notes editor" style={{ left: position.x, top: position.y }}>
+        <header className="plugin-floating-header notes-editor-header" onPointerDown={handleHeaderPointerDown}>
+          <span className="insert-plugin-logo"><PluginIcon pluginId="chalkboard.notes" fallback="N" /></span>
           <div>
             <strong>{request.mode === 'edit' ? 'Edit note' : 'New note'}</strong>
             <small>Format your text, then place it on the board.</small>
           </div>
-          <button type="button" className="notes-editor-icon-button" onClick={() => setNoteEditorRequest(null)} aria-label="Close notes editor"><X size={16} /></button>
+          <button type="button" className="insert-shapes-close notes-editor-icon-button" onClick={() => setNoteEditorRequest(null)} aria-label="Close notes editor"><X size={16} /></button>
         </header>
 
-        <div className="notes-editor-toolbar" role="toolbar" aria-label="Text formatting">
+        <div className="notes-editor-toolbar" role="toolbar" aria-label="Text formatting" onChange={(event) => {
+          const target = event.target as HTMLInputElement;
+          if (target.getAttribute('aria-label') === 'Note background color') setBackgroundTransparent(false);
+        }}>
           <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('bold')} title="Bold"><Bold size={15} /></button>
           <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('italic')} title="Italic"><Italic size={15} /></button>
           <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('underline')} title="Underline"><Underline size={15} /></button>
@@ -204,9 +170,7 @@ const NotesEditor: React.FC = () => {
             <button type="button" className="notes-editor-save" disabled={!hasText} onClick={() => void save()}><Check size={14} /> Save note</button>
           </div>
         </footer>
-        <div className="notes-editor-resize-handle" role="separator" aria-label="Resize notes editor" onPointerDown={handleResizeStart} onPointerMove={handleResizeMove} onPointerUp={stopPointerAction} onPointerCancel={stopPointerAction} />
       </section>
-    </div>
   );
 };
 

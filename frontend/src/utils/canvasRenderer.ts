@@ -3,6 +3,7 @@ import {
   drawEraserSegment,
 } from '@/utils/drawing';
 import type { Stroke, Point, Rect, TrimState } from '@/types';
+import { getCombinedBoundingBox } from '@/lib/geometry';
 
 interface RenderState {
   strokes: Stroke[];
@@ -50,6 +51,14 @@ export function drawBoardOnCanvas(
   // physical pixels, then apply pan & zoom in CSS-pixel space.
   ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, panOffset.x * dpr, panOffset.y * dpr);
 
+  // Selection guides are painted after board content so opaque fills cannot
+  // cover the handles while an object is being moved or resized.
+  const drawSelectionOverlay = () => {
+  // Tags are grouped with their object for transforms, but the visual frame
+  // should remain around the object itself rather than the label above/below it.
+  const frameBox = getCombinedBoundingBox(strokes.filter((stroke) =>
+    selectedStrokeIds.includes(stroke.id) && stroke.pluginId !== 'chalkboard.tag'
+  )) ?? transformBox;
   // Draw selection marquee
   if (selectionMarquee) {
     ctx.save();
@@ -67,9 +76,9 @@ export function drawBoardOnCanvas(
 
   // Draw transform box + rotate handle as a single rigid group, rotated
   // around the box's center by the live selectionRotation.
-  if (transformBox && selectedStrokeIds.length > 0 && !trimState.active) {
-    const boxCenterX = (transformBox.minX + transformBox.maxX) / 2;
-    const boxCenterY = (transformBox.minY + transformBox.maxY) / 2;
+  if (frameBox && selectedStrokeIds.length > 0 && !trimState.active) {
+    const boxCenterX = (frameBox.minX + frameBox.maxX) / 2;
+    const boxCenterY = (frameBox.minY + frameBox.maxY) / 2;
 
     ctx.save();
     ctx.translate(boxCenterX, boxCenterY);
@@ -81,37 +90,37 @@ export function drawBoardOnCanvas(
     ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 2 / zoom;
     ctx.strokeRect(
-      transformBox.minX,
-      transformBox.minY,
-      transformBox.maxX - transformBox.minX,
-      transformBox.maxY - transformBox.minY
+      frameBox.minX,
+      frameBox.minY,
+      frameBox.maxX - frameBox.minX,
+      frameBox.maxY - frameBox.minY
     );
     // Resize Handles (TL, TR, BL, BR)
     ctx.fillStyle = '#fff';
     const hs = 6 / zoom;
 
     // TL
-    ctx.fillRect(transformBox.minX - hs, transformBox.minY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(transformBox.minX - hs, transformBox.minY - hs, hs * 2, hs * 2);
+    ctx.fillRect(frameBox.minX - hs, frameBox.minY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(frameBox.minX - hs, frameBox.minY - hs, hs * 2, hs * 2);
 
     // TR
-    ctx.fillRect(transformBox.maxX - hs, transformBox.minY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(transformBox.maxX - hs, transformBox.minY - hs, hs * 2, hs * 2);
+    ctx.fillRect(frameBox.maxX - hs, frameBox.minY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(frameBox.maxX - hs, frameBox.minY - hs, hs * 2, hs * 2);
 
     // BL
-    ctx.fillRect(transformBox.minX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(transformBox.minX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
+    ctx.fillRect(frameBox.minX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(frameBox.minX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
 
     // BR
-    ctx.fillRect(transformBox.maxX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(transformBox.maxX - hs, transformBox.maxY - hs, hs * 2, hs * 2);
+    ctx.fillRect(frameBox.maxX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(frameBox.maxX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
 
     ctx.restore();
 
     // Draw rotate handle (circle with arrow below transform box)
     {
       const centerX = boxCenterX;
-      const rotY = transformBox.maxY + 30 / zoom;
+      const rotY = frameBox.maxY + 30 / zoom;
       const rotRadius = 10 / zoom;
 
       ctx.save();
@@ -144,7 +153,7 @@ export function drawBoardOnCanvas(
 
       // Connection line from center bottom to rotate handle
       ctx.beginPath();
-      ctx.moveTo(centerX, transformBox.maxY);
+      ctx.moveTo(centerX, frameBox.maxY);
       ctx.lineTo(centerX, rotY - rotRadius);
       ctx.strokeStyle = '#3b82f6';
       ctx.lineWidth = 1.5 / zoom;
@@ -156,6 +165,7 @@ export function drawBoardOnCanvas(
 
     ctx.restore(); // outer rotate transform
   }
+  };
 
   // Draw all strokes with smooth curves
   strokes.forEach((stroke) => {
@@ -226,6 +236,8 @@ export function drawBoardOnCanvas(
       }
     }
   });
+
+  drawSelectionOverlay();
 
   ctx.restore();
 }

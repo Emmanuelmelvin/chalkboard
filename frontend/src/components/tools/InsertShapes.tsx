@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Square,
   Circle,
@@ -23,13 +23,12 @@ import {
 } from 'lucide-react';
 
 import type { ShapeType, SavedLink } from '@/types';
-import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
+import type { PluginManifest } from '@/plugins/types';
 
 interface InsertShapesProps {
   onInsertShape: (shape: ShapeType) => void;
   pluginManifests: PluginManifest[];
-  pluginTools: PluginToolContribution[];
-  onRunPluginTool: (commandId: string, formValues?: Record<string, string>) => void;
+  onOpenPlugin: (pluginId: string) => void;
   onClose: () => void;
   /** Saved links for the current room */
   links: SavedLink[];
@@ -71,8 +70,7 @@ const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
 const InsertShapes: React.FC<InsertShapesProps> = ({
   onInsertShape,
   pluginManifests,
-  pluginTools,
-  onRunPluginTool,
+  onOpenPlugin,
   onClose,
   links,
   hasSelection,
@@ -91,10 +89,6 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [editTag, setEditTag] = useState('');
   const [pluginSearch, setPluginSearch] = useState('');
-  const [openPluginId, setOpenPluginId] = useState<string | null>(null);
-  const [pluginModalPos, setPluginModalPos] = useState({ x: 420, y: 120 });
-  const [dragStart, setDragStart] = useState<{ pointerX: number; pointerY: number; x: number; y: number } | null>(null);
-  const [pluginFormValues, setPluginFormValues] = useState<Record<string, Record<string, string>>>({});
 
   const handleCreateLink = () => {
     const tag = newTag.trim();
@@ -141,66 +135,6 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
     if (!query) return true;
     return `${plugin.name} ${plugin.description}`.toLowerCase().includes(query);
   });
-  const openPlugin = pluginManifests.find((plugin) => plugin.id === openPluginId) ?? null;
-  const openPluginTools = openPlugin ? pluginTools.filter((tool) => tool.pluginId === openPlugin.id) : [];
-
-  const setToolFieldValue = (toolId: string, fieldId: string, value: string) => {
-    setPluginFormValues((prev) => ({
-      ...prev,
-      [toolId]: {
-        ...(prev[toolId] ?? {}),
-        [fieldId]: value,
-      },
-    }));
-  };
-
-  const getToolFormValues = (tool: PluginToolContribution) => {
-    const saved = pluginFormValues[tool.id] ?? {};
-    return Object.fromEntries(
-      (tool.formFields ?? []).map((field) => [
-        field.id,
-        saved[field.id] ?? field.defaultValue ?? '',
-      ])
-    );
-  };
-
-  const clampPluginModalPosition = (x: number, y: number) => ({
-    x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 432)),
-    y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 120)),
-  });
-
-  const handlePluginDragMove = useCallback((e: PointerEvent) => {
-    if (!dragStart) return;
-    setPluginModalPos(clampPluginModalPosition(
-      dragStart.x + e.clientX - dragStart.pointerX,
-      dragStart.y + e.clientY - dragStart.pointerY
-    ));
-  }, [dragStart]);
-
-  const handlePluginDragEnd = useCallback(() => {
-    setDragStart(null);
-  }, []);
-
-  useEffect(() => {
-    if (!dragStart) return;
-    window.addEventListener('pointermove', handlePluginDragMove);
-    window.addEventListener('pointerup', handlePluginDragEnd);
-    return () => {
-      window.removeEventListener('pointermove', handlePluginDragMove);
-      window.removeEventListener('pointerup', handlePluginDragEnd);
-    };
-  }, [dragStart, handlePluginDragMove, handlePluginDragEnd]);
-
-  const openPluginModal = (pluginId: string) => {
-    setOpenPluginId(pluginId);
-    setPluginModalPos(clampPluginModalPosition(420, 120));
-  };
-
-  const handleHeaderPointerDown = (e: React.PointerEvent) => {
-    setDragStart({ pointerX: e.clientX, pointerY: e.clientY, x: pluginModalPos.x, y: pluginModalPos.y });
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
-
   return (
     <div className="insert-shapes-overlay" onClick={onClose}>
       <div className="insert-shapes-panel" onClick={(e) => e.stopPropagation()}>
@@ -274,7 +208,8 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
                   <button
                     key={plugin.id}
                     className="insert-plugin-card"
-                    onClick={() => openPluginModal(plugin.id)}
+                    disabled={plugin.id === 'chalkboard.tag' && !hasSelection}
+                    onClick={() => { if (plugin.id !== 'chalkboard.tag' || hasSelection) onOpenPlugin(plugin.id); }}
                     title={plugin.description}
                   >
                     <span className="insert-plugin-logo">{plugin.name.slice(0, 1)}</span>
@@ -393,55 +328,6 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
         )}
       </div>
 
-      {openPlugin && (
-        <div
-          className="plugin-floating-modal"
-          style={{ left: pluginModalPos.x, top: pluginModalPos.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div
-            className="plugin-floating-header"
-            onPointerDown={handleHeaderPointerDown}
-          >
-            <span className="insert-plugin-logo">{openPlugin.name.slice(0, 1)}</span>
-            <div>
-              <strong>{openPlugin.name}</strong>
-              <small>{openPlugin.description}</small>
-            </div>
-            <button className="insert-shapes-close" onClick={() => setOpenPluginId(null)}><X size={14} /></button>
-          </div>
-          <div className="plugin-floating-body">
-            {openPluginTools.map((tool) => {
-              const values = getToolFormValues(tool);
-              return (
-                <div key={tool.id} className="plugin-tool-card">
-                  <div className="plugin-tool-heading">
-                    <span>{tool.label}</span>
-                    <small>Plugin shape</small>
-                  </div>
-                  <p>{tool.description}</p>
-                  {(tool.formFields ?? []).map((field) => (
-                    <label key={field.id} className="plugin-form-field">
-                      <span>{field.label}</span>
-                      <input
-                        value={values[field.id] ?? ''}
-                        placeholder={field.placeholder}
-                        onChange={(e) => setToolFieldValue(tool.id, field.id, e.target.value)}
-                      />
-                    </label>
-                  ))}
-                  <button
-                    className="insert-links-add-btn"
-                    onClick={() => onRunPluginTool(tool.command, getToolFormValues(tool))}
-                  >
-                    Add to canvas
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

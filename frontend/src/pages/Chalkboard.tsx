@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes, Eye, EyeOff } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
@@ -18,6 +18,7 @@ import type {
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
+import PluginModal from '@/components/tools/PluginModal';
 import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
@@ -90,8 +91,20 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   }, []);
   const pluginTools = useMemo(() => pluginRegistry.getTools(), []);
   const pluginSelectionTools = useMemo(() => pluginRegistry.getSelectionTools(), []);
+  const [activePluginModal, setActivePluginModal] = useState<{ pluginId: string; selectionStrokeIds: string[] } | null>(null);
 
   const hasNavigatedToLink = useRef<boolean>(false);
+  const openPluginModal = (pluginId: string, ids = selectedStrokeIds) => {
+    setShowInsertShapes(false);
+    setActivePluginModal({ pluginId, selectionStrokeIds: [...ids] });
+  };
+
+  // A tag editor is only meaningful while its source selection exists.
+  useEffect(() => {
+    if (activePluginModal?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length === 0) {
+      setActivePluginModal(null);
+    }
+  }, [activePluginModal?.pluginId, selectedStrokeIds.length]);
 
   useCanvasRenderer(canvasRef);
 
@@ -227,8 +240,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       {showInsertShapes && (
         <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
           pluginManifests={pluginManifests}
-          pluginTools={pluginTools}
-          onRunPluginTool={(commandId: string, formValues?: Record<string, string>) => pluginRegistry.executeCommand(commandId, { formValues })}
+          onOpenPlugin={openPluginModal}
           onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
           links={links} hasSelection={selectedStrokeIds.length > 0} onNavigateToLink={handleNavigateToLink}
           onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
@@ -346,7 +358,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
                   currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
                   pluginSelectionTools={pluginSelectionTools}
-                  onRunPluginSelectionTool={(commandId) => pluginRegistry.executeCommand(commandId)}
+                  onRunPluginSelectionTool={(commandId) => {
+                    const tool = pluginSelectionTools.find((candidate) => candidate.command === commandId);
+                    if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId, selectedStrokeIds);
+                    else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId, selectedStrokeIds);
+                    else void pluginRegistry.executeCommand(commandId);
+                  }}
                   selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
               )}
               {/* ── Selection toolbox toggle button ── */}
@@ -437,6 +454,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onEraserWidthChange={setEraserWidth}
           onEraserHeightChange={setEraserHeight} />
       </div>
+      {activePluginModal && (() => {
+        const plugin = pluginManifests.find((item) => item.id === activePluginModal.pluginId);
+        if (!plugin) return null;
+        const tools = pluginTools.filter((tool) => (tool.pluginId ?? plugin.id) === plugin.id);
+        return <PluginModal plugin={plugin} tools={tools}
+          selectedStrokes={strokes.filter((stroke) => activePluginModal.selectionStrokeIds.includes(stroke.id))}
+          selectionStrokeIds={activePluginModal.selectionStrokeIds}
+          onClose={() => setActivePluginModal(null)}
+          onRunPluginTool={(commandId, formValues, selectionIds) => pluginRegistry.executeCommand(commandId, { formValues, selectionStrokeIds: selectionIds })} />;
+      })()}
     </div>
   );
 };

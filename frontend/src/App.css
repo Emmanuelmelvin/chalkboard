@@ -241,8 +241,13 @@
 .plugin-floating-modal {
   position: fixed;
   z-index: 350;
-  width: 380px;
+  width: fit-content;
+  min-width: 300px;
+  min-height: 220px;
+  max-width: min(560px, calc(100vw - 24px));
   max-height: min(620px, calc(100vh - 48px));
+  height: auto;
+  resize: both;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 0;
@@ -252,6 +257,12 @@
   color: #e2e8f0;
   pointer-events: auto;
 }
+.plugin-floating-modal.tag-plugin-modal { width: 320px; max-width: min(320px, calc(100vw - 24px)); }
+.plugin-floating-modal.math-set-plugin-modal { width: 380px; max-width: min(380px, calc(100vw - 24px)); }
+.math-set-plugin-modal .plugin-tool-card { display: flex; flex-wrap: wrap; flex-direction: row; align-items: center; }
+.math-set-plugin-modal .plugin-tool-heading, .math-set-plugin-modal .plugin-tool-card > p, .math-set-plugin-modal .math-tool-preview, .math-set-plugin-modal .insert-links-add-btn { flex: 1 1 100%; }
+.math-set-plugin-modal .plugin-form-field { flex: 1 1 140px; width: auto !important; margin-right: 8px; display: flex; flex-direction: column; align-items: stretch; }
+.math-set-plugin-modal .plugin-form-field > span { white-space: normal; min-height: 2.2em; }
 
 .plugin-floating-header {
   display: grid;
@@ -274,6 +285,7 @@
   gap: 12px;
   max-height: 510px;
   overflow: auto;
+  min-height: 0;
   padding: 14px;
 }
 

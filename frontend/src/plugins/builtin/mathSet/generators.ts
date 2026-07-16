@@ -14,6 +14,10 @@ export interface MathSetLabels {
   xAxis?: string;
   yAxis?: string;
   symbol?: string;
+  leftValue?: string;
+  intersectionValue?: string;
+  rightValue?: string;
+  bottomValue?: string; leftRightValue?: string; leftBottomValue?: string; rightBottomValue?: string; centerValue?: string;
 }
 
 function makeStroke(
@@ -90,6 +94,9 @@ export function createTwoSetVennDiagramStrokes(
     }),
     makeTextStroke(opts, 'label-a', labels.leftSet || 'A', center.x - offset - 20, center.y - VENN_RADIUS - 34, 28),
     makeTextStroke(opts, 'label-b', labels.rightSet || 'B', center.x + offset - 20, center.y - VENN_RADIUS - 34, 28),
+    makeTextStroke(opts, 'value-a', labels.leftValue || '1', center.x - offset - 12, center.y + 8, 22),
+    makeTextStroke(opts, 'value-intersection', labels.intersectionValue || '2', center.x - 10, center.y + 8, 22),
+    makeTextStroke(opts, 'value-b', labels.rightValue || '3', center.x + offset + 4, center.y + 8, 22),
   ];
 }
 
@@ -116,6 +123,13 @@ export function createThreeSetVennDiagramStrokes(
     makeTextStroke(opts, 'label-a', labels.leftSet || 'A', center.x - horizontalOffset - 24, center.y - verticalOffset - VENN_RADIUS - 30, 26),
     makeTextStroke(opts, 'label-b', labels.rightSet || 'B', center.x + horizontalOffset - 24, center.y - verticalOffset - VENN_RADIUS - 30, 26),
     makeTextStroke(opts, 'label-c', labels.bottomSet || 'C', center.x - 12, center.y + verticalOffset + VENN_RADIUS + 8, 26),
+    makeTextStroke(opts, 'value-a', labels.leftValue || '1', center.x - horizontalOffset - 28, center.y - verticalOffset, 20),
+    makeTextStroke(opts, 'value-b', labels.rightValue || '2', center.x + horizontalOffset + 8, center.y - verticalOffset, 20),
+    makeTextStroke(opts, 'value-c', labels.bottomValue || '3', center.x - 8, center.y + verticalOffset + 35, 20),
+    makeTextStroke(opts, 'value-ab', labels.leftRightValue || '4', center.x, center.y - verticalOffset - 12, 18),
+    makeTextStroke(opts, 'value-ac', labels.leftBottomValue || '5', center.x - 38, center.y + 20, 18),
+    makeTextStroke(opts, 'value-bc', labels.rightBottomValue || '6', center.x + 24, center.y + 20, 18),
+    makeTextStroke(opts, 'value-center', labels.centerValue || '7', center.x - 8, center.y + 5, 18),
   ];
 }
 

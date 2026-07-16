@@ -8,6 +8,8 @@ import {
   SquareStack,
   Scissors,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   RulerIcon,
   Group,
   Ungroup,
@@ -105,7 +107,10 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   const [dimW, setDimW] = useState<string>(String(Math.round(currentWidth)));
   const [dimH, setDimH] = useState<string>(String(Math.round(currentHeight)));
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const panelScrollRef = useRef<HTMLDivElement | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(false);
 
   // Sync dimension inputs when currentWidth/currentHeight change
   useEffect(() => {
@@ -143,6 +148,34 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
     clearCloseTimer();
     closeTimer.current = setTimeout(() => setOpenSubPanel(null), 120);
   }, []);
+
+  const updateScrollControls = useCallback(() => {
+    const panel = panelScrollRef.current;
+    if (!panel) return;
+
+    const hasOverflow = panel.scrollHeight > panel.clientHeight + 1;
+    setCanScrollUp(hasOverflow && panel.scrollTop > 1);
+    setCanScrollDown(hasOverflow && panel.scrollTop + panel.clientHeight < panel.scrollHeight - 1);
+  }, []);
+
+  useEffect(() => {
+    updateScrollControls();
+    const panel = panelScrollRef.current;
+    if (!panel) return;
+
+    const observer = new ResizeObserver(updateScrollControls);
+    observer.observe(panel);
+    observer.observe(panel.firstElementChild ?? panel);
+    window.addEventListener('resize', updateScrollControls);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateScrollControls);
+    };
+  }, [pluginSelectionTools.length, updateScrollControls]);
+
+  const scrollPanel = (direction: 1 | -1) => {
+    panelScrollRef.current?.scrollBy({ top: direction * 180, behavior: 'smooth' });
+  };
 
   const handleRowEnter = (panel: SubPanel) => {
     clearCloseTimer();
@@ -207,6 +240,22 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
     >
       {/* ── Main vertical panel ── */}
       <div className="sel-toolbox-panel" onMouseLeave={handlePanelLeave}>
+        <button
+            type="button"
+            className="sel-scroll-control sel-scroll-control-top"
+            onClick={() => scrollPanel(-1)}
+            disabled={!canScrollUp}
+            style={{ visibility: canScrollUp ? 'visible' : 'hidden' }}
+            aria-label="Scroll selection tools up"
+            title="Scroll up"
+          >
+            <ChevronUp size={16} />
+          </button>
+        <div
+          ref={panelScrollRef}
+          className="sel-toolbox-scroll-area"
+          onScroll={updateScrollControls}
+        >
 
         {/* ── Color row ── */}
         <div
@@ -379,6 +428,18 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           <span className="sel-row-label">Deselect</span>
           <kbd className="sel-kbd">Esc</kbd>
         </button>
+        </div>
+        <button
+            type="button"
+            className="sel-scroll-control sel-scroll-control-bottom"
+            onClick={() => scrollPanel(1)}
+            disabled={!canScrollDown}
+            style={{ visibility: canScrollDown ? 'visible' : 'hidden' }}
+            aria-label="Scroll selection tools down"
+            title="More selection tools"
+          >
+            <ChevronDown size={16} />
+          </button>
       </div>
 
       {/* ── Sub-panel: Color ── */}

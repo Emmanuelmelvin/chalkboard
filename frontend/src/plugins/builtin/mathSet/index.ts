@@ -32,6 +32,12 @@ function registerInsertCommand(
     const center = api.board.getViewportCenter();
     if (!center) return false;
     const labels = commandPayload?.formValues ?? {};
+    const selectedIds = commandPayload?.selectionStrokeIds ?? [];
+    if (selectedIds.length > 0) {
+      const existing = api.board.getStrokes();
+      const selected = existing.filter((stroke) => selectedIds.includes(stroke.id) && stroke.pluginId === mathSetManifest.id);
+      if (selected.length > 0) api.board.updateStrokes(existing.filter((stroke) => !selected.some((item) => item.id === stroke.id)));
+    }
     const strokes = generator(center, makeStrokeOptions(api, commandId), labels);
     return api.board.insertStrokes(strokes, {
       select: true,
@@ -64,6 +70,10 @@ export const mathSetPlugin: ChalkboardPlugin = {
           : stroke
       );
       return api.board.updateStrokes(updated);
+    });
+    api.commands.register('mathSet.editSelection', (payload?: unknown) => {
+      const ids = (payload as PluginCommandPayload | undefined)?.selectionStrokeIds ?? api.selection.getSelectedStrokeIds();
+      return api.commands.execute('mathSet.insertTwoSetVenn', { ...(payload as PluginCommandPayload), selectionStrokeIds: ids });
     });
   },
 };

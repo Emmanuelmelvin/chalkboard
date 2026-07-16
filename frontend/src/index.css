@@ -1253,10 +1253,45 @@ body {
   animation: selPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   display: flex;
   flex-direction: column;
-  gap: 1px;
   max-height: min(420px, calc(100vh - 24px));
+  overflow: hidden;
+}
+
+/* The menu remains scrollable with a wheel or trackpad, but the native
+   scrollbar is replaced by the familiar dropdown-style arrows. */
+.sel-toolbox-scroll-area {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.sel-toolbox-scroll-area::-webkit-scrollbar {
+  display: none;
+}
+
+.sel-scroll-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 24px;
+  padding: 3px;
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.sel-scroll-control:hover,
+.sel-scroll-control:focus-visible {
+  background: rgba(255, 255, 255, 0.11);
+  color: #f1f5f9;
+  outline: none;
 }
 
 @keyframes selPanelIn {
@@ -1928,8 +1963,14 @@ body {
 .plugin-floating-modal {
   position: fixed;
   z-index: 260;
-  width: min(420px, calc(100vw - 24px));
+  width: fit-content;
+  min-width: 300px;
+  min-height: 220px;
+  max-width: min(560px, calc(100vw - 24px));
   max-height: min(560px, calc(100vh - 24px));
+  height: auto;
+  resize: both;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: rgba(12, 17, 30, 0.98);
@@ -1962,9 +2003,10 @@ body {
   gap: 10px;
   padding: 12px;
   overflow-y: auto;
+  min-height: 0;
 }
 
-.plugin-tool-card {
+.plugin-tool-card { 
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1972,6 +2014,31 @@ body {
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
+.insert-plugin-card:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.35); }
+.plugin-tool-card:not(.plugin-tool-list-item) .plugin-form-field { display: inline-flex; width: calc(50% - 5px); margin-right: 6px; vertical-align: top; }
+.plugin-tool-list-item { width: 100%; text-align: left; cursor: pointer; }
+.plugin-tool-list-item:hover { border-color: rgba(96,165,250,.7); background: rgba(30,41,59,.8); }
+.plugin-tool-back { border: 0; background: transparent; color: #93c5fd; cursor: pointer; padding: 0 0 8px; }
+.tag-placement-options { display: flex; gap: 8px; }
+.tag-placement-option { flex: 1; padding: 8px; border: 1px solid rgba(148,163,184,.35); background: rgba(15,23,42,.65); color: #cbd5e1; cursor: pointer; }
+.tag-placement-option.active { border-color: #60a5fa; color: #fff; background: rgba(37,99,235,.35); box-shadow: 0 0 0 1px #60a5fa; }
+.plugin-floating-modal { z-index: 2500; }
+.plugin-floating-modal.tag-plugin-modal { width: 320px; max-width: min(320px, calc(100vw - 24px)); }
+.plugin-floating-modal.math-set-plugin-modal { width: 380px; max-width: min(380px, calc(100vw - 24px)); }
+.math-set-plugin-modal .plugin-tool-card { display: flex; flex-wrap: wrap; flex-direction: row; align-items: center; }
+.math-set-plugin-modal .plugin-tool-heading,
+.math-set-plugin-modal .plugin-tool-card > p,
+.math-set-plugin-modal .math-tool-preview,
+.math-set-plugin-modal .insert-links-add-btn { flex: 1 1 100%; }
+.math-set-plugin-modal .plugin-form-field { flex: 1 1 140px; width: auto !important; margin-right: 8px; display: flex; flex-direction: column; align-items: stretch; }
+.math-set-plugin-modal .plugin-form-field > span { white-space: normal; min-height: 2.2em; }
+.tag-plugin-preview { max-height: 150px; overflow: hidden; }
+.tag-plugin-preview svg { display: block; width: 100%; height: 120px; }
+.math-tool-preview { margin: 10px 0; padding: 8px; border: 1px solid rgba(148,163,184,.25); background: rgba(2,6,23,.45); }
+.math-tool-preview svg { display: block; width: 100%; height: 120px; }
+.math-tool-preview svg circle { fill: rgba(96,165,250,.16); stroke: #93c5fd; stroke-width: 2; }
+.math-tool-preview svg text { fill: #f8fafc; font-size: 12px; text-anchor: middle; }
+.math-tool-preview-generic { min-height: 70px; display: grid; place-items: center; color: #cbd5e1; }
 
 .plugin-tool-heading {
   display: flex;

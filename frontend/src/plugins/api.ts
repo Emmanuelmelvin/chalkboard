@@ -72,7 +72,13 @@ export function createPluginAPI(): ChalkboardPluginAPI {
     },
     selection: {
       getSelectedStrokeIds: () => getBoard().selectedStrokeIds,
-      setSelectedStrokeIds: (ids) => getBoard().setSelectedStrokeIds(ids),
+      setSelectedStrokeIds: (ids) => {
+        const board = getBoard();
+        const selected = board.strokes.filter((stroke) => ids.includes(stroke.id));
+        board.setSelectedStrokeIds(ids);
+        board.setTransformBox(getCombinedBoundingBox(selected));
+        board.setSelectionRotation(0);
+      },
       clear: () => getBoard().clearSelection(),
     },
     ui: {

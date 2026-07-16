@@ -15,6 +15,11 @@ export interface PluginToolFormField {
   label: string;
   placeholder?: string;
   defaultValue?: string;
+  type?: 'text' | 'number' | 'select';
+  options?: Array<{
+    value: string;
+    label: string;
+  }>;
 }
 
 export interface PluginToolContribution {
@@ -37,6 +42,8 @@ export interface PluginSelectionToolContribution {
 
 export interface PluginCommandPayload {
   formValues?: Record<string, string>;
+  /** Optional snapshot of the selection that opened a plugin modal. */
+  selectionStrokeIds?: string[];
 }
 
 

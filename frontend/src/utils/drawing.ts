@@ -123,94 +123,30 @@ export const drawChalkSegment = (
 };
 
 /**
- * Fill a closed stroke path with chalk-textured hatches for realistic
- * chalkboard appearance rather than a flat solid fill.
+ * Paint the interior of a closed shape from its own current path. Keeping the
+ * fill path derived from `points` makes it transform with the object whenever
+ * it is moved, resized, or rotated.
  */
-const fillChalkArea = (
+const fillShapeArea = (
   ctx: CanvasRenderingContext2D,
   points: Point[],
   pathType: NonNullable<Stroke['pathType']>,
   fillColor: string,
-  size: number,
-  intensity: number,
   closed: boolean
 ) => {
   if (points.length < 3 || !closed) return;
 
-  // Compute bounding box of the path
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const p of points) {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
-  }
-
-  const w = maxX - minX;
-  const h = maxY - minY;
-  if (w <= 0 || h <= 0) return;
-
-  // Hatch spacing based on stroke size
-  const spacing = Math.max(size * 1.5, 3);
-  const diag = Math.sqrt(w * w + h * h);
-  const cx = (minX + maxX) / 2;
-  const cy = (minY + maxY) / 2;
-
-  ctx.save();
-
-  // Clip to the stroke path so hatches only appear inside the shape
   traceStrokePath(ctx, points, pathType, closed);
-  ctx.clip();
-
-  // Draw multi-angle hatches for a natural chalk fill
-  const hatchAngles = [Math.PI / 4, -Math.PI / 4];
-  for (const angle of hatchAngles) {
-    const cosA = Math.cos(angle);
-    const sinA = Math.sin(angle);
-    const steps = Math.ceil(diag / spacing);
-    const halfDiag = diag / 2;
-    const startX = cx - halfDiag;
-    const startY = cy - halfDiag;
-
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    for (let i = 0; i <= steps; i++) {
-      const offset = i * spacing;
-      const x1 = startX + offset * cosA;
-      const y1 = startY + offset * sinA;
-      const x2 = startX + offset * cosA + diag * cosA;
-      const y2 = startY + offset * sinA + diag * sinA;
-
-      // Core hatch line
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.lineWidth = size * 0.8;
-      ctx.strokeStyle = addAlpha(fillColor, intensity * 0.6);
-      ctx.stroke();
-
-      // Texture layer for hatch line
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.lineWidth = size * 1.2;
-      ctx.strokeStyle = addAlpha(fillColor, Math.max(0.03, intensity * 0.15));
-      ctx.setLineDash([1, size * 0.5]);
-      ctx.stroke();
-    }
-  }
-
-  ctx.setLineDash([]);
-  ctx.restore();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
 };
 
 /**
  * Render a complete chalk stroke. Shape strokes carry path metadata so
  * polygons are rendered with straight, closed edges instead of being treated
  * as (and distorted like) a freehand curve.
- * If the stroke has a fillColor and is closed, the interior is filled with
- * chalk-textured hatches.
+ * If the stroke has a fillColor and is closed, its interior is painted before
+ * its outline so the object's background color remains attached to the shape.
  */
 export const drawChalkStroke = (
   ctx: CanvasRenderingContext2D,
@@ -235,9 +171,9 @@ export const drawChalkStroke = (
   const closed = stroke.closed ?? false;
   const intensity = stroke.intensity ?? 0.85;
 
-  // Draw chalk-textured fill if the stroke is closed and has a non-transparent fillColor
+  // Fill the current closed path before its chalk outline.
   if (stroke.fillColor && stroke.fillColor !== 'transparent' && closed && stroke.points.length >= 3) {
-    fillChalkArea(ctx, stroke.points, pathType, stroke.fillColor, stroke.size, intensity, closed);
+    fillShapeArea(ctx, stroke.points, pathType, stroke.fillColor, closed);
   }
 
   if (stroke.points.length === 1) {

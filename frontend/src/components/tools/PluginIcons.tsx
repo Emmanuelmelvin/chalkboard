@@ -28,6 +28,15 @@ export const PluginIcon: React.FC<PluginIconProps> = ({ pluginId, fallback }) =>
     );
   }
 
+  if (pluginId === 'chalkboard.statistics') {
+    return (
+      <svg className="plugin-logo-svg" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M6 26V16M14 26V9M22 26V13M30 26V5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        <path d="M4 27h27" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" opacity=".7" />
+      </svg>
+    );
+  }
+
   return <span aria-hidden="true">{fallback}</span>;
 };
 

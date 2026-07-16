@@ -12,8 +12,52 @@ import {
 import type { Stroke } from '@/types';
 import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
 import PluginIcon from '@/components/tools/PluginIcons';
+import { calculateSummary, parseStatisticRows } from '@/plugins/builtin/statistics/generators';
 
 const TAG_PLUGIN_ID = 'chalkboard.tag';
+const STATISTICS_PLUGIN_ID = 'chalkboard.statistics';
+
+interface DataGridRow {
+  label: string;
+  value: string;
+}
+
+const parseGridRows = (value: string | undefined): DataGridRow[] => {
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed) && parsed.length
+      ? parsed.map((row) => ({ label: String(row?.label ?? ''), value: String(row?.value ?? '') }))
+      : [{ label: '', value: '' }];
+  } catch {
+    return [{ label: '', value: '' }];
+  }
+};
+
+const StatisticsPreview: React.FC<{ values: Record<string, string>; summaryOnly: boolean }> = ({ values, summaryOnly }) => {
+  const rows = parseStatisticRows(values.dataset);
+  const summary = calculateSummary(rows);
+  const max = Math.max(1, ...rows.map((row) => Number(row.value)).filter(Number.isFinite));
+  return (
+    <div className="statistics-preview" aria-label="Statistics preview">
+      {summaryOnly ? (
+        <div className="statistics-summary-grid">
+          <span>Count<strong>{summary.count}</strong></span>
+          <span>Mean<strong>{summary.mean.toFixed(2)}</strong></span>
+          <span>Median<strong>{summary.median.toFixed(2)}</strong></span>
+          <span>Range<strong>{summary.range.toFixed(2)}</strong></span>
+        </div>
+      ) : (
+        <div className="statistics-bars">
+          {rows.slice(0, 10).map((row, index) => {
+            const value = Number(row.value);
+            const height = Number.isFinite(value) ? Math.max(8, Math.abs(value) / max * 86) : 4;
+            return <div className="statistics-bar-item" key={`${row.label}-${index}`}><div className="statistics-bar" style={{ height }} /><small>{row.label || index + 1}</small></div>;
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface PluginModalProps {
   plugin: PluginManifest;
@@ -268,6 +312,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
   });
   const isTagPlugin = plugin.id === TAG_PLUGIN_ID;
   const isMathSetPlugin = plugin.id === 'chalkboard.math-set';
+  const isStatisticsPlugin = plugin.id === STATISTICS_PLUGIN_ID;
   const [activeToolId, setActiveToolId] = useState<string | null>(isTagPlugin ? tools[0]?.id ?? null : null);
 
   const clampPosition = useCallback((x: number, y: number) => ({
@@ -349,7 +394,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
 
   return (
     <div
-      className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${isMathSetPlugin ? 'math-set-plugin-modal' : ''}`}
+      className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${isMathSetPlugin ? 'math-set-plugin-modal' : ''} ${isStatisticsPlugin ? 'statistics-plugin-modal' : ''}`}
       style={{ left: position.x, top: position.y }}
       role="dialog"
       aria-modal="true"
@@ -378,7 +423,10 @@ const PluginModal: React.FC<PluginModalProps> = ({
           const tagText = values.label ?? '';
           const placement = values.placement === 'top' ? 'top' : 'bottom';
           const isGraphTool = tool.id === 'math-set.graph';
-          const canSubmit = !isTagPlugin || (selectedStrokes.length > 0 && tagText.trim().length > 0);
+          const hasStatisticValues = parseStatisticRows(values.dataset).some((row) => Number.isFinite(Number(row.value)));
+          const canSubmit = isTagPlugin
+            ? selectedStrokes.length > 0 && tagText.trim().length > 0
+            : !isStatisticsPlugin || hasStatisticValues;
 
           return (
             <div key={tool.id} className="plugin-tool-card">
@@ -397,7 +445,8 @@ const PluginModal: React.FC<PluginModalProps> = ({
                   Use selected symbol <strong>{sharedOutput}</strong>
                 </button>
               )}
-              {!isTagPlugin && <MathToolPreview toolId={tool.id} values={values} />}
+              {!isTagPlugin && !isStatisticsPlugin && <MathToolPreview toolId={tool.id} values={values} />}
+              {isStatisticsPlugin && <StatisticsPreview values={values} summaryOnly={tool.command === 'statistics.insertSummary'} />}
 
               {(tool.formFields ?? []).map((field) => (
                 <label key={field.id} className="plugin-form-field">
@@ -414,6 +463,26 @@ const PluginModal: React.FC<PluginModalProps> = ({
                           {option.label}
                         </button>
                       ))}
+                    </div>
+                  ) : field.type === 'data-grid' ? (
+                    <div className="statistics-data-grid">
+                      <div className="statistics-data-grid-head"><span>Label</span><span>Value</span><span aria-hidden="true" /></div>
+                      {parseGridRows(values[field.id]).map((row, index, allRows) => (
+                        <div className="statistics-data-grid-row" key={index}>
+                          <input aria-label={`Row ${index + 1} label`} value={row.label} placeholder={`Item ${index + 1}`} onChange={(event) => {
+                            const next = [...allRows];
+                            next[index] = { ...next[index], label: event.target.value };
+                            setToolFieldValue(tool.id, field.id, JSON.stringify(next));
+                          }} />
+                          <input aria-label={`Row ${index + 1} value`} type="number" value={row.value} placeholder="0" onChange={(event) => {
+                            const next = [...allRows];
+                            next[index] = { ...next[index], value: event.target.value };
+                            setToolFieldValue(tool.id, field.id, JSON.stringify(next));
+                          }} />
+                          <button type="button" aria-label={`Remove row ${index + 1}`} disabled={allRows.length <= 1} onClick={() => setToolFieldValue(tool.id, field.id, JSON.stringify(allRows.filter((_, rowIndex) => rowIndex !== index)))}>×</button>
+                        </div>
+                      ))}
+                      <button type="button" className="statistics-add-row" onClick={() => setToolFieldValue(tool.id, field.id, JSON.stringify([...parseGridRows(values[field.id]), { label: '', value: '' }]))}>+ Add row</button>
                     </div>
                   ) : field.type === 'symbol-grid' ? (
                     <div className="math-symbol-grid" role="group" aria-label="Set symbols">

@@ -165,11 +165,33 @@ export function drawBoardOnCanvas(
     if (stroke.text) {
       const minX = Math.min(...pts.map((p) => p.x));
       const minY = Math.min(...pts.map((p) => p.y));
+      const maxX = Math.max(...pts.map((p) => p.x));
+      const fontSize = stroke.fontSize ?? 28;
+      const maxWidth = Math.max(fontSize * 2, maxX - minX);
+      const lineHeight = fontSize * 1.25;
+      const words = stroke.text.split(/\s+/).filter(Boolean);
+      const lines: string[] = [];
+
       ctx.save();
       ctx.fillStyle = stroke.color;
-      ctx.font = `${stroke.fontSize ?? 28}px "Comic Sans MS", "Chalkboard SE", cursive`;
+      ctx.font = `${fontSize}px "Comic Sans MS", "Chalkboard SE", cursive`;
       ctx.textBaseline = 'top';
-      ctx.fillText(stroke.text, minX, minY);
+
+      words.forEach((word) => {
+        const currentLine = lines[lines.length - 1] ?? '';
+        const nextLine = currentLine ? `${currentLine} ${word}` : word;
+        if (currentLine && ctx.measureText(nextLine).width > maxWidth) {
+          lines.push(word);
+        } else if (lines.length === 0) {
+          lines.push(word);
+        } else {
+          lines[lines.length - 1] = nextLine;
+        }
+      });
+
+      (lines.length > 0 ? lines : [stroke.text]).forEach((line, index) => {
+        ctx.fillText(line, minX, minY + index * lineHeight, maxWidth);
+      });
       ctx.restore();
       return;
     }

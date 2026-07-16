@@ -33,6 +33,33 @@ export const getStrokeBoundingBox = (stroke: Stroke): Rect | null => {
     if (p.y > maxY) maxY = p.y;
   }
 
+  if (stroke.text) {
+    const fontSize = stroke.fontSize ?? 28;
+    const textWidth = Math.max(fontSize * 2, maxX - minX);
+    const averageGlyphWidth = fontSize * 0.56;
+    const words = stroke.text.split(/\s+/).filter(Boolean);
+    let lineCount = 1;
+    let currentLineWidth = 0;
+
+    words.forEach((word) => {
+      const wordWidth = word.length * averageGlyphWidth;
+      const nextWidth = currentLineWidth === 0 ? wordWidth : currentLineWidth + averageGlyphWidth + wordWidth;
+      if (currentLineWidth > 0 && nextWidth > textWidth) {
+        lineCount += 1;
+        currentLineWidth = wordWidth;
+      } else {
+        currentLineWidth = nextWidth;
+      }
+    });
+
+    return {
+      minX,
+      minY,
+      maxX: minX + textWidth,
+      maxY: minY + Math.max(fontSize * 1.25, lineCount * fontSize * 1.25),
+    };
+  }
+
   // Expand slightly by brush size so it encompasses the line thickness
   const padding = stroke.size;
   const box = {

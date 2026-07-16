@@ -14,6 +14,7 @@ export interface MathSetLabels {
   xAxis?: string;
   yAxis?: string;
   symbol?: string;
+  equation?: string;
   leftValue?: string;
   intersectionValue?: string;
   rightValue?: string;
@@ -139,6 +140,10 @@ export function createNumberLineStrokes(
   labels: MathSetLabels = {}
 ): Stroke[] {
   const halfWidth = 260;
+  const expression = (labels.equation || 'x ≥ 0').replace(/\s+/g, '');
+  const match = expression.match(/x?(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)/i);
+  const operator = match?.[1] ?? '=';
+  const value = match ? Number(match[2]) : 0;
   const tickCount = 12;
   const tickSpacing = (halfWidth * 2) / tickCount;
   const strokes: Stroke[] = [
@@ -165,9 +170,14 @@ export function createNumberLineStrokes(
       { x, y: center.y + 16 }
     ), { pathType: 'linear' }));
   }
+  const markerX = center.x + Math.max(-halfWidth + 12, Math.min(halfWidth - 12, value * (halfWidth / 6)));
+  strokes.push(makeStroke(opts, 'number-line-marker', circlePoints(markerX, center.y, 8), { pathType: 'linear', closed: operator === '>=' || operator === '<=' || operator === '=' }));
+  if (operator === '>' || operator === '>=') strokes.push(makeStroke(opts, 'number-line-solution-right', [{ x: markerX + 10, y: center.y }, { x: center.x + halfWidth - 18, y: center.y }], { pathType: 'linear' }));
+  if (operator === '<' || operator === '<=') strokes.push(makeStroke(opts, 'number-line-solution-left', [{ x: markerX - 10, y: center.y }, { x: center.x - halfWidth + 18, y: center.y }], { pathType: 'linear' }));
 
   strokes.push(makeTextStroke(opts, 'number-line-min', labels.min || '-6', center.x - halfWidth - 8, center.y + 26, 22));
   strokes.push(makeTextStroke(opts, 'number-line-max', labels.max || '6', center.x + halfWidth - 8, center.y + 26, 22));
+  strokes.push(makeTextStroke(opts, 'number-line-equation', labels.equation || 'x ≥ 0', center.x - 70, center.y - 70, 24));
   if (labels.title) strokes.push(makeTextStroke(opts, 'number-line-title', labels.title, center.x - 80, center.y - 70, 24));
   return strokes;
 }

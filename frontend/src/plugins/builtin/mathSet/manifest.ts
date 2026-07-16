@@ -47,6 +47,7 @@ export const mathSetManifest: PluginManifest = {
         description: 'Insert a grouped number line with configurable end labels and title.',
         command: 'mathSet.insertNumberLine',
         formFields: [
+          { id: 'equation', label: 'Inequality / equation', defaultValue: 'x ≥ 0', placeholder: 'e.g. x > 3 or x ≤ -2' },
           { id: 'min', label: 'Left label', defaultValue: '-6' },
           { id: 'max', label: 'Right label', defaultValue: '6' },
           { id: 'title', label: 'Title', placeholder: 'Integers, domain, range...' },

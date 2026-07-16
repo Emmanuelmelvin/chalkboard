@@ -2035,6 +2035,13 @@ body {
 .math-set-plugin-modal .insert-links-add-btn { flex: 1 1 100%; }
 .math-set-plugin-modal .plugin-form-field { flex: 1 1 140px; width: auto !important; margin-right: 8px; display: flex; flex-direction: column; align-items: stretch; }
 .math-set-plugin-modal .plugin-form-field > span { white-space: normal; min-height: 2.2em; }
+.math-set-plugin-modal .plugin-form-field:has(.math-symbol-grid) { flex-basis: 100%; }
+.math-symbol-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.math-symbol-option { min-height: 42px; border: 1px solid rgba(148,163,184,.35); background: rgba(15,23,42,.65); color: #e2e8f0; cursor: pointer; font-size: 22px; line-height: 1; }
+.math-symbol-option:hover { border-color: rgba(96,165,250,.8); background: rgba(30,41,59,.9); }
+.math-symbol-option.active { border-color: #60a5fa; background: rgba(37,99,235,.35); box-shadow: 0 0 0 1px #60a5fa; color: #fff; }
+.plugin-shared-output { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid rgba(96,165,250,.5); background: rgba(30,64,175,.18); color: #dbeafe; padding: 8px 10px; cursor: pointer; text-align: left; }
+.plugin-shared-output strong { font-size: 22px; line-height: 1; }
 .tag-plugin-preview { max-height: 150px; overflow: hidden; }
 .tag-plugin-preview svg { display: block; width: 100%; height: 120px; }
 .math-tool-preview { margin: 10px 0; padding: 8px; border: 1px solid rgba(148,163,184,.25); background: rgba(2,6,23,.45); }

@@ -26,6 +26,8 @@ interface PluginModalProps {
     formValues: Record<string, string>,
     selectionStrokeIds: string[]
   ) => Promise<boolean> | boolean;
+  sharedOutput?: string;
+  onPublishOutput?: (value: string) => void;
 }
 
 interface TagPreviewProps {
@@ -248,6 +250,8 @@ const PluginModal: React.FC<PluginModalProps> = ({
   selectionStrokeIds,
   onClose,
   onRunPluginTool,
+  sharedOutput,
+  onPublishOutput,
 }) => {
   const [position, setPosition] = useState({ x: 420, y: 120 });
   const [dragStart, setDragStart] = useState<{ pointerX: number; pointerY: number; x: number; y: number } | null>(null);
@@ -263,6 +267,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
     return values;
   });
   const isTagPlugin = plugin.id === TAG_PLUGIN_ID;
+  const isMathSetPlugin = plugin.id === 'chalkboard.math-set';
   const [activeToolId, setActiveToolId] = useState<string | null>(isTagPlugin ? tools[0]?.id ?? null : null);
 
   const clampPosition = useCallback((x: number, y: number) => ({
@@ -338,9 +343,13 @@ const PluginModal: React.FC<PluginModalProps> = ({
     if (didRun) onClose();
   };
 
+  const useSharedOutputAsTag = (toolId: string) => {
+    if (sharedOutput) setToolFieldValue(toolId, 'label', sharedOutput);
+  };
+
   return (
     <div
-      className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${plugin.id === 'chalkboard.math-set' ? 'math-set-plugin-modal' : ''}`}
+      className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${isMathSetPlugin ? 'math-set-plugin-modal' : ''}`}
       style={{ left: position.x, top: position.y }}
       role="dialog"
       aria-modal="true"
@@ -383,6 +392,11 @@ const PluginModal: React.FC<PluginModalProps> = ({
               {isTagPlugin && (
                 <TagPreview strokes={selectedStrokes} label={tagText} placement={placement} />
               )}
+              {isTagPlugin && sharedOutput && (
+                <button type="button" className="plugin-shared-output" onClick={() => useSharedOutputAsTag(tool.id)}>
+                  Use selected symbol <strong>{sharedOutput}</strong>
+                </button>
+              )}
               {!isTagPlugin && <MathToolPreview toolId={tool.id} values={values} />}
 
               {(tool.formFields ?? []).map((field) => (
@@ -396,6 +410,23 @@ const PluginModal: React.FC<PluginModalProps> = ({
                           type="button"
                           className={values[field.id] === option.value ? 'tag-placement-option active' : 'tag-placement-option'}
                           onClick={() => setToolFieldValue(tool.id, field.id, option.value)}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : field.type === 'symbol-grid' ? (
+                    <div className="math-symbol-grid" role="group" aria-label="Set symbols">
+                      {(field.options ?? []).map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={values[field.id] === option.value ? 'math-symbol-option active' : 'math-symbol-option'}
+                          aria-pressed={values[field.id] === option.value}
+                          onClick={() => {
+                            setToolFieldValue(tool.id, field.id, option.value);
+                            onPublishOutput?.(option.value);
+                          }}
                         >
                           {option.label}
                         </button>

@@ -85,7 +85,7 @@ export const mathSetManifest: PluginManifest = {
         description: `Insert one set symbol. Available: ${SET_SYMBOLS.join(' ')}`,
         command: 'mathSet.insertSetSymbol',
         formFields: [
-          { id: 'symbol', label: 'Symbol', defaultValue: '∈', placeholder: SET_SYMBOLS.join(' ') },
+          { id: 'symbol', label: 'Choose a symbol', defaultValue: '∈', type: 'symbol-grid', options: SET_SYMBOLS.map((symbol) => ({ value: symbol, label: symbol })) },
         ],
       },
     ],

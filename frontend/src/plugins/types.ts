@@ -15,7 +15,7 @@ export interface PluginToolFormField {
   label: string;
   placeholder?: string;
   defaultValue?: string;
-  type?: 'text' | 'number' | 'select';
+  type?: 'text' | 'number' | 'select' | 'symbol-grid';
   options?: Array<{
     value: string;
     label: string;

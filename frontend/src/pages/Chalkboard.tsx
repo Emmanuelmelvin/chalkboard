@@ -92,20 +92,23 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   }, []);
   const pluginTools = useMemo(() => pluginRegistry.getTools(), []);
   const pluginSelectionTools = useMemo(() => pluginRegistry.getSelectionTools(), []);
-  const [activePluginModal, setActivePluginModal] = useState<{ pluginId: string; selectionStrokeIds: string[] } | null>(null);
+  const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string; selectionStrokeIds: string[] }>>([]);
+  const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
 
   const hasNavigatedToLink = useRef<boolean>(false);
   const openPluginModal = (pluginId: string, ids = selectedStrokeIds) => {
     setShowInsertShapes(false);
-    setActivePluginModal({ pluginId, selectionStrokeIds: [...ids] });
+    setActivePluginModals((current) => current.some((modal) => modal.pluginId === pluginId)
+      ? current
+      : [...current, { pluginId, selectionStrokeIds: [...ids] }]);
   };
 
   // A tag editor is only meaningful while its source selection exists.
   useEffect(() => {
-    if (activePluginModal?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length === 0) {
-      setActivePluginModal(null);
+    if (selectedStrokeIds.length === 0) {
+      setActivePluginModals((current) => current.filter((modal) => modal.pluginId !== 'chalkboard.tag'));
     }
-  }, [activePluginModal?.pluginId, selectedStrokeIds.length]);
+  }, [selectedStrokeIds.length]);
 
   useCanvasRenderer(canvasRef);
 
@@ -455,16 +458,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onEraserWidthChange={setEraserWidth}
           onEraserHeightChange={setEraserHeight} />
       </div>
-      {activePluginModal && (() => {
-        const plugin = pluginManifests.find((item) => item.id === activePluginModal.pluginId);
+      {activePluginModals.map((modal) => {
+        const plugin = pluginManifests.find((item) => item.id === modal.pluginId);
         if (!plugin) return null;
         const tools = pluginTools.filter((tool) => (tool.pluginId ?? plugin.id) === plugin.id);
-        return <PluginModal plugin={plugin} tools={tools}
-          selectedStrokes={strokes.filter((stroke) => activePluginModal.selectionStrokeIds.includes(stroke.id))}
-          selectionStrokeIds={activePluginModal.selectionStrokeIds}
-          onClose={() => setActivePluginModal(null)}
+        return <PluginModal key={modal.pluginId} plugin={plugin} tools={tools}
+          selectedStrokes={strokes.filter((stroke) => modal.selectionStrokeIds.includes(stroke.id))}
+          selectionStrokeIds={modal.selectionStrokeIds}
+          sharedOutput={sharedPluginOutput}
+          onPublishOutput={setSharedPluginOutput}
+          onClose={() => setActivePluginModals((current) => current.filter((item) => item.pluginId !== modal.pluginId))}
           onRunPluginTool={(commandId, formValues, selectionIds) => pluginRegistry.executeCommand(commandId, { formValues, selectionStrokeIds: selectionIds })} />;
-      })()}
+      })}
     </div>
   );
 };

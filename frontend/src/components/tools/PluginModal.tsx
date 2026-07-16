@@ -1,9 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { getCombinedBoundingBox } from '@/lib/geometry';
-import { getNumberLineDomain, parseNumberLineExpression } from '@/plugins/builtin/mathSet/generators';
+import {
+  evaluateGraphExpression,
+  getGraphRange,
+  getNumberLineDomain,
+  parseCoordinatePoints,
+  parseGraphEquation,
+  parseNumberLineExpression,
+} from '@/plugins/builtin/mathSet/generators';
 import type { Stroke } from '@/types';
 import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
+import PluginIcon from '@/components/tools/PluginIcons';
 
 const TAG_PLUGIN_ID = 'chalkboard.tag';
 
@@ -62,9 +70,93 @@ const NumberLinePreview: React.FC<{ values: Record<string, string> }> = ({ value
   );
 };
 
+const GraphPreview: React.FC<{ values: Record<string, string> }> = ({ values }) => {
+  const equation = values.equation || 'y = x^2';
+  const graph = parseGraphEquation(equation);
+  const range = getGraphRange(values);
+  const left = 20;
+  const right = 240;
+  const top = 16;
+  const bottom = 112;
+  const mapX = (x: number) => left + ((x - range.xMin) / (range.xMax - range.xMin)) * (right - left);
+  const mapY = (y: number) => bottom - ((y - range.yMin) / (range.yMax - range.yMin)) * (bottom - top);
+  const points: string[] = [];
+  if (graph) {
+    for (let index = 0; index <= 160; index++) {
+      const x = range.xMin + ((range.xMax - range.xMin) * index) / 160;
+      const y = evaluateGraphExpression(graph.expression, x);
+      if (!Number.isFinite(y)) continue;
+      points.push(`${mapX(x)},${mapY(y)}`);
+    }
+  }
+  const path = points.join(' ');
+  const xAxis = range.xMin <= 0 && range.xMax >= 0 ? mapX(0) : left;
+  const yAxis = range.yMin <= 0 && range.yMax >= 0 ? mapY(0) : bottom;
+  const fillPath = graph && graph.relation !== '=' && points.length > 1
+    ? `${path} ${mapX(range.xMax)},${graph.relation === '>' || graph.relation === '>=' ? top : bottom} ${mapX(range.xMin)},${graph.relation === '>' || graph.relation === '>=' ? top : bottom} Z`
+    : '';
+
+  return (
+    <div className="graph-preview" aria-label="Graph preview">
+      <svg viewBox="0 0 260 140" role="img">
+        {Array.from({ length: 11 }, (_, index) => {
+          const x = left + ((right - left) * index) / 10;
+          const y = top + ((bottom - top) * index) / 10;
+          return <g key={index}><line x1={x} y1={top} x2={x} y2={bottom} stroke="#334155" strokeWidth="0.7" /><line x1={left} y1={y} x2={right} y2={y} stroke="#334155" strokeWidth="0.7" /></g>;
+        })}
+        <line x1={xAxis} y1={top} x2={xAxis} y2={bottom} stroke="#cbd5e1" strokeWidth="1.5" />
+        <line x1={left} y1={yAxis} x2={right} y2={yAxis} stroke="#cbd5e1" strokeWidth="1.5" />
+        {fillPath && <path d={fillPath} fill="rgba(96,165,250,.18)" stroke="none" />}
+        {path && <polyline points={path} fill="none" stroke="#60a5fa" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />}
+        <text x="130" y="132" textAnchor="middle" fill="#f8fafc" fontSize="12">{equation}</text>
+      </svg>
+    </div>
+  );
+};
+
+const CoordinateGridPreview: React.FC<{ values: Record<string, string> }> = ({ values }) => {
+  const range = getGraphRange(values);
+  const stepValue = Number(values.gridStep);
+  const step = Number.isFinite(stepValue) && stepValue > 0 ? stepValue : 1;
+  const left = 20;
+  const right = 240;
+  const top = 16;
+  const bottom = 112;
+  const xCount = Math.min(30, Math.ceil((range.xMax - range.xMin) / step));
+  const yCount = Math.min(30, Math.ceil((range.yMax - range.yMin) / step));
+  const mapX = (value: number) => left + ((value - range.xMin) / (range.xMax - range.xMin)) * (right - left);
+  const mapY = (value: number) => bottom - ((value - range.yMin) / (range.yMax - range.yMin)) * (bottom - top);
+  const xAxis = range.xMin <= 0 && range.xMax >= 0 ? mapX(0) : left;
+  const yAxis = range.yMin <= 0 && range.yMax >= 0 ? mapY(0) : bottom;
+  const major = (value: number) => value !== 0 && Math.abs(value % 5) < 0.0001;
+  const points = parseCoordinatePoints(values.points).filter((point) => point.x >= range.xMin && point.x <= range.xMax && point.y >= range.yMin && point.y <= range.yMax);
+
+  return (
+    <div className="coordinate-grid-preview" aria-label="Coordinate grid preview">
+      <svg viewBox="0 0 260 140" role="img">
+        {Array.from({ length: xCount + 1 }, (_, index) => {
+          const value = range.xMin + ((range.xMax - range.xMin) * index) / xCount;
+          const x = mapX(value);
+          return <g key={`x-${index}`}><line x1={x} y1={top} x2={x} y2={bottom} stroke={major(value) ? '#64748b' : '#334155'} strokeOpacity={major(value) ? 0.45 : 0.22} strokeWidth="0.6" />{major(value) && <text x={x} y={yAxis + 13} textAnchor="middle" fill="#cbd5e1" fontSize="8">{Number(value.toFixed(1))}</text>}</g>;
+        })}
+        {Array.from({ length: yCount + 1 }, (_, index) => {
+          const value = range.yMin + ((range.yMax - range.yMin) * index) / yCount;
+          const y = mapY(value);
+          return <g key={`y-${index}`}><line x1={left} y1={y} x2={right} y2={y} stroke={major(value) ? '#64748b' : '#334155'} strokeOpacity={major(value) ? 0.45 : 0.22} strokeWidth="0.6" />{major(value) && <text x={xAxis + 5} y={y + 3} fill="#cbd5e1" fontSize="8">{Number(value.toFixed(1))}</text>}</g>;
+        })}
+        {range.yMin <= 0 && range.yMax >= 0 && <line x1={left} y1={yAxis} x2={right} y2={yAxis} stroke="#f8fafc" strokeWidth="1.8" />}
+        {range.xMin <= 0 && range.xMax >= 0 && <line x1={xAxis} y1={top} x2={xAxis} y2={bottom} stroke="#f8fafc" strokeWidth="1.8" />}
+        {points.map((point, index) => <g key={`point-${index}`}><circle cx={mapX(point.x)} cy={mapY(point.y)} r="4.5" fill="#60a5fa" stroke="#dbeafe" strokeWidth="1.2" /><text x={mapX(point.x) + 7} y={mapY(point.y) - 6} fill="#f8fafc" fontSize="8">({point.x}, {point.y})</text></g>)}
+        <text x="250" y={yAxis - 4} textAnchor="end" fill="#f8fafc" fontSize="10">{values.xAxis || 'x'}</text>
+        <text x={xAxis + 5} y="13" fill="#f8fafc" fontSize="10">{values.yAxis || 'y'}</text>
+      </svg>
+    </div>
+  );
+};
+
 const MathToolPreview: React.FC<{ toolId: string; values: Record<string, string> }> = ({ toolId, values }) => (
   <div className="math-tool-preview" aria-label="Tool preview">
-    {toolId.includes('number-line') ? <NumberLinePreview values={values} /> : toolId.includes('two-set-venn') ? <svg viewBox="0 0 260 130"><circle cx="105" cy="65" r="42" /><circle cx="155" cy="65" r="42" /><text x="70" y="25">{values.leftSet || 'A'}</text><text x="175" y="25">{values.rightSet || 'B'}</text><text x="82" y="70">{values.leftValue || '1'}</text><text x="130" y="70">{values.intersectionValue || '2'}</text><text x="168" y="70">{values.rightValue || '3'}</text></svg> : toolId.includes('three-set-venn') ? <svg viewBox="0 0 260 150"><circle cx="105" cy="62" r="42" /><circle cx="155" cy="62" r="42" /><circle cx="130" cy="94" r="42" /><text x="70" y="20">{values.leftSet || 'A'}</text><text x="190" y="20">{values.rightSet || 'B'}</text><text x="130" y="145">{values.bottomSet || 'C'}</text><text x="82" y="62">{values.leftValue || '1'}</text><text x="178" y="62">{values.rightValue || '2'}</text><text x="130" y="116">{values.bottomValue || '3'}</text><text x="130" y="42">{values.leftRightValue || '4'}</text><text x="108" y="103">{values.leftBottomValue || '5'}</text><text x="152" y="103">{values.rightBottomValue || '6'}</text><text x="130" y="78">{values.centerValue || '7'}</text></svg> : <div className="math-tool-preview-generic">{values.title || values.symbol || 'Preview of inserted chalk object'}</div>}
+    {toolId.includes('coordinate-grid') ? <CoordinateGridPreview values={values} /> : toolId.includes('graph') ? <GraphPreview values={values} /> : toolId.includes('number-line') ? <NumberLinePreview values={values} /> : toolId.includes('two-set-venn') ? <svg viewBox="0 0 260 130"><circle cx="105" cy="65" r="42" /><circle cx="155" cy="65" r="42" /><text x="70" y="25">{values.leftSet || 'A'}</text><text x="175" y="25">{values.rightSet || 'B'}</text><text x="82" y="70">{values.leftValue || '1'}</text><text x="130" y="70">{values.intersectionValue || '2'}</text><text x="168" y="70">{values.rightValue || '3'}</text></svg> : toolId.includes('three-set-venn') ? <svg viewBox="0 0 260 150"><circle cx="105" cy="62" r="42" /><circle cx="155" cy="62" r="42" /><circle cx="130" cy="94" r="42" /><text x="70" y="20">{values.leftSet || 'A'}</text><text x="190" y="20">{values.rightSet || 'B'}</text><text x="130" y="145">{values.bottomSet || 'C'}</text><text x="82" y="62">{values.leftValue || '1'}</text><text x="178" y="62">{values.rightValue || '2'}</text><text x="130" y="116">{values.bottomValue || '3'}</text><text x="130" y="42">{values.leftRightValue || '4'}</text><text x="108" y="103">{values.leftBottomValue || '5'}</text><text x="152" y="103">{values.rightBottomValue || '6'}</text><text x="130" y="78">{values.centerValue || '7'}</text></svg> : <div className="math-tool-preview-generic">{values.title || values.symbol || 'Preview of inserted chalk object'}</div>}
   </div>
 );
 
@@ -159,6 +251,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
 }) => {
   const [position, setPosition] = useState({ x: 420, y: 120 });
   const [dragStart, setDragStart] = useState<{ pointerX: number; pointerY: number; x: number; y: number } | null>(null);
+  const equationInputRef = useRef<HTMLInputElement | null>(null);
   const existingTag = selectedStrokes.find((stroke) => stroke.pluginId === TAG_PLUGIN_ID && stroke.text);
   const [formValues, setFormValues] = useState<Record<string, Record<string, string>>>(() => {
     if (existingTag && tools[0]) return { [tools[0].id]: { label: existingTag.text ?? '' } };
@@ -211,6 +304,19 @@ const PluginModal: React.FC<PluginModalProps> = ({
     }));
   };
 
+  const insertEquationToken = (toolId: string, value: string, token: string) => {
+    const input = equationInputRef.current;
+    const start = input?.selectionStart ?? value.length;
+    const end = input?.selectionEnd ?? value.length;
+    const nextValue = `${value.slice(0, start)}${token}${value.slice(end)}`;
+    setToolFieldValue(toolId, 'equation', nextValue);
+    requestAnimationFrame(() => {
+      input?.focus();
+      const caret = start + token.length;
+      input?.setSelectionRange(caret, caret);
+    });
+  };
+
   const getToolFormValues = (tool: PluginToolContribution) => {
     const saved = formValues[tool.id] ?? {};
     return Object.fromEntries(
@@ -241,7 +347,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
       aria-label={`${plugin.name} plugin`}
     >
       <div className="plugin-floating-header" onPointerDown={handleHeaderPointerDown}>
-        <span className="insert-plugin-logo">{plugin.name.slice(0, 1)}</span>
+        <span className="insert-plugin-logo"><PluginIcon pluginId={plugin.id} fallback={plugin.name.slice(0, 1)} /></span>
         <div>
           <strong>{plugin.name}</strong>
           <small>{plugin.description}</small>
@@ -262,6 +368,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
           const values = getToolFormValues(tool);
           const tagText = values.label ?? '';
           const placement = values.placement === 'top' ? 'top' : 'bottom';
+          const isGraphTool = tool.id === 'math-set.graph';
           const canSubmit = !isTagPlugin || (selectedStrokes.length > 0 && tagText.trim().length > 0);
 
           return (
@@ -305,12 +412,20 @@ const PluginModal: React.FC<PluginModalProps> = ({
                     </select>
                   ) : (
                     <input
+                      ref={isGraphTool && field.id === 'equation' ? equationInputRef : undefined}
                       type={field.type === 'number' ? 'number' : 'text'}
                       value={values[field.id] ?? ''}
                       placeholder={field.placeholder}
                       autoFocus={isTagPlugin && field.id === 'label'}
                       onChange={(event) => setToolFieldValue(tool.id, field.id, event.target.value)}
                     />
+                  )}
+                  {isGraphTool && field.id === 'equation' && (
+                    <div className="graph-equation-symbols" aria-label="Equation symbols">
+                      {['²', '>=', '<=', 'sqrt()', 'π'].map((token) => (
+                        <button key={token} type="button" onClick={() => insertEquationToken(tool.id, values[field.id] ?? '', token)}>{token}</button>
+                      ))}
+                    </div>
                   )}
                 </label>
               ))}

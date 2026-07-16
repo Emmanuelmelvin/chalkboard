@@ -1,8 +1,6 @@
 import type { Point, ShapeStrokeOptions, Stroke } from '@/types';
 
 const VENN_RADIUS = 90;
-const GRID_SIZE = 320;
-const GRID_STEP = 40;
 
 export interface MathSetLabels {
   leftSet?: string;
@@ -11,6 +9,12 @@ export interface MathSetLabels {
   title?: string;
   xAxis?: string;
   yAxis?: string;
+  xMin?: string;
+  xMax?: string;
+  yMin?: string;
+  yMax?: string;
+  gridStep?: string;
+  points?: string;
   symbol?: string;
   equation?: string;
   leftValue?: string;
@@ -291,31 +295,330 @@ export function createSetSymbolStroke(
   return [makeTextStroke(opts, 'set-symbol', labels.symbol || '∈', center.x - 16, center.y - 18, 46)];
 }
 
+export interface GraphEquation {
+  expression: string;
+  relation: '=' | '>' | '<' | '>=' | '<=';
+}
+
+export interface GraphRange {
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+}
+
+const GRAPH_WIDTH = 480;
+const GRAPH_HEIGHT = 360;
+
+interface GraphPalette {
+  minorGrid: string;
+  majorGrid: string;
+  axis: string;
+  minorOpacity: number;
+  majorOpacity: number;
+  axisOpacity: number;
+  tickLabel: string;
+}
+
+function getGraphPalette(): GraphPalette {
+  const root = typeof document !== 'undefined' ? document.documentElement : null;
+  const body = typeof document !== 'undefined' ? document.body : null;
+  const isLight = root?.dataset.theme === 'light'
+    || root?.classList.contains('light-theme')
+    || body?.classList.contains('light-theme');
+  return isLight
+    ? {
+        minorGrid: '#d1d5db',
+        majorGrid: '#9ca3af',
+        axis: '#1f2937',
+        minorOpacity: 0.15,
+        majorOpacity: 0.34,
+        axisOpacity: 1,
+        tickLabel: 'rgba(31, 41, 55, 0.72)',
+      }
+    : {
+        minorGrid: '#ffffff',
+        majorGrid: '#ffffff',
+        axis: '#ffffff',
+        minorOpacity: 0.08,
+        majorOpacity: 0.2,
+        axisOpacity: 0.9,
+        tickLabel: 'rgba(255, 255, 255, 0.58)',
+      };
+}
+
+function isMajorGridValue(value: number, interval: number): boolean {
+  return value !== 0 && Math.abs(value % interval) < 0.0001;
+}
+
+/** Accept keyboard-friendly syntax (`^2`, `>=`) as well as math symbols. */
+export function parseGraphEquation(input: string): GraphEquation | null {
+  const normalized = (input || 'y = x^2')
+    .replace(/\u2265/g, '>=')
+    .replace(/\u2264/g, '<=')
+    .replace(/\u00d7/g, '*')
+    .replace(/\u00f7/g, '/')
+    .replace(/\u03c0/g, 'pi')
+    .replace(/\u00b2/g, '^2')
+    .replace(/\u00b3/g, '^3')
+    .trim();
+  const match = normalized.match(/^(?:y|f\(x\))\s*(>=|<=|>|<|=)\s*(.+)$/i);
+  if (!match) return null;
+  const expression = match[2].trim();
+  if (!expression) return null;
+  return { relation: match[1] as GraphEquation['relation'], expression };
+}
+
+function compileGraphExpression(expression: string): ((x: number) => number) | null {
+  const normalized = expression
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    // Support the natural math notation `2x`, `x(x + 1)`, and `(x + 1)(x - 1)`.
+    .replace(/(\d|x|\))(?=(x|pi|sqrt|sin|cos|tan|abs|log|exp|\())/g, '$1*');
+  const source = normalized
+    .replace(/\bpi\b/g, 'Math.PI')
+    .replace(/\bsqrt\b/g, 'Math.sqrt')
+    .replace(/\bsin\b/g, 'Math.sin')
+    .replace(/\bcos\b/g, 'Math.cos')
+    .replace(/\btan\b/g, 'Math.tan')
+    .replace(/\babs\b/g, 'Math.abs')
+    .replace(/\blog\b/g, 'Math.log')
+    .replace(/\bexp\b/g, 'Math.exp')
+    .replace(/\^/g, '**');
+  const identifiers = source.match(/[a-z]+/gi) ?? [];
+  const allowedIdentifiers = new Set(['x', 'Math', 'PI', 'sqrt', 'sin', 'cos', 'tan', 'abs', 'log', 'exp']);
+  if (identifiers.some((identifier) => !allowedIdentifiers.has(identifier))) return null;
+  if (!/^[0-9a-zA-Z_+\-*/%().,\s]+$/.test(source)) return null;
+  try {
+    const evaluator = new Function('x', `"use strict"; return (${source});`) as (x: number) => unknown;
+    return (x: number) => {
+      const value = evaluator(x);
+      return typeof value === 'number' ? value : Number.NaN;
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function getGraphRange(labels: MathSetLabels): GraphRange {
+  const numberOr = (value: string | undefined, fallback: number) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const xMin = numberOr(labels.xMin, -10);
+  const xMax = numberOr(labels.xMax, 10);
+  const yMin = numberOr(labels.yMin, -10);
+  const yMax = numberOr(labels.yMax, 10);
+  return {
+    xMin: Math.min(xMin, xMax - 1),
+    xMax: Math.max(xMax, xMin + 1),
+    yMin: Math.min(yMin, yMax - 1),
+    yMax: Math.max(yMax, yMin + 1),
+  };
+}
+
+export function evaluateGraphExpression(expression: string, x: number): number {
+  const evaluator = compileGraphExpression(expression);
+  if (!evaluator) return Number.NaN;
+  return evaluator(x);
+}
+
+function graphPoint(center: Point, range: GraphRange, x: number, y: number): Point {
+  return {
+    x: center.x - GRAPH_WIDTH / 2 + ((x - range.xMin) / (range.xMax - range.xMin)) * GRAPH_WIDTH,
+    y: center.y + GRAPH_HEIGHT / 2 - ((y - range.yMin) / (range.yMax - range.yMin)) * GRAPH_HEIGHT,
+  };
+}
+
+export interface CoordinatePoint {
+  x: number;
+  y: number;
+}
+
+export function parseCoordinatePoints(input: string | undefined): CoordinatePoint[] {
+  if (!input) return [];
+  const points: CoordinatePoint[] = [];
+  const pattern = /\(?\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)?/g;
+  for (const match of input.matchAll(pattern)) {
+    points.push({ x: Number(match[1]), y: Number(match[2]) });
+  }
+  return points;
+}
+
+export function createGraphStrokes(
+  center: Point,
+  opts: ShapeStrokeOptions,
+  labels: MathSetLabels = {}
+): Stroke[] {
+  const graph = parseGraphEquation(labels.equation || 'y = x^2');
+  if (!graph) return [makeTextStroke(opts, 'graph-error', 'Use y = expression', center.x - 100, center.y, 24)];
+  const range = getGraphRange(labels);
+  const palette = getGraphPalette();
+  const majorInterval = Math.max(range.xMax - range.xMin, range.yMax - range.yMin) <= 50 ? 5 : 10;
+  const gridStrokes: Stroke[] = [];
+  const tickLabelStrokes: Stroke[] = [];
+  const strokes: Stroke[] = [];
+  const xStart = center.x - GRAPH_WIDTH / 2;
+  const xEnd = center.x + GRAPH_WIDTH / 2;
+  const yStart = center.y - GRAPH_HEIGHT / 2;
+  const yEnd = center.y + GRAPH_HEIGHT / 2;
+
+  const xTickStart = Math.ceil(range.xMin);
+  const xTickEnd = Math.floor(range.xMax);
+  for (let value = xTickStart; value <= xTickEnd; value++) {
+    const point = graphPoint(center, range, value, range.yMin);
+    const isMajor = isMajorGridValue(value, majorInterval);
+    gridStrokes.push(makeStroke({
+      ...opts,
+      color: isMajor ? palette.majorGrid : palette.minorGrid,
+      intensity: isMajor ? palette.majorOpacity : palette.minorOpacity,
+      size: 0.45,
+    }, `graph-grid-x-${value}`, [
+      { x: point.x, y: yStart },
+      { x: point.x, y: yEnd },
+    ], { pathType: 'linear' }));
+    if (isMajor) tickLabelStrokes.push(makeTextStroke({ ...opts, color: palette.tickLabel }, `graph-x-value-${value}`, String(value), point.x - 6, graphPoint(center, range, value, 0).y + 8, 14));
+  }
+  const yTickStart = Math.ceil(range.yMin);
+  const yTickEnd = Math.floor(range.yMax);
+  for (let value = yTickStart; value <= yTickEnd; value++) {
+    const point = graphPoint(center, range, range.xMin, value);
+    const isMajor = isMajorGridValue(value, majorInterval);
+    gridStrokes.push(makeStroke({
+      ...opts,
+      color: isMajor ? palette.majorGrid : palette.minorGrid,
+      intensity: isMajor ? palette.majorOpacity : palette.minorOpacity,
+      size: 0.45,
+    }, `graph-grid-y-${value}`, [
+      { x: xStart, y: point.y },
+      { x: xEnd, y: point.y },
+    ], { pathType: 'linear' }));
+    if (isMajor) tickLabelStrokes.push(makeTextStroke({ ...opts, color: palette.tickLabel }, `graph-y-value-${value}`, String(value), graphPoint(center, range, 0, value).x + 8, point.y - 8, 14));
+  }
+
+  // Paint the complete grid first, then draw both axes as a separate layer so
+  // intersections can never wash out the x=0/y=0 lines.
+  strokes.push(...gridStrokes);
+  const axisOptions = { ...opts, color: palette.axis, intensity: palette.axisOpacity, size: 4 / 3 };
+  if (range.yMin <= 0 && range.yMax >= 0) {
+    const xAxisY = graphPoint(center, range, 0, 0).y;
+    strokes.push(makeStroke(axisOptions, 'graph-axis-x', [
+      { x: xStart, y: xAxisY },
+      { x: xEnd, y: xAxisY },
+    ], { pathType: 'linear' }));
+  }
+  if (range.xMin <= 0 && range.xMax >= 0) {
+    const yAxisX = graphPoint(center, range, 0, 0).x;
+    strokes.push(makeStroke(axisOptions, 'graph-axis-y', [
+      { x: yAxisX, y: yStart },
+      { x: yAxisX, y: yEnd },
+    ], { pathType: 'linear' }));
+  }
+  strokes.push(...tickLabelStrokes);
+
+  const evaluator = compileGraphExpression(graph.expression);
+  if (evaluator) {
+    const curveSegments: Point[][] = [];
+    let currentSegment: Point[] = [];
+    const sampleCount = 240;
+    for (let index = 0; index <= sampleCount; index++) {
+      const x = range.xMin + ((range.xMax - range.xMin) * index) / sampleCount;
+      const y = evaluator(x);
+      if (!Number.isFinite(y) || y < range.yMin || y > range.yMax) {
+        if (currentSegment.length > 1) curveSegments.push(currentSegment);
+        currentSegment = [];
+        continue;
+      }
+      currentSegment.push(graphPoint(center, range, x, y));
+    }
+    if (currentSegment.length > 1) curveSegments.push(currentSegment);
+    curveSegments.forEach((curvePoints, segmentIndex) => {
+      if (graph.relation !== '=') {
+        const boundaryY = graph.relation === '>' || graph.relation === '>=' ? yStart : yEnd;
+        const fill = [...curvePoints, { x: curvePoints[curvePoints.length - 1].x, y: boundaryY }, { x: curvePoints[0].x, y: boundaryY }];
+        strokes.push(makeStroke(opts, `graph-inequality-region-${segmentIndex}`, fill, { pathType: 'linear', closed: true, fillColor: 'rgba(96, 165, 250, 0.16)' }));
+      }
+      strokes.push(makeStroke(opts, `graph-curve-${segmentIndex}`, curvePoints, { pathType: 'linear' }));
+    });
+  }
+
+  strokes.push(makeTextStroke(opts, 'graph-equation', labels.equation || 'y = x^2', center.x - Math.max(50, (labels.equation || 'y = x^2').length * 7), yStart - 36, 24));
+  strokes.push(makeTextStroke({ ...opts, color: palette.axis }, 'graph-x-axis-label', 'x', xEnd + 12, graphPoint(center, range, range.xMax, 0).y - 10, 20));
+  strokes.push(makeTextStroke({ ...opts, color: palette.axis }, 'graph-y-axis-label', 'y', graphPoint(center, range, 0, range.yMax).x + 10, yStart - 10, 20));
+  return strokes;
+}
+
 export function createCoordinateGridStrokes(
   center: Point,
   opts: ShapeStrokeOptions,
   labels: MathSetLabels = {}
 ): Stroke[] {
+  const range = getGraphRange(labels);
+  const palette = getGraphPalette();
+  const requestedStep = Number(labels.gridStep);
+  const step = Number.isFinite(requestedStep) && requestedStep > 0 ? requestedStep : 1;
+  const majorInterval = Math.max(range.xMax - range.xMin, range.yMax - range.yMin) <= 50 ? 5 : 10;
+  const gridStrokes: Stroke[] = [];
+  const tickLabelStrokes: Stroke[] = [];
   const strokes: Stroke[] = [];
-  const half = GRID_SIZE / 2;
-  let index = 0;
+  const xStart = center.x - GRAPH_WIDTH / 2;
+  const xEnd = center.x + GRAPH_WIDTH / 2;
+  const yStart = center.y - GRAPH_HEIGHT / 2;
+  const yEnd = center.y + GRAPH_HEIGHT / 2;
+  const xCount = Math.min(250, Math.ceil((range.xMax - range.xMin) / step));
+  const yCount = Math.min(250, Math.ceil((range.yMax - range.yMin) / step));
 
-  for (let offset = -half; offset <= half; offset += GRID_STEP) {
-    const isAxis = offset === 0;
-    const size = isAxis ? opts.size + 1 : Math.max(1, opts.size - 2);
-    const gridOpts = { ...opts, size };
-    strokes.push(makeStroke(gridOpts, `grid-v-${index}`, linePoints(
-      { x: center.x + offset, y: center.y - half },
-      { x: center.x + offset, y: center.y + half }
-    ), { pathType: 'linear' }));
-    strokes.push(makeStroke(gridOpts, `grid-h-${index}`, linePoints(
-      { x: center.x - half, y: center.y + offset },
-      { x: center.x + half, y: center.y + offset }
-    ), { pathType: 'linear' }));
-    index += 1;
+  for (let index = 0; index <= xCount; index++) {
+    const value = range.xMin + ((range.xMax - range.xMin) * index) / xCount;
+    const point = graphPoint(center, range, value, range.yMin);
+    const isMajor = isMajorGridValue(value, majorInterval);
+    gridStrokes.push(makeStroke({
+      ...opts,
+      color: isMajor ? palette.majorGrid : palette.minorGrid,
+      intensity: isMajor ? palette.majorOpacity : palette.minorOpacity,
+      size: 0.45,
+    }, `coordinate-grid-v-${index}`, [{ x: point.x, y: yStart }, { x: point.x, y: yEnd }], { pathType: 'linear' }));
+    if (isMajor) tickLabelStrokes.push(makeTextStroke({ ...opts, color: palette.tickLabel }, `coordinate-grid-x-value-${index}`, String(Number(value.toFixed(2))), point.x - 8, range.yMin <= 0 && range.yMax >= 0 ? graphPoint(center, range, value, 0).y + 8 : yEnd - 22, 14));
   }
 
-  strokes.push(makeTextStroke(opts, 'x-axis-label', labels.xAxis || 'x', center.x + half + 12, center.y - 10, 22));
-  strokes.push(makeTextStroke(opts, 'y-axis-label', labels.yAxis || 'y', center.x + 10, center.y - half - 30, 22));
+  for (let index = 0; index <= yCount; index++) {
+    const value = range.yMin + ((range.yMax - range.yMin) * index) / yCount;
+    const point = graphPoint(center, range, range.xMin, value);
+    const isMajor = isMajorGridValue(value, majorInterval);
+    gridStrokes.push(makeStroke({
+      ...opts,
+      color: isMajor ? palette.majorGrid : palette.minorGrid,
+      intensity: isMajor ? palette.majorOpacity : palette.minorOpacity,
+      size: 0.45,
+    }, `coordinate-grid-h-${index}`, [{ x: xStart, y: point.y }, { x: xEnd, y: point.y }], { pathType: 'linear' }));
+    if (isMajor) tickLabelStrokes.push(makeTextStroke({ ...opts, color: palette.tickLabel }, `coordinate-grid-y-value-${index}`, String(Number(value.toFixed(2))), range.xMin <= 0 && range.xMax >= 0 ? graphPoint(center, range, 0, value).x + 8 : xStart + 8, point.y - 8, 14));
+  }
+
+  // Keep the grid behind the axes so the coordinate frame is immediately readable.
+  strokes.push(...gridStrokes);
+  const axisOptions = { ...opts, color: palette.axis, intensity: palette.axisOpacity, size: 4 / 3 };
+  if (range.yMin <= 0 && range.yMax >= 0) {
+    const axisY = graphPoint(center, range, 0, 0).y;
+    strokes.push(makeStroke(axisOptions, 'coordinate-grid-axis-x', [{ x: xStart, y: axisY }, { x: xEnd, y: axisY }], { pathType: 'linear' }));
+  }
+  if (range.xMin <= 0 && range.xMax >= 0) {
+    const axisX = graphPoint(center, range, 0, 0).x;
+    strokes.push(makeStroke(axisOptions, 'coordinate-grid-axis-y', [{ x: axisX, y: yStart }, { x: axisX, y: yEnd }], { pathType: 'linear' }));
+  }
+  strokes.push(...tickLabelStrokes);
+  strokes.push(makeTextStroke({ ...opts, color: palette.axis }, 'x-axis-label', labels.xAxis || 'x', xEnd + 12, range.yMin <= 0 && range.yMax >= 0 ? graphPoint(center, range, range.xMax, 0).y - 10 : yEnd - 12, 22));
+  strokes.push(makeTextStroke({ ...opts, color: palette.axis }, 'y-axis-label', labels.yAxis || 'y', range.xMin <= 0 && range.xMax >= 0 ? graphPoint(center, range, 0, range.yMax).x + 10 : xStart + 10, yStart - 30, 22));
+
+  parseCoordinatePoints(labels.points).forEach((coordinate, index) => {
+    if (coordinate.x < range.xMin || coordinate.x > range.xMax || coordinate.y < range.yMin || coordinate.y > range.yMax) return;
+    const point = graphPoint(center, range, coordinate.x, coordinate.y);
+    strokes.push(makeStroke(opts, `coordinate-grid-point-${index}`, circlePoints(point.x, point.y, 6), {
+      pathType: 'linear',
+      closed: true,
+      fillColor: opts.color,
+    }));
+    const label = `(${coordinate.x}, ${coordinate.y})`;
+    strokes.push(makeTextStroke({ ...opts, color: palette.axis }, `coordinate-grid-point-label-${index}`, label, point.x + 9, point.y - 18, 14));
+  });
   return strokes;
 }

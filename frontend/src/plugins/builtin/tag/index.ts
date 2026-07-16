@@ -63,6 +63,7 @@ function createTagStroke(
     ],
     text,
     fontSize: TAG_FONT_SIZE,
+    textAlign: 'center',
     pluginId: tagManifest.id,
   };
 }

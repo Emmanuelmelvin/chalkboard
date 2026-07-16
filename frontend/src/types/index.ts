@@ -28,6 +28,8 @@ export interface Stroke {
   text?: string;
   /** Optional font size for text strokes */
   fontSize?: number;
+  /** Horizontal alignment for text inside its point bounds */
+  textAlign?: 'left' | 'center' | 'right';
   /** Rotation angle in degrees */
   rotation?: number;
   /** Non-destructive crop/clip bounds */

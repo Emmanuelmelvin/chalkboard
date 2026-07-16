@@ -1,6 +1,7 @@
 import { mathSetManifest } from '@/plugins/builtin/mathSet/manifest';
 import {
   createCoordinateGridStrokes,
+  createGraphStrokes,
   createNumberLineStrokes,
   createSetSymbolStroke,
   createThreeSetVennDiagramStrokes,
@@ -59,6 +60,7 @@ export const mathSetPlugin: ChalkboardPlugin = {
     registerInsertCommand(api, 'mathSet.insertThreeSetVenn', createThreeSetVennDiagramStrokes);
     registerInsertCommand(api, 'mathSet.insertNumberLine', createNumberLineStrokes);
     registerInsertCommand(api, 'mathSet.insertCoordinateGrid', createCoordinateGridStrokes);
+    registerInsertCommand(api, 'mathSet.insertGraph', createGraphStrokes);
     registerInsertCommand(api, 'mathSet.insertSetSymbol', createSetSymbolStroke);
 
     api.commands.register('mathSet.normalizeSelection', () => {

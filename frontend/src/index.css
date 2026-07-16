@@ -2014,6 +2014,8 @@ body {
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
+
+.plugin-logo-svg { width: 22px; height: 22px; display: block; }
 .sel-plugin-subpanel { margin-top: 250px; }
 .insert-plugin-card:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.35); }
 .plugin-tool-card:not(.plugin-tool-list-item) .plugin-form-field { display: inline-flex; width: calc(50% - 5px); margin-right: 6px; vertical-align: top; }
@@ -2040,6 +2042,9 @@ body {
 .math-tool-preview svg circle { fill: rgba(96,165,250,.16); stroke: #93c5fd; stroke-width: 2; }
 .math-tool-preview svg text { fill: #f8fafc; font-size: 12px; text-anchor: middle; }
 .math-tool-preview-generic { min-height: 70px; display: grid; place-items: center; color: #cbd5e1; }
+.graph-equation-symbols { display: flex; gap: 4px; margin-top: 6px; }
+.graph-equation-symbols button { border: 1px solid rgba(148,163,184,.35); background: rgba(30,41,59,.7); color: #cbd5e1; border-radius: 3px; padding: 3px 7px; cursor: pointer; font-size: 12px; }
+.graph-equation-symbols button:hover { border-color: rgba(96,165,250,.75); color: #fff; }
 
 .plugin-tool-heading {
   display: flex;

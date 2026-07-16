@@ -1,0 +1,34 @@
+import React from 'react';
+
+interface PluginIconProps {
+  pluginId: string;
+  fallback?: string;
+}
+
+/** Small, canvas-inspired marks for the built-in plugins. */
+export const PluginIcon: React.FC<PluginIconProps> = ({ pluginId, fallback }) => {
+  if (pluginId === 'chalkboard.tag') {
+    return (
+      <svg className="plugin-logo-svg" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M5 7.5v8.2L17.4 28 28 17.4 15.6 5H7.5A2.5 2.5 0 0 0 5 7.5Z" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinejoin="round" />
+        <circle cx="10.2" cy="10.2" r="2" fill="currentColor" />
+        <path d="m17.8 10.8 3.4 3.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" opacity=".7" />
+      </svg>
+    );
+  }
+
+  if (pluginId === 'chalkboard.math-set') {
+    return (
+      <svg className="plugin-logo-svg" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="12" cy="15" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+        <circle cx="20" cy="15" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+        <path d="M8 25h16M12 22v6M20 22v6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity=".8" />
+        <circle cx="16" cy="15" r="1.7" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  return <span aria-hidden="true">{fallback}</span>;
+};
+
+export default PluginIcon;

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 
 import type { ShapeType, SavedLink } from '@/types';
+import PluginIcon from '@/components/tools/PluginIcons';
 import type { PluginManifest } from '@/plugins/types';
 
 interface InsertShapesProps {
@@ -212,7 +213,7 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
                     onClick={() => { if (plugin.id !== 'chalkboard.tag' || hasSelection) onOpenPlugin(plugin.id); }}
                     title={plugin.description}
                   >
-                    <span className="insert-plugin-logo">{plugin.name.slice(0, 1)}</span>
+                    <span className="insert-plugin-logo"><PluginIcon pluginId={plugin.id} fallback={plugin.name.slice(0, 1)} /></span>
                     <span className="insert-plugin-copy">
                       <strong>{plugin.name}</strong>
                       <small>{plugin.description}</small>

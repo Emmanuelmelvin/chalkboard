@@ -186,6 +186,7 @@ export function drawBoardOnCanvas(
       ctx.fillStyle = stroke.color;
       ctx.font = `${fontSize}px "Comic Sans MS", "Chalkboard SE", cursive`;
       ctx.textBaseline = 'top';
+      ctx.textAlign = stroke.textAlign ?? 'left';
 
       words.forEach((word) => {
         const currentLine = lines[lines.length - 1] ?? '';
@@ -200,7 +201,8 @@ export function drawBoardOnCanvas(
       });
 
       (lines.length > 0 ? lines : [stroke.text]).forEach((line, index) => {
-        ctx.fillText(line, minX, minY + index * lineHeight, maxWidth);
+        const textX = stroke.textAlign === 'center' ? (minX + maxX) / 2 : stroke.textAlign === 'right' ? maxX : minX;
+        ctx.fillText(line, textX, minY + index * lineHeight, maxWidth);
       });
       ctx.restore();
       return;

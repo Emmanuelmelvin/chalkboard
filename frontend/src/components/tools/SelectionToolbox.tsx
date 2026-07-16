@@ -64,7 +64,7 @@ interface SelectionToolboxProps {
   onRunPluginSelectionTool?: (commandId: string) => void;
 }
 
-type SubPanel = 'color' | 'size' | 'rotate' | 'dimensions' | 'trim' | null;
+type SubPanel = 'color' | 'size' | 'rotate' | 'dimensions' | 'trim' | 'plugins' | null;
 
 const PANEL_WIDTH = 188;
 const PANEL_MARGIN = 16; // gap from selection box edge to panel
@@ -146,7 +146,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
 
   const scheduleClose = useCallback(() => {
     clearCloseTimer();
-    closeTimer.current = setTimeout(() => setOpenSubPanel(null), 120);
+    closeTimer.current = setTimeout(() => setOpenSubPanel(null), 450);
   }, []);
 
   const updateScrollControls = useCallback(() => {
@@ -385,21 +385,10 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         </button>
 
         {pluginSelectionTools.length > 0 && (
-          <div className="selection-plugin-tools">
-            {pluginSelectionTools.map((tool) => (
-              <button
-                key={tool.id}
-                type="button"
-                className="sel-toolbox-row sel-action-row"
-                onMouseEnter={() => handleRowEnter(null)}
-                onClick={() => onRunPluginSelectionTool?.(tool.command)}
-                title={tool.description ?? tool.label}
-              >
-                <span className="sel-row-icon"><SquareStack size={13} /></span>
-                <span className="sel-row-label">{tool.label}</span>
-                <span className="selection-plugin-badge">Plugin</span>
-              </button>
-            ))}
+          <div className={`sel-toolbox-row ${openSubPanel === 'plugins' ? 'sel-row-active' : ''}`} onMouseEnter={() => handleRowEnter('plugins')}>
+            <span className="sel-row-icon"><SquareStack size={13} /></span>
+            <span className="sel-row-label">Plugins</span>
+            <ChevronRight size={11} className="sel-row-chevron" />
           </div>
         )}
 
@@ -757,6 +746,15 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           <p className="sel-size-hint" style={{ marginTop: 8 }}>
             Drag edges to crop, Enter to apply
           </p>
+        </div>
+      )}
+      {openSubPanel === 'plugins' && (
+        <div className={`sel-subpanel sel-plugin-subpanel ${subPanelSide === 'right' ? 'sel-subpanel-right' : 'sel-subpanel-left'}`} onMouseEnter={() => clearCloseTimer()} onMouseLeave={handlePanelLeave}>
+          {pluginSelectionTools.map((tool) => (
+            <button key={tool.id} type="button" className="sel-toolbox-row sel-action-row" onClick={() => onRunPluginSelectionTool?.(tool.command)} title={tool.description ?? tool.label}>
+              <span className="sel-row-icon"><SquareStack size={13} /></span><span className="sel-row-label">{tool.label}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>

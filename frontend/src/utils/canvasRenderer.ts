@@ -77,8 +77,11 @@ export function drawBoardOnCanvas(
   // Draw transform box + rotate handle as a single rigid group, rotated
   // around the box's center by the live selectionRotation.
   if (frameBox && selectedStrokeIds.length > 0 && !trimState.active) {
-    const boxCenterX = (frameBox.minX + frameBox.maxX) / 2;
-    const boxCenterY = (frameBox.minY + frameBox.maxY) / 2;
+    // Transforms (including the attached tag) rotate around the full
+    // selection center. Keep the visible object frame in sync with that
+    // same pivot so it never appears to wobble or detach during rotation.
+    const boxCenterX = (transformBox!.minX + transformBox!.maxX) / 2;
+    const boxCenterY = (transformBox!.minY + transformBox!.maxY) / 2;
 
     ctx.save();
     ctx.translate(boxCenterX, boxCenterY);

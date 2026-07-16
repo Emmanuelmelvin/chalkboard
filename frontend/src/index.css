@@ -2014,6 +2014,7 @@ body {
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
+.sel-plugin-subpanel { margin-top: 250px; }
 .insert-plugin-card:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.35); }
 .plugin-tool-card:not(.plugin-tool-list-item) .plugin-form-field { display: inline-flex; width: calc(50% - 5px); margin-right: 6px; vertical-align: top; }
 .plugin-tool-list-item { width: 100%; text-align: left; cursor: pointer; }

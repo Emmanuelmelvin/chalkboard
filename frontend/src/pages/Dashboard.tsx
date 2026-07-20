@@ -64,6 +64,8 @@ const toolItems = [
   { icon: Sparkles, label: 'Thinking plugins', description: 'Use math, statistics, and tags without leaving the room.' },
 ];
 
+const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
+
 function getTab(location: string): DashboardTab {
   const query = location.includes('?')
     ? location.split('?')[1]
@@ -427,6 +429,14 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   );
 
   const tabTitle = tabItems.find((item) => item.id === activeTab)?.label || 'Overview';
+
+  useEffect(() => {
+    document.title = `${tabTitle} - Chalkboard`;
+
+    return () => {
+      document.title = DEFAULT_DOCUMENT_TITLE;
+    };
+  }, [tabTitle]);
 
   return (
     <>

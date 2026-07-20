@@ -53,6 +53,8 @@ import {
   handleInsertShape as toolboxInsertShape,
 } from '@/components/toolbox';
 
+const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
+
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
   userName,
@@ -101,7 +103,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string; selectionStrokeIds: string[] }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
   const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
-  const [roomTitle, setRoomTitle] = useState('Chalkboard');
+  const [roomTitle, setRoomTitle] = useState(() => `Room ${roomId}`);
   const [roomDescription, setRoomDescription] = useState('');
 
   const hasNavigatedToLink = useRef<boolean>(false);
@@ -143,8 +145,19 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   useKeyboardShortcuts();
 
   useEffect(() => {
+    const title = roomTitle.trim() || `Room ${roomId}`;
+    document.title = `${title} - Chalkboard`;
+
+    return () => {
+      document.title = DEFAULT_DOCUMENT_TITLE;
+    };
+  }, [roomId, roomTitle]);
+
+  useEffect(() => {
     let cancelled = false;
     const loadRoomTheme = async () => {
+      setRoomTitle(`Room ${roomId}`);
+      setRoomDescription('');
       try {
         const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`, { credentials: 'include' });
         const payload = await response.json().catch(() => ({}));

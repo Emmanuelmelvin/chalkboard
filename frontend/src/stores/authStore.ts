@@ -26,47 +26,71 @@ async function readUserResponse(response: Response) {
   return payload.user as UserProfile;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  profile: null,
-  status: 'loading',
-  error: null,
+export const useAuthStore = create<AuthState>((set) => {
+  // A slow hydration request must not be able to undo a newer sign-in or sign-out.
+  let authRequestId = 0;
+  const beginAuthRequest = () => {
+    authRequestId += 1;
+    return authRequestId;
+  };
+  const isCurrentRequest = (requestId: number) => requestId === authRequestId;
 
-  hydrate: async () => {
-    try {
-      const response = await fetch('/api/auth/me', { credentials: 'include' });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.user) {
-        set({ profile: null, status: 'unauthenticated', error: null });
-        return;
+  return {
+    profile: null,
+    status: 'loading',
+    error: null,
+
+    hydrate: async () => {
+      const requestId = beginAuthRequest();
+      try {
+        const response = await fetch('/api/auth/me', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!isCurrentRequest(requestId)) return;
+        if (!response.ok || !payload.user) {
+          set({ profile: null, status: 'unauthenticated', error: null });
+          return;
+        }
+        set({ profile: payload.user as UserProfile, status: 'authenticated', error: null });
+      } catch {
+        if (isCurrentRequest(requestId)) {
+          set({ profile: null, status: 'unauthenticated', error: 'The authentication service is unavailable.' });
+        }
       }
-      set({ profile: payload.user as UserProfile, status: 'authenticated', error: null });
-    } catch {
-      set({ profile: null, status: 'unauthenticated', error: 'The authentication service is unavailable.' });
-    }
-  },
+    },
 
-  signInWithGoogle: async (idToken) => {
-    set({ status: 'loading', error: null });
-    try {
-      const profile = await readUserResponse(await fetch('/api/auth/google', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      }));
-      set({ profile, status: 'authenticated', error: null });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to sign in with Google.';
-      set({ profile: null, status: 'unauthenticated', error: message });
-      throw error;
-    }
-  },
+    signInWithGoogle: async (idToken) => {
+      const requestId = beginAuthRequest();
+      set({ status: 'loading', error: null });
+      try {
+        const profile = await readUserResponse(await fetch('/api/auth/google', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken }),
+        }));
+        if (isCurrentRequest(requestId)) {
+          set({ profile, status: 'authenticated', error: null });
+        }
+      } catch (error) {
+        if (!isCurrentRequest(requestId)) return;
+        const message = error instanceof Error ? error.message : 'Unable to sign in with Google.';
+        set({ profile: null, status: 'unauthenticated', error: message });
+        throw error;
+      }
+    },
 
-  signOut: async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    } finally {
-      set({ profile: null, status: 'unauthenticated', error: null });
-    }
-  },
-}));
+    signOut: async () => {
+      const requestId = beginAuthRequest();
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      } finally {
+        if (isCurrentRequest(requestId)) {
+          set({ profile: null, status: 'unauthenticated', error: null });
+        }
+      }
+    },
+  };
+});

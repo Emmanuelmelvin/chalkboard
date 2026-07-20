@@ -11,7 +11,7 @@ import {
   Sparkles,
   UsersRound,
 } from 'lucide-react';
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import '@/styles/PublicPages.css';
 
 const features = [
@@ -83,8 +83,8 @@ function Home() {
         <nav className="home-nav-links" aria-label="Main navigation">
           <a href="#capabilities">Capabilities</a>
           <a href="#workflow">How it works</a>
-          <a className="home-nav-route" href="/dashboard">Dashboard</a>
-          <a className="home-nav-route" href="/lobby">Lobby</a>
+          <Link className="home-nav-route" href="/dashboard">Dashboard</Link>
+          <Link className="home-nav-route" href="/lobby">Lobby</Link>
           <button className="home-nav-cta" type="button" onClick={() => setLocation('/dashboard?tab=rooms')}>
             Open a room <ArrowUpRight size={15} strokeWidth={1.8} />
           </button>

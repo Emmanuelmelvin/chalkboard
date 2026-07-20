@@ -2736,6 +2736,7 @@
 .dashboard-access-option span { display: flex; flex-direction: column; gap: 4px; }
 .dashboard-access-option strong { color: #191816; font-size: 11px; font-weight: 750; }
 .dashboard-access-option small { color: #777169; font-size: 9px; line-height: 1.35; }
+.lobby-password-description { margin: -4px 0 18px !important; padding: 9px 10px; border-left: 2px solid #c7a258; background: rgba(199, 162, 88, 0.1); color: #a6a29a !important; font-size: 11px !important; }
 .dashboard-theme-fieldset { min-width: 0; margin: 14px 0 18px; border: 0; padding: 0; }
 .dashboard-theme-fieldset legend { color: #605b54; font-size: 9px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
 .dashboard-theme-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }

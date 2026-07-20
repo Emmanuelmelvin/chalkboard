@@ -173,23 +173,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       return;
     }
     setError('');
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/rooms/${encodeURIComponent(normalizedCode)}`, { credentials: 'include' });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.room?.slug) {
-        throw new Error(payload.error === 'not_found'
-          ? 'That room could not be found. Check the code and try again.'
-          : payload.error === 'room_closed'
-            ? 'That room has been closed and cannot be reopened.'
-            : payload.error || 'We could not open that room.');
-      }
-      onJoinRoom(payload.room.slug);
-    } catch (joinError) {
-      setError(joinError instanceof Error ? joinError.message : 'We could not open that room.');
-    } finally {
-      setLoading(false);
-    }
+    setLocation(`/lobby/${encodeURIComponent(normalizedCode)}`);
   };
 
   const openRoom = (room: RoomSummary) => {

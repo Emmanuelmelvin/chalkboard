@@ -7,8 +7,10 @@ import {
   CircleHelp,
   Copy,
   DoorOpen,
+  Globe2,
   LayoutDashboard,
   LibraryBig,
+  LockKeyhole,
   LogOut,
   PanelTopOpen,
   PenLine,
@@ -43,6 +45,7 @@ interface RoomSummary {
   lastActivityAt: string;
   createdAt: string;
   role: 'owner' | 'instructor' | 'viewer' | null;
+  password: string | null;
 }
 
 interface DashboardProps {
@@ -261,8 +264,21 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
               <strong>{room.title}</strong>
               <small>{room.slug} · {getRoomThemeLabel(room.theme)} · {formatActivity(room.lastActivityAt)}</small>
               {room.description && <small className="dashboard-room-description">{room.description}</small>}
+              {room.accessMode === 'password_protected' && (
+                <small className="dashboard-room-password">
+                  {room.password ? <>Password: <code>{room.password}</code></> : 'Password protected'}
+                </small>
+              )}
             </span>
             <span className="dashboard-room-row-meta">
+              <span
+                className="dashboard-room-row-access"
+                title={room.accessMode === 'open' ? 'Public room' : 'Private room'}
+                aria-label={room.accessMode === 'open' ? 'Public room' : 'Private room'}
+              >
+                {room.accessMode === 'open' ? <Globe2 size={14} strokeWidth={1.8} /> : <LockKeyhole size={14} strokeWidth={1.8} />}
+                <small>{room.accessMode === 'open' ? 'Public' : 'Private'}</small>
+              </span>
               <small>{room.status === 'closed' ? 'Archived' : roomRole(room)}</small>
               {room.status === 'open' && <ChevronRight size={15} strokeWidth={1.7} />}
             </span>

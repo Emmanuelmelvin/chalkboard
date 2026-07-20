@@ -2705,9 +2705,13 @@ body.dashboard-active #root {
 .dashboard-room-row.is-closed .dashboard-room-row-main { opacity: 0.55; }
 .dashboard-room-row-copy { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
 .dashboard-room-row-copy .dashboard-room-description { overflow: hidden; color: #a09a90; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-room-row-copy .dashboard-room-password { color: var(--dashboard-gold-bright); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.dashboard-room-password code { color: inherit; font: inherit; letter-spacing: 0.08em; }
 .dashboard-room-row-copy strong { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-room-row-copy small, .dashboard-room-row-meta small { color: #77736c; font-size: 9px; letter-spacing: 0.03em; }
 .dashboard-room-row-meta { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+.dashboard-room-row-access { display: inline-flex; align-items: center; gap: 4px; }
+.dashboard-room-row-access svg { color: var(--dashboard-gold-bright); }
 .dashboard-room-row-meta svg { color: var(--dashboard-gold-bright); }
 .dashboard-room-delete { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid rgba(220, 96, 82, 0.35); background: transparent; color: #cc8177; cursor: pointer; font-family: inherit; font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }
 .dashboard-room-delete:hover:not(:disabled), .dashboard-room-delete:focus-visible:not(:disabled) { border-color: rgba(220, 96, 82, 0.75); background: rgba(220, 96, 82, 0.1); color: #f0a49a; }

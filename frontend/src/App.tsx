@@ -15,7 +15,9 @@ import '@/styles/PublicPages.css';
 // Initialize a single socket client that can be activated on demand
 const socket: Socket = io({
   autoConnect: false,
-  transports: ['websocket'],
+  // Allow polling to establish the session when a LAN proxy or firewall does
+  // not support WebSocket upgrades, then let Socket.IO upgrade when possible.
+  transports: ['polling', 'websocket'],
   withCredentials: true,
 });
 

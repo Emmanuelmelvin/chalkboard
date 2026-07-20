@@ -111,8 +111,14 @@ export function useBoardSocket(
       if (typeof count === 'number') setOnlineCount(Math.max(0, count));
     };
 
-    const handleConnectError = () => {
-      useLoggerStore.getState().notify('Live room connection failed. Realtime updates are unavailable.', 'error', 5000);
+    const handleConnectError = (error: Error) => {
+      const detail = error?.message?.trim();
+      const message = detail === 'unauthorized'
+        ? 'Your session is not available on this device. Please sign in again.'
+        : detail
+          ? `Live room connection failed: ${detail}`
+          : 'Live room connection failed. Realtime updates are unavailable.';
+      useLoggerStore.getState().notify(message, 'error', 7000);
     };
 
     // The server uses stroke-start for both live strokes and redo broadcasts.

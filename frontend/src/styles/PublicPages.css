@@ -2152,6 +2152,21 @@
 }
 
 /* Signed-in dashboard */
+html.dashboard-active {
+  height: 100%;
+}
+
+body.dashboard-active {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.dashboard-active #root {
+  height: 100%;
+  min-height: 0;
+}
+
 .dashboard-page {
   --dashboard-black: #090909;
   --dashboard-black-soft: #111110;
@@ -2800,6 +2815,9 @@
 }
 
 @media (max-width: 800px) {
+  html.dashboard-active { height: auto; }
+  body.dashboard-active { height: auto; min-height: 100vh; overflow-y: auto; }
+  body.dashboard-active #root { height: auto; min-height: 100vh; }
   .dashboard-page { display: block; height: auto; min-height: 100vh; overflow: visible; }
   .dashboard-rail { position: static; height: auto; min-height: auto; overflow: visible; padding: 18px 20px 15px; border-right: 0; border-bottom: 1px solid var(--dashboard-line); }
   .dashboard-main { height: auto; min-height: 0; overflow: visible; }

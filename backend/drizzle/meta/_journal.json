@@ -29,6 +29,13 @@
       "when": 1784551200214,
       "tag": "0003_friendly_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784555000000,
+      "tag": "0004_room_password_ciphertext",
+      "breakpoints": true
     }
   ]
 }

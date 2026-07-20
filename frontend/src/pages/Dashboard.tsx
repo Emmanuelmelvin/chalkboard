@@ -102,6 +102,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [roomToDelete, setRoomToDelete] = useState<RoomSummary | null>(null);
   const [createdRoomInvite, setCreatedRoomInvite] = useState<{ slug: string; title: string; password: string } | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => getTab(location));
   const firstName = profile.displayName.trim().split(/\s+/)[0] || 'friend';
   const openRooms = useMemo(() => rooms.filter((room) => room.status === 'open'), [rooms]);
@@ -110,10 +111,32 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     setActiveTab(getTab(location));
   }, [location]);
 
+  useEffect(() => {
+    document.documentElement.classList.add('dashboard-active');
+    document.body.classList.add('dashboard-active');
+
+    return () => {
+      document.documentElement.classList.remove('dashboard-active');
+      document.body.classList.remove('dashboard-active');
+    };
+  }, []);
+
   const selectTab = (tab: DashboardTab) => {
     setError('');
     setActiveTab(tab);
     setLocation(`/dashboard?tab=${tab}`);
+  };
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    setError('');
+    try {
+      await signOut();
+      setLocation('/login');
+    } catch {
+      setSigningOut(false);
+      setError('We could not log you out. Please try again.');
+    }
   };
 
   const loadRooms = async () => {
@@ -416,7 +439,9 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           <h3>{profile.displayName}</h3>
           <p>{profile.email}</p>
           <div className="dashboard-profile-rule" />
-          <button className="dashboard-button dashboard-button-outline" type="button" onClick={() => { void signOut().then(() => setLocation('/login')); }}><LogOut size={15} /> Sign out</button>
+          <button className="dashboard-button dashboard-button-outline" type="button" onClick={() => { void handleSignOut(); }} disabled={signingOut}>
+            <LogOut size={15} /> {signingOut ? 'Logging out...' : 'Log out'}
+          </button>
         </div>
         <div className="dashboard-panel dashboard-account-notes">
           <p className="dashboard-panel-kicker">Account notes</p>

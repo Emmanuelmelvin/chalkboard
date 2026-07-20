@@ -25,6 +25,7 @@ export const rooms = pgTable('rooms', {
   accessMode: roomAccessMode('access_mode').default('open').notNull(),
   theme: roomTheme('theme').default('classroom').notNull(),
   passwordHash: text('password_hash'),
+  passwordCiphertext: text('password_ciphertext'),
   maxAttendees: integer('max_attendees'),
   voiceEnabled: boolean('voice_enabled').default(false).notNull(),
   status: roomStatus('status').default('open').notNull(),

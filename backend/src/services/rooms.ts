@@ -6,6 +6,7 @@ import { joinRequests, roomBans, roomMembers, rooms } from '@/db/schema';
 import { canPublishVoice } from '@/services/permissions';
 import { createVoiceToken } from '@/services/livekit';
 import { deleteRoomState } from '@/services/realtimeRooms';
+import { decryptRoomPassword, encryptRoomPassword } from '@/services/roomPasswords';
 import { logger } from '@/utils/logger';
 
 export type RoomRole = 'owner' | 'instructor' | 'viewer';
@@ -163,11 +164,12 @@ export async function createRoom(user: any, body: any) {
     ? (requestedPassword?.trim() || randomBytes(6).toString('base64url'))
     : undefined;
   const passwordHash = generatedPassword ? await bcrypt.hash(generatedPassword, 12) : null;
+  const passwordCiphertext = generatedPassword ? encryptRoomPassword(generatedPassword) : null;
 
   const room = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(rooms)
-      .values({ ...roomValues, description, ownerId: user.id, passwordHash })
+      .values({ ...roomValues, description, ownerId: user.id, passwordHash, passwordCiphertext })
       .returning();
     await tx.insert(roomMembers).values({ roomId: created.id, userId: user.id, role: 'owner' });
     return created;
@@ -175,7 +177,7 @@ export async function createRoom(user: any, body: any) {
 
   logger.info('Created room', { roomId: room.id, slug: room.slug, ownerId: user.id });
   return {
-    room: { ...room, passwordHash: undefined },
+    room: { ...room, passwordHash: undefined, passwordCiphertext: undefined },
     password: generatedPassword,
   };
 }
@@ -184,13 +186,15 @@ export async function getRoomWithMembers(slug: string) {
   const room = await getRoomBySlug(db, slug);
   if (!room) return null;
   const members = await db.select().from(roomMembers).where(eq(roomMembers.roomId, room.id));
-  return { room: { ...room, passwordHash: undefined }, members };
+  return { room: { ...room, passwordHash: undefined, passwordCiphertext: undefined }, members };
 }
 
 /** List rooms the signed-in user owns or has joined, newest activity first. */
 export async function listRoomsForUser(userId: string) {
-  return db
+  const rows = await db
     .select({
+      ownerId: rooms.ownerId,
+      passwordCiphertext: rooms.passwordCiphertext,
       slug: rooms.slug,
       title: rooms.title,
       description: rooms.description,
@@ -207,6 +211,13 @@ export async function listRoomsForUser(userId: string) {
     .where(or(eq(rooms.ownerId, userId), eq(roomMembers.userId, userId)))
     .orderBy(desc(rooms.lastActivityAt))
     .limit(24);
+
+  return rows.map(({ ownerId, passwordCiphertext, ...room }) => ({
+    ...room,
+    // Passwords are only returned to the room owner; members still get the
+    // access mode indicator without receiving the owner credential.
+    password: ownerId === userId ? decryptRoomPassword(passwordCiphertext) : null,
+  }));
 }
 
 /** Permanently delete a room owned by the signed-in user and its ephemeral state. */

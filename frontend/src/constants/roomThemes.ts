@@ -2,32 +2,32 @@ export const roomThemes = [
   {
     id: 'classroom',
     label: 'Classroom',
-    description: 'Cool ocean slate with bright chalk contrast.',
+    description: 'Deep slate green with warm white chalk and a quiet, nostalgic feel.',
   },
   {
     id: 'workshop',
     label: 'Workshop',
-    description: 'Warm, practical, and built for making.',
+    description: 'Industrial dark grey with high-contrast yellow, white, and blueprint lines.',
   },
   {
     id: 'brainstorm',
     label: 'Brainstorm',
-    description: 'Energetic color for loose, fast ideas.',
+    description: 'Charcoal black with electric pink, cyan, and yellow bursts.',
   },
   {
     id: 'meeting',
     label: 'Meeting',
-    description: 'Clear, calm, and easy to scan together.',
+    description: 'Graphite grey with a minimal palette and one calm accent.',
   },
   {
     id: 'planning',
     label: 'Planning',
-    description: 'Structured, balanced, and ready for next steps.',
+    description: 'Muted navy with crisp white chalk and faint planning grids.',
   },
   {
     id: 'studio',
     label: 'Studio',
-    description: 'Quiet and neutral for visual exploration.',
+    description: 'Warm terracotta with soft amber chalk and a tactile grain.',
   },
 ] as const;
 

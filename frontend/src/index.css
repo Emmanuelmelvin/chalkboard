@@ -2,18 +2,24 @@
 
 :root {
   /* Wood Frame Colors */
-  --wood-dark: #071d2b;
-  --wood-light: #0f4760;
-  --wood-grain: #04111a;
+  --wood-dark: #3a1a0b;
+  --wood-light: #5d2b12;
+  --wood-grain: #271107;
   
   /* Metallic Accent Colors */
-  --brass: #6ed7e8;
-  --brass-dark: #277f9d;
-  --brass-light: #b9f5ff;
+  --brass: #c5a059;
+  --brass-dark: #8c6e30;
+  --brass-light: #e8d098;
   
   /* Slate Blackboard Colors */
-  --slate-green: #123a46;
-  --slate-dark: #081d2a;
+  --slate-green: #143525;
+  --slate-dark: #0b2216;
+  --board-glow: rgba(255, 255, 255, 0.05);
+  --board-secondary-glow: rgba(255, 255, 255, 0.02);
+  --board-pattern: none;
+  --board-pattern-size: auto;
+  --board-corners: none;
+  --board-vignette: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.22) 100%);
   --chalk-dust: rgba(255, 255, 255, 0.08);
 
   /* Chalk Colors */
@@ -81,93 +87,116 @@ body {
 
 /* Room themes keep the board interaction the same while changing its atmosphere. */
 .board-container.room-theme-classroom {
-  --wood-dark: #071d2b;
-  --wood-light: #0f4760;
-  --wood-grain: #04111a;
-  --brass: #6ed7e8;
-  --brass-dark: #277f9d;
-  --brass-light: #b9f5ff;
-  --slate-green: #123a46;
-  --slate-dark: #081d2a;
-  --chalk-yellow: #fff0ad;
-  --chalk-blue: #a9eaff;
-  --chalk-pink: #ffb8dc;
-  --chalk-green: #a7f5da;
+  --wood-dark: #3a1a0b;
+  --wood-light: #5d2b12;
+  --wood-grain: #271107;
+  --brass: #c5a059;
+  --brass-dark: #8c6e30;
+  --brass-light: #e8d098;
+  --slate-green: #143525;
+  --slate-dark: #0b2216;
+  --chalk-yellow: #fff3a1;
+  --chalk-blue: #a3e5ff;
+  --chalk-pink: #ffa3d1;
+  --chalk-green: #a3ffd6;
+  --board-glow: rgba(255, 255, 255, 0.05);
+  --board-secondary-glow: rgba(255, 255, 255, 0.02);
+  --board-corners: radial-gradient(ellipse at 0% 0%, rgba(255, 255, 255, 0.075), transparent 25%), radial-gradient(ellipse at 100% 100%, rgba(255, 255, 255, 0.055), transparent 27%);
+  --board-vignette: radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, 0.2) 100%);
 }
 
 .board-container.room-theme-workshop {
-  --wood-dark: #31170d;
-  --wood-light: #754326;
-  --wood-grain: #261008;
-  --brass: #d69a4c;
-  --brass-dark: #8f5527;
-  --brass-light: #f0c982;
-  --slate-green: #392820;
-  --slate-dark: #1f130e;
-  --chalk-yellow: #ffe2a3;
-  --chalk-blue: #b8e4ed;
-  --chalk-pink: #ffc0a8;
-  --chalk-green: #c8e4b2;
+  --wood-dark: #1b2025;
+  --wood-light: #4a535b;
+  --wood-grain: #111519;
+  --brass: #e1bb45;
+  --brass-dark: #9d7b20;
+  --brass-light: #ffe58a;
+  --slate-green: #292f34;
+  --slate-dark: #151a1f;
+  --chalk-yellow: #ffe36a;
+  --chalk-blue: #b6e9ff;
+  --chalk-pink: #f6a8b9;
+  --chalk-green: #f5f7f1;
+  --board-glow: rgba(255, 255, 255, 0.045);
+  --board-secondary-glow: rgba(225, 187, 69, 0.04);
+  --board-pattern: linear-gradient(45deg, rgba(116, 175, 205, 0.105) 1px, transparent 1px), linear-gradient(-45deg, rgba(116, 175, 205, 0.07) 1px, transparent 1px);
+  --board-pattern-size: 26px 26px;
+  --board-vignette: radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, 0.24) 100%);
 }
 
 .board-container.room-theme-brainstorm {
-  --wood-dark: #1c1634;
-  --wood-light: #4b3e79;
-  --wood-grain: #100d20;
-  --brass: #a995ed;
-  --brass-dark: #6854b3;
-  --brass-light: #d8ccff;
-  --slate-green: #24203f;
-  --slate-dark: #100d20;
-  --chalk-yellow: #f9e4a3;
-  --chalk-blue: #b7d8ff;
-  --chalk-pink: #ffb9df;
-  --chalk-green: #b4f2d1;
+  --wood-dark: #090b10;
+  --wood-light: #303541;
+  --wood-grain: #050609;
+  --brass: #ff4fa3;
+  --brass-dark: #b31d68;
+  --brass-light: #ff9dce;
+  --slate-green: #171a21;
+  --slate-dark: #080a0f;
+  --chalk-yellow: #ffe45c;
+  --chalk-blue: #55edff;
+  --chalk-pink: #ff4fa3;
+  --chalk-green: #b7ff74;
+  --board-glow: rgba(255, 79, 163, 0.09);
+  --board-secondary-glow: rgba(85, 237, 255, 0.07);
+  --board-vignette: radial-gradient(ellipse at center, transparent 48%, rgba(0, 0, 0, 0.36) 100%);
 }
 
 .board-container.room-theme-meeting {
-  --wood-dark: #102032;
-  --wood-light: #3c5b75;
-  --wood-grain: #09131f;
-  --brass: #78b4cb;
-  --brass-dark: #43748d;
-  --brass-light: #b4e1ec;
-  --slate-green: #1a3041;
-  --slate-dark: #0d1724;
-  --chalk-yellow: #f4dda1;
-  --chalk-blue: #a9d8ff;
-  --chalk-pink: #f6b8c9;
-  --chalk-green: #b6e6d1;
+  --wood-dark: #24272c;
+  --wood-light: #59616b;
+  --wood-grain: #15171b;
+  --brass: #9db4c5;
+  --brass-dark: #657a8a;
+  --brass-light: #d8e6ee;
+  --slate-green: #3a3f46;
+  --slate-dark: #1d2127;
+  --chalk-yellow: #f2f5f7;
+  --chalk-blue: #9ad7e9;
+  --chalk-pink: #e7c8d1;
+  --chalk-green: #dce8e3;
+  --board-glow: rgba(255, 255, 255, 0.045);
+  --board-secondary-glow: rgba(157, 180, 197, 0.04);
+  --board-vignette: radial-gradient(ellipse at center, transparent 48%, rgba(0, 0, 0, 0.3) 100%);
 }
 
 .board-container.room-theme-planning {
-  --wood-dark: #10302b;
-  --wood-light: #327267;
-  --wood-grain: #081e1b;
-  --brass: #80c89b;
-  --brass-dark: #4b9374;
-  --brass-light: #bde8c5;
-  --slate-green: #173c37;
-  --slate-dark: #0b2522;
-  --chalk-yellow: #f5e7a5;
-  --chalk-blue: #b0e1ed;
-  --chalk-pink: #f4bac8;
-  --chalk-green: #b9f0cf;
+  --wood-dark: #0b1727;
+  --wood-light: #304d6b;
+  --wood-grain: #06101d;
+  --brass: #8fb8d5;
+  --brass-dark: #557b9a;
+  --brass-light: #d5ebfa;
+  --slate-green: #1d3049;
+  --slate-dark: #101b2b;
+  --chalk-yellow: #edf4f7;
+  --chalk-blue: #b6d9eb;
+  --chalk-pink: #e3becb;
+  --chalk-green: #dceee9;
+  --board-glow: rgba(222, 240, 250, 0.05);
+  --board-secondary-glow: rgba(143, 184, 213, 0.045);
+  --board-pattern: linear-gradient(rgba(174, 210, 232, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(174, 210, 232, 0.1) 1px, transparent 1px);
+  --board-pattern-size: 44px 44px;
+  --board-vignette: radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, 0.22) 100%);
 }
 
 .board-container.room-theme-studio {
-  --wood-dark: #24211e;
-  --wood-light: #686158;
-  --wood-grain: #141311;
-  --brass: #c5ab7e;
-  --brass-dark: #8f7958;
-  --brass-light: #e7d7b5;
-  --slate-green: #3a3935;
-  --slate-dark: #1b1a18;
-  --chalk-yellow: #f7e8b1;
-  --chalk-blue: #c4e1e4;
-  --chalk-pink: #f2c4d1;
-  --chalk-green: #c7e2cf;
+  --wood-dark: #3a1f1b;
+  --wood-light: #70483d;
+  --wood-grain: #241412;
+  --brass: #d69b5c;
+  --brass-dark: #96653e;
+  --brass-light: #f2c58b;
+  --slate-green: #512e29;
+  --slate-dark: #2b1919;
+  --chalk-yellow: #f6d38f;
+  --chalk-blue: #c6d8d2;
+  --chalk-pink: #e8b6ad;
+  --chalk-green: #d8e2c5;
+  --board-glow: rgba(246, 211, 143, 0.07);
+  --board-secondary-glow: rgba(214, 155, 92, 0.045);
+  --board-vignette: radial-gradient(ellipse at center, transparent 56%, rgba(27, 10, 8, 0.28) 100%);
 }
 
 /* Wood frame corners brackets */
@@ -194,14 +223,15 @@ body {
   height: 100%;
   z-index: 1;
   background-color: var(--slate-green);
-  /* Layer 1: Radial shine, Layer 2: Chalk dust clouds, Layer 3: Noise overlay */
+  /* Theme tokens control the glow, pattern, vignette, and tactile grain. */
   background-image:
-    radial-gradient(circle at 50% 40%, rgba(160, 238, 248, 0.07) 0%, transparent 60%),
-    radial-gradient(circle at 72% 15%, rgba(61, 180, 205, 0.08) 0%, transparent 34%),
-    radial-gradient(circle at 20% 70%, rgba(255, 255, 255, 0.02) 0%, transparent 40%),
-    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 50% 40%, var(--board-glow) 0%, transparent 60%),
+    var(--board-pattern),
+    radial-gradient(circle at 20% 70%, var(--board-secondary-glow) 0%, transparent 40%),
+    var(--board-corners),
+    var(--board-vignette),
     url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.16'/%3E%3C/svg%3E");
-  background-size: auto, auto, auto, auto, 256px 256px;
+  background-size: auto, var(--board-pattern-size), auto, auto, auto, 256px 256px;
 }
 
 /* Drawing Canvas */

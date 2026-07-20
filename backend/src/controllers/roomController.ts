@@ -1,5 +1,5 @@
-import { assertRoomJoinAllowed, createRoom, createRoomVoiceToken, deleteRoomForUser, getRoomWithMembers, listRoomsForUser } from '@/services/rooms';
-import { createRoomSchema, joinRoomSchema } from '@/validators/roomValidators';
+import { assertRoomJoinAllowed, createRoom, createRoomVoiceToken, deleteRoomForUser, getRoomWithMembers, listRoomsForUser, resetRoomPasswordForOwner } from '@/services/rooms';
+import { createRoomSchema, joinRoomSchema, roomPasswordSchema } from '@/validators/roomValidators';
 import { APIError } from '@/utils/error';
 
 export async function createRoomHandler(c: any) {
@@ -32,6 +32,18 @@ export async function joinRoomHandler(c: any) {
     throw new APIError(result.error, status);
   }
   return c.json(result);
+}
+
+export async function resetRoomPasswordHandler(c: any) {
+  const user = c.get('user');
+  if (!user) throw new APIError('unauthorized', 401);
+  const { password } = roomPasswordSchema.parse(await c.req.json().catch(() => ({})));
+  const result = await resetRoomPasswordForOwner(c.req.param('slug'), user.id, password);
+  if (!result.ok) {
+    const status = result.error === 'not_found' ? 404 : result.error === 'not_password_protected' ? 409 : 403;
+    throw new APIError(result.error, status);
+  }
+  return c.json({ password: result.password });
 }
 
 export async function deleteRoomHandler(c: any) {

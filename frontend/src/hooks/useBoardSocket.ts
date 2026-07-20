@@ -176,7 +176,15 @@ export function useBoardSocket(
     // Socket.IO emits `connect` after every reconnect and assigns a new
     // socket.id, so rejoin then to restore room membership and catch-up state.
     socket.on('connect', joinRoom);
-    if (socket.connected) joinRoom();
+    if (socket.connected) {
+      joinRoom();
+    } else {
+      // The app intentionally creates this socket with autoConnect disabled.
+      // A browser reload can land directly on /room/:roomId, bypassing the
+      // lobby's explicit socket.connect() call, so the room hook must start
+      // the connection before it can receive room-history.
+      socket.connect();
+    }
 
     return () => {
       socket.off('connect', joinRoom);

@@ -7,6 +7,7 @@ import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import Lobby from '@/pages/Lobby';
 import LoggerOutlet from '@/components/LoggerOutlet';
+import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
 import '@/styles/PublicPages.css';
@@ -17,6 +18,17 @@ const socket: Socket = io({
   transports: ['websocket'],
   withCredentials: true,
 });
+
+const THEME_STORAGE_KEY = 'chalkboard-theme';
+
+function getInitialTheme(): ThemeMode {
+  if (typeof window === 'undefined') return 'dark';
+
+  const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+
+  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
 
 function AuthLoading() {
   return (
@@ -49,9 +61,18 @@ function RequireAuth({ children }: { children: (profile: UserProfile) => ReactNo
 }
 
 function App() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { hydrate } = useAuthStore();
   const [roomPassword, setRoomPassword] = useState<string | undefined>();
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  const isRoomRoute = location.startsWith('/room/');
+
+  useEffect(() => {
+    const activeTheme = isRoomRoute ? 'dark' : theme;
+    document.documentElement.dataset.theme = activeTheme;
+    document.documentElement.style.colorScheme = activeTheme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [isRoomRoute, theme]);
 
   useEffect(() => {
     void hydrate();
@@ -72,6 +93,7 @@ function App() {
 
   return (
     <>
+      {!isRoomRoute && <ThemeToggle theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />}
       <Switch>
       {/* Dynamic room route */}
       <Route path="/room/:roomId">

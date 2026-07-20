@@ -237,6 +237,24 @@ export async function deleteRoomForUser(roomSlug: string, userId: string) {
   return { ok: true as const };
 }
 
+/** Set or regenerate a password when an older room has no recoverable ciphertext. */
+export async function resetRoomPasswordForOwner(roomSlug: string, userId: string, requestedPassword?: string) {
+  const room = await getRoomBySlug(db, roomSlug);
+  if (!room) return { ok: false as const, error: 'not_found' as const };
+  if (room.ownerId !== userId) return { ok: false as const, error: 'forbidden' as const };
+  if (room.accessMode !== 'password_protected') return { ok: false as const, error: 'not_password_protected' as const };
+
+  const password = requestedPassword?.trim() || randomBytes(6).toString('base64url');
+  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordCiphertext = encryptRoomPassword(password);
+  await db
+    .update(rooms)
+    .set({ passwordHash, passwordCiphertext, updatedAt: new Date() })
+    .where(and(eq(rooms.id, room.id), eq(rooms.ownerId, userId)));
+
+  return { ok: true as const, password };
+}
+
 /** Update only room lifecycle metadata; canvas content never enters Postgres. */
 export async function touchRoomActivity(roomSlug: string) {
   const now = new Date();

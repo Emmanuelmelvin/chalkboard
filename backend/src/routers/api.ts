@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { currentUser, googleAuth, googleAuthConfig, logout } from '@/controllers/authController';
-import { createRoomHandler, deleteRoomHandler, getRoomHandler, joinRoomHandler, listRoomsHandler, updateRoomHandler, voiceTokenHandler } from '@/controllers/roomController';
+import { createRoomHandler, deleteRoomHandler, getRoomHandler, joinRoomHandler, listRoomsHandler, resetRoomPasswordHandler, updateRoomHandler, voiceTokenHandler } from '@/controllers/roomController';
 import { requireAuth } from '@/middlewares/auth';
 import { inviteJoinRateLimit } from '@/middlewares/rateLimit';
 
@@ -17,6 +17,7 @@ api.use('/rooms/*', requireAuth);
 api.get('/rooms', listRoomsHandler);
 api.post('/rooms', createRoomHandler);
 api.post('/rooms/:slug/join', joinRoomHandler);
+api.post('/rooms/:slug/password', resetRoomPasswordHandler);
 api.get('/rooms/:slug', inviteJoinRateLimit, getRoomHandler);
 api.delete('/rooms/:slug', deleteRoomHandler);
 api.patch('/rooms/:slug', updateRoomHandler);

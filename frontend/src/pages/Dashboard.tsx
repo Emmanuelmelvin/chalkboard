@@ -105,6 +105,9 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [roomToDelete, setRoomToDelete] = useState<RoomSummary | null>(null);
   const [createdRoomInvite, setCreatedRoomInvite] = useState<{ slug: string; title: string; password: string } | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
+  const [copiedRoomValue, setCopiedRoomValue] = useState<string | null>(null);
+  const [openRoomDetailsSlug, setOpenRoomDetailsSlug] = useState<string | null>(null);
+  const [resettingPasswordSlug, setResettingPasswordSlug] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => getTab(location));
   const firstName = profile.displayName.trim().split(/\s+/)[0] || 'friend';
@@ -124,6 +127,16 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     };
   }, []);
 
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest('.dashboard-room-details')) return;
+      setOpenRoomDetailsSlug(null);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, []);
+
   const selectTab = (tab: DashboardTab) => {
     setError('');
     setActiveTab(tab);
@@ -139,6 +152,38 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     } catch {
       setSigningOut(false);
       setError('We could not log you out. Please try again.');
+    }
+  };
+
+  const copyRoomValue = async (key: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedRoomValue(key);
+      window.setTimeout(() => setCopiedRoomValue((current) => current === key ? null : current), 1800);
+    } catch {
+      setError('We could not copy that value. Please copy it manually.');
+    }
+  };
+
+  const regenerateRoomPassword = async (roomSlug: string) => {
+    setResettingPasswordSlug(roomSlug);
+    setError('');
+    try {
+      const response = await fetch(`/api/rooms/${encodeURIComponent(roomSlug)}/password`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || typeof payload.password !== 'string' || !payload.password) {
+        throw new Error(payload.error || 'We could not generate a room password.');
+      }
+      setRooms((current) => current.map((room) => room.slug === roomSlug ? { ...room, password: payload.password } : room));
+    } catch (passwordError) {
+      setError(passwordError instanceof Error ? passwordError.message : 'We could not generate a room password.');
+    } finally {
+      setResettingPasswordSlug(null);
     }
   };
 
@@ -262,27 +307,73 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
             </span>
             <span className="dashboard-room-row-copy">
               <strong>{room.title}</strong>
-              <small>{room.slug} · {getRoomThemeLabel(room.theme)} · {formatActivity(room.lastActivityAt)}</small>
-              {room.description && <small className="dashboard-room-description">{room.description}</small>}
-              {room.accessMode === 'password_protected' && (
-                <small className="dashboard-room-password">
-                  {room.password ? <>Password: <code>{room.password}</code></> : 'Password protected'}
-                </small>
-              )}
-            </span>
-            <span className="dashboard-room-row-meta">
-              <span
-                className="dashboard-room-row-access"
-                title={room.accessMode === 'open' ? 'Public room' : 'Private room'}
-                aria-label={room.accessMode === 'open' ? 'Public room' : 'Private room'}
-              >
-                {room.accessMode === 'open' ? <Globe2 size={14} strokeWidth={1.8} /> : <LockKeyhole size={14} strokeWidth={1.8} />}
-                <small>{room.accessMode === 'open' ? 'Public' : 'Private'}</small>
-              </span>
-              <small>{room.status === 'closed' ? 'Archived' : roomRole(room)}</small>
-              {room.status === 'open' && <ChevronRight size={15} strokeWidth={1.7} />}
+              <small>{getRoomThemeLabel(room.theme)} · {formatActivity(room.lastActivityAt)}</small>
             </span>
           </button>
+          <details
+            className="dashboard-room-details"
+            open={openRoomDetailsSlug === room.slug}
+            onToggle={(event) => setOpenRoomDetailsSlug(event.currentTarget.open ? room.slug : null)}
+          >
+            <summary aria-label={`Show details for ${room.title}`}>
+              <span>Details</span>
+              <ChevronRight size={14} strokeWidth={1.8} />
+            </summary>
+            <div className="dashboard-room-details-panel">
+              <div className="dashboard-room-details-heading">
+                <strong>Room details</strong>
+                <span className="dashboard-room-row-access">
+                  {room.accessMode === 'open' ? <Globe2 size={13} strokeWidth={1.8} /> : <LockKeyhole size={13} strokeWidth={1.8} />}
+                  {room.accessMode === 'open' ? 'Public' : 'Private'}
+                </span>
+              </div>
+              {room.description && <p className="dashboard-room-details-description">{room.description}</p>}
+              <div className="dashboard-room-copy-actions">
+                <button
+                  className="dashboard-room-copy-button"
+                  type="button"
+                  onClick={() => { void copyRoomValue(`${room.slug}:code`, room.slug); }}
+                  title="Copy room code"
+                  aria-label={`Copy room code ${room.slug}`}
+                >
+                  {copiedRoomValue === `${room.slug}:code` ? <Check size={12} /> : <Copy size={12} />}
+                  <span>{copiedRoomValue === `${room.slug}:code` ? 'Copied' : 'Code'} <code>{room.slug}</code></span>
+                </button>
+                {room.accessMode === 'password_protected' && room.password && (
+                  <button
+                    className="dashboard-room-copy-button dashboard-room-password"
+                    type="button"
+                    onClick={() => { void copyRoomValue(`${room.slug}:password`, room.password!); }}
+                    title="Copy room password"
+                    aria-label="Copy room password"
+                  >
+                    {copiedRoomValue === `${room.slug}:password` ? <Check size={12} /> : <Copy size={12} />}
+                    <span>{copiedRoomValue === `${room.slug}:password` ? 'Copied' : 'Password'} <code>{room.password}</code></span>
+                  </button>
+                )}
+              </div>
+                {room.accessMode === 'password_protected' && !room.password && roomRole(room) === 'owner' && (
+                  <div className="dashboard-room-password-recovery">
+                    <span>Password unavailable for this older room.</span>
+                    <button
+                      className="dashboard-room-copy-button"
+                      type="button"
+                      onClick={() => { void regenerateRoomPassword(room.slug); }}
+                      disabled={resettingPasswordSlug === room.slug}
+                      title="Generate a new room password"
+                    >
+                      <RefreshCw size={12} className={resettingPasswordSlug === room.slug ? 'is-spinning' : undefined} />
+                      <span>{resettingPasswordSlug === room.slug ? 'Generating' : 'Generate password'}</span>
+                    </button>
+                  </div>
+                )}
+              {room.accessMode === 'password_protected' && !room.password && roomRole(room) !== 'owner' && <span className="dashboard-room-password-status">Password protected</span>}
+              <div className="dashboard-room-details-meta">
+                <span>{room.status === 'closed' ? 'Archived' : 'Active'}</span>
+                <span>{roomRole(room)}</span>
+              </div>
+            </div>
+          </details>
           {roomRole(room) === 'owner' && (
             <button
               className="dashboard-room-delete"

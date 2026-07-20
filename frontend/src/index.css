@@ -1,6 +1,10 @@
 /* Chalkboard Design System */
 
 :root {
+  color-scheme: dark;
+}
+
+:root {
   /* Wood Frame Colors */
   --wood-dark: #3a1a0b;
   --wood-light: #5d2b12;
@@ -2685,4 +2689,76 @@ body {
 @media (max-width: 520px) {
   .app-modal { padding: 18px; }
   .app-modal-actions { display: grid; grid-template-columns: 1fr 1fr; }
+}
+
+/* App-level color mode control. */
+.theme-toggle {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 7000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(12px);
+  color: #f8fafc;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  border-color: var(--brass-light);
+  background: var(--wood-dark);
+  color: var(--brass-light);
+  transform: translateY(-1px);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--brass-light);
+  outline-offset: 3px;
+}
+
+html[data-theme='light'] {
+  color-scheme: light;
+}
+
+html[data-theme='light'] body {
+  background: #f1eee6;
+  color: #282722;
+}
+
+html[data-theme='light'] .theme-toggle {
+  border-color: rgba(87, 73, 46, 0.24);
+  background: rgba(255, 253, 247, 0.94);
+  color: #51472f;
+  box-shadow: 0 8px 22px rgba(64, 52, 31, 0.14);
+}
+
+html[data-theme='light'] .theme-toggle:hover,
+html[data-theme='light'] .theme-toggle:focus-visible {
+  border-color: #9d7b3e;
+  background: #f4ead1;
+  color: #694f1e;
+}
+
+@media (max-width: 520px) {
+  .theme-toggle {
+    top: 12px;
+    right: 12px;
+    min-height: 32px;
+    padding: 0 9px;
+  }
 }

@@ -15,6 +15,10 @@ export const joinRoomSchema = z.object({
   password: z.string().max(256).optional(),
 });
 
+export const roomPasswordSchema = z.object({
+  password: z.string().trim().min(1).max(256).optional(),
+});
+
 export const googleAuthSchema = z.object({
   idToken: z.string().min(1),
 });

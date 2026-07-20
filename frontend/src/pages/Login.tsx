@@ -60,14 +60,19 @@ function Login() {
     let cancelled = false;
     const renderGoogleButton = async () => {
       try {
-        const configResponse = await fetch('/api/auth/google/config', { credentials: 'include' });
-        const config = await configResponse.json();
-        if (!configResponse.ok || !config.clientId) throw new Error('Google Sign-In is not configured on the server.');
+        let clientId = import.meta.env.VITE_CLIENT_ID?.trim();
+        if (!clientId) {
+          const configResponse = await fetch('/api/auth/google/config', { credentials: 'include' });
+          const responseText = await configResponse.text();
+          const config = responseText ? JSON.parse(responseText) as { clientId?: string } : {};
+          clientId = config.clientId?.trim();
+          if (!configResponse.ok || !clientId) throw new Error('Google Sign-In is not configured on the server.');
+        }
         await waitForGoogleIdentity();
         if (cancelled || !googleButtonRef.current || !window.google) return;
 
         window.google.accounts.id.initialize({
-          client_id: config.clientId,
+          client_id: clientId,
           callback: (response) => {
             void signInWithGoogle(response.credential).catch(() => undefined);
           },

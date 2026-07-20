@@ -170,6 +170,17 @@ export function useCanvasInteraction(
     currentStrokeId.current = null;
     socket?.emit('stroke-end', { roomId });
 
+    // Live stroke-start/stroke-draw packets are transient. Persist the
+    // completed stroke through the existing full-stroke event so Redis keeps
+    // the complete room history for refreshes and later joins.
+    if (activeTool !== 'eraser' && eraserId) {
+      setStrokes((prevStrokes) => {
+        const completedStroke = prevStrokes.find((stroke) => stroke.id === eraserId);
+        if (completedStroke) socket?.emit('draw-stroke', { roomId, stroke: completedStroke });
+        return prevStrokes;
+      });
+    }
+
     if (activeTool === 'eraser' && eraserId) {
       setStrokes((prevStrokes) => {
         const eraserStroke = prevStrokes.find((s) => s.id === eraserId);

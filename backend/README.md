@@ -24,6 +24,7 @@ Hono serves REST routes from `/api` and Socket.IO attaches to the same raw HTTP 
 - `PROCESS_TYPE` selects `server` (default) or `worker` for the same deployable image
 - `PORT` defaults to `3001`
 - `CORS_ORIGIN` comma-separated frontend origins
+- `FRONTEND_DIST_DIR` optionally overrides the frontend build directory; the default resolves `frontend/dist` relative to the backend module, not the process working directory
 - `DATABASE_URL` is required for Drizzle/Postgres persistence and is validated at boot
 - `REDIS_URL` is required for Redis ephemeral state, BullMQ jobs, and the Socket.IO Redis adapter
 - `GOOGLE_CLIENT_ID` is required for Google Sign-In verification
@@ -41,16 +42,18 @@ that session.
 
 ## Scripts
 
-- `npm run dev` starts `src/index.ts` as `PROCESS_TYPE=server` through `tsx` watch mode.
-- `npm run dev:worker` starts `src/index.ts` as `PROCESS_TYPE=worker` for BullMQ jobs.
+- `npm run dev` loads `.env` and starts `src/index.ts` using its `PROCESS_TYPE` value (currently `server`) through Node watch mode.
+- To run the worker, change `PROCESS_TYPE=worker` in the environment before starting the same command.
 - `npm run build` bundles `src/index.ts` to `dist/index.js` with tsup.
 - `npm run check` runs TypeScript type checking.
+- `npm run verify` runs type checking and the production bundle build without connecting to Postgres, Redis, or LiveKit.
 - `npm run db:generate` and `npm run db:migrate` use Drizzle Kit.
 
 ## Operational hardening
 
-- `/health` and `/api/health` both return `{ "ok": true }` for uptime checks.
+- `/health` and `/api/health` are liveness endpoints and return `{ "ok": true }` without contacting external services.
+- `/ready` checks Postgres with `select 1` and Redis with `PING`; it returns HTTP 200 only when both dependencies are available, otherwise HTTP 503 with per-dependency status.
 - `PROCESS_TYPE=worker` starts a BullMQ worker in the same repo/image and schedules `room-snapshot-cleanup`.
 - Socket disconnects use a short presence grace period (`PRESENCE_GRACE_MS`) before emitting leave/count updates, reducing flicker on transient reconnects.
 - Invite/room join HTTP routes and high-fanout socket events (`reaction:send`, `hand:raise`) are rate limited with environment-tunable windows.
-- Server shutdown handles `SIGTERM`/`SIGINT`, closes Socket.IO, closes HTTP, and then quits Redis.
+- Server shutdown handles `SIGTERM`/`SIGINT` once, closes Socket.IO and its HTTP server, then closes Redis and Postgres with a bounded force-exit timeout.

@@ -13,6 +13,7 @@ export async function createRoomHandler(c: any) {
 export async function getRoomHandler(c: any) {
   const result = await getRoomWithMembers(c.req.param('slug'));
   if (!result) throw new APIError('not_found', 404);
+  if (result.room.status === 'closed') throw new APIError('room_closed', 410);
   return c.json(result);
 }
 
@@ -24,6 +25,6 @@ export async function voiceTokenHandler(c: any) {
   const user = c.get('user');
   if (!user) throw new APIError('unauthorized', 401);
   const result = await createRoomVoiceToken(c.req.param('slug'), user);
-  if ('error' in result) throw new APIError(result.error, 403);
+  if ('error' in result) throw new APIError(result.error, result.error === 'room_closed' ? 410 : 403);
   return c.json(result);
 }

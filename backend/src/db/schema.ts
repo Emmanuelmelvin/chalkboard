@@ -1,6 +1,7 @@
-import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 export const roomAccessMode = pgEnum('room_access_mode', ['open', 'approval_required', 'password_protected']);
+export const roomStatus = pgEnum('room_status', ['open', 'closed']);
 export const roomRole = pgEnum('room_role', ['owner', 'instructor', 'viewer']);
 export const joinRequestStatus = pgEnum('join_request_status', ['pending', 'approved', 'denied']);
 
@@ -23,8 +24,9 @@ export const rooms = pgTable('rooms', {
   passwordHash: text('password_hash'),
   maxAttendees: integer('max_attendees'),
   voiceEnabled: boolean('voice_enabled').default(false).notNull(),
-  canvasSnapshot: jsonb('canvas_snapshot'),
-  canvasSnapshotAt: timestamp('canvas_snapshot_at', { withTimezone: true }),
+  status: roomStatus('status').default('open').notNull(),
+  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).defaultNow().notNull(),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({ ownerIdx: index('rooms_owner_idx').on(table.ownerId) }));

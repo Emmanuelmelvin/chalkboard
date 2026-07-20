@@ -8,6 +8,13 @@
       "when": 1784539855074,
       "tag": "0000_sleepy_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784544787194,
+      "tag": "0001_room_lifecycle",
+      "breakpoints": true
     }
   ]
 }

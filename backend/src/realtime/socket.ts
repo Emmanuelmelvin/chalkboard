@@ -1,8 +1,7 @@
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { redis, setRaisedHand, getRaisedHands } from '@/services/roomState';
-import { canManage } from '@/services/permissions';
-import { assertRoomJoinAllowed, banRoomUser } from '@/services/rooms';
+import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, touchRoomActivity } from '@/services/rooms';
 import {
   appendStroke,
   clearHistory,
@@ -21,6 +20,29 @@ import { logger } from '@/utils/logger';
 import { env } from '@/config/env';
 import { checkRateLimit } from '@/services/rateLimiter';
 import { authenticateSocketSession } from '@/services/auth';
+import {
+  SOCKET_LIMITS,
+  clearBoardSchema,
+  cursorMoveSchema,
+  drawStrokeSchema,
+  handRaiseSchema,
+  joinRoomSchema,
+  linksUpdateSchema,
+  memberKickSchema,
+  pluginEventSchema,
+  reactionSendSchema,
+  strokeDrawSchema,
+  strokeStartSchema,
+  undoStrokeSchema,
+} from '@/validators/socketValidators';
+
+type SocketAckResponse = {
+  ok: boolean;
+  error?: string;
+  role?: string;
+};
+
+type SocketAck = ((response: SocketAckResponse) => void) | undefined;
 
 function emitPresence(io: Server, roomId: string) {
   const roomUsers = getRoomUsers(roomId);
@@ -28,8 +50,230 @@ function emitPresence(io: Server, roomId: string) {
   io.to(roomId).emit('presence:count', { roomId, count: roomUsers.size });
 }
 
+async function recordRoomActivity(roomId: string) {
+  try {
+    await touchRoomActivity(roomId);
+  } catch (error) {
+    logger.error('Room activity metadata update failed', {
+      roomId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function sendAck(ack: SocketAck, response: SocketAckResponse) {
+  if (typeof ack !== 'function') return;
+  try {
+    ack(response);
+  } catch (error) {
+    logger.debug('Socket acknowledgement failed', { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+function rejectEvent(socket: any, event: string, error: string, ack?: SocketAck, roomId?: string) {
+  logger.warn('Socket event rejected', { event, error, socketId: socket.id, roomId });
+  sendAck(ack, { ok: false, error });
+}
+
+function parsePayload<T>(socket: any, event: string, schema: any, payload: unknown, ack?: SocketAck): T | null {
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) {
+    rejectEvent(socket, event, 'invalid_payload', ack);
+    return null;
+  }
+  return parsed.data as T;
+}
+
+function isJoinedRoom(socket: any, roomId: string, event: string, ack?: SocketAck): boolean {
+  const meta = getSocketMeta(socket.id);
+  if (!socket.rooms?.has(roomId) || meta?.roomId !== roomId) {
+    rejectEvent(socket, event, 'room_not_joined', ack, roomId);
+    return false;
+  }
+  return true;
+}
+
+function runSafely(socket: any, event: string, ack: SocketAck, handler: () => unknown) {
+  try {
+    const result = handler();
+    if (result && typeof (result as Promise<unknown>).catch === 'function') {
+      void (result as Promise<unknown>).catch((error) => {
+        logger.error('Socket event failed', { event, socketId: socket.id, error: error instanceof Error ? error.message : String(error) });
+        sendAck(ack, { ok: false, error: 'internal_error' });
+      });
+    }
+  } catch (error) {
+    logger.error('Socket event failed', { event, socketId: socket.id, error: error instanceof Error ? error.message : String(error) });
+    sendAck(ack, { ok: false, error: 'internal_error' });
+  }
+}
+
+async function handleJoin(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
+  const data = parsePayload<{
+    roomId: string;
+    color?: string;
+    password?: string;
+  }>(socket, 'join-room', joinRoomSchema, payload, ack);
+  if (!data) return;
+
+  const user = socket.data.user;
+  if (!user?.id) {
+    sendAck(ack, { ok: false, error: 'unauthorized' });
+    return;
+  }
+
+  const joinLimit = checkRateLimit(
+    `socket:${socket.id}:join:${data.roomId}`,
+    env.INVITE_JOIN_RATE_LIMIT_MAX,
+    env.INVITE_JOIN_RATE_LIMIT_WINDOW_MS,
+  );
+  if (!joinLimit.allowed) {
+    logger.warn('Socket room join rate limited', { socketId: socket.id, roomId: data.roomId });
+    sendAck(ack, { ok: false, error: 'rate_limited' });
+    return;
+  }
+
+  const join = await assertRoomJoinAllowed({ roomSlug: data.roomId, userId: user.id, password: data.password });
+  if (!join.ok) {
+    sendAck(ack, { ok: false, error: join.error });
+    return;
+  }
+
+  const currentMeta = getSocketMeta(socket.id);
+  if (currentMeta && currentMeta.roomId !== data.roomId) {
+    await socket.leave(currentMeta.roomId);
+    const removed = removePresenceNow(socket.id);
+    if (removed) {
+      io.to(removed.roomId).emit('user-disconnected', socket.id);
+      emitPresence(io, removed.roomId);
+    }
+  }
+
+  await socket.join(data.roomId);
+  await recordRoomActivity(data.roomId);
+  setSocketMeta(socket.id, { roomId: data.roomId, userId: user.id, role: join.role });
+  const presence = upsertPresence({
+    roomId: data.roomId,
+    socketId: socket.id,
+    userId: user.id,
+    user: {
+      id: socket.id,
+      userId: user.id,
+      name: user.displayName,
+      color: data.color || '#fff',
+      role: join.role,
+    },
+  });
+
+  // A reconnect for the same user supersedes the old socket. Drop its metadata
+  // so it cannot continue publishing into the room with a stale membership.
+  if (presence.previousSocketId && presence.previousSocketId !== socket.id) {
+    const previousSocket = io.sockets.sockets.get(presence.previousSocketId);
+    await previousSocket?.leave(data.roomId);
+    removePresenceNow(presence.previousSocketId);
+    io.to(data.roomId).emit('user-disconnected', presence.previousSocketId);
+  }
+
+  socket.emit('room-history', await getRoomHistory(data.roomId));
+  socket.emit('links-update', { links: await getRoomLinks(data.roomId) });
+  socket.emit('raised-hands:update', await getRaisedHands(data.roomId));
+  emitPresence(io, data.roomId);
+  logger.info('Socket joined room', {
+    socketId: socket.id,
+    roomId: data.roomId,
+    userId: user.id,
+    role: join.role,
+    reconnected: presence.reconnected,
+  });
+  sendAck(ack, { ok: true, role: join.role });
+}
+
+function relayValidated(
+  socket: any,
+  event: string,
+  schema: any,
+  payload: unknown,
+  ack?: SocketAck,
+) {
+  const data = parsePayload<{ roomId: string }>(socket, event, schema, payload, ack);
+  if (!data || !isJoinedRoom(socket, data.roomId, event, ack)) return;
+  socket.to(data.roomId).emit(event, { ...data, userId: socket.id });
+  sendAck(ack, { ok: true });
+}
+
+async function handleKick(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
+  const data = parsePayload<{
+    roomId: string;
+    targetSocketId: string;
+    reason?: string;
+  }>(socket, 'member:kick', memberKickSchema, payload, ack);
+  if (!data || !isJoinedRoom(socket, data.roomId, 'member:kick', ack)) return;
+
+  const actor = getSocketMeta(socket.id);
+  if (!actor) {
+    rejectEvent(socket, 'member:kick', 'room_not_joined', ack, data.roomId);
+    return;
+  }
+
+  // Keep persisted membership and role decisions in the room service rather
+  // than trusting the role captured when this socket first joined.
+  const authorization = await authorizeRoomAction({
+    roomSlug: data.roomId,
+    userId: actor.userId,
+    minimumRole: 'instructor',
+  });
+  if (!authorization.ok) {
+    const error = authorization.error === 'not_found' ? 'not_found' : 'forbidden';
+    logger.warn('Socket kick rejected', { roomId: data.roomId, actorSocketId: socket.id, error });
+    sendAck(ack, { ok: false, error });
+    return;
+  }
+
+  if (data.targetSocketId === socket.id) {
+    sendAck(ack, { ok: false, error: 'invalid_target' });
+    return;
+  }
+
+  const target = getSocketMeta(data.targetSocketId);
+  const targetSocket = io.sockets.sockets.get(data.targetSocketId);
+  if (!target || target.roomId !== data.roomId || !targetSocket?.rooms.has(data.roomId)) {
+    sendAck(ack, { ok: false, error: 'target_not_found' });
+    return;
+  }
+
+  const ban = await banRoomUser({
+    roomSlug: data.roomId,
+    targetUserId: target.userId,
+    bannedById: actor.userId,
+    reason: data.reason,
+  });
+  if (!ban.ok) {
+    const banError = (ban as { error?: string }).error;
+    sendAck(ack, { ok: false, error: banError === 'not_found' ? 'not_found' : 'forbidden' });
+    return;
+  }
+  io.to(data.targetSocketId).emit('member:kicked', { roomId: data.roomId, reason: data.reason });
+  const removed = removePresenceNow(data.targetSocketId);
+  if (removed) {
+    io.to(removed.roomId).emit('user-disconnected', data.targetSocketId);
+    emitPresence(io, removed.roomId);
+  }
+  targetSocket.disconnect(true);
+  logger.warn('Socket member kicked', {
+    roomId: data.roomId,
+    actorUserId: actor.userId,
+    targetSocketId: data.targetSocketId,
+    targetUserId: target.userId,
+    reason: data.reason,
+  });
+  sendAck(ack, { ok: true });
+}
+
 export async function attachSocket(server: any, corsOrigin: string[]) {
-  const io = new Server(server, { cors: { origin: corsOrigin, credentials: true } });
+  const io = new Server(server, {
+    cors: { origin: corsOrigin, credentials: true },
+    maxHttpBufferSize: SOCKET_LIMITS.maxPacketBytes,
+  });
   if (redis) {
     const pubClient = redis.duplicate();
     const subClient = redis.duplicate();
@@ -51,74 +295,119 @@ export async function attachSocket(server: any, corsOrigin: string[]) {
   });
 
   io.on('connection', (socket) => {
-    socket.on('join-room', async ({ roomId, color, password } = {}, ack) => {
-      const user = socket.data.user;
-      if (!roomId) return ack?.({ ok: false, error: 'room_required' });
-      const joinLimit = checkRateLimit(`socket:${socket.id}:join:${roomId}`, env.INVITE_JOIN_RATE_LIMIT_MAX, env.INVITE_JOIN_RATE_LIMIT_WINDOW_MS);
-      if (!joinLimit.allowed) {
-        logger.warn('Socket room join rate limited', { socketId: socket.id, roomId });
-        return ack?.({ ok: false, error: 'rate_limited' });
-      }
-      const join = await assertRoomJoinAllowed({ roomSlug: roomId, userId: user.id, password });
-      if (!join.ok) return ack?.({ ok: false, error: join.error });
+    socket.on('join-room', (payload, ack) => {
+      runSafely(socket, 'join-room', ack, () => handleJoin(io, socket, payload, ack));
+    });
 
-      socket.join(roomId);
-      const stableUserId = user.id;
-      setSocketMeta(socket.id, { roomId, userId: stableUserId, role: join.role });
-      const presence = upsertPresence({
-        roomId,
-        socketId: socket.id,
-        userId: stableUserId,
-        user: { id: socket.id, userId: stableUserId, name: user.displayName, color: color || '#fff', role: join.role },
+    socket.on('stroke-start', (payload, ack) => {
+      runSafely(socket, 'stroke-start', ack, async () => {
+        const data = parsePayload<{ roomId: string }>(socket, 'stroke-start', strokeStartSchema, payload, ack);
+        if (!data || !isJoinedRoom(socket, data.roomId, 'stroke-start', ack)) return;
+        await recordRoomActivity(data.roomId);
+        relayValidated(socket, 'stroke-start', strokeStartSchema, payload, ack);
       });
-      socket.emit('room-history', getRoomHistory(roomId));
-      socket.emit('links-update', { links: getRoomLinks(roomId) });
-      socket.emit('raised-hands:update', await getRaisedHands(roomId));
-      emitPresence(io, roomId);
-      logger.info('Socket joined room', { socketId: socket.id, roomId, userId: stableUserId, role: join.role, reconnected: presence.reconnected });
-      ack?.({ ok: true, role: join.role });
+    });
+    socket.on('stroke-draw', (payload, ack) => {
+      runSafely(socket, 'stroke-draw', ack, () => relayValidated(socket, 'stroke-draw', strokeDrawSchema, payload, ack));
+    });
+    socket.on('cursor-move', (payload, ack) => {
+      runSafely(socket, 'cursor-move', ack, () => relayValidated(socket, 'cursor-move', cursorMoveSchema, payload, ack));
+    });
+    socket.on('plugin:event', (payload, ack) => {
+      runSafely(socket, 'plugin:event', ack, () => relayValidated(socket, 'plugin:event', pluginEventSchema, payload, ack));
     });
 
-    const relay = (event: string, payload: any) => { const { roomId } = payload || {}; if (roomId) socket.to(roomId).emit(event, { ...payload, userId: socket.id }); };
-    socket.on('stroke-start', (p) => relay('stroke-start', p));
-    socket.on('stroke-draw', (p) => relay('stroke-draw', p));
-    socket.on('cursor-move', (p) => relay('cursor-move', p));
-    socket.on('plugin:event', (p) => relay('plugin:event', p));
-    socket.on('draw-stroke', ({ roomId, stroke } = {}) => { if (!roomId) return; appendStroke(roomId, stroke); socket.to(roomId).emit('stroke-start', { ...stroke, strokeId: stroke.id, startPoint: stroke.points?.[0] }); });
-    socket.on('undo-stroke', ({ roomId, strokes } = {}) => { if (!roomId) return; replaceHistory(roomId, strokes || []); socket.to(roomId).emit('undo-stroke', { strokes: strokes || [] }); });
-    socket.on('clear-board', ({ roomId } = {}) => { if (!roomId) return; clearHistory(roomId); io.to(roomId).emit('clear-board'); });
-    socket.on('links-update', ({ roomId, links: next } = {}) => { if (!roomId) return; replaceLinks(roomId, next || []); socket.to(roomId).emit('links-update', { links: next || [] }); });
-    socket.on('reaction:send', ({ roomId, emoji } = {}) => {
-      const limit = checkRateLimit(`socket:${socket.id}:reaction`, env.REACTION_RATE_LIMIT_MAX, env.REACTION_RATE_LIMIT_WINDOW_MS);
-      if (!limit.allowed) { logger.warn('Socket reaction rate limited', { socketId: socket.id, roomId }); return; }
-      if (roomId && emoji) io.to(roomId).emit('reaction:received', { userId: socket.id, emoji, at: Date.now() });
+    socket.on('draw-stroke', (payload, ack) => {
+      runSafely(socket, 'draw-stroke', ack, async () => {
+        const data = parsePayload<{ roomId: string; stroke: Record<string, unknown> }>(socket, 'draw-stroke', drawStrokeSchema, payload, ack);
+        if (!data || !isJoinedRoom(socket, data.roomId, 'draw-stroke', ack)) return;
+        const stroke = { ...(data.stroke as Record<string, any>), userId: socket.id } as Record<string, any>;
+        await appendStroke(data.roomId, stroke);
+        await recordRoomActivity(data.roomId);
+        socket.to(data.roomId).emit('stroke-start', {
+          ...stroke,
+          strokeId: stroke.id,
+          startPoint: (stroke.points as Array<{ x: number; y: number }>)[0],
+        });
+        sendAck(ack, { ok: true });
+      });
     });
-    socket.on('hand:raise', async ({ roomId, raised } = {}) => {
-      const limit = checkRateLimit(`socket:${socket.id}:hand`, env.HAND_RATE_LIMIT_MAX, env.HAND_RATE_LIMIT_WINDOW_MS);
-      if (!limit.allowed) { logger.warn('Socket hand-toggle rate limited', { socketId: socket.id, roomId }); return; }
-      if (roomId) io.to(roomId).emit('raised-hands:update', await setRaisedHand(roomId, socket.id, Boolean(raised)));
+
+    socket.on('undo-stroke', (payload, ack) => {
+      runSafely(socket, 'undo-stroke', ack, async () => {
+        const data = parsePayload<{ roomId: string; strokes: Array<Record<string, unknown>> }>(socket, 'undo-stroke', undoStrokeSchema, payload, ack);
+        if (!data || !isJoinedRoom(socket, data.roomId, 'undo-stroke', ack)) return;
+        await replaceHistory(data.roomId, data.strokes);
+        await recordRoomActivity(data.roomId);
+        socket.to(data.roomId).emit('undo-stroke', { strokes: data.strokes });
+        sendAck(ack, { ok: true });
+      });
     });
-    socket.on('member:kick', async ({ roomId, targetSocketId, reason } = {}, ack) => {
-      const actor = getSocketMeta(socket.id);
-      if (!actor || !canManage(actor.role)) {
-        logger.warn('Socket kick rejected', { roomId, actorSocketId: socket.id, role: actor?.role });
-        return ack?.({ ok: false, error: 'forbidden' });
-      }
-      const target = getSocketMeta(targetSocketId);
-      if (target) await banRoomUser({ roomSlug: roomId, targetUserId: target.userId, bannedById: actor.userId, reason });
-      io.to(targetSocketId).emit('member:kicked', { roomId, reason });
-      const removed = removePresenceNow(targetSocketId);
-      if (removed) {
-        io.to(removed.roomId).emit('user-disconnected', targetSocketId);
-        emitPresence(io, removed.roomId);
-      }
-      io.sockets.sockets.get(targetSocketId)?.disconnect(true);
-      logger.warn('Socket member kicked', { roomId, actorUserId: actor.userId, targetSocketId, targetUserId: target?.userId, reason });
-      ack?.({ ok: true });
+
+    socket.on('clear-board', (payload, ack) => {
+      runSafely(socket, 'clear-board', ack, async () => {
+        const data = parsePayload<{ roomId: string }>(socket, 'clear-board', clearBoardSchema, payload, ack);
+        if (!data || !isJoinedRoom(socket, data.roomId, 'clear-board', ack)) return;
+        await clearHistory(data.roomId);
+        await recordRoomActivity(data.roomId);
+        io.to(data.roomId).emit('clear-board');
+        sendAck(ack, { ok: true });
+      });
     });
+
+    socket.on('links-update', (payload, ack) => {
+      runSafely(socket, 'links-update', ack, async () => {
+        const data = parsePayload<{ roomId: string; links: Array<Record<string, unknown>> }>(socket, 'links-update', linksUpdateSchema, payload, ack);
+        if (!data || !isJoinedRoom(socket, data.roomId, 'links-update', ack)) return;
+        await replaceLinks(data.roomId, data.links);
+        await recordRoomActivity(data.roomId);
+        socket.to(data.roomId).emit('links-update', { links: data.links });
+        sendAck(ack, { ok: true });
+      });
+    });
+
+    socket.on('reaction:send', (payload, ack) => {
+      runSafely(socket, 'reaction:send', ack, () => {
+        const data = parsePayload<{ roomId: string; emoji: string }>(socket, 'reaction:send', reactionSendSchema, payload, ack);
+        if (!data || !isJoinedRoom(socket, data.roomId, 'reaction:send', ack)) return;
+        const limit = checkRateLimit(`socket:${socket.id}:reaction`, env.REACTION_RATE_LIMIT_MAX, env.REACTION_RATE_LIMIT_WINDOW_MS);
+        if (!limit.allowed) {
+          logger.warn('Socket reaction rate limited', { socketId: socket.id, roomId: data.roomId });
+          sendAck(ack, { ok: false, error: 'rate_limited' });
+          return;
+        }
+        io.to(data.roomId).emit('reaction:received', { userId: socket.id, emoji: data.emoji, at: Date.now() });
+        sendAck(ack, { ok: true });
+      });
+    });
+
+    socket.on('hand:raise', (payload, ack) => {
+      runSafely(socket, 'hand:raise', ack, async () => {
+        const data = parsePayload<{ roomId: string; raised: boolean }>(socket, 'hand:raise', handRaiseSchema, payload, ack);
+        if (!data || !isJoinedRoom(socket, data.roomId, 'hand:raise', ack)) return;
+        const limit = checkRateLimit(`socket:${socket.id}:hand`, env.HAND_RATE_LIMIT_MAX, env.HAND_RATE_LIMIT_WINDOW_MS);
+        if (!limit.allowed) {
+          logger.warn('Socket hand-toggle rate limited', { socketId: socket.id, roomId: data.roomId });
+          sendAck(ack, { ok: false, error: 'rate_limited' });
+          return;
+        }
+        io.to(data.roomId).emit('raised-hands:update', await setRaisedHand(data.roomId, socket.id, data.raised));
+        sendAck(ack, { ok: true });
+      });
+    });
+
+    socket.on('member:kick', (payload, ack) => {
+      runSafely(socket, 'member:kick', ack, () => handleKick(io, socket, payload, ack));
+    });
+
     socket.on('disconnect', () => {
-      const meta = getSocketMeta(socket.id); if (!meta) return;
-      logger.info('Socket disconnected; scheduling presence grace removal', { socketId: socket.id, roomId: meta.roomId, graceMs: env.PRESENCE_GRACE_MS });
+      const meta = getSocketMeta(socket.id);
+      if (!meta) return;
+      logger.info('Socket disconnected; scheduling presence grace removal', {
+        socketId: socket.id,
+        roomId: meta.roomId,
+        graceMs: env.PRESENCE_GRACE_MS,
+      });
       schedulePresenceRemoval(socket.id, env.PRESENCE_GRACE_MS, (removedMeta) => {
         io.to(removedMeta.roomId).emit('user-disconnected', socket.id);
         emitPresence(io, removedMeta.roomId);

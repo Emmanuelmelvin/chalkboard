@@ -26,7 +26,7 @@ chalkboard/
 
 ### Architecture
 1. **Frontend**: Built with **React** and **TypeScript** compiled by **Vite**. Styling is handled using custom **Vanilla CSS** to deliver premium chalkboard dust styling, realistic frame shadows, and responsive glassmorphism toolbars.
-2. **Backend**: Built with **Node.js**, **Express**, and **Socket.io**. It handles real-time message routing for cursors, room creation/presence, and keeps drawing history in-memory to catch up newly joined participants.
+2. **Backend**: Built with **Node.js**, **Hono**, and **Socket.io**. It handles REST requests, real-time message routing, and persistence-backed room access.
 
 ---
 
@@ -38,7 +38,7 @@ Navigate to the `backend/` directory:
 ```bash
 cd backend
 npm install
-npm run dev # runs server.js on port 3000
+npm run dev # runs the Hono/Socket.IO server on port 3001
 ```
 
 ### 2. Frontend Setup
@@ -50,4 +50,15 @@ npm install
 npm run dev # runs Vite dev server on port 5173
 ```
 
-Now open `http://localhost:5173` in your browser. Open multiple windows or tabs to test real-time collaborative drawing and cursor synchronization!
+Now open `http://localhost:5173` in your browser. Open multiple windows or tabs to test real-time collaborative drawing and cursor synchronization. Copy `backend/.env.example` to `backend/.env` and provide Postgres, Redis, Google Identity, session, and LiveKit settings before starting the backend.
+
+### Production verification
+
+Build the frontend first, then verify and build the backend:
+
+```bash
+cd frontend && npm run build
+cd ../backend && npm run verify
+```
+
+The backend serves the resulting `frontend/dist` build alongside `/api` and `/socket.io`. Use `/health` for liveness and `/ready` for Postgres/Redis readiness; `/ready` returns HTTP 503 until both dependencies respond.

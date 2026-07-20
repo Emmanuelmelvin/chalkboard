@@ -1,3 +1,5 @@
+import { redis } from '@/services/roomState';
+
 const histories = new Map<string, any[]>();
 const links = new Map<string, any[]>();
 const usersByRoom = new Map<string, Map<string, any>>();
@@ -49,9 +51,86 @@ export function schedulePresenceRemoval(socketId: string, graceMs: number, onRem
   }, graceMs);
 }
 
-export function getRoomHistory(roomId: string) { return histories.get(roomId) || []; }
-export function appendStroke(roomId: string, stroke: any) { histories.set(roomId, [...getRoomHistory(roomId), stroke]); }
-export function replaceHistory(roomId: string, strokes: any[]) { histories.set(roomId, strokes || []); }
-export function clearHistory(roomId: string) { histories.set(roomId, []); }
-export function getRoomLinks(roomId: string) { return links.get(roomId) || []; }
-export function replaceLinks(roomId: string, next: any[]) { links.set(roomId, next || []); }
+export const ROOM_STROKES_KEY_PREFIX = 'chalkboard:room:strokes:';
+export const ROOM_LINKS_KEY_PREFIX = 'chalkboard:room:links:';
+
+function strokesKey(roomId: string) { return `${ROOM_STROKES_KEY_PREFIX}${roomId}`; }
+function linksKey(roomId: string) { return `${ROOM_LINKS_KEY_PREFIX}${roomId}`; }
+
+function parseJson<T>(value: string | null, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function getRoomHistory(roomId: string): Promise<any[]> {
+  if (redis) {
+    const values = await redis.lRange(strokesKey(roomId), 0, -1);
+    return values.flatMap((value: string) => {
+      try {
+        return [JSON.parse(value)];
+      } catch {
+        return [];
+      }
+    });
+  }
+  return histories.get(roomId) || [];
+}
+
+export async function appendStroke(roomId: string, stroke: any) {
+  if (redis) {
+    await redis.rPush(strokesKey(roomId), JSON.stringify(stroke));
+    return;
+  }
+  histories.set(roomId, [...(histories.get(roomId) || []), stroke]);
+}
+
+export async function replaceHistory(roomId: string, strokes: any[]) {
+  const next = strokes || [];
+  if (redis) {
+    const key = strokesKey(roomId);
+    const transaction = redis.multi().del(key);
+    if (next.length > 0) transaction.rPush(key, next.map((stroke) => JSON.stringify(stroke)));
+    await transaction.exec();
+    return;
+  }
+  histories.set(roomId, next);
+}
+
+export async function clearHistory(roomId: string) {
+  if (redis) {
+    await redis.del(strokesKey(roomId));
+    return;
+  }
+  histories.set(roomId, []);
+}
+
+export async function getRoomLinks(roomId: string): Promise<any[]> {
+  if (redis) return parseJson(await redis.get(linksKey(roomId)), []);
+  return links.get(roomId) || [];
+}
+
+export async function replaceLinks(roomId: string, next: any[]) {
+  const value = next || [];
+  if (redis) {
+    await redis.set(linksKey(roomId), JSON.stringify(value));
+    return;
+  }
+  links.set(roomId, value);
+}
+
+/** Delete every Redis-backed canvas/presence state for a permanently closed room. */
+export async function deleteRoomState(roomId: string) {
+  if (redis) {
+    await redis.del(
+      strokesKey(roomId),
+      linksKey(roomId),
+      `room:${roomId}:hands`,
+    );
+  }
+  histories.delete(roomId);
+  links.delete(roomId);
+}

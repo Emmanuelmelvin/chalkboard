@@ -5,7 +5,9 @@ const envSchema = z.object({
   PROCESS_TYPE: z.enum(['server', 'worker']).default('server'),
   NODE_ENV: z.string().default('development'),
   PORT: z.coerce.number().int().positive().default(3001),
-  CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  PG_POOL_SIZE: z.coerce.number().int().positive().default(5),
+  CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
+  FRONTEND_DIST_DIR: z.string().default(''),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
   GOOGLE_CLIENT_ID: z.string().min(1),
@@ -20,8 +22,8 @@ const envSchema = z.object({
   REACTION_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(10000),
   HAND_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(6),
   HAND_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(10000),
-  SNAPSHOT_CLEANUP_AGE_DAYS: z.coerce.number().int().positive().default(30),
-  SNAPSHOT_CLEANUP_REPEAT_MS: z.coerce.number().int().positive().default(3600000),
+  ROOM_INACTIVITY_MS: z.coerce.number().int().positive().default(86400000),
+  ROOM_CLEANUP_REPEAT_MS: z.coerce.number().int().positive().default(3600000),
 });
 
 export const env = envSchema.parse(process.env);

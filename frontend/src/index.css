@@ -1015,37 +1015,32 @@ body {
 /* Real-Time Collaborator Cursors */
 .collaborator-cursor {
   position: absolute;
-  width: 0;
-  height: 0;
+  width: 32px;
+  height: 32px;
   pointer-events: none;
   z-index: 9999;
   transition: left 0.1s linear, top 0.1s linear;
 }
 
-/* Simulate the piece of chalk drawing */
-.cursor-pointer-chalk {
+.collaborator-avatar {
   position: absolute;
-  width: 8px;
-  height: 24px;
-  border-radius: 0;
-  transform: rotate(35deg) translate(-2px, -20px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  inset: 0;
+  width: 32px;
+  height: 32px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-sizing: border-box;
+  box-shadow: 0 3px 9px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(0, 0, 0, 0.3);
 }
 
-/* Username Label */
-.cursor-label {
+.collaborator-cursor-dot {
   position: absolute;
-  top: 10px;
-  left: 15px;
-  padding: 2px 8px;
-  border-radius: 0;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: bold;
-  white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  right: -3px;
+  bottom: -3px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #173d24;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.48);
 }
 
 /* Floating Items Container */

@@ -348,9 +348,19 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         const y = coll.cursor.y * zoom + panOffset.y + 24;
         if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null;
         return (
-          <div key={id} className="collaborator-cursor" style={{ left: x - 24, top: y - 24 }}>
-            <div className="cursor-pointer-chalk" style={{ backgroundColor: coll.color, color: coll.color }} />
-            <div className="cursor-label" style={{ backgroundColor: coll.color }}>{coll.name}</div>
+          <div
+            key={id}
+            className="collaborator-cursor"
+            style={{ left: x - 24, top: y - 24 }}
+            title={`${coll.name}'s cursor`}
+            aria-label={`${coll.name}'s cursor`}
+          >
+            <UserAvatar name={coll.name} avatarUrl={coll.avatarUrl} size="sm" className="collaborator-avatar" />
+            <span
+              className="collaborator-cursor-dot"
+              style={{ backgroundColor: coll.color }}
+              aria-hidden="true"
+            />
           </div>
         );
       })}

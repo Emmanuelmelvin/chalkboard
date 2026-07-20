@@ -258,6 +258,8 @@ async function handleMemberRoleUpdate(io: Server, socket: any, payload: unknown,
   if (targetSocket) {
     const targetMeta = getSocketMeta(targetSocket.id);
     if (targetMeta?.roomId === data.roomId) setSocketMeta(targetSocket.id, { ...targetMeta, role: data.role });
+    const targetPresence = getRoomUsers(data.roomId).get(targetSocket.id);
+    if (targetPresence) getRoomUsers(data.roomId).set(targetSocket.id, { ...targetPresence, role: data.role });
   }
   const roomDetails = await getRoomWithMembers(data.roomId);
   if (roomDetails) io.to(data.roomId).emit('room-members-updated', roomDetails);

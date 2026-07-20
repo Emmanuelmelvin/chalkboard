@@ -36,6 +36,13 @@
       "when": 1784555000000,
       "tag": "0004_room_password_ciphertext",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784560157870,
+      "tag": "0005_complex_stingray",
+      "breakpoints": true
     }
   ]
 }

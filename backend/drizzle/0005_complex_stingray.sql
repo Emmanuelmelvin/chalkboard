@@ -1,0 +1,1 @@
+ALTER TABLE "rooms" ADD COLUMN "default_role" "room_role" DEFAULT 'instructor' NOT NULL;

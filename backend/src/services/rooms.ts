@@ -48,7 +48,7 @@ export function canManageRoomRole(role: string | undefined) {
 }
 
 export function canEditRoomRole(role: string | undefined) {
-  return hasRoomRole(role, 'viewer');
+  return hasRoomRole(role, 'instructor');
 }
 
 type RoomDb = typeof db;

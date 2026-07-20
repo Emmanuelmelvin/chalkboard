@@ -3,7 +3,20 @@ import { useBoardStore } from '@/stores/boardStore';
 import { useLinksStore, type SavedLink } from '@/stores/linksStore';
 import { getRandomColor } from '@/utils/colors';
 import type { Socket } from 'socket.io-client';
-import type { Stroke, Collaborator } from '@/types';
+import type { Point, Stroke, Collaborator } from '@/types';
+
+type StrokeStartPayload = Partial<Stroke> & {
+  /** Present on live stroke-start relays; full redo payloads also include `id`. */
+  strokeId?: string;
+  /** Present on live stroke-start relays when `points` is not included. */
+  startPoint?: Point;
+};
+
+type RoomUser = {
+  id: string;
+  name: string;
+  color: string;
+};
 
 /**
  * Hook to manage all WebSocket (socket.io) event listeners for the chalkboard.
@@ -30,140 +43,152 @@ export function useBoardSocket(
   const [userCursorColor] = useState<string>(() => getRandomColor());
 
   useEffect(() => {
-    // 1. Connection & room info
-    const joinPayload = { roomId, userName, color: userCursorColor };
-    const joinCurrentRoom = () => socket.emit('join-room', joinPayload);
-    joinCurrentRoom();
-    socket.on('connect', joinCurrentRoom);
-
-    // 2. Stroke history catch-up
-    socket.on('room-history', (historyStrokes: Stroke[]) => {
+    // Register listeners before joining so a fast room-history response cannot
+    // arrive before its handler is attached.
+    const handleRoomHistory = (historyStrokes: Stroke[]) => {
       setStrokes(historyStrokes);
-    });
+    };
 
-    // 3. User updates
-    socket.on(
-      'update-users',
-      (userList: Record<string, { id: string; name: string; color: string }>) => {
-        setCollaborators((prev) => {
-          const next: Record<string, Collaborator> = {};
-          Object.entries(userList).forEach(([sid, user]) => {
-            if (sid !== socket.id) {
-              next[sid] = {
-                id: user.id,
-                name: user.name,
-                color: user.color,
-                cursor: prev[sid]?.cursor,
-              };
-            }
-          });
-          return next;
+    const handleUsersUpdate = (userList: Record<string, RoomUser>) => {
+      setCollaborators((prev) => {
+        const next: Record<string, Collaborator> = {};
+        Object.entries(userList).forEach(([sid, user]) => {
+          if (sid !== socket.id) {
+            next[sid] = {
+              id: user.id,
+              name: user.name,
+              color: user.color,
+              cursor: prev[sid]?.cursor,
+            };
+          }
         });
-      },
-    );
+        return next;
+      });
+    };
 
-    // 4. Remote drawing
-    socket.on(
-      'stroke-start',
-      ({
-        strokeId,
-        userId,
-        tool,
-        color,
-        size,
-        intensity,
-        eraserWidth: ew,
-        eraserHeight: eh,
-        startPoint,
-      }: {
-        strokeId: string;
-        userId: string;
-        tool: string;
-        color: string;
-        size: number;
-        intensity: number;
-        eraserWidth: number;
-        eraserHeight: number;
-        startPoint: { x: number; y: number };
-      }) => {
-        setStrokes((prev: Stroke[]) => [
-          ...prev,
-          {
-            id: strokeId,
-            userId,
-            tool,
-            color,
-            size,
-            intensity,
-            eraserWidth: ew,
-            eraserHeight: eh,
-            points: [startPoint],
-          } as Stroke,
-        ]);
-      },
-    );
+    // The server uses stroke-start for both live strokes and redo broadcasts.
+    // A redo payload contains the complete Stroke (including all points),
+    // while a live payload only contains startPoint until stroke-draw events
+    // arrive. Preserve whichever form the server sent.
+    const handleStrokeStart = (payload: StrokeStartPayload) => {
+      const strokeId = payload.id ?? payload.strokeId;
+      const points = payload.points?.length
+        ? payload.points
+        : payload.startPoint
+          ? [payload.startPoint]
+          : [];
 
-    socket.on(
-      'stroke-draw',
-      ({ strokeId, point }: { strokeId: string; point: { x: number; y: number } }) => {
-        setStrokes((prev: Stroke[]) =>
-          prev.map((s) =>
-            s.id === strokeId ? { ...s, points: [...s.points, point] } : s,
-          ),
-        );
-      },
-    );
+      if (
+        !strokeId
+        || !payload.userId
+        || !payload.tool
+        || !payload.color
+        || typeof payload.size !== 'number'
+        || points.length === 0
+      ) {
+        return;
+      }
 
-    socket.on('undo-stroke', ({ strokes: newStrokes }: { strokes: Stroke[] }) => {
+      const strokePayload = { ...payload };
+      delete strokePayload.strokeId;
+      delete strokePayload.startPoint;
+      const stroke: Stroke = {
+        ...strokePayload,
+        id: strokeId,
+        userId: payload.userId,
+        tool: payload.tool,
+        color: payload.color,
+        size: payload.size,
+        points,
+      } as Stroke;
+
+      setStrokes((prev: Stroke[]) => {
+        const existingIndex = prev.findIndex((existing) => existing.id === strokeId);
+        if (existingIndex === -1) return [...prev, stroke];
+
+        // Replays and reconnect races can deliver the same stroke more than
+        // once. Replacing by ID also upgrades a one-point live stroke to the
+        // full-points redo payload without creating a duplicate.
+        return prev.map((existing) => (existing.id === strokeId ? stroke : existing));
+      });
+    };
+
+    const handleStrokeDraw = ({
+      strokeId,
+      point,
+    }: { strokeId: string; point: Point }) => {
+      setStrokes((prev: Stroke[]) =>
+        prev.map((stroke) =>
+          stroke.id === strokeId ? { ...stroke, points: [...stroke.points, point] } : stroke,
+        ),
+      );
+    };
+
+    const handleUndoStroke = ({ strokes: newStrokes }: { strokes: Stroke[] }) => {
       setStrokes(newStrokes);
-    });
+    };
 
-    socket.on('clear-board', () => {
+    const handleClearBoard = () => {
       setStrokes([]);
       setRedoStack([]);
-    });
+    };
 
-    // 5. Remote cursors
-    socket.on(
-      'cursor-move',
-      ({ userId, cursor }: { userId: string; cursor: { x: number; y: number } }) => {
-        setCollaborators((prev) => {
-          if (!prev[userId]) return prev;
-          return {
-            ...prev,
-            [userId]: {
-              ...prev[userId],
-              cursor,
-            },
-          };
-        });
-      },
-    );
+    const handleCursorMove = ({ userId, cursor }: { userId: string; cursor: Point }) => {
+      setCollaborators((prev) => {
+        if (!prev[userId]) return prev;
+        return {
+          ...prev,
+          [userId]: {
+            ...prev[userId],
+            cursor,
+          },
+        };
+      });
+    };
 
-    // 6. Links sync (multiplayer)
-    socket.on('links-update', ({ links: newLinks }: { links: SavedLink[] }) => {
+    const handleLinksUpdate = ({ links: newLinks }: { links: SavedLink[] }) => {
       setLinks(newLinks);
-    });
+    };
 
-    socket.on('user-disconnected', (userId: string) => {
+    const handleUserDisconnected = (userId: string) => {
       setCollaborators((prev) => {
         const next = { ...prev };
         delete next[userId];
         return next;
       });
-    });
+    };
+
+    const joinRoom = () => {
+      socket.emit('join-room', { roomId, color: userCursorColor });
+    };
+
+    socket.on('room-history', handleRoomHistory);
+    socket.on('update-users', handleUsersUpdate);
+    socket.on('stroke-start', handleStrokeStart);
+    socket.on('stroke-draw', handleStrokeDraw);
+    socket.on('undo-stroke', handleUndoStroke);
+    socket.on('clear-board', handleClearBoard);
+    socket.on('cursor-move', handleCursorMove);
+    socket.on('links-update', handleLinksUpdate);
+    socket.on('user-disconnected', handleUserDisconnected);
+
+    // Socket.IO emits `connect` after every reconnect and assigns a new
+    // socket.id, so rejoin then to restore room membership and catch-up state.
+    socket.on('connect', joinRoom);
+    if (socket.connected) joinRoom();
 
     return () => {
-      socket.off('connect', joinCurrentRoom);
-      socket.off('room-history');
-      socket.off('update-users');
-      socket.off('stroke-start');
-      socket.off('stroke-draw');
-      socket.off('undo-stroke');
-      socket.off('clear-board');
-      socket.off('cursor-move');
-      socket.off('links-update');
-      socket.off('user-disconnected');
+      socket.off('connect', joinRoom);
+      socket.off('room-history', handleRoomHistory);
+      socket.off('update-users', handleUsersUpdate);
+      socket.off('stroke-start', handleStrokeStart);
+      socket.off('stroke-draw', handleStrokeDraw);
+      socket.off('undo-stroke', handleUndoStroke);
+      socket.off('clear-board', handleClearBoard);
+      socket.off('cursor-move', handleCursorMove);
+      socket.off('links-update', handleLinksUpdate);
+      socket.off('user-disconnected', handleUserDisconnected);
+      setCollaborators({});
     };
   }, [socket, roomId, userName, userCursorColor, setStrokes, setRedoStack, setLinks]);
 

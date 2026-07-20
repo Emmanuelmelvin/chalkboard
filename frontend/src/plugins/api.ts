@@ -1,7 +1,7 @@
 import { getSelectionBoundingBox } from '@/lib/geometry';
 import { getBoard } from '@/stores/boardStore';
-import { pluginRegistry } from '@/plugins/registry';
 import { useLoggerStore } from '@/stores/loggerStore';
+import { pluginRegistry } from '@/plugins/registry';
 import type { ChalkboardPluginAPI, InsertStrokeOptions } from '@/plugins/types';
 import type { Stroke } from '@/types';
 

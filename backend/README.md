@@ -27,7 +27,17 @@ Hono serves REST routes from `/api` and Socket.IO attaches to the same raw HTTP 
 - `DATABASE_URL` is required for Drizzle/Postgres persistence and is validated at boot
 - `REDIS_URL` is required for Redis ephemeral state, BullMQ jobs, and the Socket.IO Redis adapter
 - `GOOGLE_CLIENT_ID` is required for Google Sign-In verification
+- `AUTH_SESSION_SECRET` signs the HTTP-only same-origin session cookie created after Google Sign-In
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` are required for voice token issuance
+
+The frontend uses the same-origin `/api` and `/socket.io` paths. In production, build
+`frontend` first so the server can serve `frontend/dist` alongside the API. During local
+development, Vite proxies those same paths to the backend on port `3001`.
+
+Authentication is handled by `POST /api/auth/google`, which accepts a Google Identity
+Services credential and sets an HTTP-only session cookie. `GET /api/auth/me` hydrates the
+signed-in profile, `POST /api/auth/logout` clears it, and room/API/Socket.IO access requires
+that session.
 
 ## Scripts
 

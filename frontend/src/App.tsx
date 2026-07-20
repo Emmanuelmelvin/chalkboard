@@ -1,60 +1,107 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Redirect, Route, Switch, useLocation } from 'wouter';
-import Auth from '@/pages/Auth';
-import Dashboard from '@/pages/Dashboard';
-import JoinRoom from '@/pages/JoinRoom';
-import Onboarding from '@/pages/Onboarding';
-import Chalkboard from '@/pages/Chalkboard';
+import { Route, Switch, useLocation } from 'wouter';
 import Lobby from '@/pages/Lobby';
-import { useAuthStore } from '@/stores/authStore';
+import Chalkboard from '@/pages/Chalkboard';
+import Home from '@/pages/Home';
+import Login from '@/pages/Login';
 import LoggerOutlet from '@/components/LoggerOutlet';
+import { useAuthStore } from '@/stores/authStore';
+import type { UserProfile } from '@/stores/authStore';
+import '@/styles/PublicPages.css';
 
-function App() {
-  const [guestName, setGuestName] = useState<string | null>(null);
+// Initialize a single socket client that can be activated on demand
+const socket: Socket = io({
+  autoConnect: false,
+  transports: ['websocket'],
+  withCredentials: true,
+});
+
+function AuthLoading() {
+  return (
+    <div className="auth-loading" role="status" aria-live="polite">
+      <span className="auth-loading-mark">C</span>
+      <span>Checking your workspace…</span>
+    </div>
+  );
+}
+
+function RequireAuth({ children }: { children: (profile: UserProfile) => ReactNode }) {
   const [location, setLocation] = useLocation();
-  const { user, token, loading, hydrate } = useAuthStore();
-  const socket: Socket = useMemo(() => io({ autoConnect: false, transports: ['websocket'], auth: { token } }), [token]);
-
-  useEffect(() => { void hydrate(); }, [hydrate]);
+  const { profile, status } = useAuthStore();
 
   useEffect(() => {
-    if ((user || guestName) && location.startsWith('/room/') && !socket.connected) {
-      socket.connect();
+    if (status === 'unauthenticated') {
+      setLocation(`/login?redirect=${encodeURIComponent(location)}`);
     }
-  }, [guestName, location, socket, user]);
+  }, [location, setLocation, status]);
 
-  const handleJoinRoom = (name: string, room: string) => {
-    setGuestName(name);
+  if (status !== 'authenticated' || !profile) return <AuthLoading />;
+  return <>{children(profile)}</>;
+}
+
+function App() {
+  const [, setLocation] = useLocation();
+  const { hydrate } = useAuthStore();
+
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+
+  const handleJoinRoom = (room: string) => {
     socket.connect();
-    setLocation(`/room/${room}`);
+    const targetPath = `/room/${room}`;
+    setLocation(targetPath);
   };
 
   const handleLeaveRoom = () => {
     socket.disconnect();
-    setGuestName(null);
-    setLocation(user ? '/dashboard' : '/');
+    setLocation('/');
   };
-
-  if (loading) return <><div className="boot-screen">Dusting the slate...</div><LoggerOutlet /></>;
 
   return (
     <>
       <Switch>
-      <Route path="/auth">{user ? <Redirect to={user.onboardingComplete ? '/dashboard' : '/onboarding'} /> : <Auth />}</Route>
-      <Route path="/onboarding">{user ? <Onboarding /> : <Redirect to="/auth" />}</Route>
-      <Route path="/dashboard">{user ? <Dashboard /> : <Redirect to="/auth" />}</Route>
-      <Route path="/join/:roomId">{(params) => <JoinRoom roomId={params.roomId.toLowerCase()} />}</Route>
+      {/* Dynamic room route */}
       <Route path="/room/:roomId">
         {(params: { roomId: string }) => {
           const roomId = params.roomId.toLowerCase();
-          const displayName = user?.name ?? guestName;
-          if (displayName) return <Chalkboard roomId={roomId} userName={displayName} socket={socket} onLeaveRoom={handleLeaveRoom} />;
-          return <Lobby initialRoomId={roomId} onJoinRoom={handleJoinRoom} />;
+          return (
+            <RequireAuth>
+              {(user) => (
+                <Chalkboard
+                  roomId={roomId}
+                  userName={user.displayName}
+                  socket={socket}
+                  onLeaveRoom={handleLeaveRoom}
+                />
+              )}
+            </RequireAuth>
+          );
         }}
       </Route>
-      <Route path="/">{user ? <Redirect to={user.onboardingComplete ? '/dashboard' : '/onboarding'} /> : <Auth />}</Route>
-      <Route>{<Redirect to="/" />}</Route>
+
+      {/* Public authentication route */}
+      <Route path="/login">
+        <Login />
+      </Route>
+
+      {/* Public landing page */}
+      <Route path="/">
+        <Home />
+      </Route>
+
+      {/* Room entry route */}
+      <Route path="/lobby">
+        <RequireAuth>
+          {(user) => <Lobby initialRoomId={null} profile={user} onJoinRoom={handleJoinRoom} />}
+        </RequireAuth>
+      </Route>
+
+      {/* Catch-all fallback */}
+      <Route>
+        <Home />
+      </Route>
       </Switch>
       <LoggerOutlet />
     </>

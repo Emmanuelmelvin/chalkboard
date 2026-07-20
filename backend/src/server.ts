@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { api } from '@/routers/api';
@@ -17,7 +18,11 @@ export async function startServer() {
   app.onError(errorHandler);
   app.route('/api', api);
   app.get('/health', (c) => c.json({ ok: true }));
-  app.get('/', (c) => c.json({ name: 'chalkboard-backend', ok: true }));
+  app.use('/assets/*', serveStatic({ root: '../frontend/dist' }));
+  app.get('/favicon.svg', serveStatic({ root: '../frontend/dist' }));
+  app.get('/icons.svg', serveStatic({ root: '../frontend/dist' }));
+  app.get('/', serveStatic({ root: '../frontend/dist', path: 'index.html' }));
+  app.get('*', serveStatic({ root: '../frontend/dist', path: 'index.html' }));
 
   await initRedis();
   const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => logger.info('Chalkboard backend listening', { port: info.port }));

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Undo2, Redo2, Trash2 } from 'lucide-react';
 
 interface ActionSticksProps {
@@ -16,6 +16,8 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
   canUndo,
   canRedo,
 }) => {
+  const [confirmingClear, setConfirmingClear] = useState(false);
+
   return (
     <>
       <button
@@ -46,15 +48,21 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
         type="button"
         className="action-stick"
         title="Clear Blackboard"
-        onClick={() => {
-          if (window.confirm('Are you sure you want to clear the entire blackboard?')) {
-            onClear();
-          }
-        }}
+        onClick={() => setConfirmingClear(true)}
       >
         <Trash2 size={16} />
         <span>Clear</span>
       </button>
+
+      {confirmingClear && (
+        <div className="clear-confirm-popover" role="dialog" aria-label="Confirm clear board">
+          <p>Clear the entire blackboard?</p>
+          <div>
+            <button type="button" onClick={() => setConfirmingClear(false)}>Cancel</button>
+            <button type="button" onClick={() => { setConfirmingClear(false); onClear(); }}>Clear board</button>
+          </div>
+        </div>
+      )}
     </>
   );
 };

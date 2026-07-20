@@ -1,57 +1,72 @@
 import { create } from 'zustand';
-import { authService } from '@/services/authService';
-import type { AuthUser } from '@/types/app';
 
-interface AuthState {
-  user: AuthUser | null;
-  token: string | null;
-  loading: boolean;
-  error: string | null;
-  hydrate: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  signOut: () => void;
-  completeOnboarding: () => Promise<void>;
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string | null;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null,
-  token: null,
-  loading: true,
+type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+
+interface AuthState {
+  profile: UserProfile | null;
+  status: AuthStatus;
+  error: string | null;
+  hydrate: () => Promise<void>;
+  signInWithGoogle: (idToken: string) => Promise<void>;
+  signOut: () => Promise<void>;
+}
+
+async function readUserResponse(response: Response) {
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.user) {
+    throw new Error(payload.error || 'Unable to authenticate with Google.');
+  }
+  return payload.user as UserProfile;
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+  profile: null,
+  status: 'loading',
   error: null,
 
   hydrate: async () => {
-    const stored = authService.readStoredSession();
-    if (!stored) {
-      set({ loading: false });
-      return;
-    }
-    set({ loading: true, error: null, token: stored.token, user: stored.user });
     try {
-      const session = await authService.getMe(stored.token);
-      authService.storeSession(session);
-      set({ token: session.token, user: session.user, loading: false });
-    } catch (error) {
-      authService.storeSession(null);
-      set({ token: null, user: null, loading: false, error: error instanceof Error ? error.message : 'Session expired' });
+      const response = await fetch('/api/auth/me', { credentials: 'include' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.user) {
+        set({ profile: null, status: 'unauthenticated', error: null });
+        return;
+      }
+      set({ profile: payload.user as UserProfile, status: 'authenticated', error: null });
+    } catch {
+      set({ profile: null, status: 'unauthenticated', error: 'The authentication service is unavailable.' });
     }
   },
 
-  signInWithGoogle: async () => {
-    set({ loading: true, error: null });
-    await authService.beginGoogleSignIn();
-    const session = authService.readStoredSession();
-    set({ token: session?.token ?? null, user: session?.user ?? null, loading: false });
+  signInWithGoogle: async (idToken) => {
+    set({ status: 'loading', error: null });
+    try {
+      const profile = await readUserResponse(await fetch('/api/auth/google', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      }));
+      set({ profile, status: 'authenticated', error: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to sign in with Google.';
+      set({ profile: null, status: 'unauthenticated', error: message });
+      throw error;
+    }
   },
 
-  signOut: () => {
-    authService.storeSession(null);
-    set({ user: null, token: null, loading: false, error: null });
-  },
-
-  completeOnboarding: async () => {
-    const token = get().token;
-    if (!token) return;
-    const session = await authService.completeOnboarding(token);
-    set({ token: session.token, user: session.user });
+  signOut: async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } finally {
+      set({ profile: null, status: 'unauthenticated', error: null });
+    }
   },
 }));

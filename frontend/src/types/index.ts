@@ -1,4 +1,5 @@
 import { Socket } from 'socket.io-client';
+import type { UserProfile } from '@/stores/authStore';
 
 export interface Stroke {
   id: string;
@@ -120,7 +121,8 @@ export interface ChalkboardProps {
 
 export interface LobbyProps {
   initialRoomId: string | null;
-  onJoinRoom: (userName: string, roomId: string) => void;
+  profile: UserProfile;
+  onJoinRoom: (roomId: string) => void;
 }
 
 export interface ToolbarProps {

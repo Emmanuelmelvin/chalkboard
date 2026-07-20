@@ -5,10 +5,6 @@ import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
 
 export async function cleanupAbandonedRoomSnapshots() {
-  if (!db) {
-    logger.warn('Snapshot cleanup skipped because DATABASE_URL is not configured');
-    return { cleaned: 0 };
-  }
   const cutoff = new Date(Date.now() - env.SNAPSHOT_CLEANUP_AGE_DAYS * 24 * 60 * 60 * 1000);
   const cleaned = await db.update(rooms)
     .set({ canvasSnapshot: null, canvasSnapshotAt: null, updatedAt: new Date() })

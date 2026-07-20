@@ -20,6 +20,7 @@ import {
 import { logger } from '@/utils/logger';
 import { env } from '@/config/env';
 import { checkRateLimit } from '@/services/rateLimiter';
+import { authenticateSocketSession } from '@/services/auth';
 
 function emitPresence(io: Server, roomId: string) {
   const roomUsers = getRoomUsers(roomId);
@@ -37,25 +38,38 @@ export async function attachSocket(server: any, corsOrigin: string[]) {
     logger.info('Socket.IO Redis adapter attached');
   }
 
+  io.use(async (socket, next) => {
+    try {
+      const user = await authenticateSocketSession(socket.request.headers.cookie);
+      if (!user) return next(new Error('unauthorized'));
+      socket.data.user = user;
+      next();
+    } catch (error) {
+      logger.warn('Socket authentication failed', { error: error instanceof Error ? error.message : String(error) });
+      next(new Error('unauthorized'));
+    }
+  });
+
   io.on('connection', (socket) => {
-    socket.on('join-room', async ({ roomId, userName, color, userId, password } = {}, ack) => {
+    socket.on('join-room', async ({ roomId, color, password } = {}, ack) => {
+      const user = socket.data.user;
       if (!roomId) return ack?.({ ok: false, error: 'room_required' });
       const joinLimit = checkRateLimit(`socket:${socket.id}:join:${roomId}`, env.INVITE_JOIN_RATE_LIMIT_MAX, env.INVITE_JOIN_RATE_LIMIT_WINDOW_MS);
       if (!joinLimit.allowed) {
         logger.warn('Socket room join rate limited', { socketId: socket.id, roomId });
         return ack?.({ ok: false, error: 'rate_limited' });
       }
-      const join = await assertRoomJoinAllowed({ roomSlug: roomId, userId, password });
+      const join = await assertRoomJoinAllowed({ roomSlug: roomId, userId: user.id, password });
       if (!join.ok) return ack?.({ ok: false, error: join.error });
 
       socket.join(roomId);
-      const stableUserId = userId || socket.id;
+      const stableUserId = user.id;
       setSocketMeta(socket.id, { roomId, userId: stableUserId, role: join.role });
       const presence = upsertPresence({
         roomId,
         socketId: socket.id,
         userId: stableUserId,
-        user: { id: socket.id, userId: stableUserId, name: userName || 'Anonymous', color: color || '#fff', role: join.role },
+        user: { id: socket.id, userId: stableUserId, name: user.displayName, color: color || '#fff', role: join.role },
       });
       socket.emit('room-history', getRoomHistory(roomId));
       socket.emit('links-update', { links: getRoomLinks(roomId) });

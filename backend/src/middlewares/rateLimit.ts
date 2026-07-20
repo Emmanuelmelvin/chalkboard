@@ -1,12 +1,13 @@
 import { env } from '@/config/env';
 import { checkRateLimit, getRateLimitRetryAfterMs } from '@/services/rateLimiter';
 import { logger } from '@/utils/logger';
+import type { Context } from 'hono';
 
-function clientIp(c: any) {
+function clientIp(c: Context) {
   return c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 }
 
-export async function inviteJoinRateLimit(c: any, next: () => Promise<void>) {
+export async function inviteJoinRateLimit(c: Context, next: () => Promise<void>) {
   const roomSlug = c.req.param('slug') || 'create';
   const result = checkRateLimit(`invite:${clientIp(c)}:${roomSlug}`, env.INVITE_JOIN_RATE_LIMIT_MAX, env.INVITE_JOIN_RATE_LIMIT_WINDOW_MS);
   if (!result.allowed) {

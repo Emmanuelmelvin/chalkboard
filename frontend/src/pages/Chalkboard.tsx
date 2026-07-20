@@ -4,6 +4,7 @@ import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import UserAvatar from '@/components/UserAvatar';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import {
   getCombinedBoundingBox,
   getSelectionBoundingBox,
@@ -27,6 +28,7 @@ import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
 import { NOTES_PLUGIN_ID } from '@/plugins/builtin/notes';
 import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
+import { useLoggerStore } from '@/stores/loggerStore';
 import { isRoomTheme, type RoomTheme } from '@/constants/roomThemes';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
@@ -111,6 +113,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [roomDetailsOpen, setRoomDetailsOpen] = useState(false);
   const [roleUpdateError, setRoleUpdateError] = useState('');
+  const [closeRoomPending, setCloseRoomPending] = useState(false);
+  const [closingRoom, setClosingRoom] = useState(false);
+  const roomClosureHandledRef = useRef(false);
   const roomDetailsRef = useRef<HTMLDivElement | null>(null);
 
   const hasNavigatedToLink = useRef<boolean>(false);
@@ -225,6 +230,23 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     return () => { socket.off('room-members-updated', handleMembersUpdated); };
   }, [socket]);
 
+  const leaveClosedRoom = () => {
+    if (roomClosureHandledRef.current) return;
+    roomClosureHandledRef.current = true;
+    useLoggerStore.getState().notify('The owner closed this room.', 'info', 5000);
+    onLeaveRoom();
+  };
+
+  useEffect(() => {
+    roomClosureHandledRef.current = false;
+    const handleRoomClosed = (payload: { roomId?: string }) => {
+      if (payload?.roomId && payload.roomId !== roomId) return;
+      leaveClosedRoom();
+    };
+    socket.on('room:closed', handleRoomClosed);
+    return () => { socket.off('room:closed', handleRoomClosed); };
+  }, [socket, roomId, onLeaveRoom]);
+
   useEffect(() => {
     if (!roomDetailsOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -246,6 +268,30 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setRoleUpdateError('');
     socket.emit('member:update-role', { roomId, targetUserId, role }, (response: { ok?: boolean; error?: string }) => {
       if (!response?.ok) setRoleUpdateError(response?.error || 'Unable to update this member.');
+    });
+  };
+
+  const requestCloseRoom = () => {
+    setRoomDetailsOpen(false);
+    setCloseRoomPending(true);
+  };
+
+  const closeRoom = () => {
+    setClosingRoom(true);
+    socket.emit('room:close', { roomId }, (response: { ok?: boolean; error?: string }) => {
+      if (response?.ok) {
+        setCloseRoomPending(false);
+        setClosingRoom(false);
+        leaveClosedRoom();
+        return;
+      }
+      setClosingRoom(false);
+      setCloseRoomPending(false);
+      useLoggerStore.getState().notify(
+        response?.error === 'forbidden' ? 'Only the room owner can close this room.' : `Unable to close the room${response?.error ? `: ${response.error}` : ''}`,
+        'error',
+        5000,
+      );
     });
   };
 
@@ -606,6 +652,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                     })}
                   </div>
                   {roleUpdateError && <p className="room-details-error">{roleUpdateError}</p>}
+                  {canManageMembers && (
+                    <button className="room-close-button" type="button" onClick={requestCloseRoom}>
+                      Close room
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -653,6 +704,17 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onRunPluginTool={(commandId, formValues, selectionIds) => pluginRegistry.executeCommand(commandId, { formValues, selectionStrokeIds: selectionIds })} />;
       })}
       {noteEditorRequest && <NotesEditor />}
+      {closeRoomPending && (
+        <ConfirmModal
+          title="Close this room?"
+          message="Everyone will be taken out of the room and returned to their dashboard. The room will remain archived and cannot be reopened."
+          confirmLabel={closingRoom ? 'Closing…' : 'Close room'}
+          danger
+          confirmDisabled={closingRoom}
+          onCancel={() => setCloseRoomPending(false)}
+          onConfirm={closeRoom}
+        />
+      )}
     </div>
   );
 };

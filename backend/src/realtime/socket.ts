@@ -357,7 +357,7 @@ async function handleRoomClose(io: Server, socket: any, payload: unknown, ack?: 
 
   const result = await closeRoomForOwner(data.roomId, actor!.userId);
   if (!result.ok) {
-    sendAck(ack, { ok: false, error: result.error });
+    sendAck(ack, { ok: false, error: 'error' in result ? result.error : 'room_closed' });
     return;
   }
 
@@ -500,6 +500,9 @@ export async function attachSocket(server: any) {
     });
     socket.on('room:sync', (payload, ack) => {
       runSafely(socket, 'room:sync', ack, () => handleRoomSync(socket, payload, ack));
+    });
+    socket.on('room:close', (payload, ack) => {
+      runSafely(socket, 'room:close', ack, () => handleRoomClose(io, socket, payload, ack));
     });
 
     socket.on('stroke-start', (payload, ack) => {

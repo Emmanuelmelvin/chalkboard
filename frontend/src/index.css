@@ -705,6 +705,8 @@ body {
 .room-member-role-select { max-width: 90px; padding: 5px 6px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); color: #f8fafc; font: 700 10px var(--font-sans); }
 .room-member-role-select option { color: #111827; }
 .room-details-error { margin: 10px 0 0; color: #fca5a5; font-size: 11px; }
+.room-close-button { width: 100%; margin-top: 14px; padding: 8px 10px; border: 1px solid rgba(248, 113, 113, 0.48); background: rgba(248, 113, 113, 0.08); color: #fca5a5; cursor: pointer; font: 700 10px var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; }
+.room-close-button:hover, .room-close-button:focus-visible { border-color: rgba(248, 113, 113, 0.82); background: rgba(248, 113, 113, 0.16); color: #fecaca; outline: none; }
 
 .btn-icon {
   background: none;

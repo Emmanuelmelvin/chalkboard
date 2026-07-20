@@ -245,6 +245,22 @@ export async function updateRoomMemberRole({
   return { ok: true as const, membership: updated };
 }
 
+export async function closeRoomForOwner(roomSlug: string, userId: string) {
+  const authorization = await authorizeRoomAction({ roomSlug, userId, minimumRole: 'owner' });
+  if (!authorization.ok) return authorization;
+
+  const closedAt = new Date();
+  const [closedRoom] = await db
+    .update(rooms)
+    .set({ status: 'closed', closedAt, updatedAt: closedAt })
+    .where(and(eq(rooms.slug, roomSlug), eq(rooms.ownerId, userId), eq(rooms.status, 'open')))
+    .returning({ id: rooms.id, slug: rooms.slug });
+
+  if (!closedRoom) return { ok: false as const, error: 'room_closed' as const };
+  logger.info('Room closed by owner', { roomSlug, roomId: closedRoom.id, ownerId: userId });
+  return { ok: true as const, roomId: closedRoom.id, slug: closedRoom.slug };
+}
+
 /** List rooms the signed-in user owns or has joined, newest activity first. */
 export async function listRoomsForUser(userId: string) {
   const rows = await db

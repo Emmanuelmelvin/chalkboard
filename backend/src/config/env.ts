@@ -4,6 +4,7 @@ import { logger } from '@/utils/logger';
 const envSchema = z.object({
   PROCESS_TYPE: z.enum(['server', 'worker']).default('server'),
   NODE_ENV: z.string().default('development'),
+  HOST: z.string().min(1).default('0.0.0.0'),
   PORT: z.coerce.number().int().positive().default(3001),
   PG_POOL_SIZE: z.coerce.number().int().positive().default(5),
   CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
@@ -29,6 +30,32 @@ const envSchema = z.object({
 export const env = envSchema.parse(process.env);
 export const corsOrigins = env.CORS_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean);
 
+function isPrivateIpv4(hostname: string) {
+  const octets = hostname.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return false;
+
+  const [first, second] = octets;
+  return first === 10
+    || (first === 172 && second >= 16 && second <= 31)
+    || (first === 192 && second === 168);
+}
+
+export function isAllowedCorsOrigin(origin: string) {
+  if (corsOrigins.includes(origin)) return true;
+  if (env.NODE_ENV === 'production') return false;
+
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    return url.hostname === 'localhost'
+      || url.hostname === '0.0.0.0'
+      || url.hostname === '::1'
+      || isPrivateIpv4(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function logBootMode() {
-  logger.info('Backend environment validated', { processType: env.PROCESS_TYPE, nodeEnv: env.NODE_ENV });
+  logger.info('Backend environment validated', { host: env.HOST, processType: env.PROCESS_TYPE, nodeEnv: env.NODE_ENV });
 }

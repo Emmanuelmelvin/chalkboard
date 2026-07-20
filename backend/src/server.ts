@@ -12,7 +12,7 @@ import { attachSocket } from '@/realtime/socket';
 import { errorHandler } from '@/middlewares/errorHandler';
 import { requestLogger } from '@/middlewares/requestLogger';
 import { logger } from '@/utils/logger';
-import { corsOrigins, env, logBootMode } from '@/config/env';
+import { env, isAllowedCorsOrigin, logBootMode } from '@/config/env';
 
 type DependencyStatus = 'up' | 'down';
 const READINESS_TIMEOUT_MS = 2000;
@@ -62,7 +62,10 @@ export async function startServer() {
   logBootMode();
   const app = new Hono();
   app.use('*', requestLogger);
-  app.use('*', cors({ origin: corsOrigins, credentials: true }));
+  app.use('*', cors({
+    origin: (origin) => isAllowedCorsOrigin(origin) ? origin : undefined,
+    credentials: true,
+  }));
   app.onError(errorHandler);
   app.route('/api', api);
   app.get('/health', (c) => c.json({ ok: true }));
@@ -85,10 +88,10 @@ export async function startServer() {
   }
 
   await initRedis();
-  const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => logger.info('Chalkboard backend listening', { port: info.port }));
+  const server = serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (info) => logger.info('Chalkboard backend listening', { host: env.HOST, port: info.port }));
   let io;
   try {
-    io = await attachSocket(server, corsOrigins);
+    io = await attachSocket(server);
   } catch (error) {
     await Promise.allSettled([
       new Promise<void>((resolveClose) => server.close(() => resolveClose())),

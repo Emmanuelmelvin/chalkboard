@@ -2996,6 +2996,17 @@ html[data-theme='light'] .dashboard-room-details-panel {
   box-shadow: 0 14px 30px rgba(81, 66, 38, 0.18);
 }
 
+html[data-theme='light'] .dashboard-button-outline {
+  border-color: rgba(41, 39, 34, 0.28);
+  color: #292722;
+}
+
+html[data-theme='light'] .dashboard-button-outline:hover,
+html[data-theme='light'] .dashboard-button-outline:focus-visible {
+  border-color: #292722;
+  background: #ece7dc;
+}
+
 html[data-theme='light'] .dashboard-tool-card:hover {
   background: #e5dfd3;
 }

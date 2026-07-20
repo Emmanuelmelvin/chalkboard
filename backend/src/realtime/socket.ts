@@ -17,7 +17,7 @@ import {
   removePresenceNow,
 } from '@/services/realtimeRooms';
 import { logger } from '@/utils/logger';
-import { env } from '@/config/env';
+import { env, isAllowedCorsOrigin } from '@/config/env';
 import { checkRateLimit } from '@/services/rateLimiter';
 import { authenticateSocketSession } from '@/services/auth';
 import {
@@ -273,7 +273,20 @@ async function handleKick(io: Server, socket: any, payload: unknown, ack?: Socke
   sendAck(ack, { ok: true });
 }
 
-export async function attachSocket(server: any, corsOrigin: string[]) {
+type SocketCorsOrigin = (
+  requestOrigin: string | undefined,
+  callback: (error: Error | null, origin?: boolean | string | RegExp | Array<boolean | string | RegExp>) => void,
+) => void;
+
+const corsOrigin: SocketCorsOrigin = (requestOrigin, callback) => {
+  if (!requestOrigin || isAllowedCorsOrigin(requestOrigin)) {
+    callback(null, requestOrigin || true);
+    return;
+  }
+  callback(null, false);
+};
+
+export async function attachSocket(server: any) {
   const io = new Server(server, {
     cors: { origin: corsOrigin, credentials: true },
     maxHttpBufferSize: SOCKET_LIMITS.maxPacketBytes,

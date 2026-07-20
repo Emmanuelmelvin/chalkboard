@@ -12,6 +12,7 @@ import {
   LibraryBig,
   LockKeyhole,
   LogOut,
+  Menu,
   PanelTopOpen,
   PenLine,
   Plus,
@@ -22,6 +23,7 @@ import {
   Trash2,
   UserRound,
   UsersRound,
+  X,
 } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { getRoomThemeLabel, roomThemes, type RoomTheme } from '@/constants/roomThemes';
@@ -108,6 +110,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [copiedRoomValue, setCopiedRoomValue] = useState<string | null>(null);
   const [openRoomDetailsSlug, setOpenRoomDetailsSlug] = useState<string | null>(null);
   const [resettingPasswordSlug, setResettingPasswordSlug] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => getTab(location));
   const firstName = profile.displayName.trim().split(/\s+/)[0] || 'friend';
@@ -137,8 +140,24 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, []);
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileMenuOpen(false);
+    };
+
+    document.body.classList.add('dashboard-mobile-menu-open');
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.classList.remove('dashboard-mobile-menu-open');
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mobileMenuOpen]);
+
   const selectTab = (tab: DashboardTab) => {
     setError('');
+    setMobileMenuOpen(false);
     setActiveTab(tab);
     setLocation(`/dashboard?tab=${tab}`);
   };
@@ -574,7 +593,19 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     <>
       <div className="dashboard-page">
       <aside className="dashboard-rail">
-        <button className="dashboard-brand" type="button" onClick={() => setLocation('/')} aria-label="Chalkboard home"><span className="home-brand-mark">C</span><span>Chalkboard</span></button>
+        <div className="dashboard-rail-top">
+          <button className="dashboard-brand" type="button" onClick={() => setLocation('/')} aria-label="Chalkboard home"><span className="home-brand-mark">C</span><span>Chalkboard</span></button>
+          <button
+            className="dashboard-mobile-menu-button"
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Open workspace menu"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="dashboard-mobile-drawer"
+          >
+            <Menu size={19} strokeWidth={1.8} />
+          </button>
+        </div>
         <div className="dashboard-rail-rule" />
         <p className="dashboard-rail-label">Workspace</p>
         <nav className="dashboard-tabs" aria-label="Dashboard sections">
@@ -604,6 +635,49 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
         </div>
       </main>
       </div>
+      <button
+        className={`dashboard-mobile-menu-backdrop${mobileMenuOpen ? ' is-visible' : ''}`}
+        type="button"
+        onClick={() => setMobileMenuOpen(false)}
+        aria-label="Close workspace menu"
+        tabIndex={mobileMenuOpen ? 0 : -1}
+      />
+      <aside
+        id="dashboard-mobile-drawer"
+        className={`dashboard-mobile-drawer${mobileMenuOpen ? ' is-open' : ''}`}
+        aria-label="Mobile workspace menu"
+        aria-hidden={!mobileMenuOpen}
+      >
+        <div className="dashboard-mobile-drawer-header">
+          <div><p className="dashboard-panel-kicker">Workspace</p><strong>Chalkboard</strong></div>
+          <button className="dashboard-mobile-drawer-close" type="button" onClick={() => setMobileMenuOpen(false)} aria-label="Close workspace menu">
+            <X size={18} strokeWidth={1.8} />
+          </button>
+        </div>
+        <nav className="dashboard-mobile-drawer-nav" aria-label="Workspace sections">
+          {tabItems.map(({ id, label, icon: Icon }) => (
+            <button
+              className={`dashboard-mobile-drawer-tab${activeTab === id ? ' is-active' : ''}`}
+              type="button"
+              key={id}
+              onClick={() => selectTab(id)}
+              aria-current={activeTab === id ? 'page' : undefined}
+            >
+              <Icon size={18} strokeWidth={activeTab === id ? 1.9 : 1.5} />
+              <span>{label}</span>
+              {id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
+            </button>
+          ))}
+        </nav>
+        <button className="dashboard-mobile-drawer-new-room" type="button" onClick={() => selectTab('rooms')}>
+          <Plus size={16} strokeWidth={1.9} /> New room
+        </button>
+        <div className="dashboard-mobile-drawer-bottom">
+          <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
+          <button className="dashboard-help" type="button" onClick={() => selectTab('toolkit')}><CircleHelp size={15} /> Need a starting point?</button>
+          <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{firstName}</strong><small>Workspace member</small></span></div>
+        </div>
+      </aside>
       {roomToDelete && (
         <ConfirmModal
           title="Delete room?"

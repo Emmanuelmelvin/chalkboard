@@ -50,7 +50,7 @@ npm install
 npm run dev # runs Vite dev server on port 5173
 ```
 
-Now open `http://localhost:5173` in your browser. Open multiple windows or tabs to test real-time collaborative drawing and cursor synchronization. Copy `backend/.env.example` to `backend/.env` and provide Postgres, Redis, Google Identity, session, and LiveKit settings before starting the backend.
+Now open `http://localhost:5173` in your browser. Vite listens on `0.0.0.0`, so it also prints a `Network` URL such as `http://192.168.1.25:5173`; share that URL with devices on the same network. Development CORS allows private LAN origins, and the backend binds to `0.0.0.0` for production/static serving as well. Make sure the computer firewall allows ports `5173` (Vite) and `3001` (backend), and configure the LAN URL as an authorized origin in Google Identity Services if sign-in is enabled. Open multiple windows or devices to test real-time collaborative drawing and cursor synchronization. Copy `backend/.env.example` to `backend/.env` and provide Postgres, Redis, Google Identity, session, and LiveKit settings before starting the backend.
 
 ### Production verification
 

@@ -634,7 +634,6 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           {activeTab !== 'rooms' && error && <p className="dashboard-error dashboard-floating-error" role="alert">{error}</p>}
         </div>
       </main>
-      </div>
       <button
         className={`dashboard-mobile-menu-backdrop${mobileMenuOpen ? ' is-visible' : ''}`}
         type="button"
@@ -678,6 +677,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{firstName}</strong><small>Workspace member</small></span></div>
         </div>
       </aside>
+      </div>
       {roomToDelete && (
         <ConfirmModal
           title="Delete room?"

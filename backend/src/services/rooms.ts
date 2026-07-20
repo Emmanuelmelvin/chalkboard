@@ -1,11 +1,11 @@
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
-import { and, count, desc, eq, or } from 'drizzle-orm';
+import { and, count, desc, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { joinRequests, roomBans, roomMembers, rooms, users } from '@/db/schema';
 import { canPublishVoice } from '@/services/permissions';
 import { createVoiceToken } from '@/services/livekit';
-import { deleteRoomState } from '@/services/realtimeRooms';
+import { deleteRoomState, getLiveRoomUserIds } from '@/services/realtimeRooms';
 import { decryptRoomPassword, encryptRoomPassword } from '@/services/roomPasswords';
 import { logger } from '@/utils/logger';
 
@@ -185,7 +185,8 @@ export async function createRoom(user: any, body: any) {
 export async function getRoomWithMembers(slug: string) {
   const room = await getRoomBySlug(db, slug);
   if (!room) return null;
-  const members = await db
+  const [members, liveUserIds] = await Promise.all([
+    db
     .select({
       id: roomMembers.id,
       userId: roomMembers.userId,
@@ -197,8 +198,21 @@ export async function getRoomWithMembers(slug: string) {
     })
     .from(roomMembers)
     .innerJoin(users, eq(users.id, roomMembers.userId))
-    .where(eq(roomMembers.roomId, room.id));
-  return { room: { ...room, passwordHash: undefined, passwordCiphertext: undefined }, members };
+    .where(eq(roomMembers.roomId, room.id)),
+    getLiveRoomUserIds(slug),
+  ]);
+  return {
+    room: { ...room, passwordHash: undefined, passwordCiphertext: undefined },
+    members: members.map((member) => ({ ...member, online: liveUserIds.has(member.userId) })),
+  };
+}
+
+export async function updateRoomPeakAttendeeCount(slug: string, currentCount: number) {
+  if (currentCount <= 0) return;
+  await db
+    .update(rooms)
+    .set({ peakAttendeeCount: sql`GREATEST(${rooms.peakAttendeeCount}, ${currentCount})` })
+    .where(eq(rooms.slug, slug));
 }
 
 export async function updateRoomMemberRole({
@@ -246,6 +260,7 @@ export async function listRoomsForUser(userId: string) {
       voiceEnabled: rooms.voiceEnabled,
       lastActivityAt: rooms.lastActivityAt,
       createdAt: rooms.createdAt,
+      peakAttendeeCount: rooms.peakAttendeeCount,
       role: roomMembers.role,
     })
     .from(rooms)
@@ -254,8 +269,15 @@ export async function listRoomsForUser(userId: string) {
     .orderBy(desc(rooms.lastActivityAt))
     .limit(24);
 
+  const roomMembersBySlug = new Map<string, Awaited<ReturnType<typeof getRoomWithMembers>>['members']>();
+  await Promise.all(rows.map(async (row) => {
+    const details = await getRoomWithMembers(row.slug);
+    roomMembersBySlug.set(row.slug, details?.members || []);
+  }));
+
   return rows.map(({ ownerId, passwordCiphertext, ...room }) => ({
     ...room,
+    members: roomMembersBySlug.get(room.slug) || [],
     // Passwords are only returned to the room owner; members still get the
     // access mode indicator without receiving the owner credential.
     password: ownerId === userId ? decryptRoomPassword(passwordCiphertext) : null,

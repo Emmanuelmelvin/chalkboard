@@ -31,6 +31,7 @@ export const rooms = pgTable('rooms', {
   voiceEnabled: boolean('voice_enabled').default(false).notNull(),
   status: roomStatus('status').default('open').notNull(),
   lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).defaultNow().notNull(),
+  peakAttendeeCount: integer('peak_attendee_count').default(0).notNull(),
   closedAt: timestamp('closed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

@@ -123,6 +123,7 @@ export interface RoomMember {
   avatarUrl?: string | null;
   role: 'owner' | 'instructor' | 'viewer';
   createdAt?: string;
+  online?: boolean;
 }
 
 export interface ChalkboardProps {

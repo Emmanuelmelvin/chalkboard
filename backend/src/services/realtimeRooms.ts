@@ -5,6 +5,32 @@ const links = new Map<string, any[]>();
 const usersByRoom = new Map<string, Map<string, any>>();
 const socketMeta = new Map<string, any>();
 const presenceByKey = new Map<string, { roomId: string; socketId: string; user: any; removalTimer?: ReturnType<typeof setTimeout> }>();
+let presenceServer: any = null;
+
+export function setPresenceServer(server: any) {
+  presenceServer = server;
+}
+
+export async function getLiveRoomUserIds(roomId: string) {
+  if (presenceServer) {
+    try {
+      const roomSockets = await presenceServer.in(roomId).fetchSockets();
+      return new Set(
+        roomSockets
+          .map((socket: any) => socket.data?.user?.id)
+          .filter((userId: unknown): userId is string => typeof userId === 'string' && userId.length > 0),
+      );
+    } catch {
+      // Fall through to the local map when the adapter is unavailable.
+    }
+  }
+
+  return new Set(
+    [...getRoomUsers(roomId).values()]
+      .map((user) => user.userId)
+      .filter((userId: unknown): userId is string => typeof userId === 'string' && userId.length > 0),
+  );
+}
 
 function presenceKey(roomId: string, userId: string) { return `${roomId}:${userId}`; }
 export function getRoomUsers(roomId: string) {

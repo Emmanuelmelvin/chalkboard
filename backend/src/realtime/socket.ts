@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { redis, setRaisedHand, getRaisedHands } from '@/services/roomState';
-import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole } from '@/services/rooms';
+import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms';
 import {
   appendStroke,
   clearHistory,
@@ -15,6 +15,7 @@ import {
   upsertPresence,
   schedulePresenceRemoval,
   removePresenceNow,
+  setPresenceServer,
 } from '@/services/realtimeRooms';
 import { logger } from '@/utils/logger';
 import { env, isAllowedCorsOrigin } from '@/config/env';
@@ -74,6 +75,15 @@ async function emitPresence(io: Server, roomId: string) {
   }
 
   const roomUsers = Object.fromEntries(users);
+  const uniqueUserCount = new Set(users.map(([, user]) => user.userId).filter(Boolean)).size;
+  try {
+    await updateRoomPeakAttendeeCount(roomId, uniqueUserCount);
+  } catch (error) {
+    logger.warn('Room peak attendance update failed', {
+      roomId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
   io.to(roomId).emit('update-users', roomUsers);
   io.to(roomId).emit('presence:count', { roomId, count: users.length });
 }
@@ -426,6 +436,7 @@ export async function attachSocket(server: any) {
     io.adapter(createAdapter(pubClient, subClient));
     logger.info('Socket.IO Redis adapter attached');
   }
+  setPresenceServer(io);
 
   io.use(async (socket, next) => {
     try {

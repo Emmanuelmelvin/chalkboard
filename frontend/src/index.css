@@ -2,18 +2,18 @@
 
 :root {
   /* Wood Frame Colors */
-  --wood-dark: #3a1a0b;
-  --wood-light: #5d2b12;
-  --wood-grain: #271107;
+  --wood-dark: #071d2b;
+  --wood-light: #0f4760;
+  --wood-grain: #04111a;
   
   /* Metallic Accent Colors */
-  --brass: #c5a059;
-  --brass-dark: #8c6e30;
-  --brass-light: #e8d098;
+  --brass: #6ed7e8;
+  --brass-dark: #277f9d;
+  --brass-light: #b9f5ff;
   
   /* Slate Blackboard Colors */
-  --slate-green: #143525;
-  --slate-dark: #0b2216;
+  --slate-green: #123a46;
+  --slate-dark: #081d2a;
   --chalk-dust: rgba(255, 255, 255, 0.08);
 
   /* Chalk Colors */
@@ -63,7 +63,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: var(--slate-dark);
+  background: radial-gradient(circle at 50% -10%, rgba(110, 215, 232, 0.14), transparent 42%), var(--slate-dark);
   
   /* 3D Wood Frame Border (Simulated with outer shadows and inset borders) */
   border: 24px solid var(--wood-light);
@@ -76,23 +76,23 @@ body {
   box-shadow: 
     inset 0 10px 30px rgba(0, 0, 0, 0.95),
     inset 0 -10px 30px rgba(0, 0, 0, 0.95),
-    0 15px 40px rgba(0, 0, 0, 0.8);
+    0 15px 40px rgba(0, 0, 0, 0.8), 0 0 55px rgba(39, 127, 157, 0.16);
 }
 
 /* Room themes keep the board interaction the same while changing its atmosphere. */
 .board-container.room-theme-classroom {
-  --wood-dark: #3a1a0b;
-  --wood-light: #5d2b12;
-  --wood-grain: #271107;
-  --brass: #c5a059;
-  --brass-dark: #8c6e30;
-  --brass-light: #e8d098;
-  --slate-green: #143525;
-  --slate-dark: #0b2216;
-  --chalk-yellow: #fff3a1;
-  --chalk-blue: #a3e5ff;
-  --chalk-pink: #ffa3d1;
-  --chalk-green: #a3ffd6;
+  --wood-dark: #071d2b;
+  --wood-light: #0f4760;
+  --wood-grain: #04111a;
+  --brass: #6ed7e8;
+  --brass-dark: #277f9d;
+  --brass-light: #b9f5ff;
+  --slate-green: #123a46;
+  --slate-dark: #081d2a;
+  --chalk-yellow: #fff0ad;
+  --chalk-blue: #a9eaff;
+  --chalk-pink: #ffb8dc;
+  --chalk-green: #a7f5da;
 }
 
 .board-container.room-theme-workshop {
@@ -196,11 +196,12 @@ body {
   background-color: var(--slate-green);
   /* Layer 1: Radial shine, Layer 2: Chalk dust clouds, Layer 3: Noise overlay */
   background-image:
-    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.05) 0%, transparent 60%),
+    radial-gradient(circle at 50% 40%, rgba(160, 238, 248, 0.07) 0%, transparent 60%),
+    radial-gradient(circle at 72% 15%, rgba(61, 180, 205, 0.08) 0%, transparent 34%),
     radial-gradient(circle at 20% 70%, rgba(255, 255, 255, 0.02) 0%, transparent 40%),
     radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
     url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.16'/%3E%3C/svg%3E");
-  background-size: auto, auto, auto, 256px 256px;
+  background-size: auto, auto, auto, auto, 256px 256px;
 }
 
 /* Drawing Canvas */
@@ -588,6 +589,15 @@ body {
   font-size: 18px;
   color: var(--chalk-yellow);
   margin-top: 2px;
+}
+
+.board-title small {
+  display: block;
+  max-width: 260px;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 /* Share Panel */

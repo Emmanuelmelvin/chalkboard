@@ -2842,5 +2842,6 @@
   .dashboard-room-row-meta small { display: none; }
   .dashboard-room-delete { padding: 6px; }
   .dashboard-room-delete span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .dashboard-access-grid { grid-template-columns: 1fr; }
   .dashboard-theme-grid { grid-template-columns: 1fr; }
 }

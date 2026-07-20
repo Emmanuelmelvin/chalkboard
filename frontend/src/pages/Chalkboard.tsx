@@ -101,6 +101,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string; selectionStrokeIds: string[] }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
   const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
+  const [roomTitle, setRoomTitle] = useState('Chalkboard');
+  const [roomDescription, setRoomDescription] = useState('');
 
   const hasNavigatedToLink = useRef<boolean>(false);
   const openPluginModal = (pluginId: string, ids = selectedStrokeIds) => {
@@ -146,7 +148,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       try {
         const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`, { credentials: 'include' });
         const payload = await response.json().catch(() => ({}));
-        if (!cancelled && isRoomTheme(payload.room?.theme)) setRoomTheme(payload.room.theme);
+        if (!cancelled) {
+          if (isRoomTheme(payload.room?.theme)) setRoomTheme(payload.room.theme);
+          if (typeof payload.room?.title === 'string' && payload.room.title) setRoomTitle(payload.room.title);
+          if (typeof payload.room?.description === 'string') setRoomDescription(payload.room.description);
+        }
       } catch {
         // The classroom theme remains a safe fallback if metadata is unavailable.
       }
@@ -433,7 +439,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         })()}
 
         <div className="board-header">
-          <Card className="board-title"><h1>Chalkboard</h1><span>Room Code: {roomId}</span></Card>
+          <Card className="board-title"><h1>{roomTitle}</h1><span>Room Code: {roomId}</span>{roomDescription && <small>{roomDescription}</small>}</Card>
           <Card style={{ display: 'flex', flexDirection: 'row', gap: '12px', alignItems: 'center', padding: '8px' }}>
             <ActionSticks onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
               canUndo={strokes.some((s) => s.userId === socket.id || s.userId === 'local')} canRedo={redoStack.length > 0} />

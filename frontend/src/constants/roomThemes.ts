@@ -2,7 +2,7 @@ export const roomThemes = [
   {
     id: 'classroom',
     label: 'Classroom',
-    description: 'Focused, familiar, and chalkboard green.',
+    description: 'Cool ocean slate with bright chalk contrast.',
   },
   {
     id: 'workshop',

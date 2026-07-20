@@ -2,17 +2,37 @@
   "name": "backend",
   "version": "1.0.0",
   "type": "module",
-  "main": "server.js",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "PROCESS_TYPE=server tsx watch --tsconfig tsconfig.json src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "check": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "dev:worker": "PROCESS_TYPE=worker tsx watch --tsconfig tsconfig.json src/index.ts"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.21.2",
-    "socket.io": "^4.8.3"
+    "@hono/node-server": "^1.19.6",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.45.1",
+    "google-auth-library": "^10.5.0",
+    "hono": "^4.10.7",
+    "livekit-server-sdk": "^2.14.0",
+    "postgres": "^3.4.7",
+    "redis": "^5.10.0",
+    "socket.io": "^4.8.3",
+    "zod": "^4.2.1",
+    "winston": "^3.18.3",
+    "bullmq": "^5.64.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.9"
+    "@types/node": "^24.10.1",
+    "nodemon": "^3.1.9",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.6",
+    "typescript": "^7.0.2",
+    "drizzle-kit": "^0.32.6"
   }
 }

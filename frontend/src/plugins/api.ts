@@ -1,6 +1,7 @@
 import { getSelectionBoundingBox } from '@/lib/geometry';
 import { getBoard } from '@/stores/boardStore';
 import { pluginRegistry } from '@/plugins/registry';
+import { useLoggerStore } from '@/stores/loggerStore';
 import type { ChalkboardPluginAPI, InsertStrokeOptions } from '@/plugins/types';
 import type { Stroke } from '@/types';
 
@@ -83,7 +84,7 @@ export function createPluginAPI(): ChalkboardPluginAPI {
     },
     ui: {
       showToast: (message) => {
-        window.setTimeout(() => window.alert(message), 0);
+        useLoggerStore.getState().notify(message, 'info');
       },
     },
     commands: {

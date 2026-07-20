@@ -31,7 +31,10 @@ export function useBoardSocket(
 
   useEffect(() => {
     // 1. Connection & room info
-    socket.emit('join-room', { roomId, userName, color: userCursorColor });
+    const joinPayload = { roomId, userName, color: userCursorColor };
+    const joinCurrentRoom = () => socket.emit('join-room', joinPayload);
+    joinCurrentRoom();
+    socket.on('connect', joinCurrentRoom);
 
     // 2. Stroke history catch-up
     socket.on('room-history', (historyStrokes: Stroke[]) => {
@@ -151,6 +154,7 @@ export function useBoardSocket(
     });
 
     return () => {
+      socket.off('connect', joinCurrentRoom);
       socket.off('room-history');
       socket.off('update-users');
       socket.off('stroke-start');

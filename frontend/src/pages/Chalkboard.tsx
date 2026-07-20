@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, useState } from 'react';
-import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes, Eye, EyeOff } from 'lucide-react';
+import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes, Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -29,6 +29,8 @@ import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useBoardSocket } from '@/hooks/useBoardSocket';
+import { useSocketConnectionStatus } from '@/hooks/useSocketConnectionStatus';
+import { useLoggerStore } from '@/stores/loggerStore';
 import { createPluginAPI, pluginRegistry, registerInstalledPlugins } from '@/plugins';
 import {
   handleUndo,
@@ -98,6 +100,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const pluginSelectionTools = useMemo(() => pluginRegistry.getSelectionTools(), []);
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string; selectionStrokeIds: string[] }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
+  const [rateLimitedActions, setRateLimitedActions] = useState<Record<string, boolean>>({});
+  const [handRaised, setHandRaised] = useState(false);
+  const notify = useLoggerStore((state) => state.notify);
 
   const hasNavigatedToLink = useRef<boolean>(false);
   const openPluginModal = (pluginId: string, ids = selectedStrokeIds) => {
@@ -138,6 +143,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   useKeyboardShortcuts();
 
   const { collaborators, userCursorColor } = useBoardSocket(socket, roomId, userName);
+  const { status: connectionStatus, rejoin } = useSocketConnectionStatus(socket, true);
 
   useEffect(() => {
     initSession({ roomId, socket, userId: socket.id ?? 'local' });
@@ -185,6 +191,36 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const resetPanZoom = () => {
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
+  };
+
+  const throttleAction = (key: string, durationMs = 1400) => {
+    setRateLimitedActions((current) => ({ ...current, [key]: true }));
+    window.setTimeout(() => {
+      setRateLimitedActions((current) => ({ ...current, [key]: false }));
+    }, durationMs);
+  };
+
+  const emitRateLimitedAction = (key: string, eventName: string, payload: Record<string, unknown>, onAccepted?: () => void) => {
+    if (rateLimitedActions[key]) return;
+    throttleAction(key);
+    socket.timeout(1500).emit(eventName, payload, (error: Error | null, response?: { ok?: boolean; rateLimited?: boolean; message?: string; retryAfterMs?: number }) => {
+      if (error) return;
+      if (response?.rateLimited || response?.ok === false) {
+        throttleAction(key, response.retryAfterMs ?? 2500);
+        if (response.message) notify(response.message, 'warning', 2200);
+        return;
+      }
+      onAccepted?.();
+    });
+  };
+
+  const sendReaction = (reaction: string) => {
+    emitRateLimitedAction(`reaction:${reaction}`, 'reaction', { roomId, reaction });
+  };
+
+  const toggleRaiseHand = () => {
+    const nextRaised = !handRaised;
+    emitRateLimitedAction('raise-hand', 'raise-hand', { roomId, raised: nextRaised }, () => setHandRaised(nextRaised));
   };
 
   const getCanvasCursor = () => {
@@ -420,6 +456,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               canUndo={strokes.some((s) => s.userId === socket.id || s.userId === 'local')} canRedo={redoStack.length > 0} />
           </Card>
           <div style={{ display: 'flex', gap: '12px' }}>
+
+            <Card className={`connection-panel connection-${connectionStatus}`}>
+              {connectionStatus === 'disconnected' ? <WifiOff size={14} /> : <Wifi size={14} />}
+              <span>{connectionStatus === 'connected' ? 'Connected' : connectionStatus === 'reconnecting' ? 'Reconnecting…' : 'Disconnected'}</span>
+              {connectionStatus === 'disconnected' && <Button variant="secondary" onClick={rejoin}>Rejoin</Button>}
+            </Card>
+            <Card className="classroom-social-panel">
+              {['👏', '💡', '😂'].map((reaction) => (
+                <Button key={reaction} variant="icon" disabled={rateLimitedActions[`reaction:${reaction}`]} onClick={() => sendReaction(reaction)} title={`Send ${reaction} reaction`}>{reaction}</Button>
+              ))}
+              <Button variant="secondary" disabled={rateLimitedActions['raise-hand']} onClick={toggleRaiseHand}>{handRaised ? 'Lower hand' : 'Raise hand'}</Button>
+            </Card>
             <Card className="share-panel">
               <span className="room-code-badge">{roomId.toUpperCase()}</span>
               <Button variant="icon" onClick={handleCopyLink} title="Copy Invite Link">

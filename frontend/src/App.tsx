@@ -1,84 +1,63 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Route, Switch, useLocation } from 'wouter';
-import Lobby from '@/pages/Lobby';
+import { Redirect, Route, Switch, useLocation } from 'wouter';
+import Auth from '@/pages/Auth';
+import Dashboard from '@/pages/Dashboard';
+import JoinRoom from '@/pages/JoinRoom';
+import Onboarding from '@/pages/Onboarding';
 import Chalkboard from '@/pages/Chalkboard';
-
-// Initialize a single socket client that can be activated on demand
-const socket: Socket = io({
-  autoConnect: false,
-  transports: ['websocket'],
-});
+import Lobby from '@/pages/Lobby';
+import { useAuthStore } from '@/stores/authStore';
+import LoggerOutlet from '@/components/LoggerOutlet';
 
 function App() {
-  const [userName, setUserName] = useState<string | null>(null);
+  const [guestName, setGuestName] = useState<string | null>(null);
   const [location, setLocation] = useLocation();
+  const { user, token, loading, hydrate } = useAuthStore();
+  const socket: Socket = useMemo(() => io({ autoConnect: false, transports: ['websocket'], auth: { token } }), [token]);
+
+  useEffect(() => { void hydrate(); }, [hydrate]);
+
+  useEffect(() => {
+    if ((user || guestName) && location.startsWith('/room/') && !socket.connected) {
+      socket.connect();
+    }
+  }, [guestName, location, socket, user]);
 
   const handleJoinRoom = (name: string, room: string) => {
-    setUserName(name);
-
-    // Connect to WebSocket backend
+    setGuestName(name);
     socket.connect();
-
-    // Redirect to the chalkboard room path while preserving deep-link query params.
-    const query = window.location.search;
-    const targetPath = `/room/${room}`;
-    setLocation(`${targetPath}${location.startsWith(targetPath) ? query : ''}`);
+    setLocation(`/room/${room}`);
   };
 
   const handleLeaveRoom = () => {
     socket.disconnect();
-    setUserName(null);
-
-    // Redirect back to the landing lobby
-    setLocation('/');
+    setGuestName(null);
+    setLocation(user ? '/dashboard' : '/');
   };
 
+  if (loading) return <><div className="boot-screen">Dusting the slate...</div><LoggerOutlet /></>;
+
   return (
-    <Switch>
-      {/* Dynamic room route */}
+    <>
+      <Switch>
+      <Route path="/auth">{user ? <Redirect to={user.onboardingComplete ? '/dashboard' : '/onboarding'} /> : <Auth />}</Route>
+      <Route path="/onboarding">{user ? <Onboarding /> : <Redirect to="/auth" />}</Route>
+      <Route path="/dashboard">{user ? <Dashboard /> : <Redirect to="/auth" />}</Route>
+      <Route path="/join/:roomId">{(params) => <JoinRoom roomId={params.roomId.toLowerCase()} />}</Route>
       <Route path="/room/:roomId">
         {(params: { roomId: string }) => {
           const roomId = params.roomId.toLowerCase();
-
-          if (userName) {
-            return (
-              <Chalkboard
-                roomId={roomId}
-                userName={userName}
-                socket={socket}
-                onLeaveRoom={handleLeaveRoom}
-              />
-            );
-          } else {
-            // Guard: If the user directly browses to a room URL without setting their name,
-            // render the Lobby to capture their nickname for this specific room code.
-            return (
-              <Lobby
-                initialRoomId={roomId}
-                onJoinRoom={handleJoinRoom}
-              />
-            );
-          }
+          const displayName = user?.name ?? guestName;
+          if (displayName) return <Chalkboard roomId={roomId} userName={displayName} socket={socket} onLeaveRoom={handleLeaveRoom} />;
+          return <Lobby initialRoomId={roomId} onJoinRoom={handleJoinRoom} />;
         }}
       </Route>
-
-      {/* Default lobby route */}
-      <Route path="/">
-        <Lobby
-          initialRoomId={null}
-          onJoinRoom={handleJoinRoom}
-        />
-      </Route>
-
-      {/* Catch-all fallback */}
-      <Route>
-        <Lobby
-          initialRoomId={null}
-          onJoinRoom={handleJoinRoom}
-        />
-      </Route>
-    </Switch>
+      <Route path="/">{user ? <Redirect to={user.onboardingComplete ? '/dashboard' : '/onboarding'} /> : <Auth />}</Route>
+      <Route>{<Redirect to="/" />}</Route>
+      </Switch>
+      <LoggerOutlet />
+    </>
   );
 }
 

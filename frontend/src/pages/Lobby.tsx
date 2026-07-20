@@ -4,15 +4,17 @@ import Input from '@/components/ui/Input';
 import Card from '@/components/ui/Card';
 import FloatingItems from '@/components/FloatingItems';
 import type { LobbyProps } from '@/types';
+import { useLoggerStore } from '@/stores/loggerStore';
 
 export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
   const [userName, setUserName] = useState('');
   const [roomCode, setRoomCode] = useState(initialRoomId || '');
+  const notify = useLoggerStore((state) => state.notify);
 
   const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName.trim()) {
-      alert('Please enter your name.');
+      notify('Please enter your name.', 'warning');
       return;
     }
     const generatedId = Math.random().toString(36).substring(2, 8).toLowerCase();
@@ -22,11 +24,11 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
   const handleJoinRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName.trim()) {
-      alert('Please enter your name.');
+      notify('Please enter your name.', 'warning');
       return;
     }
     if (!roomCode.trim()) {
-      alert('Please enter a room code.');
+      notify('Please enter a room code.', 'warning');
       return;
     }
     onJoinRoom(userName.trim(), roomCode.trim().toLowerCase());

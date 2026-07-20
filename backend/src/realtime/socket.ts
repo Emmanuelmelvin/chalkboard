@@ -344,6 +344,49 @@ async function handleMemberRoleUpdate(io: Server, socket: any, payload: unknown,
   sendAck(ack, { ok: true, role: data.role });
 }
 
+async function handleRoomClose(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
+  const data = parsePayload<{ roomId: string }>(socket, 'room:close', roomCloseSchema, payload, ack);
+  if (!data || !isJoinedRoom(socket, data.roomId, 'room:close', ack)) return;
+
+  const actor = getSocketMeta(socket.id);
+  const authorization = await authorizeRoomAction({ roomSlug: data.roomId, userId: actor?.userId, minimumRole: 'owner' });
+  if (!authorization.ok) {
+    rejectEvent(socket, 'room:close', 'forbidden', ack, data.roomId);
+    return;
+  }
+
+  const result = await closeRoomForOwner(data.roomId, actor!.userId);
+  if (!result.ok) {
+    sendAck(ack, { ok: false, error: result.error });
+    return;
+  }
+
+  let roomSockets: any[] = [];
+  try {
+    roomSockets = await io.in(data.roomId).fetchSockets();
+  } catch (error) {
+    logger.error('Room close socket lookup failed; broadcasting closure only', {
+      roomId: data.roomId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  io.to(data.roomId).emit('room:closed', { roomId: data.roomId });
+  await Promise.allSettled(roomSockets.map(async (roomSocket: any) => {
+    const localSocket = io.sockets.sockets.get(roomSocket.id);
+    if (localSocket) removePresenceNow(localSocket.id);
+    await roomSocket.leave(data.roomId);
+    roomSocket.disconnect(true);
+  }));
+
+  logger.info('Room closure broadcast to active members', {
+    roomId: data.roomId,
+    ownerId: actor.userId,
+    socketCount: roomSockets.length,
+  });
+  sendAck(ack, { ok: true });
+}
+
 async function handleKick(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
   const data = parsePayload<{
     roomId: string;

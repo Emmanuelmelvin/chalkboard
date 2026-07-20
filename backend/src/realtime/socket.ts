@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { redis, setRaisedHand, getRaisedHands } from '@/services/roomState';
-import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms';
+import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, closeRoomForOwner, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms';
 import {
   appendStroke,
   clearHistory,
@@ -33,6 +33,7 @@ import {
   memberRoleUpdateSchema,
   pluginEventSchema,
   reactionSendSchema,
+  roomCloseSchema,
   roomSyncSchema,
   strokeDrawSchema,
   strokeStartSchema,

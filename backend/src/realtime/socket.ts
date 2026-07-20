@@ -52,12 +52,13 @@ function emitPresence(io: Server, roomId: string) {
 
 async function recordRoomActivity(roomId: string) {
   try {
-    await touchRoomActivity(roomId);
+    return await touchRoomActivity(roomId);
   } catch (error) {
     logger.error('Room activity metadata update failed', {
       roomId,
       error: error instanceof Error ? error.message : String(error),
     });
+    return false;
   }
 }
 
@@ -149,8 +150,11 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     }
   }
 
+  if (!await recordRoomActivity(data.roomId)) {
+    sendAck(ack, { ok: false, error: 'room_closed' });
+    return;
+  }
   await socket.join(data.roomId);
-  await recordRoomActivity(data.roomId);
   setSocketMeta(socket.id, { roomId: data.roomId, userId: user.id, role: join.role });
   const presence = upsertPresence({
     roomId: data.roomId,
@@ -303,7 +307,10 @@ export async function attachSocket(server: any, corsOrigin: string[]) {
       runSafely(socket, 'stroke-start', ack, async () => {
         const data = parsePayload<{ roomId: string }>(socket, 'stroke-start', strokeStartSchema, payload, ack);
         if (!data || !isJoinedRoom(socket, data.roomId, 'stroke-start', ack)) return;
-        await recordRoomActivity(data.roomId);
+        if (!await recordRoomActivity(data.roomId)) {
+          sendAck(ack, { ok: false, error: 'room_closed' });
+          return;
+        }
         relayValidated(socket, 'stroke-start', strokeStartSchema, payload, ack);
       });
     });
@@ -321,9 +328,12 @@ export async function attachSocket(server: any, corsOrigin: string[]) {
       runSafely(socket, 'draw-stroke', ack, async () => {
         const data = parsePayload<{ roomId: string; stroke: Record<string, unknown> }>(socket, 'draw-stroke', drawStrokeSchema, payload, ack);
         if (!data || !isJoinedRoom(socket, data.roomId, 'draw-stroke', ack)) return;
+        if (!await recordRoomActivity(data.roomId)) {
+          sendAck(ack, { ok: false, error: 'room_closed' });
+          return;
+        }
         const stroke = { ...(data.stroke as Record<string, any>), userId: socket.id } as Record<string, any>;
         await appendStroke(data.roomId, stroke);
-        await recordRoomActivity(data.roomId);
         socket.to(data.roomId).emit('stroke-start', {
           ...stroke,
           strokeId: stroke.id,
@@ -337,8 +347,11 @@ export async function attachSocket(server: any, corsOrigin: string[]) {
       runSafely(socket, 'undo-stroke', ack, async () => {
         const data = parsePayload<{ roomId: string; strokes: Array<Record<string, unknown>> }>(socket, 'undo-stroke', undoStrokeSchema, payload, ack);
         if (!data || !isJoinedRoom(socket, data.roomId, 'undo-stroke', ack)) return;
+        if (!await recordRoomActivity(data.roomId)) {
+          sendAck(ack, { ok: false, error: 'room_closed' });
+          return;
+        }
         await replaceHistory(data.roomId, data.strokes);
-        await recordRoomActivity(data.roomId);
         socket.to(data.roomId).emit('undo-stroke', { strokes: data.strokes });
         sendAck(ack, { ok: true });
       });
@@ -348,8 +361,11 @@ export async function attachSocket(server: any, corsOrigin: string[]) {
       runSafely(socket, 'clear-board', ack, async () => {
         const data = parsePayload<{ roomId: string }>(socket, 'clear-board', clearBoardSchema, payload, ack);
         if (!data || !isJoinedRoom(socket, data.roomId, 'clear-board', ack)) return;
+        if (!await recordRoomActivity(data.roomId)) {
+          sendAck(ack, { ok: false, error: 'room_closed' });
+          return;
+        }
         await clearHistory(data.roomId);
-        await recordRoomActivity(data.roomId);
         io.to(data.roomId).emit('clear-board');
         sendAck(ack, { ok: true });
       });
@@ -359,8 +375,11 @@ export async function attachSocket(server: any, corsOrigin: string[]) {
       runSafely(socket, 'links-update', ack, async () => {
         const data = parsePayload<{ roomId: string; links: Array<Record<string, unknown>> }>(socket, 'links-update', linksUpdateSchema, payload, ack);
         if (!data || !isJoinedRoom(socket, data.roomId, 'links-update', ack)) return;
+        if (!await recordRoomActivity(data.roomId)) {
+          sendAck(ack, { ok: false, error: 'room_closed' });
+          return;
+        }
         await replaceLinks(data.roomId, data.links);
-        await recordRoomActivity(data.roomId);
         socket.to(data.roomId).emit('links-update', { links: data.links });
         sendAck(ack, { ok: true });
       });

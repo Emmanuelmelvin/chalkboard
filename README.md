@@ -26,7 +26,7 @@ chalkboard/
 
 ### Architecture
 1. **Frontend**: Built with **React** and **TypeScript** compiled by **Vite**. Styling is handled using custom **Vanilla CSS** to deliver premium chalkboard dust styling, realistic frame shadows, and responsive glassmorphism toolbars.
-2. **Backend**: Built with **Node.js**, **Hono**, and **Socket.io**. It handles REST requests, real-time message routing, and persistence-backed room access.
+2. **Backend**: Built with **Node.js**, **Hono**, and **Socket.io**. It handles REST requests, real-time message routing, and room lifecycle metadata. Open-room canvas strokes are stored in Redis for fast access; PostgreSQL does not store canvas data.
 
 ---
 

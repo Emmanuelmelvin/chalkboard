@@ -8,7 +8,7 @@ Hono serves REST routes from `/api` and Socket.IO attaches to the same raw HTTP 
 - LiveKit is the voice SFU. The backend only mints scoped tokens: owners/instructors may publish; viewers subscribe by default.
 - Existing canvas socket events are preserved: `join-room`, `room-history`, `update-users`, `stroke-start`, `stroke-draw`, `undo-stroke`, `clear-board`, `cursor-move`, `links-update`, and `user-disconnected`.
 - New classroom events are namespaced to avoid collisions: `reaction:send`, `reaction:received`, `hand:raise`, `raised-hands:update`, `presence:count`, `member:kick`, and `member:kicked`.
-- Reactions, raised hands, cursors, and in-process canvas history are ephemeral. Raised hands use Redis when `REDIS_URL` is configured; Postgres is reserved for users, rooms, roles, join requests, bans, settings, and debounced snapshots.
+- Redis is the source of truth for open-room canvas strokes and saved links. Postgres stores room metadata and lifecycle state only; it never stores canvas strokes or snapshots. Reactions, raised hands, cursors, and presence are ephemeral as well.
 
 ## Code organization
 
@@ -30,6 +30,8 @@ Hono serves REST routes from `/api` and Socket.IO attaches to the same raw HTTP 
 - `GOOGLE_CLIENT_ID` is required for Google Sign-In verification
 - `AUTH_SESSION_SECRET` signs the HTTP-only same-origin session cookie created after Google Sign-In
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` are required for voice token issuance
+- `ROOM_INACTIVITY_MS` defaults to 24 hours. An open room is permanently closed after this period without a join or canvas update.
+- `ROOM_CLEANUP_REPEAT_MS` controls how often the worker scans for inactive rooms and defaults to one hour.
 
 The frontend uses the same-origin `/api` and `/socket.io` paths. In production, build
 `frontend` first so the server can serve `frontend/dist` alongside the API. During local
@@ -53,7 +55,8 @@ that session.
 
 - `/health` and `/api/health` are liveness endpoints and return `{ "ok": true }` without contacting external services.
 - `/ready` checks Postgres with `select 1` and Redis with `PING`; it returns HTTP 200 only when both dependencies are available, otherwise HTTP 503 with per-dependency status.
-- `PROCESS_TYPE=worker` starts a BullMQ worker in the same repo/image and schedules `room-snapshot-cleanup`.
+- `PROCESS_TYPE=worker` starts a BullMQ worker in the same repo/image and schedules `room-inactivity-cleanup`.
+- The worker marks inactive rooms closed in Postgres and deletes their Redis strokes, links, hands, and other room state. Closed rooms return `410 room_closed` and cannot be joined or reopened.
 - Socket disconnects use a short presence grace period (`PRESENCE_GRACE_MS`) before emitting leave/count updates, reducing flicker on transient reconnects.
 - Invite/room join HTTP routes and high-fanout socket events (`reaction:send`, `hand:raise`) are rate limited with environment-tunable windows.
 - Server shutdown handles `SIGTERM`/`SIGINT` once, closes Socket.IO and its HTTP server, then closes Redis and Postgres with a bounded force-exit timeout.

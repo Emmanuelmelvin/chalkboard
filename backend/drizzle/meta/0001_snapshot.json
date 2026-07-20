@@ -1,5 +1,5 @@
 {
-  "id": "726a54b8-0678-45c8-aa72-e758f42ae0e2",
+  "id": "f18aaf0e-4ab1-4b55-9a54-3b6c9df4a9f4",
   "prevId": "e5306a23-7531-409a-9330-724689cebdbe",
   "version": "7",
   "dialect": "postgresql",
@@ -396,14 +396,23 @@
           "notNull": true,
           "default": false
         },
-        "canvas_snapshot": {
-          "name": "canvas_snapshot",
-          "type": "jsonb",
+        "status": {
+          "name": "status",
+          "type": "room_status",
+          "typeSchema": "public",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "'open'"
         },
-        "canvas_snapshot_at": {
-          "name": "canvas_snapshot_at",
+        "last_activity_at": {
+          "name": "last_activity_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "closed_at": {
+          "name": "closed_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -569,6 +578,14 @@
         "owner",
         "instructor",
         "viewer"
+      ]
+    },
+    "public.room_status": {
+      "name": "room_status",
+      "schema": "public",
+      "values": [
+        "open",
+        "closed"
       ]
     }
   },

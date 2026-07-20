@@ -181,10 +181,11 @@ export async function getRoomWithMembers(slug: string) {
 /** Update only room lifecycle metadata; canvas content never enters Postgres. */
 export async function touchRoomActivity(roomSlug: string) {
   const now = new Date();
-  await db
+  const updated = await db
     .update(rooms)
     .set({ lastActivityAt: now, updatedAt: now })
     .where(and(eq(rooms.slug, roomSlug), eq(rooms.status, 'open')));
+  return updated.count > 0;
 }
 
 export async function resolveRoomRole(roomSlug: string, userId?: string): Promise<RoomRole> {

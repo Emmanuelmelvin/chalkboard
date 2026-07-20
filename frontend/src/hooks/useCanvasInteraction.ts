@@ -71,6 +71,7 @@ export function useCanvasInteraction(
   const dustIdCounter = useRef<number>(0);
   const marqueeStartPos = useRef<Point | null>(null);
   const isMarqueeDragging = useRef<boolean>(false);
+  const activeStrokeRef = useRef<Stroke | null>(null);
   const MARQUEE_THRESHOLD = 5; // screen pixels before marquee appears
 
   // Screen to Canvas coordinate conversion
@@ -119,6 +120,7 @@ export function useCanvasInteraction(
     };
 
     setStrokes((prev) => [...prev, newStroke]);
+    activeStrokeRef.current = newStroke;
     setRedoStack([]);
 
     socket?.emit('stroke-start', {
@@ -147,6 +149,13 @@ export function useCanvasInteraction(
 
     if (!isDrawing || !currentStrokeId.current) return;
 
+    if (activeStrokeRef.current?.id === currentStrokeId.current) {
+      activeStrokeRef.current = {
+        ...activeStrokeRef.current,
+        points: [...activeStrokeRef.current.points, pos],
+      };
+    }
+
     setStrokes((prev) =>
       prev.map((s) => (s.id === currentStrokeId.current ? { ...s, points: [...s.points, pos] } : s))
     );
@@ -168,17 +177,15 @@ export function useCanvasInteraction(
 
     const eraserId = currentStrokeId.current;
     currentStrokeId.current = null;
+    const completedStroke = activeStrokeRef.current;
+    activeStrokeRef.current = null;
     socket?.emit('stroke-end', { roomId });
 
     // Live stroke-start/stroke-draw packets are transient. Persist the
     // completed stroke through the existing full-stroke event so Redis keeps
     // the complete room history for refreshes and later joins.
-    if (activeTool !== 'eraser' && eraserId) {
-      setStrokes((prevStrokes) => {
-        const completedStroke = prevStrokes.find((stroke) => stroke.id === eraserId);
-        if (completedStroke) socket?.emit('draw-stroke', { roomId, stroke: completedStroke });
-        return prevStrokes;
-      });
+    if (activeTool !== 'eraser' && eraserId && completedStroke) {
+      socket?.emit('draw-stroke', { roomId, stroke: completedStroke });
     }
 
     if (activeTool === 'eraser' && eraserId) {

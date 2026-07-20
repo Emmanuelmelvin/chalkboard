@@ -285,7 +285,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         );
       })}
       <canvas ref={canvasRef} className="chalk-canvas" style={{ cursor: getCanvasCursor() }}
-        onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
+        onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp} onWheel={handleWheel} />
       <NotesLayer />
       
       {showInsertShapes && (

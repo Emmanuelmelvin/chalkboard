@@ -100,7 +100,12 @@ export function useCanvasInteraction(
   }, []);
 
   const startDrawing = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (isPanning || spacePressed || e.button === 1 || e.button === 2 || activeTool === 'pan') return;
+    if (isDrawing || isPanning || spacePressed || e.button === 1 || e.button === 2 || activeTool === 'pan') return;
+
+    // Keep receiving move/up/cancel events when the pointer leaves the canvas.
+    // Without capture, releasing outside the canvas leaves the stroke active
+    // and prevents its completed form from being persisted.
+    e.currentTarget.setPointerCapture(e.pointerId);
 
     setIsDrawing(true);
     const pos = screenToCanvas(e.clientX, e.clientY);
@@ -134,7 +139,7 @@ export function useCanvasInteraction(
       eraserHeight: activeTool === 'eraser' ? eraserHeight : undefined,
       startPoint: pos,
     });
-  }, [isPanning, spacePressed, activeTool, activeColor, brushSize, brushIntensity, eraserWidth, eraserHeight, roomId, socket, screenToCanvas, setStrokes, setRedoStack]);
+  }, [isDrawing, isPanning, spacePressed, activeTool, activeColor, brushSize, brushIntensity, eraserWidth, eraserHeight, roomId, socket, screenToCanvas, setStrokes, setRedoStack]);
 
   const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -175,7 +180,7 @@ export function useCanvasInteraction(
     if (!isDrawing) return;
     setIsDrawing(false);
 
-    const eraserId = currentStrokeId.current;
+    const strokeId = currentStrokeId.current;
     currentStrokeId.current = null;
     const completedStroke = activeStrokeRef.current;
     activeStrokeRef.current = null;
@@ -184,15 +189,15 @@ export function useCanvasInteraction(
     // Live stroke-start/stroke-draw packets are transient. Persist the
     // completed stroke through the existing full-stroke event so Redis keeps
     // the complete room history for refreshes and later joins.
-    if (activeTool !== 'eraser' && eraserId && completedStroke) {
+    if (completedStroke?.tool === 'chalk' && strokeId) {
       socket?.emit('draw-stroke', { roomId, stroke: completedStroke });
     }
 
-    if (activeTool === 'eraser' && eraserId) {
+    if (completedStroke?.tool === 'eraser' && strokeId) {
       setStrokes((prevStrokes) => {
-        const eraserStroke = prevStrokes.find((s) => s.id === eraserId);
+        const eraserStroke = prevStrokes.find((s) => s.id === strokeId);
         if (!eraserStroke || eraserStroke.points.length === 0) {
-          return prevStrokes.filter((s) => s.id !== eraserId);
+          return prevStrokes.filter((s) => s.id !== strokeId);
         }
 
         const eraserPoints = eraserStroke.points;
@@ -202,7 +207,7 @@ export function useCanvasInteraction(
 
         const updated: Stroke[] = [];
         prevStrokes.forEach((stroke) => {
-          if (stroke.id === eraserId) return;
+          if (stroke.id === strokeId) return;
           if (stroke.tool === 'eraser') {
             updated.push(stroke);
             return;
@@ -215,7 +220,7 @@ export function useCanvasInteraction(
         return updated;
       });
     }
-  }, [isDrawing, activeTool, roomId, socket, setStrokes]);
+  }, [isDrawing, roomId, socket, setStrokes]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -345,6 +350,13 @@ export function useCanvasInteraction(
         x: e.clientX - panStart.current.x,
         y: e.clientY - panStart.current.y,
       });
+      return;
+    }
+
+    // A drawing gesture owns the pointer until it ends, even if the active
+    // toolbar tool changes while the pointer is down.
+    if (isDrawing) {
+      draw(e);
       return;
     }
 
@@ -505,13 +517,21 @@ export function useCanvasInteraction(
     }
 
     draw(e);
-  }, [isPanning, screenToCanvas, activeTool, transformMode, selectionRotation, trimState, transformBox, setStrokes, setSelectionRotation, setTransformBox, setSelectionMarquee, selectionMarquee, setPanOffset, setTrimState, hoveredHandle, zoom, draw]);
+  }, [isPanning, isDrawing, screenToCanvas, activeTool, transformMode, selectionRotation, trimState, transformBox, setStrokes, setSelectionRotation, setTransformBox, setSelectionMarquee, selectionMarquee, setPanOffset, setTrimState, hoveredHandle, zoom, draw]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (isPanning) {
       setIsPanning(false);
       if (canvas) canvas.releasePointerCapture(e.pointerId);
+      return;
+    }
+
+    // Finalize an active drawing before looking at the current toolbar tool.
+    // This also handles a tool switch during a pointer gesture.
+    if (isDrawing) {
+      stopDrawing();
+      if (canvas?.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
       return;
     }
 
@@ -598,7 +618,7 @@ export function useCanvasInteraction(
     }
 
     stopDrawing();
-  }, [isPanning, activeTool, transformMode, trimState, selectionMarquee, strokes, selectedStrokeIds, setSelectedStrokeIds, setTransformBox, setSelectionRotation, setSelectionMarquee, socket, roomId, stopDrawing, canvasRef]);
+  }, [isPanning, isDrawing, activeTool, transformMode, trimState, selectionMarquee, strokes, selectedStrokeIds, setSelectedStrokeIds, setTransformBox, setSelectionRotation, setSelectionMarquee, socket, roomId, stopDrawing, canvasRef]);
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;

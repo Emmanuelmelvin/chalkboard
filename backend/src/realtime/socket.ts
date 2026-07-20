@@ -32,6 +32,7 @@ import {
   memberRoleUpdateSchema,
   pluginEventSchema,
   reactionSendSchema,
+  roomSyncSchema,
   strokeDrawSchema,
   strokeStartSchema,
   undoStrokeSchema,
@@ -196,6 +197,8 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
   socket.emit('links-update', { links: await getRoomLinks(data.roomId) });
   socket.emit('raised-hands:update', await getRaisedHands(data.roomId));
   emitPresence(io, data.roomId);
+  const roomDetails = await getRoomWithMembers(data.roomId);
+  if (roomDetails) io.to(data.roomId).emit('room-members-updated', roomDetails);
   logger.info('Socket joined room', {
     socketId: socket.id,
     roomId: data.roomId,
@@ -204,6 +207,18 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     reconnected: presence.reconnected,
   });
   sendAck(ack, { ok: true, role: join.role });
+}
+
+async function handleRoomSync(socket: any, payload: unknown, ack?: SocketAck) {
+  const data = parsePayload<{ roomId: string }>(socket, 'room:sync', roomSyncSchema, payload, ack);
+  if (!data || !isJoinedRoom(socket, data.roomId, 'room:sync', ack)) return;
+
+  const [strokes, links] = await Promise.all([
+    getRoomHistory(data.roomId),
+    getRoomLinks(data.roomId),
+  ]);
+  socket.emit('room-state', { strokes, links });
+  sendAck(ack, { ok: true });
 }
 
 function relayValidated(
@@ -376,6 +391,9 @@ export async function attachSocket(server: any) {
   io.on('connection', (socket) => {
     socket.on('join-room', (payload, ack) => {
       runSafely(socket, 'join-room', ack, () => handleJoin(io, socket, payload, ack));
+    });
+    socket.on('room:sync', (payload, ack) => {
+      runSafely(socket, 'room:sync', ack, () => handleRoomSync(socket, payload, ack));
     });
 
     socket.on('stroke-start', (payload, ack) => {

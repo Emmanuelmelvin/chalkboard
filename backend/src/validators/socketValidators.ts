@@ -131,6 +131,7 @@ const strokeSchema = z.object({
 });
 
 const roomPayload = z.object({ roomId: roomIdSchema });
+export const roomSyncSchema = roomPayload;
 
 export const joinRoomSchema = z.object({
   roomId: roomIdSchema,

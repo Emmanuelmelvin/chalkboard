@@ -148,7 +148,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     dustPuffs,
   } = useCanvasInteraction(canvasRef);
 
-  const { collaborators, userCursorColor, currentRole } = useBoardSocket(socket, roomId, userName, userId, roomPassword);
+  const { collaborators, userCursorColor, currentRole, onlineCount } = useBoardSocket(socket, roomId, userName, userId, roomPassword);
   const effectiveRole = roomMembers.find((member) => member.userId === userId)?.role ?? currentRole;
   const canEdit = effectiveRole !== 'viewer';
   const canManageMembers = effectiveRole === 'owner';
@@ -517,7 +517,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 aria-label="Open room details"
               >
                 <UsersRound size={16} />
-                <span>{roomMembers.length || Object.keys(collaborators).length + 1}</span>
+                <span>{onlineCount}</span>
                 <ChevronDown size={14} className={roomDetailsOpen ? 'room-details-chevron open' : 'room-details-chevron'} />
               </button>
               {roomDetailsOpen && (
@@ -530,7 +530,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                     <span className={canEdit ? 'room-role-pill room-role-editor' : 'room-role-pill'}>{roleLabel(effectiveRole)}</span>
                   </div>
                   {roomDescription && <p className="room-details-description">{roomDescription}</p>}
-                  <div className="room-details-section-title">Members <span>{roomMembers.length}</span></div>
+                  <div className="room-details-section-title">Members <span>{roomMembers.length} · {onlineCount} online</span></div>
                   <div className="room-details-members">
                     {roomMembers.map((member) => {
                       const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);

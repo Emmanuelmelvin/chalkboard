@@ -502,12 +502,12 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
             </fieldset>
             <fieldset className="dashboard-role-fieldset">
               <legend>Default member role</legend>
-              <div className="dashboard-role-grid">
-                <label className={`dashboard-role-option${defaultMemberRole === 'instructor' ? ' is-selected' : ''}`}>
+              <div className="dashboard-access-grid">
+                <label className={`dashboard-access-option${defaultMemberRole === 'instructor' ? ' is-selected' : ''}`}>
                   <input type="radio" name="default-member-role" value="instructor" checked={defaultMemberRole === 'instructor'} onChange={() => setDefaultMemberRole('instructor')} />
                   <span><strong>Editor</strong><small>Can draw, edit, and add to the canvas.</small></span>
                 </label>
-                <label className={`dashboard-role-option${defaultMemberRole === 'viewer' ? ' is-selected' : ''}`}>
+                <label className={`dashboard-access-option${defaultMemberRole === 'viewer' ? ' is-selected' : ''}`}>
                   <input type="radio" name="default-member-role" value="viewer" checked={defaultMemberRole === 'viewer'} onChange={() => setDefaultMemberRole('viewer')} />
                   <span><strong>Viewer</strong><small>Can follow along without editing.</small></span>
                 </label>

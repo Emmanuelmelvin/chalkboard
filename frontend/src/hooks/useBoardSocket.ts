@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useBoardStore } from '@/stores/boardStore';
 import { useLinksStore, type SavedLink } from '@/stores/linksStore';
+import { useLoggerStore } from '@/stores/loggerStore';
 import { getRandomColor } from '@/utils/colors';
 import type { Socket } from 'socket.io-client';
 import type { Point, Stroke, Collaborator, RoomMember } from '@/types';
@@ -45,16 +46,45 @@ export function useBoardSocket(
 
   const [collaborators, setCollaborators] = useState<Record<string, Collaborator>>({});
   const [currentRole, setCurrentRole] = useState<RoomMember['role']>('viewer');
+  const [onlineCount, setOnlineCount] = useState(0);
   const [userCursorColor] = useState<string>(() => getRandomColor());
+  const previousUsersRef = useRef<Map<string, string> | null>(null);
 
   useEffect(() => {
     // Register listeners before joining so a fast room-history response cannot
     // arrive before its handler is attached.
-    const handleRoomHistory = (historyStrokes: Stroke[]) => {
-      setStrokes(historyStrokes);
+    const handleRoomHistory = (payload: Stroke[] | { strokes?: Stroke[] }) => {
+      const historyStrokes = Array.isArray(payload) ? payload : payload.strokes;
+      if (Array.isArray(historyStrokes)) setStrokes(historyStrokes);
+    };
+
+    const handleRoomState = ({ strokes, links }: { strokes?: Stroke[]; links?: SavedLink[] }) => {
+      if (Array.isArray(strokes)) setStrokes(strokes);
+      if (Array.isArray(links)) setLinks(links);
     };
 
     const handleUsersUpdate = (userList: Record<string, RoomUser>) => {
+      const activeUsers = new Map<string, string>();
+      Object.entries(userList).forEach(([sid, user]) => {
+        if (sid !== socket.id) activeUsers.set(user.userId, user.name);
+      });
+
+      const previousUsers = previousUsersRef.current;
+      if (previousUsers) {
+        activeUsers.forEach((name, activeUserId) => {
+          if (!previousUsers.has(activeUserId)) {
+            useLoggerStore.getState().notify(`${name} joined the room`, 'success');
+          }
+        });
+        previousUsers.forEach((name, previousUserId) => {
+          if (!activeUsers.has(previousUserId)) {
+            useLoggerStore.getState().notify(`${name} left the room`, 'info');
+          }
+        });
+      }
+      previousUsersRef.current = activeUsers;
+      setOnlineCount(Object.keys(userList).length);
+
       setCollaborators((prev) => {
         const next: Record<string, Collaborator> = {};
         Object.entries(userList).forEach(([sid, user]) => {
@@ -168,10 +198,21 @@ export function useBoardSocket(
     };
 
     const joinRoom = () => {
-      socket.emit('join-room', { roomId, color: userCursorColor, password });
+      socket.emit('join-room', { roomId, color: userCursorColor, password }, (response: { ok?: boolean; error?: string; role?: RoomMember['role'] }) => {
+        if (!response?.ok) {
+          useLoggerStore.getState().notify(`Unable to join the room${response?.error ? `: ${response.error}` : ''}`, 'error', 5000);
+          return;
+        }
+        socket.emit('room:sync', { roomId });
+      });
     };
 
+    setStrokes([]);
+    setLinks([]);
+    setOnlineCount(0);
+    previousUsersRef.current = null;
     socket.on('room-history', handleRoomHistory);
+    socket.on('room-state', handleRoomState);
     socket.on('update-users', handleUsersUpdate);
     socket.on('stroke-start', handleStrokeStart);
     socket.on('stroke-draw', handleStrokeDraw);
@@ -197,6 +238,7 @@ export function useBoardSocket(
     return () => {
       socket.off('connect', joinRoom);
       socket.off('room-history', handleRoomHistory);
+      socket.off('room-state', handleRoomState);
       socket.off('update-users', handleUsersUpdate);
       socket.off('stroke-start', handleStrokeStart);
       socket.off('stroke-draw', handleStrokeDraw);
@@ -206,10 +248,12 @@ export function useBoardSocket(
       socket.off('links-update', handleLinksUpdate);
       socket.off('user-disconnected', handleUserDisconnected);
       setCollaborators({});
+      setOnlineCount(0);
+      previousUsersRef.current = null;
     };
   }, [socket, roomId, userName, userId, password, userCursorColor, setStrokes, setRedoStack, setLinks]);
 
-  return { collaborators, userCursorColor, currentRole };
+  return { collaborators, userCursorColor, currentRole, onlineCount };
 }
 
 export default useBoardSocket;

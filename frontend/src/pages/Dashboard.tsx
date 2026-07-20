@@ -29,8 +29,10 @@ import { useLocation } from 'wouter';
 import { getRoomThemeLabel, roomThemes, type RoomTheme } from '@/constants/roomThemes';
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import RoomMembersModal from '@/components/RoomMembersModal';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
+import type { RoomMember } from '@/types';
 import '@/styles/PublicPages.css';
 
 type DashboardTab = 'overview' | 'rooms' | 'toolkit' | 'profile';
@@ -48,6 +50,8 @@ interface RoomSummary {
   createdAt: string;
   role: 'owner' | 'instructor' | 'viewer' | null;
   password: string | null;
+  members: RoomMember[];
+  peakAttendeeCount: number;
 }
 
 interface DashboardProps {
@@ -70,6 +74,7 @@ const toolItems = [
 ];
 
 const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
+const ROOM_MEMBER_PREVIEW_LIMIT = 4;
 
 function getTab(location: string): DashboardTab {
   const query = location.includes('?')
@@ -107,6 +112,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [deletingRoomSlug, setDeletingRoomSlug] = useState<string | null>(null);
   const [roomToDelete, setRoomToDelete] = useState<RoomSummary | null>(null);
   const [createdRoomInvite, setCreatedRoomInvite] = useState<{ slug: string; title: string; password: string } | null>(null);
+  const [roomMembersModal, setRoomMembersModal] = useState<RoomSummary | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [copiedRoomValue, setCopiedRoomValue] = useState<string | null>(null);
   const [openRoomDetailsSlug, setOpenRoomDetailsSlug] = useState<string | null>(null);
@@ -389,6 +395,30 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                   </div>
                 )}
               {room.accessMode === 'password_protected' && !room.password && roomRole(room) !== 'owner' && <span className="dashboard-room-password-status">Password protected</span>}
+              <div className="dashboard-room-attendance" aria-label="Room attendance summary">
+                <div><span>Members</span><strong>{room.members.length}</strong></div>
+                <div><span>Online</span><strong>{room.members.filter((member) => member.online).length}</strong></div>
+                <div><span>Peak</span><strong>{room.peakAttendeeCount}</strong></div>
+              </div>
+              <div className="dashboard-room-members-heading">
+                <span>People in this room</span>
+                <span>{room.members.length}</span>
+              </div>
+              <div className="dashboard-room-members-preview">
+                {room.members.slice(0, ROOM_MEMBER_PREVIEW_LIMIT).map((member) => (
+                  <div className="dashboard-room-member-row" key={member.userId}>
+                    <UserAvatar name={member.displayName} avatarUrl={member.avatarUrl} size="sm" className="dashboard-room-member-avatar" />
+                    <span className="dashboard-room-member-copy"><strong>{member.displayName}</strong><small>{member.online ? 'Online' : 'Offline'} · {member.role === 'owner' ? 'Owner' : member.role === 'instructor' ? 'Editor' : 'Viewer'}</small></span>
+                    <span className={`dashboard-room-member-dot${member.online ? ' is-online' : ''}`} aria-label={member.online ? 'Online' : 'Offline'} />
+                  </div>
+                ))}
+                {room.members.length === 0 && <span className="dashboard-room-members-empty">No one has joined yet.</span>}
+              </div>
+              {room.members.length > ROOM_MEMBER_PREVIEW_LIMIT && (
+                <button className="dashboard-room-show-more" type="button" onClick={() => setRoomMembersModal(room)}>
+                  Show more <ChevronRight size={13} strokeWidth={1.8} />
+                </button>
+              )}
               <div className="dashboard-room-details-meta">
                 <span>{room.status === 'closed' ? 'Archived' : 'Active'}</span>
                 <span>{roomRole(room)}</span>
@@ -706,6 +736,14 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           variant="dashboard"
           onCancel={() => setRoomToDelete(null)}
           onConfirm={() => { void handleDeleteRoom(); }}
+        />
+      )}
+      {roomMembersModal && (
+        <RoomMembersModal
+          roomTitle={roomMembersModal.title}
+          members={roomMembersModal.members}
+          peakAttendeeCount={roomMembersModal.peakAttendeeCount}
+          onClose={() => setRoomMembersModal(null)}
         />
       )}
       {createdRoomInvite && (

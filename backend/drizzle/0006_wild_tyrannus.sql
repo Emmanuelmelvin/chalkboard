@@ -1,0 +1,1 @@
+ALTER TABLE "rooms" ADD COLUMN "peak_attendee_count" integer DEFAULT 0 NOT NULL;

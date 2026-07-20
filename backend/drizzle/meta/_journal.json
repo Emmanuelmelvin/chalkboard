@@ -43,6 +43,13 @@
       "when": 1784560157870,
       "tag": "0005_complex_stingray",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784565369425,
+      "tag": "0006_wild_tyrannus",
+      "breakpoints": true
     }
   ]
 }

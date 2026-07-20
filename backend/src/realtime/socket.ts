@@ -225,12 +225,12 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     roomId: data.roomId,
     socketId: socket.id,
     userId: user.id,
-      user: {
-        id: socket.id,
-        userId: user.id,
-        name: user.displayName,
-        avatarUrl: user.avatarUrl ?? null,
-        color: data.color || '#fff',
+    user: {
+      id: socket.id,
+      userId: user.id,
+      name: user.displayName,
+      avatarUrl: user.avatarUrl ?? null,
+      color: data.color || '#fff',
       role: join.role,
     },
   });

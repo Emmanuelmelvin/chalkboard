@@ -3,6 +3,7 @@ import { Copy, Check, ChevronDown, UsersRound, Maximize2, Minus, Plus, Shapes, E
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import UserAvatar from '@/components/UserAvatar';
 import {
   getCombinedBoundingBox,
   getSelectionBoundingBox,
@@ -152,6 +153,31 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const effectiveRole = roomMembers.find((member) => member.userId === userId)?.role ?? currentRole;
   const canEdit = effectiveRole !== 'viewer';
   const canManageMembers = effectiveRole === 'owner';
+  const displayedRoomMembers = useMemo(() => {
+    const members = new Map<string, RoomMember>(roomMembers.map((member) => [member.userId, member]));
+    if (!members.has(userId)) {
+      members.set(userId, {
+        id: `presence-${userId}`,
+        userId,
+        displayName: userName,
+        email: '',
+        role: effectiveRole,
+      });
+    }
+    Object.values(collaborators).forEach((collaborator) => {
+      if (!members.has(collaborator.userId)) {
+        members.set(collaborator.userId, {
+          id: `presence-${collaborator.userId}`,
+          userId: collaborator.userId,
+          displayName: collaborator.name,
+          email: '',
+          avatarUrl: collaborator.avatarUrl,
+          role: collaborator.role,
+        });
+      }
+    });
+    return [...members.values()];
+  }, [roomMembers, collaborators, userId, userName, effectiveRole]);
 
   useKeyboardShortcuts(canEdit);
 
@@ -496,14 +522,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           );
         })()}
 
+        {canEdit && (
+          <div className="board-actions-center">
+            <Card className="board-actions-card">
+              <ActionSticks onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
+                canUndo={strokes.some((s) => s.userId === socket.id || s.userId === 'local')} canRedo={redoStack.length > 0} />
+            </Card>
+          </div>
+        )}
+
         <div className="board-header">
           <div className="board-header-tools">
-            {canEdit ? (
-              <Card className="board-actions-card">
-                <ActionSticks onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
-                  canUndo={strokes.some((s) => s.userId === socket.id || s.userId === 'local')} canRedo={redoStack.length > 0} />
-              </Card>
-            ) : (
+            {!canEdit && (
               <div className="board-readonly-badge">Viewer · read only</div>
             )}
           </div>
@@ -530,13 +560,19 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                     <span className={canEdit ? 'room-role-pill room-role-editor' : 'room-role-pill'}>{roleLabel(effectiveRole)}</span>
                   </div>
                   {roomDescription && <p className="room-details-description">{roomDescription}</p>}
-                  <div className="room-details-section-title">Members <span>{roomMembers.length} · {onlineCount} online</span></div>
+                  <div className="room-details-section-title">Members <span>{displayedRoomMembers.length} · {onlineCount} online</span></div>
                   <div className="room-details-members">
-                    {roomMembers.map((member) => {
+                    {displayedRoomMembers.map((member) => {
                       const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);
                       const isOnline = member.userId === userId || Boolean(collaborator);
                       return (
                         <div key={member.userId} className="room-detail-member">
+                          <UserAvatar
+                            name={member.displayName}
+                            avatarUrl={member.avatarUrl || collaborator?.avatarUrl}
+                            size="sm"
+                            className="room-member-avatar"
+                          />
                           <span className="room-member-presence" style={{ backgroundColor: collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b') }} />
                           <div className="room-member-name">
                             <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>

@@ -109,6 +109,7 @@ export interface Collaborator {
   id: string;
   userId: string;
   name: string;
+  avatarUrl?: string | null;
   color: string;
   role: 'owner' | 'instructor' | 'viewer';
   cursor?: Point;

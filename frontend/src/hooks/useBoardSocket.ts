@@ -17,6 +17,7 @@ type RoomUser = {
   id: string;
   userId: string;
   name: string;
+  avatarUrl?: string | null;
   color: string;
   role: RoomMember['role'];
 };
@@ -93,6 +94,7 @@ export function useBoardSocket(
               id: user.id,
               userId: user.userId,
               name: user.name,
+              avatarUrl: user.avatarUrl,
               color: user.color,
               role: user.role,
               cursor: prev[sid]?.cursor,
@@ -103,6 +105,14 @@ export function useBoardSocket(
         if (currentUser) setCurrentRole(currentUser.role);
         return next;
       });
+    };
+
+    const handlePresenceCount = ({ count }: { roomId?: string; count?: number }) => {
+      if (typeof count === 'number') setOnlineCount(Math.max(0, count));
+    };
+
+    const handleConnectError = () => {
+      useLoggerStore.getState().notify('Live room connection failed. Realtime updates are unavailable.', 'error', 5000);
     };
 
     // The server uses stroke-start for both live strokes and redo broadcasts.
@@ -200,7 +210,12 @@ export function useBoardSocket(
     const joinRoom = () => {
       socket.emit('join-room', { roomId, color: userCursorColor, password }, (response: { ok?: boolean; error?: string; role?: RoomMember['role'] }) => {
         if (!response?.ok) {
-          useLoggerStore.getState().notify(`Unable to join the room${response?.error ? `: ${response.error}` : ''}`, 'error', 5000);
+          const errorMessage = response?.error === 'already_joined'
+            ? 'You have already joined this room on another device.'
+            : response?.error === 'unauthorized'
+              ? 'Your session has expired. Please sign in again.'
+              : `Unable to join the room${response?.error ? `: ${response.error}` : ''}`;
+          useLoggerStore.getState().notify(errorMessage, 'error', 5000);
           return;
         }
         socket.emit('room:sync', { roomId });
@@ -214,6 +229,7 @@ export function useBoardSocket(
     socket.on('room-history', handleRoomHistory);
     socket.on('room-state', handleRoomState);
     socket.on('update-users', handleUsersUpdate);
+    socket.on('presence:count', handlePresenceCount);
     socket.on('stroke-start', handleStrokeStart);
     socket.on('stroke-draw', handleStrokeDraw);
     socket.on('undo-stroke', handleUndoStroke);
@@ -225,6 +241,7 @@ export function useBoardSocket(
     // Socket.IO emits `connect` after every reconnect and assigns a new
     // socket.id, so rejoin then to restore room membership and catch-up state.
     socket.on('connect', joinRoom);
+    socket.on('connect_error', handleConnectError);
     if (socket.connected) {
       joinRoom();
     } else {
@@ -240,6 +257,7 @@ export function useBoardSocket(
       socket.off('room-history', handleRoomHistory);
       socket.off('room-state', handleRoomState);
       socket.off('update-users', handleUsersUpdate);
+      socket.off('presence:count', handlePresenceCount);
       socket.off('stroke-start', handleStrokeStart);
       socket.off('stroke-draw', handleStrokeDraw);
       socket.off('undo-stroke', handleUndoStroke);
@@ -247,6 +265,7 @@ export function useBoardSocket(
       socket.off('cursor-move', handleCursorMove);
       socket.off('links-update', handleLinksUpdate);
       socket.off('user-disconnected', handleUserDisconnected);
+      socket.off('connect_error', handleConnectError);
       setCollaborators({});
       setOnlineCount(0);
       previousUsersRef.current = null;

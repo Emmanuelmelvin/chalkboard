@@ -46,10 +46,50 @@ type SocketAckResponse = {
 
 type SocketAck = ((response: SocketAckResponse) => void) | undefined;
 
-function emitPresence(io: Server, roomId: string) {
-  const roomUsers = getRoomUsers(roomId);
-  io.to(roomId).emit('update-users', Object.fromEntries(roomUsers));
-  io.to(roomId).emit('presence:count', { roomId, count: roomUsers.size });
+async function emitPresence(io: Server, roomId: string) {
+  let users: Array<[string, any]>;
+  try {
+    // fetchSockets() includes sockets connected to other backend instances when
+    // the Redis adapter is enabled, so presence is not limited to one process.
+    const roomSockets = await io.in(roomId).fetchSockets();
+    users = roomSockets.map((remoteSocket: any) => {
+      const fallback = getRoomUsers(roomId).get(remoteSocket.id);
+      const user = remoteSocket.data?.user;
+      return [remoteSocket.id, {
+        id: remoteSocket.id,
+        userId: user?.id ?? fallback?.userId,
+        name: user?.displayName ?? fallback?.name ?? 'Classmate',
+        email: user?.email ?? fallback?.email,
+        avatarUrl: user?.avatarUrl ?? remoteSocket.data?.roomAvatarUrl ?? fallback?.avatarUrl ?? null,
+        color: remoteSocket.data?.roomColor ?? fallback?.color ?? '#fff',
+        role: remoteSocket.data?.roomRole ?? fallback?.role ?? 'viewer',
+      }];
+    });
+  } catch (error) {
+    logger.warn('Cross-instance presence lookup failed; using local presence', {
+      roomId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    users = [...getRoomUsers(roomId).entries()];
+  }
+
+  const roomUsers = Object.fromEntries(users);
+  io.to(roomId).emit('update-users', roomUsers);
+  io.to(roomId).emit('presence:count', { roomId, count: users.length });
+}
+
+async function hasActiveRoomSession(io: Server, roomId: string, userId: string, currentSocketId: string) {
+  try {
+    const roomSockets = await io.in(roomId).fetchSockets();
+    return roomSockets.some((remoteSocket: any) => remoteSocket.id !== currentSocketId && remoteSocket.data?.user?.id === userId);
+  } catch (error) {
+    logger.warn('Duplicate room-session lookup failed; using local presence', {
+      roomId,
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [...getRoomUsers(roomId).entries()].some(([socketId, user]) => socketId !== currentSocketId && user.userId === userId);
+  }
 }
 
 async function recordRoomActivity(roomId: string) {
@@ -155,13 +195,19 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     return;
   }
 
+  if (await hasActiveRoomSession(io, data.roomId, user.id, socket.id)) {
+    logger.info('Duplicate room session rejected', { roomId: data.roomId, userId: user.id, socketId: socket.id });
+    sendAck(ack, { ok: false, error: 'already_joined' });
+    return;
+  }
+
   const currentMeta = getSocketMeta(socket.id);
   if (currentMeta && currentMeta.roomId !== data.roomId) {
     await socket.leave(currentMeta.roomId);
     const removed = removePresenceNow(socket.id);
     if (removed) {
       io.to(removed.roomId).emit('user-disconnected', socket.id);
-      emitPresence(io, removed.roomId);
+      await emitPresence(io, removed.roomId);
     }
   }
 
@@ -171,15 +217,20 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
   }
   await socket.join(data.roomId);
   setSocketMeta(socket.id, { roomId: data.roomId, userId: user.id, role: join.role });
+  socket.data.roomId = data.roomId;
+  socket.data.roomRole = join.role;
+  socket.data.roomColor = data.color || '#fff';
+  socket.data.roomAvatarUrl = user.avatarUrl ?? null;
   const presence = upsertPresence({
     roomId: data.roomId,
     socketId: socket.id,
     userId: user.id,
-    user: {
-      id: socket.id,
-      userId: user.id,
-      name: user.displayName,
-      color: data.color || '#fff',
+      user: {
+        id: socket.id,
+        userId: user.id,
+        name: user.displayName,
+        avatarUrl: user.avatarUrl ?? null,
+        color: data.color || '#fff',
       role: join.role,
     },
   });
@@ -196,7 +247,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
   socket.emit('room-history', await getRoomHistory(data.roomId));
   socket.emit('links-update', { links: await getRoomLinks(data.roomId) });
   socket.emit('raised-hands:update', await getRaisedHands(data.roomId));
-  emitPresence(io, data.roomId);
+  await emitPresence(io, data.roomId);
   const roomDetails = await getRoomWithMembers(data.roomId);
   if (roomDetails) io.to(data.roomId).emit('room-members-updated', roomDetails);
   logger.info('Socket joined room', {
@@ -278,7 +329,7 @@ async function handleMemberRoleUpdate(io: Server, socket: any, payload: unknown,
   }
   const roomDetails = await getRoomWithMembers(data.roomId);
   if (roomDetails) io.to(data.roomId).emit('room-members-updated', roomDetails);
-  emitPresence(io, data.roomId);
+  await emitPresence(io, data.roomId);
   sendAck(ack, { ok: true, role: data.role });
 }
 
@@ -337,7 +388,7 @@ async function handleKick(io: Server, socket: any, payload: unknown, ack?: Socke
   const removed = removePresenceNow(data.targetSocketId);
   if (removed) {
     io.to(removed.roomId).emit('user-disconnected', data.targetSocketId);
-    emitPresence(io, removed.roomId);
+    await emitPresence(io, removed.roomId);
   }
   targetSocket.disconnect(true);
   logger.warn('Socket member kicked', {
@@ -526,7 +577,7 @@ export async function attachSocket(server: any) {
       });
       schedulePresenceRemoval(socket.id, env.PRESENCE_GRACE_MS, (removedMeta) => {
         io.to(removedMeta.roomId).emit('user-disconnected', socket.id);
-        emitPresence(io, removedMeta.roomId);
+        void emitPresence(io, removedMeta.roomId);
         logger.info('Socket presence removed after grace period', { socketId: socket.id, roomId: removedMeta.roomId });
       });
     });

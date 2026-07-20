@@ -1,13 +1,23 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { useLocation } from 'wouter';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import type { LobbyProps } from '@/types';
 import '@/styles/PublicPages.css';
+
+interface PendingPrivateRoom {
+  slug: string;
+  title: string;
+  description?: string | null;
+}
 
 export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
   const [roomCode, setRoomCode] = useState(initialRoomId?.trim() || '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [roomPassword, setRoomPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [pendingPrivateRoom, setPendingPrivateRoom] = useState<PendingPrivateRoom | null>(null);
   const attemptedUrlCode = useRef(false);
   const [, setLocation] = useLocation();
 
@@ -38,6 +48,17 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
         );
       }
 
+      if (payload.room.accessMode === 'password_protected') {
+        setRoomPassword('');
+        setPasswordError('');
+        setPendingPrivateRoom({
+          slug: payload.room.slug,
+          title: payload.room.title || 'Private room',
+          description: payload.room.description,
+        });
+        return;
+      }
+
       onJoinRoom(payload.room.slug);
     } catch (joinError) {
       setError(joinError instanceof Error ? joinError.message : 'We could not open that room. Please try again.');
@@ -45,6 +66,47 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
       setLoading(false);
     }
   }, [onJoinRoom, roomCode]);
+
+  const closePasswordModal = () => {
+    setPendingPrivateRoom(null);
+    setRoomPassword('');
+    setPasswordError('');
+  };
+
+  const handlePrivateRoomJoin = async () => {
+    if (!pendingPrivateRoom) return;
+    const password = roomPassword.trim();
+    if (!password) {
+      setPasswordError('Enter the password shared by the room owner.');
+      return;
+    }
+
+    setPasswordError('');
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/rooms/${encodeURIComponent(pendingPrivateRoom.slug)}/join`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error === 'bad_password'
+          ? 'That password is not correct.'
+          : payload.error === 'room_closed'
+            ? 'That room has already been closed.'
+            : payload.error || 'We could not verify the room password.');
+      }
+      const slug = pendingPrivateRoom.slug;
+      closePasswordModal();
+      onJoinRoom(slug, password);
+    } catch (joinError) {
+      setPasswordError(joinError instanceof Error ? joinError.message : 'We could not verify the room password.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!initialRoomId || attemptedUrlCode.current) return;
@@ -102,6 +164,39 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
 
         <p className="lobby-simple-footer">Private spaces for shared thinking.</p>
       </main>
+      {pendingPrivateRoom && (
+        <ConfirmModal
+          title="Private room"
+          message={`Enter the password shared by the owner to join “${pendingPrivateRoom.title}”.`}
+          confirmLabel={loading ? 'Checking…' : 'Enter room'}
+          variant="dashboard"
+          confirmDisabled={loading || !roomPassword.trim()}
+          onCancel={closePasswordModal}
+          onConfirm={() => { void handlePrivateRoomJoin(); }}
+        >
+          {pendingPrivateRoom.description && <p className="lobby-password-description">{pendingPrivateRoom.description}</p>}
+          <div className="app-modal-input-group">
+            <label htmlFor="private-room-password">Room password</label>
+            <input
+              id="private-room-password"
+              className="app-modal-input"
+              type="password"
+              value={roomPassword}
+              onChange={(event) => {
+                setRoomPassword(event.target.value);
+                setPasswordError('');
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && roomPassword.trim()) void handlePrivateRoomJoin();
+              }}
+              autoFocus
+              autoComplete="current-password"
+              aria-describedby={passwordError ? 'private-room-password-error' : undefined}
+            />
+          </div>
+          {passwordError && <p id="private-room-password-error" className="app-modal-field-error" role="alert">{passwordError}</p>}
+        </ConfirmModal>
+      )}
     </div>
   );
 };

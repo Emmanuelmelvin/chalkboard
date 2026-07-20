@@ -83,7 +83,9 @@ function Home() {
         <nav className="home-nav-links" aria-label="Main navigation">
           <a href="#capabilities">Capabilities</a>
           <a href="#workflow">How it works</a>
-          <button className="home-nav-cta" type="button" onClick={() => setLocation('/lobby')}>
+          <a className="home-nav-route" href="/dashboard">Dashboard</a>
+          <a className="home-nav-route" href="/lobby">Lobby</a>
+          <button className="home-nav-cta" type="button" onClick={() => setLocation('/dashboard?tab=rooms')}>
             Open a room <ArrowUpRight size={15} strokeWidth={1.8} />
           </button>
         </nav>
@@ -104,7 +106,7 @@ function Home() {
               Chalkboard is a live canvas for teams who think better together. Move from first spark to clear next step in one room.
             </p>
             <div className="home-hero-actions">
-              <button className="home-button home-button-gold" type="button" onClick={() => setLocation('/lobby')}>
+              <button className="home-button home-button-gold" type="button" onClick={() => setLocation('/dashboard?tab=rooms')}>
                 Start creating <ArrowUpRight size={18} strokeWidth={1.8} />
               </button>
               <a className="home-text-link" href="#capabilities">
@@ -271,7 +273,7 @@ function Home() {
           <div className="home-cta-ring home-cta-ring-two" />
           <p className="home-eyebrow"><span className="home-eyebrow-line" />The next idea is already here</p>
           <h2 id="cta-heading">Give it a room<br /><em>to become.</em></h2>
-          <button className="home-button home-button-gold" type="button" onClick={() => setLocation('/lobby')}>
+          <button className="home-button home-button-gold" type="button" onClick={() => setLocation('/dashboard?tab=rooms')}>
             Open your first room <ArrowUpRight size={18} strokeWidth={1.8} />
           </button>
         </section>

@@ -47,7 +47,7 @@ function Login() {
   const [redirectTarget] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const redirect = params.get('redirect');
-    return redirect?.startsWith('/') ? redirect : '/lobby';
+    return redirect?.startsWith('/') ? redirect : '/dashboard?tab=rooms';
   });
 
   useEffect(() => {

@@ -79,6 +79,97 @@ body {
     0 15px 40px rgba(0, 0, 0, 0.8);
 }
 
+/* Room themes keep the board interaction the same while changing its atmosphere. */
+.board-container.room-theme-classroom {
+  --wood-dark: #3a1a0b;
+  --wood-light: #5d2b12;
+  --wood-grain: #271107;
+  --brass: #c5a059;
+  --brass-dark: #8c6e30;
+  --brass-light: #e8d098;
+  --slate-green: #143525;
+  --slate-dark: #0b2216;
+  --chalk-yellow: #fff3a1;
+  --chalk-blue: #a3e5ff;
+  --chalk-pink: #ffa3d1;
+  --chalk-green: #a3ffd6;
+}
+
+.board-container.room-theme-workshop {
+  --wood-dark: #31170d;
+  --wood-light: #754326;
+  --wood-grain: #261008;
+  --brass: #d69a4c;
+  --brass-dark: #8f5527;
+  --brass-light: #f0c982;
+  --slate-green: #392820;
+  --slate-dark: #1f130e;
+  --chalk-yellow: #ffe2a3;
+  --chalk-blue: #b8e4ed;
+  --chalk-pink: #ffc0a8;
+  --chalk-green: #c8e4b2;
+}
+
+.board-container.room-theme-brainstorm {
+  --wood-dark: #1c1634;
+  --wood-light: #4b3e79;
+  --wood-grain: #100d20;
+  --brass: #a995ed;
+  --brass-dark: #6854b3;
+  --brass-light: #d8ccff;
+  --slate-green: #24203f;
+  --slate-dark: #100d20;
+  --chalk-yellow: #f9e4a3;
+  --chalk-blue: #b7d8ff;
+  --chalk-pink: #ffb9df;
+  --chalk-green: #b4f2d1;
+}
+
+.board-container.room-theme-meeting {
+  --wood-dark: #102032;
+  --wood-light: #3c5b75;
+  --wood-grain: #09131f;
+  --brass: #78b4cb;
+  --brass-dark: #43748d;
+  --brass-light: #b4e1ec;
+  --slate-green: #1a3041;
+  --slate-dark: #0d1724;
+  --chalk-yellow: #f4dda1;
+  --chalk-blue: #a9d8ff;
+  --chalk-pink: #f6b8c9;
+  --chalk-green: #b6e6d1;
+}
+
+.board-container.room-theme-planning {
+  --wood-dark: #10302b;
+  --wood-light: #327267;
+  --wood-grain: #081e1b;
+  --brass: #80c89b;
+  --brass-dark: #4b9374;
+  --brass-light: #bde8c5;
+  --slate-green: #173c37;
+  --slate-dark: #0b2522;
+  --chalk-yellow: #f5e7a5;
+  --chalk-blue: #b0e1ed;
+  --chalk-pink: #f4bac8;
+  --chalk-green: #b9f0cf;
+}
+
+.board-container.room-theme-studio {
+  --wood-dark: #24211e;
+  --wood-light: #686158;
+  --wood-grain: #141311;
+  --brass: #c5ab7e;
+  --brass-dark: #8f7958;
+  --brass-light: #e7d7b5;
+  --slate-green: #3a3935;
+  --slate-dark: #1b1a18;
+  --chalk-yellow: #f7e8b1;
+  --chalk-blue: #c4e1e4;
+  --chalk-pink: #f2c4d1;
+  --chalk-green: #c7e2cf;
+}
+
 /* Wood frame corners brackets */
 .board-container::before {
   content: '';
@@ -2500,26 +2591,58 @@ body {
 .logger-warning { color: var(--chalk-yellow); }
 .logger-error { color: var(--chalk-pink); }
 
-.clear-confirm-popover {
-  position: absolute;
-  z-index: 30;
-  margin-top: 42px;
-  padding: 12px;
-  min-width: 190px;
+.app-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 7, 18, 0.68);
+  backdrop-filter: blur(5px);
+}
+
+.app-modal {
+  width: min(420px, 100%);
+  padding: 22px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(15, 23, 42, 0.98);
   color: #f8fafc;
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.36);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
 }
 
-.clear-confirm-popover p { margin: 0 0 10px; font-size: 12px; }
-.clear-confirm-popover div { display: flex; justify-content: flex-end; gap: 8px; }
-.clear-confirm-popover button {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
-  padding: 6px 8px;
-  cursor: pointer;
-  font-size: 11px;
+.app-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.app-modal h2 { margin: 0; color: #fff; font-size: 18px; font-weight: 650; }
+.app-modal p { margin: 12px 0 22px; color: #cbd5e1; font-size: 12px; line-height: 1.6; }
+.app-modal-input-group { display: flex; flex-direction: column; gap: 7px; margin: -5px 0 22px; }
+.app-modal-input-group label { color: #94a3b8; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+.app-modal-input { width: 100%; box-sizing: border-box; min-height: 42px; border: 1px solid rgba(255, 255, 255, 0.2); outline: 0; background: rgba(255, 255, 255, 0.06); color: #f8fafc; font-family: inherit; font-size: 14px; padding: 0 11px; }
+.app-modal-input:focus { border-color: rgba(251, 191, 36, 0.7); box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.12); }
+.app-modal-field-error { margin: -12px 0 18px; color: #fca5a5; font-size: 11px; }
+.app-modal-close { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid rgba(255, 255, 255, 0.15); background: transparent; color: #94a3b8; cursor: pointer; }
+.app-modal-close:hover, .app-modal-close:focus-visible { border-color: rgba(255, 255, 255, 0.35); color: #fff; }
+.app-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.app-modal-actions button { padding: 8px 12px; border: 1px solid rgba(255, 255, 255, 0.18); cursor: pointer; font-family: inherit; font-size: 11px; }
+.app-modal-cancel { background: rgba(255, 255, 255, 0.06); color: #cbd5e1; }
+.app-modal-confirm { border-color: rgba(251, 191, 36, 0.55) !important; background: rgba(251, 191, 36, 0.1); color: #fbbf24; }
+.app-modal-confirm.is-danger { border-color: rgba(248, 113, 113, 0.58) !important; background: rgba(248, 113, 113, 0.12); color: #fca5a5; }
+.app-modal-actions button:hover, .app-modal-actions button:focus-visible { filter: brightness(1.18); }
+
+/* Dashboard confirmation surfaces use the dashboard's black, cream, and gold palette. */
+.app-modal-overlay-dashboard { background: rgba(9, 9, 9, 0.74); }
+.app-modal-dashboard { border-color: rgba(227, 199, 126, 0.42); background: #111110; color: #f5f2ea; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58); }
+.app-modal-dashboard h2 { color: #f5f2ea; font-family: Georgia, serif; font-size: 25px; font-weight: 400; letter-spacing: -0.04em; }
+.app-modal-dashboard p { color: #a6a29a; }
+.app-modal-dashboard .app-modal-close { border-color: rgba(245, 242, 234, 0.14); color: #a6a29a; }
+.app-modal-dashboard .app-modal-close:hover, .app-modal-dashboard .app-modal-close:focus-visible { border-color: rgba(227, 199, 126, 0.62); color: #e3c77e; }
+.app-modal-dashboard .app-modal-cancel { border-color: rgba(245, 242, 234, 0.2); background: transparent; color: #a6a29a; }
+.app-modal-dashboard .app-modal-confirm.is-danger { border-color: #c7a258 !important; background: #c7a258; color: #090909; }
+.app-modal-dashboard .app-modal-input-group label { color: #a6a29a; }
+.app-modal-dashboard .app-modal-input { border-color: rgba(245, 242, 234, 0.22); background: #090909; color: #f5f2ea; }
+.app-modal-dashboard .app-modal-input:focus { border-color: #e3c77e; box-shadow: 0 0 0 3px rgba(227, 199, 126, 0.14); }
+.app-modal-confirm:disabled { cursor: not-allowed; filter: grayscale(0.5); opacity: 0.45; }
+
+@media (max-width: 520px) {
+  .app-modal { padding: 18px; }
+  .app-modal-actions { display: grid; grid-template-columns: 1fr 1fr; }
 }
-.clear-confirm-popover button:last-child { border-color: rgba(251, 191, 36, 0.55); color: #fbbf24; }

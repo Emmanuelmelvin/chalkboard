@@ -1,13 +1,12 @@
-import { createRoom, createRoomVoiceToken, getRoomWithMembers } from '@/services/rooms';
-import { createRoomSchema } from '@/validators/roomValidators';
+import { assertRoomJoinAllowed, createRoom, createRoomVoiceToken, deleteRoomForUser, getRoomWithMembers, listRoomsForUser } from '@/services/rooms';
+import { createRoomSchema, joinRoomSchema } from '@/validators/roomValidators';
 import { APIError } from '@/utils/error';
 
 export async function createRoomHandler(c: any) {
   const user = c.get('user');
   if (!user) throw new APIError('unauthorized', 401);
   const body = createRoomSchema.parse(await c.req.json());
-  const room = await createRoom(user, body);
-  return c.json({ room }, 201);
+  return c.json(await createRoom(user, body), 201);
 }
 
 export async function getRoomHandler(c: any) {
@@ -15,6 +14,32 @@ export async function getRoomHandler(c: any) {
   if (!result) throw new APIError('not_found', 404);
   if (result.room.status === 'closed') throw new APIError('room_closed', 410);
   return c.json(result);
+}
+
+export async function listRoomsHandler(c: any) {
+  const user = c.get('user');
+  if (!user) throw new APIError('unauthorized', 401);
+  return c.json({ rooms: await listRoomsForUser(user.id) });
+}
+
+export async function joinRoomHandler(c: any) {
+  const user = c.get('user');
+  if (!user) throw new APIError('unauthorized', 401);
+  const { password } = joinRoomSchema.parse(await c.req.json().catch(() => ({})));
+  const result = await assertRoomJoinAllowed({ roomSlug: c.req.param('slug'), userId: user.id, password });
+  if (!result.ok) {
+    const status = result.error === 'not_found' ? 404 : result.error === 'room_closed' ? 410 : 403;
+    throw new APIError(result.error, status);
+  }
+  return c.json(result);
+}
+
+export async function deleteRoomHandler(c: any) {
+  const user = c.get('user');
+  if (!user) throw new APIError('unauthorized', 401);
+  const result = await deleteRoomForUser(c.req.param('slug'), user.id);
+  if ('error' in result) throw new APIError(result.error, result.error === 'not_found' ? 404 : 403);
+  return c.json({ ok: true });
 }
 
 export async function updateRoomHandler() {

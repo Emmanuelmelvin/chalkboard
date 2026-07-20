@@ -25,6 +25,7 @@ import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
 import { NOTES_PLUGIN_ID } from '@/plugins/builtin/notes';
 import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
+import { isRoomTheme, type RoomTheme } from '@/constants/roomThemes';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -56,6 +57,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
   userName,
   socket,
+  roomPassword,
   onLeaveRoom,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -98,6 +100,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const pluginSelectionTools = useMemo(() => pluginRegistry.getSelectionTools(), []);
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string; selectionStrokeIds: string[] }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
+  const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
 
   const hasNavigatedToLink = useRef<boolean>(false);
   const openPluginModal = (pluginId: string, ids = selectedStrokeIds) => {
@@ -137,7 +140,23 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   useKeyboardShortcuts();
 
-  const { collaborators, userCursorColor } = useBoardSocket(socket, roomId, userName);
+  useEffect(() => {
+    let cancelled = false;
+    const loadRoomTheme = async () => {
+      try {
+        const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`, { credentials: 'include' });
+        const payload = await response.json().catch(() => ({}));
+        if (!cancelled && isRoomTheme(payload.room?.theme)) setRoomTheme(payload.room.theme);
+      } catch {
+        // The classroom theme remains a safe fallback if metadata is unavailable.
+      }
+    };
+
+    void loadRoomTheme();
+    return () => { cancelled = true; };
+  }, [roomId]);
+
+  const { collaborators, userCursorColor } = useBoardSocket(socket, roomId, userName, roomPassword);
 
   useEffect(() => {
     initSession({ roomId, socket, userId: socket.id ?? 'local' });
@@ -229,7 +248,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   };
 
   return (
-    <div className="board-container" ref={containerRef}>
+    <div className={`board-container room-theme-${roomTheme}`} ref={containerRef}>
       <div className="blackboard-slate" />
       {dustPuffs.map((p) => (
         <div key={p.id} className="dust-puff" style={{ left: p.x - 12, top: p.y - 12, width: 24, height: 24 }} />

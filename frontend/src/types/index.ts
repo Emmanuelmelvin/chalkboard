@@ -116,13 +116,14 @@ export interface ChalkboardProps {
   roomId: string;
   userName: string;
   socket: Socket;
+  roomPassword?: string;
   onLeaveRoom: () => void;
 }
 
 export interface LobbyProps {
   initialRoomId: string | null;
   profile: UserProfile;
-  onJoinRoom: (roomId: string) => void;
+  onJoinRoom: (roomId: string, password?: string) => void;
 }
 
 export interface ToolbarProps {

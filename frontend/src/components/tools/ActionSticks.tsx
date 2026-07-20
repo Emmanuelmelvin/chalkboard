@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Undo2, Redo2, Trash2 } from 'lucide-react';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 
 interface ActionSticksProps {
   onUndo: () => void;
@@ -55,13 +56,14 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
       </button>
 
       {confirmingClear && (
-        <div className="clear-confirm-popover" role="dialog" aria-label="Confirm clear board">
-          <p>Clear the entire blackboard?</p>
-          <div>
-            <button type="button" onClick={() => setConfirmingClear(false)}>Cancel</button>
-            <button type="button" onClick={() => { setConfirmingClear(false); onClear(); }}>Clear board</button>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Clear blackboard?"
+          message="This removes the entire shared blackboard for everyone in the room."
+          confirmLabel="Clear board"
+          danger
+          onCancel={() => setConfirmingClear(false)}
+          onConfirm={() => { setConfirmingClear(false); onClear(); }}
+        />
       )}
     </>
   );

@@ -31,6 +31,7 @@ export function useBoardSocket(
   socket: Socket,
   roomId: string,
   userName: string,
+  password?: string,
 ) {
   const {
     setStrokes,
@@ -159,7 +160,7 @@ export function useBoardSocket(
     };
 
     const joinRoom = () => {
-      socket.emit('join-room', { roomId, color: userCursorColor });
+      socket.emit('join-room', { roomId, color: userCursorColor, password });
     };
 
     socket.on('room-history', handleRoomHistory);
@@ -190,7 +191,7 @@ export function useBoardSocket(
       socket.off('user-disconnected', handleUserDisconnected);
       setCollaborators({});
     };
-  }, [socket, roomId, userName, userCursorColor, setStrokes, setRedoStack, setLinks]);
+  }, [socket, roomId, userName, password, userCursorColor, setStrokes, setRedoStack, setLinks]);
 
   return { collaborators, userCursorColor };
 }

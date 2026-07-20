@@ -1,10 +1,11 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Route, Switch, useLocation } from 'wouter';
-import Lobby from '@/pages/Lobby';
 import Chalkboard from '@/pages/Chalkboard';
 import Home from '@/pages/Home';
 import Login from '@/pages/Login';
+import Dashboard from '@/pages/Dashboard';
+import Lobby from '@/pages/Lobby';
 import LoggerOutlet from '@/components/LoggerOutlet';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
@@ -26,13 +27,20 @@ function AuthLoading() {
   );
 }
 
+function getLobbyRoomCode() {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  return params.get('room') || params.get('code');
+}
+
 function RequireAuth({ children }: { children: (profile: UserProfile) => ReactNode }) {
   const [location, setLocation] = useLocation();
   const { profile, status } = useAuthStore();
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      setLocation(`/login?redirect=${encodeURIComponent(location)}`);
+      const destination = location.includes('?') ? location : `${location}${window.location.search}`;
+      setLocation(`/login?redirect=${encodeURIComponent(destination)}`);
     }
   }, [location, setLocation, status]);
 
@@ -43,12 +51,14 @@ function RequireAuth({ children }: { children: (profile: UserProfile) => ReactNo
 function App() {
   const [, setLocation] = useLocation();
   const { hydrate } = useAuthStore();
+  const [roomPassword, setRoomPassword] = useState<string | undefined>();
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
 
-  const handleJoinRoom = (room: string) => {
+  const handleJoinRoom = (room: string, password?: string) => {
+    setRoomPassword(password);
     socket.connect();
     const targetPath = `/room/${room}`;
     setLocation(targetPath);
@@ -56,7 +66,8 @@ function App() {
 
   const handleLeaveRoom = () => {
     socket.disconnect();
-    setLocation('/');
+    setRoomPassword(undefined);
+    setLocation('/dashboard?tab=rooms');
   };
 
   return (
@@ -73,6 +84,7 @@ function App() {
                   roomId={roomId}
                   userName={user.displayName}
                   socket={socket}
+                  roomPassword={roomPassword}
                   onLeaveRoom={handleLeaveRoom}
                 />
               )}
@@ -86,15 +98,29 @@ function App() {
         <Login />
       </Route>
 
+      {/* Signed-in workspace dashboard */}
+      <Route path="/dashboard">
+        <RequireAuth>
+          {(user) => <Dashboard profile={user} onJoinRoom={handleJoinRoom} />}
+        </RequireAuth>
+      </Route>
+
       {/* Public landing page */}
       <Route path="/">
         <Home />
       </Route>
 
       {/* Room entry route */}
+      <Route path="/lobby/:roomId">
+        {(params: { roomId: string }) => (
+          <RequireAuth>
+            {(user) => <Lobby initialRoomId={params.roomId} profile={user} onJoinRoom={handleJoinRoom} />}
+          </RequireAuth>
+        )}
+      </Route>
       <Route path="/lobby">
         <RequireAuth>
-          {(user) => <Lobby initialRoomId={null} profile={user} onJoinRoom={handleJoinRoom} />}
+          {(user) => <Lobby initialRoomId={getLobbyRoomCode()} profile={user} onJoinRoom={handleJoinRoom} />}
         </RequireAuth>
       </Route>
 

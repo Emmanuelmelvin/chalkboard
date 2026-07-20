@@ -15,6 +15,20 @@
       "when": 1784544787194,
       "tag": "0001_room_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784549425986,
+      "tag": "0002_purple_ultimatum",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784551200214,
+      "tag": "0003_friendly_sleepwalker",
+      "breakpoints": true
     }
   ]
 }

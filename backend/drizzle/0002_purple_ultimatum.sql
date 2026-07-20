@@ -1,0 +1,2 @@
+CREATE TYPE "public"."room_theme" AS ENUM('classroom', 'workshop', 'brainstorm', 'meeting', 'planning', 'studio');--> statement-breakpoint
+ALTER TABLE "rooms" ADD COLUMN "theme" "room_theme" DEFAULT 'classroom' NOT NULL;

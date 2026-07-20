@@ -2775,7 +2775,47 @@ body.dashboard-active #root {
 .dashboard-room-copy-button .is-spinning { animation: dashboardSpin 800ms linear infinite; }
 .dashboard-room-details-panel .dashboard-room-copy-actions { justify-content: flex-start; margin-top: 12px; }
 .dashboard-room-details-panel .dashboard-room-copy-button { flex: 1 1 0; justify-content: flex-start; }
+.dashboard-room-attendance { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 13px; }
+.dashboard-room-attendance > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 8px 7px; border: 1px solid var(--dashboard-line); background: rgba(255, 255, 255, 0.018); }
+.dashboard-room-attendance span { color: #77736c; font-size: 7px; letter-spacing: 0.08em; text-transform: uppercase; }
+.dashboard-room-attendance strong { color: var(--dashboard-gold-bright); font-size: 15px; font-weight: 500; }
+.dashboard-room-members-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 15px; color: #77736c; font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; }
+.dashboard-room-members-heading > span:last-child { color: var(--dashboard-gold-bright); }
+.dashboard-room-members-preview { display: grid; gap: 2px; margin-top: 7px; }
+.dashboard-room-member-row { display: flex; min-width: 0; align-items: center; gap: 7px; padding: 5px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.dashboard-room-member-avatar { width: 25px; height: 25px; flex: 0 0 25px; font-size: 9px; }
+.dashboard-room-member-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+.dashboard-room-member-copy strong { overflow: hidden; color: var(--dashboard-white); font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-room-member-copy small { color: #77736c; font-size: 8px; }
+.dashboard-room-member-dot, .dashboard-member-presence > span { width: 7px; height: 7px; flex: 0 0 7px; border: 1px solid #77736c; border-radius: 50%; background: transparent; }
+.dashboard-room-member-dot.is-online, .dashboard-member-presence.is-online > span { border-color: #67d17b; background: #67d17b; box-shadow: 0 0 0 3px rgba(103, 209, 123, 0.1); }
+.dashboard-room-members-empty { padding: 8px 0; color: #77736c; font-size: 9px; }
+.dashboard-room-show-more { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; padding: 0; border: 0; background: transparent; color: var(--dashboard-gold-bright); cursor: pointer; font-family: inherit; font-size: 8px; letter-spacing: 0.06em; text-transform: uppercase; }
+.dashboard-room-show-more:hover, .dashboard-room-show-more:focus-visible { color: var(--dashboard-white); outline: 0; }
 .dashboard-room-details-meta { display: flex; gap: 10px; margin-top: 12px; color: #77736c; font-size: 9px; letter-spacing: 0.03em; text-transform: uppercase; }
+.dashboard-members-modal { width: min(650px, 100%); max-height: min(760px, calc(100vh - 32px)); }
+.dashboard-members-modal .app-modal-header { align-items: flex-start; }
+.dashboard-members-modal-kicker { display: block; margin-bottom: 7px; color: var(--dashboard-gold-bright); font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; }
+.dashboard-members-modal-copy { margin-bottom: 16px !important; }
+.dashboard-members-modal-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 17px; }
+.dashboard-members-modal-stats > div { display: flex; flex-direction: column; gap: 4px; padding: 11px; border: 1px solid rgba(245, 242, 234, 0.12); background: rgba(245, 242, 234, 0.025); }
+.dashboard-members-modal-stats strong { color: var(--dashboard-gold-bright); font-size: 20px; font-weight: 500; }
+.dashboard-members-modal-stats span { color: #a6a29a; font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; }
+.dashboard-members-modal-list { display: grid; max-height: min(440px, 52vh); overflow-y: auto; border-top: 1px solid rgba(245, 242, 234, 0.12); border-bottom: 1px solid rgba(245, 242, 234, 0.12); }
+.dashboard-members-modal-row { display: flex; min-width: 0; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid rgba(245, 242, 234, 0.08); }
+.dashboard-members-modal-row:last-child { border-bottom: 0; }
+.dashboard-members-modal-avatar { width: 34px; height: 34px; flex: 0 0 34px; font-size: 11px; }
+.dashboard-members-modal-member-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+.dashboard-members-modal-member-copy strong { overflow: hidden; color: #f5f2ea; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-members-modal-member-copy small { overflow: hidden; color: #77736c; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-member-presence { display: inline-flex; align-items: center; gap: 5px; color: #77736c; font-size: 8px; letter-spacing: 0.04em; text-transform: uppercase; }
+.dashboard-member-presence.is-online { color: #67d17b; }
+.dashboard-member-role { min-width: 54px; padding: 4px 6px; border: 1px solid rgba(227, 199, 126, 0.24); color: var(--dashboard-gold-bright); font-size: 8px; letter-spacing: 0.05em; text-align: center; text-transform: uppercase; }
+.dashboard-member-role-owner { border-color: rgba(227, 199, 126, 0.52); }
+.dashboard-member-role-viewer { border-color: rgba(166, 162, 154, 0.25); color: #a6a29a; }
+.dashboard-members-modal-empty { margin: 0; padding: 18px 0; color: #77736c; font-size: 11px; }
+.dashboard-members-modal .app-modal-actions { margin-top: 16px; }
+.dashboard-members-modal .app-modal-confirm { padding: 8px 14px; border-color: rgba(227, 199, 126, 0.55) !important; background: rgba(227, 199, 126, 0.1); color: var(--dashboard-gold-bright); }
 .dashboard-room-row-access { display: inline-flex; align-items: center; gap: 4px; }
 .dashboard-room-row-access svg { color: var(--dashboard-gold-bright); }
 .dashboard-room-delete { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid rgba(220, 96, 82, 0.35); background: transparent; color: #cc8177; cursor: pointer; font-family: inherit; font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }

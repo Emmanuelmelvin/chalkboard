@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowDown,
   ArrowUpRight,
   Check,
   Layers3,
+  Menu,
   MessageCircle,
   MousePointer2,
   PenLine,
   Shapes,
   Sparkles,
   UsersRound,
+  X,
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import '@/styles/PublicPages.css';
@@ -65,8 +67,31 @@ const showcasePanels = [
 function Home() {
   const [, setLocation] = useLocation();
   const [activeFeature, setActiveFeature] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const activePanel = showcasePanels[activeFeature];
   const ActiveIcon = activePanel.icon;
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileMenuOpen(false);
+    };
+
+    document.body.classList.add('home-mobile-menu-open');
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.classList.remove('home-mobile-menu-open');
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    document.body.classList.add('home-page-active');
+    return () => document.body.classList.remove('home-page-active');
+  }, []);
+
+  const closeMobileMenu = () => setMobileMenuOpen(false);
 
   return (
     <div className="home-page">
@@ -89,7 +114,51 @@ function Home() {
             Open a room <ArrowUpRight size={15} strokeWidth={1.8} />
           </button>
         </nav>
+        <button
+          className="home-mobile-menu-button"
+          type="button"
+          onClick={() => setMobileMenuOpen(true)}
+          aria-label="Open main menu"
+          aria-expanded={mobileMenuOpen}
+          aria-controls="home-mobile-drawer"
+        >
+          <Menu size={19} strokeWidth={1.8} />
+          <span>Menu</span>
+        </button>
       </header>
+
+      <button
+        className={`home-mobile-menu-backdrop${mobileMenuOpen ? ' is-visible' : ''}`}
+        type="button"
+        onClick={closeMobileMenu}
+        aria-label="Close main menu"
+        tabIndex={mobileMenuOpen ? 0 : -1}
+      />
+      <aside
+        id="home-mobile-drawer"
+        className={`home-mobile-drawer${mobileMenuOpen ? ' is-open' : ''}`}
+        aria-label="Main navigation"
+        aria-hidden={!mobileMenuOpen}
+      >
+        <div className="home-mobile-drawer-header">
+          <a className="home-brand" href="/" onClick={closeMobileMenu} aria-label="Chalkboard home">
+            <span className="home-brand-mark">C</span>
+            <span>Chalkboard</span>
+          </a>
+          <button className="home-mobile-drawer-close" type="button" onClick={closeMobileMenu} aria-label="Close main menu">
+            <X size={18} strokeWidth={1.8} />
+          </button>
+        </div>
+        <nav className="home-mobile-drawer-nav" aria-label="Mobile navigation">
+          <a href="#capabilities" onClick={closeMobileMenu}>Capabilities</a>
+          <a href="#workflow" onClick={closeMobileMenu}>How it works</a>
+          <Link href="/dashboard" onClick={closeMobileMenu}>Dashboard</Link>
+          <Link href="/lobby" onClick={closeMobileMenu}>Lobby</Link>
+        </nav>
+        <button className="home-mobile-drawer-cta" type="button" onClick={() => { closeMobileMenu(); setLocation('/dashboard?tab=rooms'); }}>
+          Open a room <ArrowUpRight size={16} strokeWidth={1.8} />
+        </button>
+      </aside>
 
       <main id="home-content">
         <section className="home-hero" aria-labelledby="hero-heading">

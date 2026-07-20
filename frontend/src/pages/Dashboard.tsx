@@ -595,16 +595,6 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       <aside className="dashboard-rail">
         <div className="dashboard-rail-top">
           <button className="dashboard-brand" type="button" onClick={() => setLocation('/')} aria-label="Chalkboard home"><span className="home-brand-mark">C</span><span>Chalkboard</span></button>
-          <button
-            className="dashboard-mobile-menu-button"
-            type="button"
-            onClick={() => setMobileMenuOpen(true)}
-            aria-label="Open workspace menu"
-            aria-expanded={mobileMenuOpen}
-            aria-controls="dashboard-mobile-drawer"
-          >
-            <Menu size={19} strokeWidth={1.8} />
-          </button>
         </div>
         <div className="dashboard-rail-rule" />
         <p className="dashboard-rail-label">Workspace</p>
@@ -624,7 +614,21 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       <main className="dashboard-main">
         <header className="dashboard-header">
           <div><p className="dashboard-header-meta">Chalkboard / {tabTitle}</p><h1>{activeTab === 'overview' ? `Good to see you, ${firstName}.` : tabTitle}</h1></div>
-          <div className="dashboard-header-actions"><button className="dashboard-header-room-button" type="button" onClick={() => selectTab('rooms')}><Plus size={15} /> New room</button><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="md" /></div>
+          <div className="dashboard-header-actions">
+            <button className="dashboard-header-room-button" type="button" onClick={() => selectTab('rooms')}><Plus size={15} /> New room</button>
+            <button
+              className="dashboard-mobile-menu-button"
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open workspace menu"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="dashboard-mobile-drawer"
+            >
+              <Menu size={19} strokeWidth={1.8} />
+              <span>Menu</span>
+            </button>
+            <UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="md" />
+          </div>
         </header>
         <div className="dashboard-content">
           {activeTab === 'overview' && renderOverview()}

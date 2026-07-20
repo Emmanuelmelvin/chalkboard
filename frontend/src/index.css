@@ -2694,9 +2694,9 @@ body {
 /* App-level color mode control. */
 .theme-toggle {
   position: fixed;
-  top: 18px;
+  top: 42px;
   right: 18px;
-  z-index: 7000;
+  z-index: 5000;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2756,9 +2756,13 @@ html[data-theme='light'] .theme-toggle:focus-visible {
 
 @media (max-width: 520px) {
   .theme-toggle {
-    top: 12px;
+    top: 68px;
     right: 12px;
     min-height: 32px;
     padding: 0 9px;
+  }
+
+  body.home-page-active .theme-toggle {
+    top: 92px;
   }
 }

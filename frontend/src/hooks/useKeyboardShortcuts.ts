@@ -27,7 +27,7 @@ import {
  * Hook to manage window-level keyboard shortcut listeners.
  * Maps keyboard inputs directly to store actions and toolbox handlers.
  */
-export function useKeyboardShortcuts() {
+export function useKeyboardShortcuts(canEdit = true) {
   const {
     setSpacePressed,
     setInsertShapesTab,
@@ -47,6 +47,29 @@ export function useKeyboardShortcuts() {
       // Let native inputs and rich-text editors own their keyboard events.
       // In particular, Space must insert a space instead of panning the board.
       if (inInput) return;
+
+      if (!canEdit) {
+        if (e.code === 'Space') {
+          setSpacePressed(true);
+          e.preventDefault();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.altKey) {
+          if (e.key === '=' || e.key === '+') {
+            e.preventDefault();
+            handleZoomIn();
+          } else if (e.key === '-' || e.key === '_') {
+            e.preventDefault();
+            handleZoomOut();
+          }
+        }
+        if (!(e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+          if (e.key === 'ArrowUp') { e.preventDefault(); handlePanDirection('up'); }
+          else if (e.key === 'ArrowDown') { e.preventDefault(); handlePanDirection('down'); }
+          else if (e.key === 'ArrowLeft') { e.preventDefault(); handlePanDirection('left'); }
+          else if (e.key === 'ArrowRight') { e.preventDefault(); handlePanDirection('right'); }
+        }
+        return;
+      }
 
       const { selectedStrokeIds, trimState } = getBoard();
 
@@ -249,6 +272,6 @@ export function useKeyboardShortcuts() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [setSpacePressed, setInsertShapesTab, setShowInsertShapes, setShowSelectionToolbox, setActiveTool]);
+  }, [canEdit, setSpacePressed, setInsertShapesTab, setShowInsertShapes, setShowSelectionToolbox, setActiveTool]);
 }
 export default useKeyboardShortcuts;

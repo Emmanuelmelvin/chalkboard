@@ -52,6 +52,7 @@ export function useCanvasInteraction(
     socket,
     roomId,
     spacePressed,
+    canEdit,
   } = useBoardStore();
 
   // ── Interaction-local state ──
@@ -100,7 +101,7 @@ export function useCanvasInteraction(
   }, []);
 
   const startDrawing = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (isDrawing || isPanning || spacePressed || e.button === 1 || e.button === 2 || activeTool === 'pan') return;
+    if (!canEdit || isDrawing || isPanning || spacePressed || e.button === 1 || e.button === 2 || activeTool === 'pan') return;
 
     // Keep receiving move/up/cancel events when the pointer leaves the canvas.
     // Without capture, releasing outside the canvas leaves the stroke active
@@ -139,7 +140,7 @@ export function useCanvasInteraction(
       eraserHeight: activeTool === 'eraser' ? eraserHeight : undefined,
       startPoint: pos,
     });
-  }, [isDrawing, isPanning, spacePressed, activeTool, activeColor, brushSize, brushIntensity, eraserWidth, eraserHeight, roomId, socket, screenToCanvas, setStrokes, setRedoStack]);
+  }, [canEdit, isDrawing, isPanning, spacePressed, activeTool, activeColor, brushSize, brushIntensity, eraserWidth, eraserHeight, roomId, socket, screenToCanvas, setStrokes, setRedoStack]);
 
   const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -232,6 +233,8 @@ export function useCanvasInteraction(
       canvas.setPointerCapture(e.pointerId);
       return;
     }
+
+    if (!canEdit) return;
 
     const pos = screenToCanvas(e.clientX, e.clientY);
 
@@ -342,7 +345,7 @@ export function useCanvasInteraction(
     }
 
     startDrawing(e);
-  }, [canvasRef, spacePressed, activeTool, panOffset, screenToCanvas, trimState, zoom, selectionRotation, transformBox, strokes, selectedStrokeIds, setSelectedStrokeIds, setTransformBox, setSelectionRotation, setSelectionMarquee, startDrawing]);
+  }, [canvasRef, canEdit, spacePressed, activeTool, panOffset, screenToCanvas, trimState, zoom, selectionRotation, transformBox, strokes, selectedStrokeIds, setSelectedStrokeIds, setTransformBox, setSelectionRotation, setSelectionMarquee, startDrawing]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (isPanning) {

@@ -3,7 +3,7 @@ import { useBoardStore } from '@/stores/boardStore';
 import { useLinksStore, type SavedLink } from '@/stores/linksStore';
 import { getRandomColor } from '@/utils/colors';
 import type { Socket } from 'socket.io-client';
-import type { Point, Stroke, Collaborator } from '@/types';
+import type { Point, Stroke, Collaborator, RoomMember } from '@/types';
 
 type StrokeStartPayload = Partial<Stroke> & {
   /** Present on live stroke-start relays; full redo payloads also include `id`. */
@@ -14,8 +14,10 @@ type StrokeStartPayload = Partial<Stroke> & {
 
 type RoomUser = {
   id: string;
+  userId: string;
   name: string;
   color: string;
+  role: RoomMember['role'];
 };
 
 /**
@@ -31,6 +33,7 @@ export function useBoardSocket(
   socket: Socket,
   roomId: string,
   userName: string,
+  userId: string,
   password?: string,
 ) {
   const {
@@ -41,6 +44,7 @@ export function useBoardSocket(
   const { setLinks } = useLinksStore();
 
   const [collaborators, setCollaborators] = useState<Record<string, Collaborator>>({});
+  const [currentRole, setCurrentRole] = useState<RoomMember['role']>('viewer');
   const [userCursorColor] = useState<string>(() => getRandomColor());
 
   useEffect(() => {
@@ -57,12 +61,16 @@ export function useBoardSocket(
           if (sid !== socket.id) {
             next[sid] = {
               id: user.id,
+              userId: user.userId,
               name: user.name,
               color: user.color,
+              role: user.role,
               cursor: prev[sid]?.cursor,
             };
           }
         });
+        const currentUser = Object.values(userList).find((user) => user.userId === userId);
+        if (currentUser) setCurrentRole(currentUser.role);
         return next;
       });
     };
@@ -199,9 +207,9 @@ export function useBoardSocket(
       socket.off('user-disconnected', handleUserDisconnected);
       setCollaborators({});
     };
-  }, [socket, roomId, userName, password, userCursorColor, setStrokes, setRedoStack, setLinks]);
+  }, [socket, roomId, userName, userId, password, userCursorColor, setStrokes, setRedoStack, setLinks]);
 
-  return { collaborators, userCursorColor };
+  return { collaborators, userCursorColor, currentRole };
 }
 
 export default useBoardSocket;

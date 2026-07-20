@@ -1,5 +1,5 @@
-import { assertRoomJoinAllowed, createRoom, createRoomVoiceToken, deleteRoomForUser, getRoomWithMembers, listRoomsForUser, resetRoomPasswordForOwner } from '@/services/rooms';
-import { createRoomSchema, joinRoomSchema, roomPasswordSchema } from '@/validators/roomValidators';
+import { assertRoomJoinAllowed, createRoom, createRoomVoiceToken, deleteRoomForUser, getRoomWithMembers, listRoomsForUser, resetRoomPasswordForOwner, updateRoomMemberRole } from '@/services/rooms';
+import { createRoomSchema, joinRoomSchema, memberRoleSchema, roomPasswordSchema } from '@/validators/roomValidators';
 import { APIError } from '@/utils/error';
 
 export async function createRoomHandler(c: any) {
@@ -44,6 +44,23 @@ export async function resetRoomPasswordHandler(c: any) {
     throw new APIError(result.error, status);
   }
   return c.json({ password: result.password });
+}
+
+export async function updateRoomMemberRoleHandler(c: any) {
+  const user = c.get('user');
+  if (!user) throw new APIError('unauthorized', 401);
+  const { role } = memberRoleSchema.parse(await c.req.json());
+  const result = await updateRoomMemberRole({
+    roomSlug: c.req.param('slug'),
+    actorUserId: user.id,
+    targetUserId: c.req.param('userId'),
+    role,
+  });
+  if (!result.ok) {
+    const status = result.error === 'not_found' || result.error === 'member_not_found' ? 404 : 403;
+    throw new APIError(result.error, status);
+  }
+  return c.json({ ok: true, membership: result.membership });
 }
 
 export async function deleteRoomHandler(c: any) {

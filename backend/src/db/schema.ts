@@ -24,6 +24,7 @@ export const rooms = pgTable('rooms', {
   ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   accessMode: roomAccessMode('access_mode').default('open').notNull(),
   theme: roomTheme('theme').default('classroom').notNull(),
+  defaultRole: roomRole('default_role').default('instructor').notNull(),
   passwordHash: text('password_hash'),
   passwordCiphertext: text('password_ciphertext'),
   maxAttendees: integer('max_attendees'),

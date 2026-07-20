@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { redis, setRaisedHand, getRaisedHands } from '@/services/roomState';
-import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, touchRoomActivity } from '@/services/rooms';
+import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole } from '@/services/rooms';
 import {
   appendStroke,
   clearHistory,
@@ -29,6 +29,7 @@ import {
   joinRoomSchema,
   linksUpdateSchema,
   memberKickSchema,
+  memberRoleUpdateSchema,
   pluginEventSchema,
   reactionSendSchema,
   strokeDrawSchema,
@@ -92,6 +93,19 @@ function isJoinedRoom(socket: any, roomId: string, event: string, ack?: SocketAc
     return false;
   }
   return true;
+}
+
+async function canEditRoom(socket: any, roomId: string, event: string, ack?: SocketAck) {
+  if (!isJoinedRoom(socket, roomId, event, ack)) return false;
+  const meta = getSocketMeta(socket.id);
+  const authorization = await authorizeRoomAction({
+    roomSlug: roomId,
+    userId: meta?.userId,
+    minimumRole: 'instructor',
+  });
+  if (authorization.ok) return true;
+  rejectEvent(socket, event, 'forbidden', ack, roomId);
+  return false;
 }
 
 function runSafely(socket: any, event: string, ack: SocketAck, handler: () => unknown) {
@@ -198,11 +212,57 @@ function relayValidated(
   schema: any,
   payload: unknown,
   ack?: SocketAck,
+  minimumRole?: 'instructor' | 'owner',
 ) {
   const data = parsePayload<{ roomId: string }>(socket, event, schema, payload, ack);
-  if (!data || !isJoinedRoom(socket, data.roomId, event, ack)) return;
+  if (!data) return;
+  if (!isJoinedRoom(socket, data.roomId, event, ack)) return;
+  if (minimumRole) {
+    void authorizeRoomAction({ roomSlug: data.roomId, userId: getSocketMeta(socket.id)?.userId, minimumRole }).then((authorization) => {
+      if (!authorization.ok) {
+        rejectEvent(socket, event, 'forbidden', ack, data.roomId);
+        return;
+      }
+      socket.to(data.roomId).emit(event, { ...data, userId: socket.id });
+      sendAck(ack, { ok: true });
+    });
+    return;
+  }
   socket.to(data.roomId).emit(event, { ...data, userId: socket.id });
   sendAck(ack, { ok: true });
+}
+
+async function handleMemberRoleUpdate(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
+  const data = parsePayload<{ roomId: string; targetUserId: string; role: 'instructor' | 'viewer' }>(socket, 'member:update-role', memberRoleUpdateSchema, payload, ack);
+  if (!data || !await canEditRoom(socket, data.roomId, 'member:update-role', ack)) return;
+
+  const actor = getSocketMeta(socket.id);
+  const authorization = await authorizeRoomAction({ roomSlug: data.roomId, userId: actor?.userId, minimumRole: 'owner' });
+  if (!authorization.ok) {
+    rejectEvent(socket, 'member:update-role', 'forbidden', ack, data.roomId);
+    return;
+  }
+
+  const result = await updateRoomMemberRole({
+    roomSlug: data.roomId,
+    actorUserId: actor!.userId,
+    targetUserId: data.targetUserId,
+    role: data.role,
+  });
+  if (!result.ok) {
+    sendAck(ack, { ok: false, error: result.error === 'member_not_found' ? 'target_not_found' : result.error });
+    return;
+  }
+
+  const targetSocket = [...io.sockets.sockets.values()].find((candidate: any) => candidate.data.user?.id === data.targetUserId);
+  if (targetSocket) {
+    const targetMeta = getSocketMeta(targetSocket.id);
+    if (targetMeta?.roomId === data.roomId) setSocketMeta(targetSocket.id, { ...targetMeta, role: data.role });
+  }
+  const roomDetails = await getRoomWithMembers(data.roomId);
+  if (roomDetails) io.to(data.roomId).emit('room-members-updated', roomDetails);
+  emitPresence(io, data.roomId);
+  sendAck(ack, { ok: true, role: data.role });
 }
 
 async function handleKick(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
@@ -319,7 +379,7 @@ export async function attachSocket(server: any) {
     socket.on('stroke-start', (payload, ack) => {
       runSafely(socket, 'stroke-start', ack, async () => {
         const data = parsePayload<{ roomId: string }>(socket, 'stroke-start', strokeStartSchema, payload, ack);
-        if (!data || !isJoinedRoom(socket, data.roomId, 'stroke-start', ack)) return;
+        if (!data || !await canEditRoom(socket, data.roomId, 'stroke-start', ack)) return;
         if (!await recordRoomActivity(data.roomId)) {
           sendAck(ack, { ok: false, error: 'room_closed' });
           return;
@@ -328,19 +388,19 @@ export async function attachSocket(server: any) {
       });
     });
     socket.on('stroke-draw', (payload, ack) => {
-      runSafely(socket, 'stroke-draw', ack, () => relayValidated(socket, 'stroke-draw', strokeDrawSchema, payload, ack));
+      runSafely(socket, 'stroke-draw', ack, () => relayValidated(socket, 'stroke-draw', strokeDrawSchema, payload, ack, 'instructor'));
     });
     socket.on('cursor-move', (payload, ack) => {
       runSafely(socket, 'cursor-move', ack, () => relayValidated(socket, 'cursor-move', cursorMoveSchema, payload, ack));
     });
     socket.on('plugin:event', (payload, ack) => {
-      runSafely(socket, 'plugin:event', ack, () => relayValidated(socket, 'plugin:event', pluginEventSchema, payload, ack));
+      runSafely(socket, 'plugin:event', ack, () => relayValidated(socket, 'plugin:event', pluginEventSchema, payload, ack, 'instructor'));
     });
 
     socket.on('draw-stroke', (payload, ack) => {
       runSafely(socket, 'draw-stroke', ack, async () => {
         const data = parsePayload<{ roomId: string; stroke: Record<string, unknown> }>(socket, 'draw-stroke', drawStrokeSchema, payload, ack);
-        if (!data || !isJoinedRoom(socket, data.roomId, 'draw-stroke', ack)) return;
+        if (!data || !await canEditRoom(socket, data.roomId, 'draw-stroke', ack)) return;
         if (!await recordRoomActivity(data.roomId)) {
           sendAck(ack, { ok: false, error: 'room_closed' });
           return;
@@ -359,7 +419,7 @@ export async function attachSocket(server: any) {
     socket.on('undo-stroke', (payload, ack) => {
       runSafely(socket, 'undo-stroke', ack, async () => {
         const data = parsePayload<{ roomId: string; strokes: Array<Record<string, unknown>> }>(socket, 'undo-stroke', undoStrokeSchema, payload, ack);
-        if (!data || !isJoinedRoom(socket, data.roomId, 'undo-stroke', ack)) return;
+        if (!data || !await canEditRoom(socket, data.roomId, 'undo-stroke', ack)) return;
         if (!await recordRoomActivity(data.roomId)) {
           sendAck(ack, { ok: false, error: 'room_closed' });
           return;
@@ -373,7 +433,7 @@ export async function attachSocket(server: any) {
     socket.on('clear-board', (payload, ack) => {
       runSafely(socket, 'clear-board', ack, async () => {
         const data = parsePayload<{ roomId: string }>(socket, 'clear-board', clearBoardSchema, payload, ack);
-        if (!data || !isJoinedRoom(socket, data.roomId, 'clear-board', ack)) return;
+        if (!data || !await canEditRoom(socket, data.roomId, 'clear-board', ack)) return;
         if (!await recordRoomActivity(data.roomId)) {
           sendAck(ack, { ok: false, error: 'room_closed' });
           return;
@@ -387,7 +447,7 @@ export async function attachSocket(server: any) {
     socket.on('links-update', (payload, ack) => {
       runSafely(socket, 'links-update', ack, async () => {
         const data = parsePayload<{ roomId: string; links: Array<Record<string, unknown>> }>(socket, 'links-update', linksUpdateSchema, payload, ack);
-        if (!data || !isJoinedRoom(socket, data.roomId, 'links-update', ack)) return;
+        if (!data || !await canEditRoom(socket, data.roomId, 'links-update', ack)) return;
         if (!await recordRoomActivity(data.roomId)) {
           sendAck(ack, { ok: false, error: 'room_closed' });
           return;
@@ -430,6 +490,10 @@ export async function attachSocket(server: any) {
 
     socket.on('member:kick', (payload, ack) => {
       runSafely(socket, 'member:kick', ack, () => handleKick(io, socket, payload, ack));
+    });
+
+    socket.on('member:update-role', (payload, ack) => {
+      runSafely(socket, 'member:update-role', ack, () => handleMemberRoleUpdate(io, socket, payload, ack));
     });
 
     socket.on('disconnect', () => {

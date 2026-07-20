@@ -203,6 +203,12 @@ export const memberKickSchema = z.object({
   reason: z.string().max(SOCKET_LIMITS.maxReasonLength).optional(),
 });
 
+export const memberRoleUpdateSchema = z.object({
+  roomId: roomIdSchema,
+  targetUserId: boundedText(128),
+  role: z.enum(['instructor', 'viewer']),
+});
+
 export const pluginEventSchema = z.object({
   roomId: roomIdSchema,
   pluginId: boundedText(SOCKET_LIMITS.maxPluginIdLength).optional(),
@@ -231,4 +237,3 @@ export type SocketPayload =
   | z.infer<typeof handRaiseSchema>
   | z.infer<typeof memberKickSchema>
   | z.infer<typeof pluginEventSchema>;
-

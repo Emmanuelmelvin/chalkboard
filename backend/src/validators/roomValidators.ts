@@ -6,9 +6,14 @@ export const createRoomSchema = z.object({
   description: z.string().max(280).optional(),
   accessMode: z.enum(['open', 'approval_required', 'password_protected']).default('password_protected'),
   theme: z.enum(['classroom', 'workshop', 'brainstorm', 'meeting', 'planning', 'studio']).default('classroom'),
+  defaultRole: z.enum(['instructor', 'viewer']).default('instructor'),
   password: z.string().optional(),
   maxAttendees: z.number().int().positive().optional(),
   voiceEnabled: z.boolean().default(false),
+});
+
+export const memberRoleSchema = z.object({
+  role: z.enum(['instructor', 'viewer']),
 });
 
 export const joinRoomSchema = z.object({

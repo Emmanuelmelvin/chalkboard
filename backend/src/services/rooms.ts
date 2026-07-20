@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { and, count, desc, eq, or } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { joinRequests, roomBans, roomMembers, rooms } from '@/db/schema';
+import { joinRequests, roomBans, roomMembers, rooms, users } from '@/db/schema';
 import { canPublishVoice } from '@/services/permissions';
 import { createVoiceToken } from '@/services/livekit';
 import { deleteRoomState } from '@/services/realtimeRooms';
@@ -98,10 +98,10 @@ async function roomIsFull(executor: RoomDb | any, room: typeof rooms.$inferSelec
   return Number(value) >= room.maxAttendees;
 }
 
-async function addViewerMembership(executor: RoomDb | any, roomId: string, userId: string) {
+async function addRoomMembership(executor: RoomDb | any, roomId: string, userId: string, role: RoomRole = 'viewer') {
   const [created] = await executor
     .insert(roomMembers)
-    .values({ roomId, userId, role: 'viewer' })
+    .values({ roomId, userId, role })
     .onConflictDoNothing({ target: [roomMembers.roomId, roomMembers.userId] })
     .returning();
   return created ?? getMembership(executor, roomId, userId);
@@ -185,8 +185,50 @@ export async function createRoom(user: any, body: any) {
 export async function getRoomWithMembers(slug: string) {
   const room = await getRoomBySlug(db, slug);
   if (!room) return null;
-  const members = await db.select().from(roomMembers).where(eq(roomMembers.roomId, room.id));
+  const members = await db
+    .select({
+      id: roomMembers.id,
+      userId: roomMembers.userId,
+      role: roomMembers.role,
+      createdAt: roomMembers.createdAt,
+      displayName: users.displayName,
+      email: users.email,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(roomMembers)
+    .innerJoin(users, eq(users.id, roomMembers.userId))
+    .where(eq(roomMembers.roomId, room.id));
   return { room: { ...room, passwordHash: undefined, passwordCiphertext: undefined }, members };
+}
+
+export async function updateRoomMemberRole({
+  roomSlug,
+  actorUserId,
+  targetUserId,
+  role,
+}: {
+  roomSlug: string;
+  actorUserId: string;
+  targetUserId: string;
+  role: Exclude<RoomRole, 'owner'>;
+}) {
+  const authorization = await authorizeRoomAction({ roomSlug, userId: actorUserId, minimumRole: 'owner' });
+  if (!authorization.ok) return authorization;
+
+  const room = await getRoomBySlug(db, roomSlug);
+  if (!room) return { ok: false as const, error: 'not_found' as const };
+  if (room.ownerId === targetUserId) return { ok: false as const, error: 'invalid_target' as const };
+
+  const membership = await getMembership(db, room.id, targetUserId);
+  if (!membership) return { ok: false as const, error: 'member_not_found' as const };
+
+  const [updated] = await db
+    .update(roomMembers)
+    .set({ role })
+    .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, targetUserId)))
+    .returning();
+
+  return { ok: true as const, membership: updated };
 }
 
 /** List rooms the signed-in user owns or has joined, newest activity first. */
@@ -317,7 +359,7 @@ async function joinRoomInTransaction(
   if (room.accessMode === 'approval_required') {
     const approved = await getJoinRequest(tx, room.id, userId, 'approved');
     if (approved) {
-      const accepted = await addViewerMembership(tx, room.id, userId);
+      const accepted = await addRoomMembership(tx, room.id, userId, room.defaultRole);
       return { ok: true, roomId: room.id, role: accepted?.role ?? 'viewer' };
     }
 
@@ -336,7 +378,7 @@ async function joinRoomInTransaction(
     return { ok: false, error: 'approval_required', roomId: room.id, requestStatus: 'pending' };
   }
 
-  const accepted = await addViewerMembership(tx, room.id, userId);
+  const accepted = await addRoomMembership(tx, room.id, userId, room.defaultRole);
   logger.info('Room membership accepted', { roomSlug, roomId: room.id, userId, role: accepted?.role ?? 'viewer' });
   return { ok: true, roomId: room.id, role: accepted?.role ?? 'viewer' };
 }
@@ -389,7 +431,7 @@ export async function approveJoinRequest({
       .set({ status: 'approved', decidedById, decidedAt: new Date() })
       .where(eq(joinRequests.id, request.id))
       .returning();
-    const member = await addViewerMembership(tx, room.id, targetUserId);
+    const member = await addRoomMembership(tx, room.id, targetUserId, room.defaultRole);
     logger.info('Room join request approved', { roomSlug, roomId: room.id, targetUserId, decidedById });
     return { ok: true as const, request: approved, member };
   });

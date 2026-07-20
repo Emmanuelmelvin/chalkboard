@@ -15,6 +15,7 @@ export interface BoardState {
   socket: Socket | null;
   /** Local user id used when tagging new strokes (socket.id or 'local'). */
   userId: string;
+  canEdit: boolean;
 
   // ── Drawing settings ───────────────────────────────────────────────────
   activeTool: 'chalk' | 'eraser' | 'pan' | 'select';
@@ -68,6 +69,7 @@ export interface BoardState {
   setRoomId: (roomId: string) => void;
   setSocket: (socket: Socket | null) => void;
   setUserId: (userId: string) => void;
+  setCanEdit: (canEdit: boolean) => void;
   setActiveTool: (tool: BoardState['activeTool']) => void;
   setActiveColor: (color: string) => void;
   setActiveFillColor: (color: string) => void;
@@ -104,7 +106,7 @@ export interface BoardState {
   /**
    * Sync networking context when entering a room.
    */
-  initSession: (opts: { roomId: string; socket: Socket; userId?: string }) => void;
+  initSession: (opts: { roomId: string; socket: Socket; userId?: string; canEdit?: boolean }) => void;
 
   /**
    * Reset board-local state (used when leaving a room).
@@ -122,6 +124,7 @@ export const useBoardStore = create<BoardState>((set) => ({
   roomId: '',
   socket: null,
   userId: 'local',
+  canEdit: true,
 
   activeTool: 'chalk',
   activeColor: '#ffffff',
@@ -160,6 +163,7 @@ export const useBoardStore = create<BoardState>((set) => ({
   setRoomId: (roomId) => set({ roomId }),
   setSocket: (socket) => set({ socket }),
   setUserId: (userId) => set({ userId }),
+  setCanEdit: (canEdit) => set({ canEdit }),
   setActiveTool: (activeTool) => set({ activeTool }),
   setActiveColor: (activeColor) => set({ activeColor }),
   setActiveFillColor: (activeFillColor) => set({ activeFillColor }),
@@ -222,11 +226,12 @@ export const useBoardStore = create<BoardState>((set) => ({
       selectionRotation: 0,
     }),
 
-  initSession: ({ roomId, socket, userId }) =>
+  initSession: ({ roomId, socket, userId, canEdit }) =>
     set({
       roomId,
       socket,
       userId: userId ?? socket.id ?? 'local',
+      canEdit: canEdit ?? true,
     }),
 
   resetBoard: () =>
@@ -238,6 +243,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       selectionRotation: 0,
       selectionMarquee: null,
       clipboard: [],
+      canEdit: true,
       panOffset: { x: 0, y: 0 },
       zoom: 0.5,
       trimState: { ...initialTrimState },

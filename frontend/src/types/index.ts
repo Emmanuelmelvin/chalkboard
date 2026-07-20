@@ -107,13 +107,26 @@ export interface Point {
 
 export interface Collaborator {
   id: string;
+  userId: string;
   name: string;
   color: string;
+  role: 'owner' | 'instructor' | 'viewer';
   cursor?: Point;
+}
+
+export interface RoomMember {
+  id: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  avatarUrl?: string | null;
+  role: 'owner' | 'instructor' | 'viewer';
+  createdAt?: string;
 }
 
 export interface ChalkboardProps {
   roomId: string;
+  userId: string;
   userName: string;
   socket: Socket;
   roomPassword?: string;

@@ -12,6 +12,9 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
+    allowedHosts: [
+      'chalkboard.outray.app'
+    ],
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

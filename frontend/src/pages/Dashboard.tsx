@@ -98,6 +98,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [roomTitle, setRoomTitle] = useState('');
   const [roomDescription, setRoomDescription] = useState('');
   const [roomAccessMode, setRoomAccessMode] = useState<RoomAccessMode>('password_protected');
+  const [defaultMemberRole, setDefaultMemberRole] = useState<'instructor' | 'viewer'>('instructor');
   const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
@@ -239,6 +240,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           slug: generatedSlug,
           description: roomDescription.trim(),
           accessMode: roomAccessMode,
+          defaultRole: defaultMemberRole,
           theme: roomTheme,
           voiceEnabled: false,
         }),
@@ -498,6 +500,19 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                 </label>
               </div>
             </fieldset>
+            <fieldset className="dashboard-role-fieldset">
+              <legend>Default member role</legend>
+              <div className="dashboard-role-grid">
+                <label className={`dashboard-role-option${defaultMemberRole === 'instructor' ? ' is-selected' : ''}`}>
+                  <input type="radio" name="default-member-role" value="instructor" checked={defaultMemberRole === 'instructor'} onChange={() => setDefaultMemberRole('instructor')} />
+                  <span><strong>Editor</strong><small>Can draw, edit, and add to the canvas.</small></span>
+                </label>
+                <label className={`dashboard-role-option${defaultMemberRole === 'viewer' ? ' is-selected' : ''}`}>
+                  <input type="radio" name="default-member-role" value="viewer" checked={defaultMemberRole === 'viewer'} onChange={() => setDefaultMemberRole('viewer')} />
+                  <span><strong>Viewer</strong><small>Can follow along without editing.</small></span>
+                </label>
+              </div>
+            </fieldset>
             <fieldset className="dashboard-theme-fieldset">
               <legend>Room theme</legend>
               <div className="dashboard-theme-grid">
@@ -608,7 +623,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
         <div className="dashboard-rail-bottom">
           <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
           <button className="dashboard-help" type="button" onClick={() => selectTab('toolkit')}><CircleHelp size={15} /> Need a starting point?</button>
-          <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{firstName}</strong><small>Workspace member</small></span></div>
+          <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
         </div>
       </aside>
       <main className="dashboard-main">
@@ -678,7 +693,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
         <div className="dashboard-mobile-drawer-bottom">
           <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
           <button className="dashboard-help" type="button" onClick={() => selectTab('toolkit')}><CircleHelp size={15} /> Need a starting point?</button>
-          <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{firstName}</strong><small>Workspace member</small></span></div>
+          <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
         </div>
       </aside>
       </div>

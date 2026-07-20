@@ -104,6 +104,7 @@ function App() {
               {(user) => (
                 <Chalkboard
                   roomId={roomId}
+                  userId={user.id}
                   userName={user.displayName}
                   socket={socket}
                   roomPassword={roomPassword}

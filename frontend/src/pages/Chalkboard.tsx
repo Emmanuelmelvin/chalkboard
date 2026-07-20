@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, useState } from 'react';
-import { Copy, Check, Users, Maximize2, Minus, Plus, Shapes, Eye, EyeOff } from 'lucide-react';
+import { Copy, Check, ChevronDown, UsersRound, Maximize2, Minus, Plus, Shapes, Eye, EyeOff } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -15,6 +15,7 @@ import {
 import type {
   ShapeType,
   ChalkboardProps,
+  RoomMember,
 } from '@/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
@@ -57,6 +58,7 @@ const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
+  userId,
   userName,
   socket,
   roomPassword,
@@ -105,6 +107,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
   const [roomTitle, setRoomTitle] = useState(() => `Room ${roomId}`);
   const [roomDescription, setRoomDescription] = useState('');
+  const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
+  const [roomDetailsOpen, setRoomDetailsOpen] = useState(false);
+  const [roleUpdateError, setRoleUpdateError] = useState('');
+  const roomDetailsRef = useRef<HTMLDivElement | null>(null);
 
   const hasNavigatedToLink = useRef<boolean>(false);
   const openPluginModal = (pluginId: string, ids = selectedStrokeIds) => {
@@ -142,7 +148,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     dustPuffs,
   } = useCanvasInteraction(canvasRef);
 
-  useKeyboardShortcuts();
+  const { collaborators, userCursorColor, currentRole } = useBoardSocket(socket, roomId, userName, userId, roomPassword);
+  const effectiveRole = roomMembers.find((member) => member.userId === userId)?.role ?? currentRole;
+  const canEdit = effectiveRole !== 'viewer';
+  const canManageMembers = effectiveRole === 'owner';
+
+  useKeyboardShortcuts(canEdit);
 
   useEffect(() => {
     const title = roomTitle.trim() || `Room ${roomId}`;
@@ -165,6 +176,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           if (isRoomTheme(payload.room?.theme)) setRoomTheme(payload.room.theme);
           if (typeof payload.room?.title === 'string' && payload.room.title) setRoomTitle(payload.room.title);
           if (typeof payload.room?.description === 'string') setRoomDescription(payload.room.description);
+          if (Array.isArray(payload.room?.members)) setRoomMembers(payload.room.members);
         }
       } catch {
         // The classroom theme remains a safe fallback if metadata is unavailable.
@@ -175,11 +187,43 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     return () => { cancelled = true; };
   }, [roomId]);
 
-  const { collaborators, userCursorColor } = useBoardSocket(socket, roomId, userName, roomPassword);
+  useEffect(() => {
+    initSession({ roomId, socket, userId, canEdit });
+  }, [roomId, socket, userId, canEdit, initSession]);
 
   useEffect(() => {
-    initSession({ roomId, socket, userId: socket.id ?? 'local' });
-  }, [roomId, socket, initSession]);
+    const handleMembersUpdated = (payload: { members?: RoomMember[] }) => {
+      if (Array.isArray(payload.members)) setRoomMembers(payload.members);
+    };
+    socket.on('room-members-updated', handleMembersUpdated);
+    return () => { socket.off('room-members-updated', handleMembersUpdated); };
+  }, [socket]);
+
+  useEffect(() => {
+    if (!roomDetailsOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!roomDetailsRef.current?.contains(event.target as Node)) setRoomDetailsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setRoomDetailsOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [roomDetailsOpen]);
+
+  const updateMemberRole = (targetUserId: string, role: 'instructor' | 'viewer') => {
+    if (!canManageMembers || targetUserId === userId) return;
+    setRoleUpdateError('');
+    socket.emit('member:update-role', { roomId, targetUserId, role }, (response: { ok?: boolean; error?: string }) => {
+      if (!response?.ok) setRoleUpdateError(response?.error || 'Unable to update this member.');
+    });
+  };
+
+  const roleLabel = (role: RoomMember['role']) => role === 'instructor' ? 'Editor' : role === 'viewer' ? 'Viewer' : 'Owner';
 
   useEffect(() => {
     setCanvas(canvasRef.current);
@@ -289,7 +333,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         onPointerCancel={handlePointerUp} onWheel={handleWheel} />
       <NotesLayer />
       
-      {showInsertShapes && (
+      {canEdit && showInsertShapes && (
         <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
           pluginManifests={pluginManifests}
           onOpenPlugin={openPluginModal}
@@ -298,7 +342,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
           initialTab={insertShapesTab} highlightedLinkId={highlightedLinkId} />
       )}
-      <button
+      {canEdit && <button
         className="insert-shapes-fab"
         onClick={() => setShowInsertShapes(prev => !prev)}
         title="Insert Shape (Ctrl+1)"
@@ -306,7 +350,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.85)'; e.currentTarget.style.color = '#fff'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(15, 23, 42, 0.75)'; e.currentTarget.style.color = '#cbd5e1'; }}>
         <Shapes size={20} />
-      </button>
+      </button>}
       <div className="hud-layer">
         {trimState.active && trimState.cropBox && (() => {
           const cropBox = trimState.cropBox;
@@ -343,7 +387,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             </>
           );
         })()}
-        {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
+        {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
           const linkedLink = links.find(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
           if (!linkedLink) return null;
           const LINK_PADDING = 12;
@@ -362,7 +406,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           );
         })()}
 
-        {selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
+        {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
           const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
           const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
           const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
@@ -453,12 +497,72 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         })()}
 
         <div className="board-header">
-          <Card className="board-title"><h1>{roomTitle}</h1><span>Room Code: {roomId}</span>{roomDescription && <small>{roomDescription}</small>}</Card>
-          <Card style={{ display: 'flex', flexDirection: 'row', gap: '12px', alignItems: 'center', padding: '8px' }}>
-            <ActionSticks onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
-              canUndo={strokes.some((s) => s.userId === socket.id || s.userId === 'local')} canRedo={redoStack.length > 0} />
-          </Card>
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div className="board-header-tools">
+            {canEdit ? (
+              <Card className="board-actions-card">
+                <ActionSticks onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
+                  canUndo={strokes.some((s) => s.userId === socket.id || s.userId === 'local')} canRedo={redoStack.length > 0} />
+              </Card>
+            ) : (
+              <div className="board-readonly-badge">Viewer · read only</div>
+            )}
+          </div>
+          <div className="board-header-actions">
+            <div className="room-details-menu" ref={roomDetailsRef}>
+              <button
+                type="button"
+                className="room-details-trigger"
+                onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
+                aria-expanded={roomDetailsOpen}
+                aria-label="Open room details"
+              >
+                <UsersRound size={16} />
+                <span>{roomMembers.length || Object.keys(collaborators).length + 1}</span>
+                <ChevronDown size={14} className={roomDetailsOpen ? 'room-details-chevron open' : 'room-details-chevron'} />
+              </button>
+              {roomDetailsOpen && (
+                <div className="room-details-popover">
+                  <div className="room-details-heading">
+                    <div>
+                      <strong>{roomTitle}</strong>
+                      <span>Room code: {roomId.toUpperCase()}</span>
+                    </div>
+                    <span className={canEdit ? 'room-role-pill room-role-editor' : 'room-role-pill'}>{roleLabel(effectiveRole)}</span>
+                  </div>
+                  {roomDescription && <p className="room-details-description">{roomDescription}</p>}
+                  <div className="room-details-section-title">Members <span>{roomMembers.length}</span></div>
+                  <div className="room-details-members">
+                    {roomMembers.map((member) => {
+                      const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);
+                      const isOnline = member.userId === userId || Boolean(collaborator);
+                      return (
+                        <div key={member.userId} className="room-detail-member">
+                          <span className="room-member-presence" style={{ backgroundColor: collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b') }} />
+                          <div className="room-member-name">
+                            <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>
+                            <span>{isOnline ? 'Online' : 'Offline'}</span>
+                          </div>
+                          {canManageMembers && member.role !== 'owner' ? (
+                            <select
+                              className="room-member-role-select"
+                              value={member.role}
+                              onChange={(event) => updateMemberRole(member.userId, event.target.value as 'instructor' | 'viewer')}
+                              aria-label={`Role for ${member.displayName}`}
+                            >
+                              <option value="instructor">Editor</option>
+                              <option value="viewer">Viewer</option>
+                            </select>
+                          ) : (
+                            <span className="room-member-role">{roleLabel(member.role)}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {roleUpdateError && <p className="room-details-error">{roleUpdateError}</p>}
+                </div>
+              )}
+            </div>
             <Card className="share-panel">
               <span className="room-code-badge">{roomId.toUpperCase()}</span>
               <Button variant="icon" onClick={handleCopyLink} title="Copy Invite Link">
@@ -469,22 +573,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           </div>
         </div>
 
-        {Object.keys(collaborators).length > 0 && (
-          <Card className="users-panel">
-            <h3>
-              <Users
-                size={12}
-                style={{ inlineSize: 'auto', marginRight: '4px', verticalAlign: 'middle' }} />
-              Classmates
-              ({Object.keys(collaborators).length + 1})
-            </h3>
-            <div className="user-item"><span className="user-dot" style={{ color: userCursorColor, backgroundColor: userCursorColor }} /><span className="user-name">{userName} (You)</span></div>
-            {Object.entries(collaborators).map(([id, coll]) => (
-              <div key={id} className="user-item"><span className="user-dot" style={{ color: coll.color, backgroundColor: coll.color }} /><span className="user-name">{coll.name}</span></div>
-            ))}
-          </Card>
-        )}
-
         <div className="zoom-indicator">
           <Button variant="icon" onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))} style={{ padding: 2 }}><Minus size={12} /></Button>
           <span style={{ margin: '0 4px', width: '36px', textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
@@ -492,7 +580,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           <Button variant="icon" onClick={resetPanZoom} title="Reset Pan/Zoom" style={{ padding: 2, marginLeft: 4 }}><Maximize2 size={12} /></Button>
         </div>
 
-        <Toolbar
+        {canEdit && <Toolbar
           activeTool={activeTool}
           activeColor={activeColor}
           brushSize={brushSize}
@@ -504,7 +592,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onBrushSizeChange={setBrushSize}
           onIntensityChange={setBrushIntensity}
           onEraserWidthChange={setEraserWidth}
-          onEraserHeightChange={setEraserHeight} />
+          onEraserHeightChange={setEraserHeight} />}
       </div>
       {activePluginModals.map((modal) => {
         const plugin = pluginManifests.find((item) => item.id === modal.pluginId);

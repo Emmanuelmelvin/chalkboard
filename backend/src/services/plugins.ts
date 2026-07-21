@@ -314,8 +314,8 @@ export async function publishPlugin(pluginId: string) {
     await tx.update(pluginVersions)
       .set({ status: 'approved', updatedAt: publishedAt })
       .where(and(eq(pluginVersions.pluginId, plugin.id), eq(pluginVersions.status, 'published')));
-    await tx.update(plugins).set({ status: 'published', currentVersion: latestVersion.version, updatedAt: new Date() }).where(eq(plugins.id, plugin.id));
-    await tx.update(pluginVersions).set({ status: 'published', updatedAt: new Date() }).where(eq(pluginVersions.id, latestVersion.id));
+    await tx.update(plugins).set({ status: 'published', currentVersion: latestVersion.version, updatedAt: publishedAt }).where(eq(plugins.id, plugin.id));
+    await tx.update(pluginVersions).set({ status: 'published', updatedAt: publishedAt }).where(eq(pluginVersions.id, latestVersion.id));
   });
   return getPluginDetail(pluginId);
 }

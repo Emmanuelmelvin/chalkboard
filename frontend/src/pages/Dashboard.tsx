@@ -39,7 +39,7 @@ import type { RoomMember } from '@/types';
 import '@/styles/PublicPages.css';
 
 type DashboardTab = 'overview' | 'rooms' | 'toolkit' | 'developer' | 'profile';
-type RoomAccessMode = 'open' | 'password_protected';
+type RoomAccessMode = 'open' | 'approval_required' | 'password_protected';
 
 interface RoomSummary {
   slug: string;
@@ -394,8 +394,8 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
               <div className="dashboard-room-details-heading">
                 <strong>Room details</strong>
                 <span className="dashboard-room-row-access">
-                  {room.accessMode === 'open' ? <Globe2 size={13} strokeWidth={1.8} /> : <LockKeyhole size={13} strokeWidth={1.8} />}
-                  {room.accessMode === 'open' ? 'Public' : 'Private'}
+                  {room.accessMode === 'open' ? <Globe2 size={13} strokeWidth={1.8} /> : room.accessMode === 'approval_required' ? <UsersRound size={13} strokeWidth={1.8} /> : <LockKeyhole size={13} strokeWidth={1.8} />}
+                  {room.accessMode === 'open' ? 'Public' : room.accessMode === 'approval_required' ? 'Approval required' : 'Private'}
                 </span>
               </div>
               {room.description && <p className="dashboard-room-details-description">{room.description}</p>}
@@ -461,6 +461,11 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
               {room.members.length > ROOM_MEMBER_PREVIEW_LIMIT && (
                 <button className="dashboard-room-show-more" type="button" onClick={() => setRoomMembersModal(room)}>
                   Show more <ChevronRight size={13} strokeWidth={1.8} />
+                </button>
+              )}
+              {roomRole(room) !== 'viewer' && (room.accessMode === 'approval_required' || room.members.length <= ROOM_MEMBER_PREVIEW_LIMIT) && (
+                <button className="dashboard-room-show-more" type="button" onClick={() => setRoomMembersModal(room)}>
+                  {room.accessMode === 'approval_required' ? 'Review join requests' : 'Manage members'} <ChevronRight size={13} strokeWidth={1.8} />
                 </button>
               )}
               <div className="dashboard-room-details-meta">
@@ -571,6 +576,10 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                 <label className={`dashboard-access-option${roomAccessMode === 'open' ? ' is-selected' : ''}`}>
                   <input type="radio" name="room-access" value="open" checked={roomAccessMode === 'open'} onChange={() => setRoomAccessMode('open')} />
                   <span><strong>Open room</strong><small>Anyone with the code can join.</small></span>
+                </label>
+                <label className={`dashboard-access-option${roomAccessMode === 'approval_required' ? ' is-selected' : ''}`}>
+                  <input type="radio" name="room-access" value="approval_required" checked={roomAccessMode === 'approval_required'} onChange={() => setRoomAccessMode('approval_required')} />
+                  <span><strong>Ask to join</strong><small>Review each request before they enter.</small></span>
                 </label>
               </div>
             </fieldset>
@@ -810,9 +819,13 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       )}
       {roomMembersModal && (
         <RoomMembersModal
+          roomSlug={roomMembersModal.slug}
           roomTitle={roomMembersModal.title}
+          roomAccessMode={roomMembersModal.accessMode}
+          viewerRole={roomRole(roomMembersModal)}
           members={roomMembersModal.members}
           peakAttendeeCount={roomMembersModal.peakAttendeeCount}
+          onRequestsChanged={() => { void loadRooms(); }}
           onClose={() => setRoomMembersModal(null)}
         />
       )}

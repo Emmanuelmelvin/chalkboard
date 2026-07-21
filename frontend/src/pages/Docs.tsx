@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -100,6 +100,8 @@ const packageTree = `geometry-studio.zip
 └── README.md           optional developer notes`;
 
 function Docs() {
+  const [activeSection, setActiveSection] = useState('overview');
+
   useEffect(() => {
     document.documentElement.classList.add('docs-active');
     document.body.classList.add('docs-active');
@@ -109,6 +111,40 @@ function Docs() {
       document.documentElement.classList.remove('docs-active');
       document.body.classList.remove('docs-active');
       document.title = 'Chalkboard - A live canvas for shared thinking';
+    };
+  }, []);
+
+  useEffect(() => {
+    const sections = Array.from(document.querySelectorAll<HTMLElement>('.docs-section'));
+    if (sections.length === 0) return undefined;
+
+    let animationFrame = 0;
+    const updateActiveSection = () => {
+      if (animationFrame) return;
+
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = 0;
+        const activationLine = window.innerHeight * 0.35;
+        let currentSection = sections[0].id;
+
+        sections.forEach((section) => {
+          if (section.getBoundingClientRect().top <= activationLine) {
+            currentSection = section.id;
+          }
+        });
+
+        setActiveSection((previousSection) => previousSection === currentSection ? previousSection : currentSection);
+      });
+    };
+
+    updateActiveSection();
+    window.addEventListener('scroll', updateActiveSection, { passive: true });
+    window.addEventListener('resize', updateActiveSection);
+
+    return () => {
+      window.removeEventListener('scroll', updateActiveSection);
+      window.removeEventListener('resize', updateActiveSection);
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
     };
   }, []);
 
@@ -147,16 +183,16 @@ function Docs() {
           <aside className="docs-sidebar">
             <p className="docs-sidebar-label">On this page</p>
             <nav aria-label="Plugin documentation sections">
-              <a href="#overview">01 / Overview</a>
-              <a href="#dashboard-flow">02 / Dashboard workflow</a>
-              <a href="#package">03 / Package contract</a>
-              <a href="#manifest">04 / Manifest</a>
-              <a href="#bridge">05 / Runtime messages</a>
-              <a href="#contributions">06 / Contributions</a>
-              <a href="#publishing">07 / Publish</a>
-              <a href="#updates">08 / Update</a>
-              <a href="#security">09 / Safety</a>
-              <a href="#checklist">10 / Checklist</a>
+              <a className={activeSection === 'overview' ? 'is-active' : undefined} aria-current={activeSection === 'overview' ? 'location' : undefined} href="#overview">01 / Overview</a>
+              <a className={activeSection === 'dashboard-flow' ? 'is-active' : undefined} aria-current={activeSection === 'dashboard-flow' ? 'location' : undefined} href="#dashboard-flow">02 / Dashboard workflow</a>
+              <a className={activeSection === 'package' ? 'is-active' : undefined} aria-current={activeSection === 'package' ? 'location' : undefined} href="#package">03 / Package contract</a>
+              <a className={activeSection === 'manifest' ? 'is-active' : undefined} aria-current={activeSection === 'manifest' ? 'location' : undefined} href="#manifest">04 / Manifest</a>
+              <a className={activeSection === 'bridge' ? 'is-active' : undefined} aria-current={activeSection === 'bridge' ? 'location' : undefined} href="#bridge">05 / Runtime messages</a>
+              <a className={activeSection === 'contributions' ? 'is-active' : undefined} aria-current={activeSection === 'contributions' ? 'location' : undefined} href="#contributions">06 / Contributions</a>
+              <a className={activeSection === 'publishing' ? 'is-active' : undefined} aria-current={activeSection === 'publishing' ? 'location' : undefined} href="#publishing">07 / Publish</a>
+              <a className={activeSection === 'updates' ? 'is-active' : undefined} aria-current={activeSection === 'updates' ? 'location' : undefined} href="#updates">08 / Update</a>
+              <a className={activeSection === 'security' ? 'is-active' : undefined} aria-current={activeSection === 'security' ? 'location' : undefined} href="#security">09 / Safety</a>
+              <a className={activeSection === 'checklist' ? 'is-active' : undefined} aria-current={activeSection === 'checklist' ? 'location' : undefined} href="#checklist">10 / Checklist</a>
             </nav>
           </aside>
 

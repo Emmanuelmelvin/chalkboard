@@ -174,7 +174,7 @@ export default function AdminDashboard() {
       }
     }
     const passed = issues.length === 0;
-    setTestResult({ pluginId: selectedPlugin.pluginId, passed, message: passed ? `Manifest, contribution, and JavaScript bundle passed.${version?.bundleArchiveDataUrl ? ' ZIP package attached.' : ' No ZIP package attached.'}` : issues.join(' ') });
+    setTestResult({ pluginId: selectedPlugin.pluginId, passed, message: passed ? `Manifest, contribution, and JavaScript bundle passed.${version?.hasBundleArchive || version?.bundleArchiveDataUrl ? ' ZIP package attached.' : ' No ZIP package attached.'}` : issues.join(' ') });
     setError('');
     setNotice(passed ? 'Plugin smoke test passed.' : 'Plugin smoke test found issues.');
   };

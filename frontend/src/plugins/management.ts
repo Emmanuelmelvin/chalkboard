@@ -10,6 +10,9 @@ export interface ManagedPluginVersion {
   entryUrl: string | null;
   entryCode: string | null;
   bundleArchiveDataUrl: string | null;
+  bundleUrl?: string | null;
+  bundleArchiveUrl?: string | null;
+  hasBundleArchive?: boolean;
   status: ManagedPluginVersionStatus;
   createdAt: string;
   updatedAt: string;
@@ -21,6 +24,7 @@ export interface ManagedPlugin {
   name: string;
   description: string;
   logoDataUrl: string | null;
+  logoUrl?: string | null;
   authorId: string;
   status: ManagedPluginStatus;
   plan: ManagedPluginPlan;

@@ -191,6 +191,7 @@ body.docs-active {
 .docs-sidebar-label { margin-bottom: 18px; color: var(--docs-dim); font-size: 9px; }
 .docs-sidebar nav { display: flex; flex-direction: column; gap: 3px; }
 .docs-sidebar a { padding: 8px 0; border-left: 1px solid transparent; color: var(--docs-dim); font-size: 10px; text-decoration: none; transition: color 160ms ease, border-color 160ms ease, padding 160ms ease; }
+.docs-sidebar a.is-active { padding-left: 10px; border-left-color: var(--docs-gold); color: var(--docs-gold-bright); }
 .docs-sidebar a:hover, .docs-sidebar a:focus-visible { padding-left: 10px; border-left-color: var(--docs-gold); color: var(--docs-gold-bright); outline: 0; }
 
 .docs-article { min-width: 0; max-width: 960px; }
@@ -235,6 +236,8 @@ body.docs-active {
 .docs-numbered-list { display: flex; flex-direction: column; gap: 0; margin: 29px 0 0; padding: 0; list-style: none; counter-reset: docs-steps; }
 .docs-numbered-list li { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; padding: 18px 0; border-top: 1px solid var(--docs-line); counter-increment: docs-steps; }
 .docs-numbered-list li::before { color: var(--docs-gold); content: counter(docs-steps, decimal-leading-zero); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; }
+.docs-numbered-list li > strong,
+.docs-numbered-list li > span { grid-column: 2; }
 .docs-numbered-list strong { display: block; margin-bottom: 5px; color: var(--docs-ink); font-size: 12px; }
 .docs-numbered-list span { display: block; color: var(--docs-muted); font-size: 12px; line-height: 1.65; }
 

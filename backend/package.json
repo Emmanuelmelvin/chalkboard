@@ -13,6 +13,8 @@
     "db:migrate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs migrate"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1091.0",
+    "@aws-sdk/s3-request-presigner": "^3.1091.0",
     "@hono/node-server": "^1.19.6",
     "@socket.io/redis-adapter": "^8.3.0",
     "bcryptjs": "^3.0.3",

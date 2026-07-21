@@ -7,6 +7,7 @@ type PluginInput = {
   pluginId: string;
   name: string;
   description: string;
+  logoDataUrl?: string;
   plan: 'free' | 'pro';
   version: string;
   manifest: Record<string, unknown>;
@@ -41,6 +42,13 @@ export async function listPluginsForAuthor(authorId: string) {
   return Promise.all(owned.map(withVersions));
 }
 
+export async function listPublishedPlugins() {
+  const published = await db.select().from(plugins)
+    .where(eq(plugins.status, 'published'))
+    .orderBy(desc(plugins.updatedAt));
+  return Promise.all(published.map(withVersions));
+}
+
 export async function listPluginsForAdmin(status?: typeof plugins.$inferSelect.status) {
   const all = status
     ? await db.select().from(plugins).where(eq(plugins.status, status)).orderBy(desc(plugins.updatedAt))
@@ -72,6 +80,7 @@ export async function createPluginForUser(authorId: string, input: PluginInput) 
       pluginId: input.pluginId,
       name: input.name,
       description: input.description,
+      logoDataUrl: input.logoDataUrl || null,
       authorId,
       plan: input.plan,
     }).returning();

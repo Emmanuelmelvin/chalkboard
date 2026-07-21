@@ -18,6 +18,7 @@ export interface ManagedPlugin {
   pluginId: string;
   name: string;
   description: string;
+  logoDataUrl: string | null;
   authorId: string;
   status: ManagedPluginStatus;
   plan: ManagedPluginPlan;
@@ -43,6 +44,7 @@ export async function createPlugin(input: {
   pluginId: string;
   name: string;
   description: string;
+  logoDataUrl?: string;
   plan: ManagedPluginPlan;
   version: string;
   manifest: Record<string, unknown>;

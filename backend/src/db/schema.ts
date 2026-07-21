@@ -75,6 +75,7 @@ export const plugins = pgTable('plugins', {
   pluginId: text('plugin_id').notNull().unique(),
   name: text('name').notNull(),
   description: text('description').notNull(),
+  logoDataUrl: text('logo_data_url'),
   authorId: uuid('author_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   status: pluginStatus('status').default('draft').notNull(),
   plan: pluginPlan('plan').default('free').notNull(),

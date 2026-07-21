@@ -35,6 +35,14 @@ export interface ManagedPlugin {
   author?: { id: string; displayName: string; email: string } | null;
 }
 
+/**
+ * The API keeps the legacy data URL field for compatibility, while new
+ * uploads are returned through logoUrl (usually as a signed R2 URL).
+ */
+export function getManagedPluginLogo(plugin: Pick<ManagedPlugin, 'logoUrl' | 'logoDataUrl'>) {
+  return plugin.logoUrl || plugin.logoDataUrl || null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
   const payload = await response.json().catch(() => ({}));

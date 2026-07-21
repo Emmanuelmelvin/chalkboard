@@ -38,7 +38,12 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useBoardSocket } from '@/hooks/useBoardSocket';
 import { createPluginAPI, pluginRegistry, registerInstalledPlugins } from '@/plugins';
 import { listPluginCatalogue } from '@/plugins/management';
-import { publishedPluginDefinition, PublishedPluginRuntime, type PublishedPluginDefinition, type PublishedPluginCommandRequest } from '@/plugins/publishedRuntime';
+import {
+  publishedPluginDefinition,
+  PublishedPluginRuntime,
+  type PublishedPluginDefinition,
+  type PublishedPluginCommandRequest
+} from '@/plugins/publishedRuntime';
 import {
   handleUndo,
   handleRedo,
@@ -130,7 +135,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     return pluginApi.board.insertStrokes([focusDot], { select: true, closeInsertPanel: true, pluginId: request.pluginId });
   }, [pluginApi]);
   const publishedRuntime = useMemo(() => new PublishedPluginRuntime(handlePublishedPluginCommand), [handlePublishedPluginCommand]);
+
   useEffect(() => () => publishedRuntime.dispose(), [publishedRuntime]);
+
   useEffect(() => {
     let active = true;
     void listPluginCatalogue().then((payload) => {
@@ -141,6 +148,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
     return () => { active = false; };
   }, [roomId]);
+
   useEffect(() => {
     publishedRuntime.mount(publishedPlugins);
   }, [publishedPlugins, publishedRuntime]);
@@ -462,7 +470,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp} onWheel={handleWheel} />
       <NotesLayer />
-      
+
       {canEdit && showInsertShapes && (
         <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
           pluginManifests={pluginManifests}
@@ -551,9 +559,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             <>
               {showSelectionToolbox && (
                 <SelectionToolbox
-                  boxScreenLeft={BOX_SCREEN_LEFT} 
+                  boxScreenLeft={BOX_SCREEN_LEFT}
                   boxScreenRight={BOX_SCREEN_RIGHT}
-                  boxScreenCenterY={BOX_SCREEN_CENTER_Y} 
+                  boxScreenCenterY={BOX_SCREEN_CENTER_Y}
                   activeColor={actualColor}
                   activeFillColor={actualFillColor}
                   onColorChange={(color) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}

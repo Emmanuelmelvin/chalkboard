@@ -1,4 +1,4 @@
-import type { ManagedPlugin } from '@/plugins/management';
+import { getManagedPluginLogo, type ManagedPlugin } from '@/plugins/management';
 import type {
   PluginCommandContribution,
   PluginManifest,
@@ -11,6 +11,7 @@ export interface PublishedPluginDefinition {
   pluginId: string;
   manifest: PluginManifest;
   entryCode: string;
+  logoUrl: string | null;
 }
 
 export interface PublishedPluginCommandRequest {
@@ -78,7 +79,7 @@ export function publishedPluginDefinition(plugin: ManagedPlugin): PublishedPlugi
     version: version.version,
     description: typeof rawManifest.description === 'string' ? rawManifest.description : plugin.description,
     author: typeof rawManifest.author === 'string' ? rawManifest.author : 'Chalkboard community',
-    logoUrl: plugin.logoUrl || plugin.logoDataUrl || null,
+    logoUrl: getManagedPluginLogo(plugin),
     permissions: Array.isArray(rawManifest.permissions)
       ? rawManifest.permissions.filter((permission): permission is PluginPermission => allowedPermissions.includes(permission as PluginPermission))
       : [],
@@ -88,7 +89,7 @@ export function publishedPluginDefinition(plugin: ManagedPlugin): PublishedPlugi
       selectionTools: normalizeSelectionTools(rawContributes.selectionTools),
     },
   };
-  return { pluginId: plugin.pluginId, manifest, entryCode: version.entryCode };
+  return { pluginId: plugin.pluginId, manifest, entryCode: version.entryCode, logoUrl: manifest.logoUrl || null };
 }
 
 function sandboxDocument(code: string) {
@@ -99,14 +100,20 @@ function sandboxDocument(code: string) {
 export class PublishedPluginRuntime {
   private frames = new Map<string, HTMLIFrameElement>();
   private definitions = new Map<string, PublishedPluginDefinition>();
+  private readyPlugins = new Set<string>();
+  private pendingCommands = new Map<string, Array<{ command: string; payload?: unknown }>>();
+  private listening = false;
   private onCommand: (request: PublishedPluginCommandRequest) => boolean | void;
 
   constructor(onCommand: (request: PublishedPluginCommandRequest) => boolean | void) {
     this.onCommand = onCommand;
-    window.addEventListener('message', this.handleMessage);
+    this.ensureMessageListener();
   }
 
   mount(definitions: PublishedPluginDefinition[]) {
+    // React StrictMode may run an effect cleanup immediately after setup in
+    // development. Re-attach here so the runtime remains usable afterwards.
+    this.ensureMessageListener();
     this.disposeFrames();
     this.definitions = new Map(definitions.map((definition) => [definition.pluginId, definition]));
     definitions.forEach((definition) => {
@@ -122,7 +129,13 @@ export class PublishedPluginRuntime {
       frame.style.border = '0';
       frame.srcdoc = sandboxDocument(definition.entryCode);
       frame.addEventListener('load', () => {
+        if (this.frames.get(definition.pluginId) !== frame) return;
+        // The bundle has been evaluated by the time iframe load fires, so it
+        // can safely receive commands even if it does not implement the
+        // optional chalkboard:ready handshake.
+        this.readyPlugins.add(definition.pluginId);
         frame.contentWindow?.postMessage({ type: 'chalkboard:init', pluginId: definition.pluginId }, '*');
+        this.flushPendingCommands(definition.pluginId, frame);
       });
       this.frames.set(definition.pluginId, frame);
       document.body.appendChild(frame);
@@ -132,12 +145,21 @@ export class PublishedPluginRuntime {
   execute(pluginId: string, command: string, payload?: unknown) {
     const frame = this.frames.get(pluginId);
     if (!frame?.contentWindow) return false;
+    if (!this.readyPlugins.has(pluginId)) {
+      const commands = this.pendingCommands.get(pluginId) ?? [];
+      commands.push({ command, payload });
+      this.pendingCommands.set(pluginId, commands);
+      return true;
+    }
     frame.contentWindow.postMessage({ type: 'chalkboard:execute', pluginId, command, payload }, '*');
     return true;
   }
 
   dispose() {
-    window.removeEventListener('message', this.handleMessage);
+    if (this.listening) {
+      window.removeEventListener('message', this.handleMessage);
+      this.listening = false;
+    }
     this.disposeFrames();
     this.definitions.clear();
   }
@@ -145,6 +167,14 @@ export class PublishedPluginRuntime {
   private disposeFrames() {
     this.frames.forEach((frame) => frame.remove());
     this.frames.clear();
+    this.readyPlugins.clear();
+    this.pendingCommands.clear();
+  }
+
+  private ensureMessageListener() {
+    if (this.listening) return;
+    window.addEventListener('message', this.handleMessage);
+    this.listening = true;
   }
 
   private handleMessage = (event: MessageEvent) => {
@@ -152,8 +182,21 @@ export class PublishedPluginRuntime {
     if (!data || typeof data !== 'object' || typeof data.pluginId !== 'string') return;
     const frame = this.frames.get(data.pluginId);
     if (!frame || event.source !== frame.contentWindow || !this.definitions.has(data.pluginId)) return;
+    if (data.type === 'chalkboard:ready') {
+      this.readyPlugins.add(data.pluginId);
+      this.flushPendingCommands(data.pluginId, frame);
+      return;
+    }
     if (data.type === 'chalkboard:command' && typeof data.command === 'string') {
       this.onCommand({ pluginId: data.pluginId, command: data.command, payload: data.payload });
     }
   };
+
+  private flushPendingCommands(pluginId: string, frame: HTMLIFrameElement) {
+    const pending = this.pendingCommands.get(pluginId) ?? [];
+    this.pendingCommands.delete(pluginId);
+    pending.forEach(({ command, payload }) => {
+      frame.contentWindow?.postMessage({ type: 'chalkboard:execute', pluginId, command, payload }, '*');
+    });
+  }
 }

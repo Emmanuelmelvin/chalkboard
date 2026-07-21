@@ -94,15 +94,20 @@ test('approval-required joins create one pending request and only succeed after 
   const room = await createApprovalRoom(owner.id);
 
   const firstAttempt = await assertRoomJoinAllowed({ roomSlug: room.slug, userId: requester.id });
-  assert.deepEqual(firstAttempt, {
+  assert.equal(firstAttempt.ok, false);
+  assert.equal(firstAttempt.error, 'approval_required');
+  assert.equal(firstAttempt.roomId, room.id);
+  assert.equal(firstAttempt.requestStatus, 'pending');
+  assert.equal(firstAttempt.requestCreated, true);
+  assert.match(firstAttempt.requestId || '', /^[0-9a-f-]{36}$/i);
+
+  const retryAttempt = await assertRoomJoinAllowed({ roomSlug: room.slug, userId: requester.id });
+  assert.deepEqual(retryAttempt, {
     ok: false,
     error: 'approval_required',
     roomId: room.id,
     requestStatus: 'pending',
   });
-
-  const retryAttempt = await assertRoomJoinAllowed({ roomSlug: room.slug, userId: requester.id });
-  assert.deepEqual(retryAttempt, firstAttempt);
 
   const pending = await db.select().from(joinRequests).where(eq(joinRequests.roomId, room.id));
   assert.equal(pending.length, 1);
@@ -146,4 +151,3 @@ test('a denied approval request cannot be used to join later', async () => {
     requestStatus: 'denied',
   });
 });
-

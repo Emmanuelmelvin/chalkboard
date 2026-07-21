@@ -11,6 +11,22 @@ export function setPresenceServer(server: any) {
   presenceServer = server;
 }
 
+/** Notify only the connected room managers without exposing the event to requesters. */
+export async function notifyRoomManagers(roomId: string, event: string, payload: unknown) {
+  if (!presenceServer) return;
+
+  try {
+    const roomSockets = await presenceServer.in(roomId).fetchSockets();
+    roomSockets.forEach((socket: any) => {
+      const role = socket.data?.roomRole;
+      if (role === 'owner' || role === 'instructor') socket.emit(event, payload);
+    });
+  } catch {
+    // Notifications are best-effort; a temporary adapter failure must not
+    // prevent the requester from receiving the normal join response.
+  }
+}
+
 export async function getLiveRoomUserIds(roomId: string) {
   if (presenceServer) {
     try {

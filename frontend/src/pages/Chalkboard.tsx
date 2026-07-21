@@ -299,6 +299,20 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     return () => { socket.off('room-members-updated', handleMembersUpdated); };
   }, [socket]);
 
+  useEffect(() => {
+    const handleJoinRequest = (payload: { roomId?: string; requester?: { displayName?: string } }) => {
+      if (payload.roomId && payload.roomId !== roomId) return;
+      const requesterName = payload.requester?.displayName?.trim() || 'A user';
+      useLoggerStore.getState().notify(
+        `${requesterName} requested to join this room. Open “Review join requests” in the dashboard to add them.`,
+        'info',
+        8000,
+      );
+    };
+    socket.on('room:join-requested', handleJoinRequest);
+    return () => { socket.off('room:join-requested', handleJoinRequest); };
+  }, [socket, roomId]);
+
   const leaveClosedRoom = useCallback(() => {
     if (roomClosureHandledRef.current) return;
     roomClosureHandledRef.current = true;

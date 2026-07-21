@@ -16,6 +16,7 @@ import {
   schedulePresenceRemoval,
   removePresenceNow,
   setPresenceServer,
+  notifyRoomManagers,
 } from '@/services/realtimeRooms';
 import { logger } from '@/utils/logger';
 import { env, isAllowedCorsOrigin } from '@/config/env';
@@ -89,17 +90,31 @@ async function emitPresence(io: Server, roomId: string) {
   io.to(roomId).emit('presence:count', { roomId, count: users.length });
 }
 
-async function hasActiveRoomSession(io: Server, roomId: string, userId: string, currentSocketId: string) {
+async function hasActiveRoomSession(
+  io: Server,
+  roomId: string,
+  userId: string,
+  currentSocketId: string,
+  clientSessionId?: string,
+) {
   try {
     const roomSockets = await io.in(roomId).fetchSockets();
-    return roomSockets.some((remoteSocket: any) => remoteSocket.id !== currentSocketId && remoteSocket.data?.user?.id === userId);
+    return roomSockets.some((remoteSocket: any) => (
+      remoteSocket.id !== currentSocketId
+      && remoteSocket.data?.user?.id === userId
+      && !(clientSessionId && remoteSocket.data?.clientSessionId === clientSessionId)
+    ));
   } catch (error) {
     logger.warn('Duplicate room-session lookup failed; using local presence', {
       roomId,
       userId,
       error: error instanceof Error ? error.message : String(error),
     });
-    return [...getRoomUsers(roomId).entries()].some(([socketId, user]) => socketId !== currentSocketId && user.userId === userId);
+    return [...getRoomUsers(roomId).entries()].some(([socketId, user]) => {
+      if (socketId === currentSocketId || user.userId !== userId) return false;
+      const existingMeta = getSocketMeta(socketId);
+      return !(clientSessionId && existingMeta?.clientSessionId === clientSessionId);
+    });
   }
 }
 
@@ -180,6 +195,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     roomId: string;
     color?: string;
     password?: string;
+    clientSessionId?: string;
   }>(socket, 'join-room', joinRoomSchema, payload, ack);
   if (!data) return;
 
@@ -202,11 +218,22 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
 
   const join = await assertRoomJoinAllowed({ roomSlug: data.roomId, userId: user.id, password: data.password });
   if (!join.ok) {
+    if (join.error === 'approval_required' && join.requestCreated && join.requestId) {
+      void notifyRoomManagers(data.roomId, 'room:join-requested', {
+        roomId: data.roomId,
+        requestId: join.requestId,
+        requester: {
+          userId: user.id,
+          displayName: user.displayName,
+          avatarUrl: user.avatarUrl ?? null,
+        },
+      });
+    }
     sendAck(ack, { ok: false, error: join.error });
     return;
   }
 
-  if (await hasActiveRoomSession(io, data.roomId, user.id, socket.id)) {
+  if (await hasActiveRoomSession(io, data.roomId, user.id, socket.id, data.clientSessionId)) {
     logger.info('Duplicate room session rejected', { roomId: data.roomId, userId: user.id, socketId: socket.id });
     sendAck(ack, { ok: false, error: 'already_joined' });
     return;
@@ -227,11 +254,17 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     return;
   }
   await socket.join(data.roomId);
-  setSocketMeta(socket.id, { roomId: data.roomId, userId: user.id, role: join.role });
+  setSocketMeta(socket.id, {
+    roomId: data.roomId,
+    userId: user.id,
+    role: join.role,
+    clientSessionId: data.clientSessionId,
+  });
   socket.data.roomId = data.roomId;
   socket.data.roomRole = join.role;
   socket.data.roomColor = data.color || '#fff';
   socket.data.roomAvatarUrl = user.avatarUrl ?? null;
+  socket.data.clientSessionId = data.clientSessionId;
   const presence = upsertPresence({
     roomId: data.roomId,
     socketId: socket.id,
@@ -258,6 +291,13 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
   socket.emit('room-history', await getRoomHistory(data.roomId));
   socket.emit('links-update', { links: await getRoomLinks(data.roomId) });
   socket.emit('raised-hands:update', await getRaisedHands(data.roomId));
+  io.to(data.roomId).emit('room:user-joined', {
+    roomId: data.roomId,
+    userId: user.id,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl ?? null,
+    role: join.role,
+  });
   await emitPresence(io, data.roomId);
   const roomDetails = await getRoomWithMembers(data.roomId);
   if (roomDetails) io.to(data.roomId).emit('room-members-updated', roomDetails);

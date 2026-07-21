@@ -1,4 +1,5 @@
 import { approveJoinRequest, assertRoomJoinAllowed, createRoom, createRoomVoiceToken, deleteRoomForUser, denyJoinRequest, getRoomWithMembers, listJoinRequests, listRoomsForUser, resetRoomPasswordForOwner, updateRoomMemberRole } from '@/services/rooms';
+import { notifyRoomManagers } from '@/services/realtimeRooms';
 import { createRoomSchema, joinRoomSchema, memberRoleSchema, roomPasswordSchema } from '@/validators/roomValidators';
 import { APIError } from '@/utils/error';
 
@@ -26,9 +27,23 @@ export async function joinRoomHandler(c: any) {
   const user = c.get('user');
   if (!user) throw new APIError('unauthorized', 401);
   const { password } = joinRoomSchema.parse(await c.req.json().catch(() => ({})));
-  const result = await assertRoomJoinAllowed({ roomSlug: c.req.param('slug'), userId: user.id, password });
+  const roomSlug = c.req.param('slug');
+  const result = await assertRoomJoinAllowed({ roomSlug, userId: user.id, password });
   if (!result.ok) {
-    if (result.error === 'approval_required') return c.json(result, 202);
+    if (result.error === 'approval_required') {
+      if (result.requestCreated && result.requestId) {
+        void notifyRoomManagers(roomSlug, 'room:join-requested', {
+          roomId: roomSlug,
+          requestId: result.requestId,
+          requester: {
+            userId: user.id,
+            displayName: user.displayName,
+            avatarUrl: user.avatarUrl ?? null,
+          },
+        });
+      }
+      return c.json(result, 202);
+    }
     if (result.error === 'join_denied') return c.json(result, 403);
     const status = result.error === 'not_found' ? 404 : result.error === 'room_closed' ? 410 : 403;
     throw new APIError(result.error, status);

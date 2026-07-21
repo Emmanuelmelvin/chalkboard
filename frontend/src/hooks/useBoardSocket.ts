@@ -22,6 +22,44 @@ type RoomUser = {
   role: RoomMember['role'];
 };
 
+const CLIENT_SESSION_STORAGE_KEY = 'chalkboard-client-session-id';
+let fallbackClientSessionId: string | undefined;
+
+function createClientSessionId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * A sessionStorage id survives a reload in the same browser tab while staying
+ * different in another tab/device. The server uses it to recognize a reload
+ * and hand the room over to the new socket instead of reporting a duplicate.
+ */
+function getClientSessionId() {
+  if (fallbackClientSessionId) return fallbackClientSessionId;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = window.sessionStorage.getItem(CLIENT_SESSION_STORAGE_KEY);
+      if (stored) {
+        fallbackClientSessionId = stored;
+        return stored;
+      }
+
+      const created = createClientSessionId();
+      window.sessionStorage.setItem(CLIENT_SESSION_STORAGE_KEY, created);
+      fallbackClientSessionId = created;
+      return created;
+    } catch {
+      // Some privacy modes block sessionStorage. Keep a stable id for the
+      // lifetime of this page so normal Socket.IO reconnects still work.
+    }
+  }
+
+  fallbackClientSessionId = createClientSessionId();
+  return fallbackClientSessionId;
+}
+
 /**
  * Hook to manage all WebSocket (socket.io) event listeners for the chalkboard.
  * Handles room join, stroke sync, cursor sync, links sync, and collaborator tracking.
@@ -50,6 +88,7 @@ export function useBoardSocket(
   const [onlineCount, setOnlineCount] = useState(0);
   const [userCursorColor] = useState<string>(() => getRandomColor());
   const previousUsersRef = useRef<Map<string, string> | null>(null);
+  const [clientSessionId] = useState(() => getClientSessionId());
 
   useEffect(() => {
     // Register listeners before joining so a fast room-history response cannot
@@ -72,11 +111,6 @@ export function useBoardSocket(
 
       const previousUsers = previousUsersRef.current;
       if (previousUsers) {
-        activeUsers.forEach((name, activeUserId) => {
-          if (!previousUsers.has(activeUserId)) {
-            useLoggerStore.getState().notify(`${name} joined the room`, 'success');
-          }
-        });
         previousUsers.forEach((name, previousUserId) => {
           if (!activeUsers.has(previousUserId)) {
             useLoggerStore.getState().notify(`${name} left the room`, 'info');
@@ -105,6 +139,13 @@ export function useBoardSocket(
         if (currentUser) setCurrentRole(currentUser.role);
         return next;
       });
+    };
+
+    const handleRoomUserJoined = (payload: { roomId?: string; userId?: string; displayName?: string }) => {
+      if (payload.roomId && payload.roomId !== roomId) return;
+      if (!payload.userId || payload.userId === userId) return;
+      const displayName = payload.displayName?.trim() || 'A user';
+      useLoggerStore.getState().notify(`${displayName} joined the room`, 'success');
     };
 
     const handlePresenceCount = ({ count }: { roomId?: string; count?: number }) => {
@@ -214,7 +255,12 @@ export function useBoardSocket(
     };
 
     const joinRoom = () => {
-      socket.emit('join-room', { roomId, color: userCursorColor, password }, (response: { ok?: boolean; error?: string; role?: RoomMember['role'] }) => {
+      socket.emit('join-room', {
+        roomId,
+        color: userCursorColor,
+        password,
+        clientSessionId,
+      }, (response: { ok?: boolean; error?: string; role?: RoomMember['role'] }) => {
         if (!response?.ok) {
           const errorMessage = response?.error === 'already_joined'
             ? 'You have already joined this room on another device.'
@@ -234,6 +280,7 @@ export function useBoardSocket(
     socket.on('room-history', handleRoomHistory);
     socket.on('room-state', handleRoomState);
     socket.on('update-users', handleUsersUpdate);
+    socket.on('room:user-joined', handleRoomUserJoined);
     socket.on('presence:count', handlePresenceCount);
     socket.on('stroke-start', handleStrokeStart);
     socket.on('stroke-draw', handleStrokeDraw);
@@ -262,6 +309,7 @@ export function useBoardSocket(
       socket.off('room-history', handleRoomHistory);
       socket.off('room-state', handleRoomState);
       socket.off('update-users', handleUsersUpdate);
+      socket.off('room:user-joined', handleRoomUserJoined);
       socket.off('presence:count', handlePresenceCount);
       socket.off('stroke-start', handleStrokeStart);
       socket.off('stroke-draw', handleStrokeDraw);
@@ -275,7 +323,7 @@ export function useBoardSocket(
       setOnlineCount(0);
       previousUsersRef.current = null;
     };
-  }, [socket, roomId, userName, userId, password, userCursorColor, setStrokes, setRedoStack, setLinks]);
+  }, [socket, roomId, userName, userId, password, userCursorColor, clientSessionId, setStrokes, setRedoStack, setLinks]);
 
   return { collaborators, userCursorColor, currentRole, onlineCount };
 }

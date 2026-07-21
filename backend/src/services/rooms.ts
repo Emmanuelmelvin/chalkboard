@@ -29,6 +29,8 @@ export type RoomJoinResult =
       error: RoomJoinError;
       roomId?: string;
       requestStatus?: JoinRequestStatus;
+      requestCreated?: boolean;
+      requestId?: string;
     };
 
 export type RoomAuthorizationResult =
@@ -402,9 +404,19 @@ async function joinRoomInTransaction(
       return { ok: false, error: 'join_denied', roomId: room.id, requestStatus: 'denied' };
     }
 
-    await tx.insert(joinRequests).values({ roomId: room.id, userId, status: 'pending' });
+    const [createdRequest] = await tx
+      .insert(joinRequests)
+      .values({ roomId: room.id, userId, status: 'pending' })
+      .returning({ id: joinRequests.id });
     logger.info('Room join request created', { roomSlug, roomId: room.id, userId });
-    return { ok: false, error: 'approval_required', roomId: room.id, requestStatus: 'pending' };
+    return {
+      ok: false,
+      error: 'approval_required',
+      roomId: room.id,
+      requestStatus: 'pending',
+      requestCreated: true,
+      requestId: createdRequest?.id,
+    };
   }
 
   if (await roomIsFull(tx, room)) {

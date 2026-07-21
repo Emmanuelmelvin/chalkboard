@@ -8,6 +8,7 @@ import { z } from 'zod';
 export const SOCKET_LIMITS = {
   maxPacketBytes: 1024 * 1024,
   maxRoomIdLength: 128,
+  maxClientSessionIdLength: 128,
   maxSocketIdLength: 256,
   maxColorLength: 64,
   maxStrokeIdLength: 256,
@@ -138,6 +139,14 @@ export const joinRoomSchema = z.object({
   roomId: roomIdSchema,
   color: z.string().min(1).max(SOCKET_LIMITS.maxColorLength).optional(),
   password: z.string().max(256).optional(),
+  // Stable for a browser tab across reloads, but different in another tab or
+  // on another device. This lets the server distinguish a reload from a
+  // second active room session for the same account.
+  clientSessionId: z.string()
+    .min(1)
+    .max(SOCKET_LIMITS.maxClientSessionIdLength)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional(),
 });
 
 export const strokeStartSchema = z.object({

@@ -70,6 +70,15 @@ import {
 } from '@/components/toolbox';
 
 const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
+type RoomAccessMode = 'open' | 'approval_required' | 'password_protected';
+
+type PendingJoinRequest = {
+  id: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  avatarUrl?: string | null;
+};
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
@@ -159,9 +168,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
   const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
+  const [roomAccessMode, setRoomAccessMode] = useState<RoomAccessMode>('open');
   const [roomTitle, setRoomTitle] = useState(() => `Room ${roomId}`);
   const [roomDescription, setRoomDescription] = useState('');
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
+  const [joinRequests, setJoinRequests] = useState<PendingJoinRequest[]>([]);
+  const [joinRequestsLoading, setJoinRequestsLoading] = useState(false);
+  const [joinRequestAction, setJoinRequestAction] = useState<string | null>(null);
+  const [joinRequestError, setJoinRequestError] = useState('');
   const [roomDetailsOpen, setRoomDetailsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [roleUpdateError, setRoleUpdateError] = useState('');
@@ -227,6 +241,50 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const effectiveRole = roomMembers.find((member) => member.userId === userId)?.role ?? currentRole;
   const canEdit = effectiveRole !== 'viewer';
   const canManageMembers = effectiveRole === 'owner';
+
+  const loadJoinRequests = useCallback(async () => {
+    if (!canManageMembers) {
+      setJoinRequests([]);
+      return;
+    }
+
+    setJoinRequestsLoading(true);
+    setJoinRequestError('');
+    try {
+      const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/join-requests`, { credentials: 'include' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'We could not load join requests.');
+      setJoinRequests(Array.isArray(payload.requests) ? payload.requests : []);
+    } catch (error) {
+      setJoinRequestError(error instanceof Error ? error.message : 'We could not load join requests.');
+    } finally {
+      setJoinRequestsLoading(false);
+    }
+  }, [canManageMembers, roomId]);
+
+  const resolveJoinRequest = useCallback(async (request: PendingJoinRequest, decision: 'approve' | 'deny') => {
+    const actionKey = `${decision}:${request.userId}`;
+    setJoinRequestAction(actionKey);
+    setJoinRequestError('');
+    try {
+      const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/join-requests/${encodeURIComponent(request.userId)}/${decision}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `We could not ${decision} this request.`);
+      setJoinRequests((current) => current.filter((item) => item.userId !== request.userId));
+      useLoggerStore.getState().notify(
+        `${request.displayName} was ${decision === 'approve' ? 'approved' : 'declined'}.`,
+        decision === 'approve' ? 'success' : 'info',
+      );
+    } catch (error) {
+      setJoinRequestError(error instanceof Error ? error.message : `We could not ${decision} this request.`);
+    } finally {
+      setJoinRequestAction(null);
+    }
+  }, [roomId]);
+
   const displayedRoomMembers = useMemo(() => {
     const members = new Map<string, RoomMember>(roomMembers.map((member) => [member.userId, member]));
     if (!members.has(userId)) {
@@ -274,6 +332,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         const payload = await response.json().catch(() => ({}));
         if (!cancelled) {
           if (isRoomTheme(payload.room?.theme)) setRoomTheme(payload.room.theme);
+          if (payload.room?.accessMode === 'open' || payload.room?.accessMode === 'approval_required' || payload.room?.accessMode === 'password_protected') {
+            setRoomAccessMode(payload.room.accessMode);
+          }
           if (typeof payload.room?.title === 'string' && payload.room.title) setRoomTitle(payload.room.title);
           if (typeof payload.room?.description === 'string') setRoomDescription(payload.room.description);
           if (Array.isArray(payload.room?.members)) setRoomMembers(payload.room.members);
@@ -303,15 +364,25 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const handleJoinRequest = (payload: { roomId?: string; requester?: { displayName?: string } }) => {
       if (payload.roomId && payload.roomId !== roomId) return;
       const requesterName = payload.requester?.displayName?.trim() || 'A user';
+      if (canManageMembers) {
+        setRoomAccessMode('approval_required');
+        setRoomDetailsOpen(true);
+      }
       useLoggerStore.getState().notify(
-        `${requesterName} requested to join this room. Open “Review join requests” in the dashboard to add them.`,
+        `${requesterName} requested to join this room. Approve or decline them from the room dropdown.`,
         'info',
         8000,
       );
     };
     socket.on('room:join-requested', handleJoinRequest);
     return () => { socket.off('room:join-requested', handleJoinRequest); };
-  }, [socket, roomId]);
+  }, [socket, roomId, canManageMembers]);
+
+  useEffect(() => {
+    if (!roomDetailsOpen || !canManageMembers || roomAccessMode !== 'approval_required') return;
+    const requestLoad = window.setTimeout(() => { void loadJoinRequests(); }, 0);
+    return () => window.clearTimeout(requestLoad);
+  }, [roomDetailsOpen, canManageMembers, roomAccessMode, loadJoinRequests]);
 
   const leaveClosedRoom = useCallback(() => {
     if (roomClosureHandledRef.current) return;
@@ -700,6 +771,55 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                     <span className={canEdit ? 'room-role-pill room-role-editor' : 'room-role-pill'}>{roleLabel(effectiveRole)}</span>
                   </div>
                   {roomDescription && <p className="room-details-description">{roomDescription}</p>}
+                  {canManageMembers && roomAccessMode === 'approval_required' && (
+                    <section className="room-join-requests" aria-labelledby="room-join-requests-heading">
+                      <div className="room-details-section-title" id="room-join-requests-heading">
+                        Join requests <span>{joinRequests.length}</span>
+                      </div>
+                      {joinRequestError && <p className="room-details-error" role="alert">{joinRequestError}</p>}
+                      {joinRequestsLoading ? (
+                        <p className="room-join-requests-empty">Loading requests...</p>
+                      ) : joinRequests.length === 0 ? (
+                        <p className="room-join-requests-empty">No pending requests.</p>
+                      ) : (
+                        <div className="room-details-members">
+                          {joinRequests.map((request) => {
+                            const actionPending = Boolean(joinRequestAction);
+                            return (
+                              <div key={request.id} className="room-detail-member room-join-request-row">
+                                <UserAvatar name={request.displayName} avatarUrl={request.avatarUrl} size="sm" className="room-member-avatar" />
+                                <div className="room-member-name">
+                                  <strong>{request.displayName}</strong>
+                                  <span>{request.email || 'Waiting for approval'}</span>
+                                </div>
+                                <div className="room-join-request-controls">
+                                  <span className="room-member-role">Pending</span>
+                                  <button
+                                    type="button"
+                                    className="room-join-request-button room-join-request-approve"
+                                    onClick={() => { void resolveJoinRequest(request, 'approve'); }}
+                                    disabled={actionPending}
+                                    aria-label={`Approve ${request.displayName}`}
+                                  >
+                                    {joinRequestAction === `approve:${request.userId}` ? '...' : 'Approve'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="room-join-request-button room-join-request-deny"
+                                    onClick={() => { void resolveJoinRequest(request, 'deny'); }}
+                                    disabled={actionPending}
+                                    aria-label={`Decline ${request.displayName}`}
+                                  >
+                                    {joinRequestAction === `deny:${request.userId}` ? '...' : 'Decline'}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
+                  )}
                   <div className="room-details-section-title">Members <span>{displayedRoomMembers.length} · {onlineCount} online</span></div>
                   <div className="room-details-members">
                     {displayedRoomMembers.map((member) => {

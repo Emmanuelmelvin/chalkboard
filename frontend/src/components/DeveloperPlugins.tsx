@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from '
 import { ArrowLeft, CheckCircle2, Code2, FileJson, GitBranch, LoaderCircle, Plus, Send, Sparkles } from 'lucide-react';
 import { installedPlugins } from '@/plugins/installedPlugins';
 import { createPlugin, createPluginVersion, getManagedPluginLogo, listMyPlugins, listPluginCatalogue, submitPlugin, type ManagedPlugin, type ManagedPluginPlan } from '@/plugins/management';
+import { useLoggerStore } from '@/stores/loggerStore';
 
 const DEFAULT_MANIFEST = (pluginId: string, name: string, version: string) => JSON.stringify({
   id: pluginId || 'your.plugin',
@@ -97,8 +98,6 @@ export default function DeveloperPlugins() {
   const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({ pluginId: '', name: '', description: '', logoDataUrl: '', plan: 'free' as ManagedPluginPlan, version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '' });
   const [versionForm, setVersionForm] = useState({ version: '0.2.0', manifest: '', changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', hasBundleArchive: false });
@@ -118,7 +117,7 @@ export default function DeveloperPlugins() {
       setSelectedPluginId(nextPlugin?.pluginId ?? null);
       if (nextPlugin) setVersionForm({ version: '0.2.0', manifest: JSON.stringify(nextPlugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: nextPlugin.versions[0]?.entryUrl ?? '', entryCode: nextPlugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: nextPlugin.versions[0]?.hasBundleArchive || nextPlugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(nextPlugin.versions[0]?.hasBundleArchive || nextPlugin.versions[0]?.bundleArchiveDataUrl) });
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'We could not load your plugins.');
+      useLoggerStore.getState().notify(loadError instanceof Error ? loadError.message : 'We could not load your plugins.', 'error', 5000);
     } finally {
       setLoading(false);
     }
@@ -138,8 +137,6 @@ export default function DeveloperPlugins() {
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
-    setError('');
-    setNotice('');
     try {
       const payload = await createPlugin({ pluginId: createForm.pluginId, name: createForm.name, description: createForm.description, logoDataUrl: createForm.logoDataUrl, plan: createForm.plan, version: createForm.version, manifest: parseManifest(createForm.manifest), changelog: createForm.changelog, entryUrl: createForm.entryUrl, entryCode: createForm.entryCode, bundleArchiveDataUrl: createForm.bundleArchiveDataUrl });
       setPlugins((current) => [payload.plugin, ...current]);
@@ -147,9 +144,9 @@ export default function DeveloperPlugins() {
       setVersionForm({ version: '0.2.0', manifest: JSON.stringify(payload.plugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: payload.plugin.versions[0]?.entryUrl ?? '', entryCode: payload.plugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: payload.plugin.versions[0]?.hasBundleArchive || payload.plugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(payload.plugin.versions[0]?.hasBundleArchive || payload.plugin.versions[0]?.bundleArchiveDataUrl) });
       setCreateOpen(false);
       setCreateForm({ pluginId: '', name: '', description: '', logoDataUrl: '', plan: 'free', version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '' });
-      setNotice('Draft created. Add a version and submit it when it is ready for review.');
+      useLoggerStore.getState().notify('Draft created. Add a version and submit it when it is ready for review.', 'success');
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'We could not create the plugin.');
+      useLoggerStore.getState().notify(createError instanceof Error ? createError.message : 'We could not create the plugin.', 'error', 5000);
     } finally {
       setSaving(false);
     }
@@ -159,16 +156,14 @@ export default function DeveloperPlugins() {
     event.preventDefault();
     if (!selectedPlugin) return;
     setSaving(true);
-    setError('');
-    setNotice('');
     try {
       const payload = await createPluginVersion(selectedPlugin.pluginId, { ...versionForm, manifest: parseManifest(versionForm.manifest) });
       updateSelectedPlugin(payload.plugin);
       const latestVersion = payload.plugin.versions[0];
       setVersionForm((current) => ({ ...current, version: '0.3.0', changelog: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: latestVersion?.hasBundleArchive || latestVersion?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(latestVersion?.hasBundleArchive || latestVersion?.bundleArchiveDataUrl) }));
-      setNotice(`Version ${versionForm.version} added.`);
+      useLoggerStore.getState().notify(`Version ${versionForm.version} added.`, 'success');
     } catch (versionError) {
-      setError(versionError instanceof Error ? versionError.message : 'We could not add that version.');
+      useLoggerStore.getState().notify(versionError instanceof Error ? versionError.message : 'We could not add that version.', 'error', 5000);
     } finally {
       setSaving(false);
     }
@@ -177,14 +172,12 @@ export default function DeveloperPlugins() {
   const handleSubmit = async () => {
     if (!selectedPlugin) return;
     setSaving(true);
-    setError('');
-    setNotice('');
     try {
       const payload = await submitPlugin(selectedPlugin.pluginId);
       updateSelectedPlugin(payload.plugin);
-      setNotice('Plugin submitted for admin review.');
+      useLoggerStore.getState().notify('Plugin submitted for admin review.', 'success');
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'We could not submit the plugin.');
+      useLoggerStore.getState().notify(submitError instanceof Error ? submitError.message : 'We could not submit the plugin.', 'error', 5000);
     } finally {
       setSaving(false);
     }
@@ -196,15 +189,14 @@ export default function DeveloperPlugins() {
 
   const useDemoPlugin = () => {
     setCreateForm((current) => ({ ...current, ...DEMO_PLUGIN, logoDataUrl: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '' }));
-    setError('');
-    setNotice('Starter example loaded. Add a logo if you want, then create the draft.');
+    useLoggerStore.getState().notify('Starter example loaded. Add a logo if you want, then create the draft.', 'info');
   };
 
   const handleManifestFileChange = (event: ChangeEvent<HTMLInputElement>, target: 'create' | 'version') => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (file.size > 120_000 || (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json')) {
-      setError('Manifest files must be JSON and smaller than 120 KB.');
+      useLoggerStore.getState().notify('Manifest files must be JSON and smaller than 120 KB.', 'error');
       return;
     }
     const reader = new FileReader();
@@ -214,12 +206,11 @@ export default function DeveloperPlugins() {
         const parsed = parseManifest(reader.result);
         if (target === 'create') setCreateForm((current) => ({ ...current, manifest: JSON.stringify(parsed, null, 2), manifestFileName: file.name }));
         else setVersionForm((current) => ({ ...current, manifest: JSON.stringify(parsed, null, 2) }));
-        setError('');
       } catch (manifestError) {
-        setError(manifestError instanceof Error ? manifestError.message : 'That manifest is not valid JSON.');
+        useLoggerStore.getState().notify(manifestError instanceof Error ? manifestError.message : 'That manifest is not valid JSON.', 'error');
       }
     };
-    reader.onerror = () => setError('We could not read that manifest file.');
+    reader.onerror = () => useLoggerStore.getState().notify('We could not read that manifest file.', 'error');
     reader.readAsText(file);
   };
 
@@ -227,7 +218,7 @@ export default function DeveloperPlugins() {
     const file = event.target.files?.[0];
     if (!file) return;
     if (file.size > 480_000 || (!file.name.toLowerCase().endsWith('.js') && !file.name.toLowerCase().endsWith('.mjs') && !file.type.includes('javascript'))) {
-      setError('Plugin bundles must be JavaScript files smaller than 480 KB.');
+      useLoggerStore.getState().notify('Plugin bundles must be JavaScript files smaller than 480 KB.', 'error');
       return;
     }
     const reader = new FileReader();
@@ -235,9 +226,8 @@ export default function DeveloperPlugins() {
       if (typeof reader.result !== 'string') return;
       if (target === 'create') setCreateForm((current) => ({ ...current, entryCode: reader.result as string, bundleFileName: file.name }));
       else setVersionForm((current) => ({ ...current, entryCode: reader.result as string, bundleFileName: file.name }));
-      setError('');
     };
-    reader.onerror = () => setError('We could not read that plugin bundle.');
+    reader.onerror = () => useLoggerStore.getState().notify('We could not read that plugin bundle.', 'error');
     reader.readAsText(file);
   };
 
@@ -245,7 +235,7 @@ export default function DeveloperPlugins() {
     const file = event.target.files?.[0];
     if (!file) return;
     if (file.size > 2_000_000 || !file.name.toLowerCase().endsWith('.zip')) {
-      setError('Plugin packages must be ZIP files smaller than 2 MB.');
+      useLoggerStore.getState().notify('Plugin packages must be ZIP files smaller than 2 MB.', 'error');
       return;
     }
     const reader = new FileReader();
@@ -253,9 +243,8 @@ export default function DeveloperPlugins() {
       if (typeof reader.result !== 'string') return;
       if (target === 'create') setCreateForm((current) => ({ ...current, bundleArchiveDataUrl: reader.result as string, archiveFileName: file.name }));
       else setVersionForm((current) => ({ ...current, bundleArchiveDataUrl: reader.result as string, archiveFileName: file.name, hasBundleArchive: true }));
-      setError('');
     };
-    reader.onerror = () => setError('We could not read that ZIP package.');
+    reader.onerror = () => useLoggerStore.getState().notify('We could not read that ZIP package.', 'error');
     reader.readAsDataURL(file);
   };
 
@@ -263,21 +252,20 @@ export default function DeveloperPlugins() {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(file.type)) {
-      setError('Choose a PNG, JPEG, WebP, or SVG logo.');
+      useLoggerStore.getState().notify('Choose a PNG, JPEG, WebP, or SVG logo.', 'error');
       return;
     }
     if (file.size > 240_000) {
-      setError('Logo files must be smaller than 240 KB.');
+      useLoggerStore.getState().notify('Logo files must be smaller than 240 KB.', 'error');
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
         setCreateForm((current) => ({ ...current, logoDataUrl: reader.result as string }));
-        setError('');
       }
     };
-    reader.onerror = () => setError('We could not read that logo file.');
+    reader.onerror = () => useLoggerStore.getState().notify('We could not read that logo file.', 'error');
     reader.readAsDataURL(file);
   };
 
@@ -331,7 +319,6 @@ export default function DeveloperPlugins() {
       <section className="dashboard-developer-summary" aria-label="Plugin workspace summary"><article><span>My plugins</span><strong>{plugins.length.toString().padStart(2, '0')}</strong><small>owned by you</small></article><article><span>In review</span><strong>{plugins.filter((plugin) => plugin.status === 'in_review').length.toString().padStart(2, '0')}</strong><small>waiting for a decision</small></article><article><span>Runtime plugins</span><strong>{installedPlugins.length.toString().padStart(2, '0')}</strong><small>bundled in Chalkboard</small></article></section>
       {createOpen ? renderCreateForm() : renderWorkspace()}
       {!createOpen && <section className="dashboard-developer-catalogue"><div className="dashboard-developer-catalogue-heading"><div><p className="dashboard-panel-kicker">Chalkboard catalogue</p><h3>Published plugins</h3></div><span>Available after admin approval</span></div>{catalogue.length === 0 ? <p className="dashboard-developer-catalogue-empty">No published community plugins yet. Your approved plugin will appear here.</p> : <div className="dashboard-developer-catalogue-grid">{catalogue.map((plugin) => { const logoUrl = getManagedPluginLogo(plugin); return <article key={plugin.pluginId}>{logoUrl ? <img src={logoUrl} alt="" /> : <span className="dashboard-developer-catalogue-mark"><Sparkles size={17} /></span>}<div><strong>{plugin.name}</strong><small>{plugin.pluginId} · v{plugin.currentVersion || plugin.versions[0]?.version || '—'}</small></div><em className={`dashboard-plugin-status is-${plugin.status}`}>{plugin.plan === 'pro' ? 'Pro' : 'Free'}</em></article>; })}</div>}</section>}
-      {(error || notice) && <p className={`dashboard-error dashboard-developer-feedback${notice && !error ? ' is-success' : ''}`} role="status">{error || notice}</p>}
     </div>
   );
 }

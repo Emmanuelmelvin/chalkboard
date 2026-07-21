@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Check, Clipboard, Code2, ExternalLink, FileCheck2, FlaskConical, KeyRound, LoaderCircle, LogOut, ShieldCheck, Sparkles, UsersRound, WalletCards, XCircle } from 'lucide-react';
 import { addAdmin, beginAdminTwoFactorSetup, getAdminSession, listAdminPlugins, listAdmins, logoutAdminTwoFactor, publishAdminPlugin, removeAdmin, removeAdminPluginFromRegistry, reviewAdminPlugin, verifyAdminTwoFactor, type AdminPlugin, type AdminSession, type AdminUser } from '@/admin/api';
 import AdminPluginSandbox from '@/admin/AdminPluginSandbox';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import './Admin.css';
 
 type AdminView = 'plugins' | 'billing' | 'admins';
@@ -58,6 +59,7 @@ export default function AdminDashboard() {
   const [newAdminRole, setNewAdminRole] = useState<'admin' | 'super_admin'>('admin');
   const [testResult, setTestResult] = useState<{ pluginId: string; passed: boolean; message: string } | null>(null);
   const [sandboxOpen, setSandboxOpen] = useState(false);
+  const [removeRegistryConfirmOpen, setRemoveRegistryConfirmOpen] = useState(false);
 
   const selectedPlugin = useMemo(() => plugins.find((plugin) => plugin.pluginId === selectedPluginId) ?? null, [plugins, selectedPluginId]);
 
@@ -197,7 +199,11 @@ export default function AdminDashboard() {
 
   const handleRemoveFromRegistry = async () => {
     if (!selectedPlugin) return;
-    if (!window.confirm(`Remove ${selectedPlugin.name} from the published plugin registry?`)) return;
+    if (!removeRegistryConfirmOpen) {
+      setRemoveRegistryConfirmOpen(true);
+      return;
+    }
+    setRemoveRegistryConfirmOpen(false);
 
     setBusy(true);
     setError('');
@@ -287,6 +293,16 @@ export default function AdminDashboard() {
       </main>
       {view === 'plugins' && selectedPlugin && <section className={`admin-quick-test${testResult?.pluginId === selectedPlugin.pluginId && testResult.passed ? ' is-passed' : ''}`}><div><p className="admin-eyebrow">Test lab</p><strong>{testResult?.pluginId === selectedPlugin.pluginId ? testResult.message : 'Run the smoke test before approval.'}</strong></div><div className="admin-quick-test-actions"><button className="admin-secondary-button" type="button" disabled={busy} onClick={runPluginTest}><FileCheck2 size={14} /> Run test</button><button className="admin-primary-button" type="button" disabled={busy} onClick={() => setSandboxOpen(true)}><FlaskConical size={14} /> Open sandbox</button></div></section>}
       {sandboxOpen && selectedPlugin && <AdminPluginSandbox key={`${selectedPlugin.pluginId}-${selectedPlugin.versions[0]?.version || 'draft'}`} plugin={selectedPlugin} onClose={() => setSandboxOpen(false)} />}
+      {removeRegistryConfirmOpen && selectedPlugin && <ConfirmModal
+        title="Remove plugin from registry?"
+        message={`Remove ${selectedPlugin.name} from the published plugin registry? Its submission history will remain available to administrators.`}
+        confirmLabel="Remove from registry"
+        confirmDisabled={busy}
+        danger
+        variant="dashboard"
+        onCancel={() => setRemoveRegistryConfirmOpen(false)}
+        onConfirm={() => { void handleRemoveFromRegistry(); }}
+      />}
       {recoveryCodes.length > 0 && <div className="admin-recovery-overlay"><section className="admin-recovery-card"><div className="admin-auth-icon"><KeyRound size={22} /></div><p className="admin-eyebrow">Save these once</p><h2>Recovery codes</h2><p>Store these somewhere secure. Each code can be used once if you lose access to your authenticator.</p><div className="admin-recovery-grid">{recoveryCodes.map((recoveryCode) => <code key={recoveryCode}>{recoveryCode}</code>)}</div><button className="admin-primary-button" type="button" onClick={() => setRecoveryCodes([])}>I saved my codes</button></section></div>}
     </div>
   );

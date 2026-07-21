@@ -388,7 +388,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   };
 
   const resetPanZoom = () => {
-    setZoom(1);
+    setZoom(0.9);
     setPanOffset({ x: 0, y: 0 });
   };
 

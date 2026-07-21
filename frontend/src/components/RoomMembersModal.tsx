@@ -72,7 +72,10 @@ export default function RoomMembersModal({
   }, [canManageRequests, roomSlug]);
 
   useEffect(() => {
-    void loadRequests();
+    const requestLoad = window.setTimeout(() => {
+      void loadRequests();
+    }, 0);
+    return () => window.clearTimeout(requestLoad);
   }, [loadRequests]);
 
   const resolveRequest = async (request: JoinRequest, decision: 'approve' | 'deny') => {

@@ -345,7 +345,7 @@ export function useCanvasInteraction(
     }
 
     startDrawing(e);
-  }, [canvasRef, canEdit, spacePressed, activeTool, panOffset, screenToCanvas, trimState, zoom, selectionRotation, transformBox, strokes, selectedStrokeIds, setSelectedStrokeIds, setTransformBox, setSelectionRotation, setSelectionMarquee, startDrawing]);
+  }, [canvasRef, canEdit, spacePressed, activeTool, panOffset, screenToCanvas, trimState, zoom, selectionRotation, transformBox, strokes, selectedStrokeIds, setSelectedStrokeIds, setTransformBox, setSelectionRotation, startDrawing]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (isPanning) {
@@ -520,7 +520,7 @@ export function useCanvasInteraction(
     }
 
     draw(e);
-  }, [isPanning, isDrawing, screenToCanvas, activeTool, transformMode, selectionRotation, trimState, transformBox, setStrokes, setSelectionRotation, setTransformBox, setSelectionMarquee, selectionMarquee, setPanOffset, setTrimState, hoveredHandle, zoom, draw]);
+  }, [isPanning, isDrawing, screenToCanvas, activeTool, transformMode, selectionRotation, trimState, transformBox, setStrokes, setSelectionRotation, setTransformBox, setSelectionMarquee, setPanOffset, setTrimState, hoveredHandle, zoom, draw]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;

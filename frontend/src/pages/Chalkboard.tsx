@@ -299,12 +299,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     return () => { socket.off('room-members-updated', handleMembersUpdated); };
   }, [socket]);
 
-  const leaveClosedRoom = () => {
+  const leaveClosedRoom = useCallback(() => {
     if (roomClosureHandledRef.current) return;
     roomClosureHandledRef.current = true;
     useLoggerStore.getState().notify('The owner closed this room.', 'info', 5000);
     onLeaveRoom();
-  };
+  }, [onLeaveRoom]);
 
   useEffect(() => {
     roomClosureHandledRef.current = false;
@@ -314,7 +314,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     };
     socket.on('room:closed', handleRoomClosed);
     return () => { socket.off('room:closed', handleRoomClosed); };
-  }, [socket, roomId, onLeaveRoom]);
+  }, [socket, roomId, leaveClosedRoom]);
 
   useEffect(() => {
     if (!roomDetailsOpen) return;
@@ -383,7 +383,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         setSelectionRotation(0);
       }
     }
-  }, [activeTool]);
+  }, [activeTool, trimState.active, selectedStrokeIds.length, handleApplyTrim, setSelectedStrokeIds, setTransformBox, setSelectionRotation]);
 
   // Navigate to link from URL on initial load
   useEffect(() => {

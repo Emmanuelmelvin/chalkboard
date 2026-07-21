@@ -139,17 +139,13 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [signingOut, setSigningOut] = useState(false);
   const initialDeveloperMode = readDeveloperMode(profile.id);
   const [developerMode, setDeveloperMode] = useState(initialDeveloperMode);
-  const [activeTab, setActiveTab] = useState<DashboardTab>(() => getTab(location, initialDeveloperMode));
+  const activeTab = getTab(location, developerMode);
   const firstName = profile.displayName.trim().split(/\s+/)[0] || 'friend';
   const openRooms = useMemo(() => rooms.filter((room) => room.status === 'open'), [rooms]);
   const visibleTabItems = useMemo(
     () => tabItems.filter(({ id }) => id !== 'developer' || developerMode),
     [developerMode],
   );
-
-  useEffect(() => {
-    setActiveTab(getTab(location, developerMode));
-  }, [developerMode, location]);
 
   useEffect(() => {
     if (!developerMode && getTab(location) === 'developer') {
@@ -195,7 +191,6 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const selectTab = (tab: DashboardTab) => {
     setError('');
     setMobileMenuOpen(false);
-    setActiveTab(tab);
     setLocation(`/dashboard?tab=${tab}`);
   };
 
@@ -208,7 +203,6 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       // Developer mode still works for this session when storage is unavailable.
     }
     if (!nextValue && getTab(location) === 'developer') {
-      setActiveTab('overview');
       setLocation('/dashboard?tab=overview');
     }
   };
@@ -272,7 +266,10 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   };
 
   useEffect(() => {
-    void loadRooms();
+    const roomLoad = window.setTimeout(() => {
+      void loadRooms();
+    }, 0);
+    return () => window.clearTimeout(roomLoad);
   }, [profile.id]);
 
   const handleCreateRoom = async (event: React.FormEvent) => {

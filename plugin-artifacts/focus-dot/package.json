@@ -1,0 +1,13 @@
+{
+  "name": "demo.focus-dot",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A small external Chalkboard plugin used to simulate upload, review, and catalogue publishing.",
+  "main": "index.js",
+  "files": [
+    "manifest.json",
+    "index.js",
+    "logo.svg",
+    "README.md"
+  ]
+}

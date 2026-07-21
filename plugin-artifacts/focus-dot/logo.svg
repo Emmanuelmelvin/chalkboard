@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Focus Dot</title>
+  <desc id="desc">A gold dot inside a chalkboard frame.</desc>
+  <rect width="128" height="128" rx="24" fill="#171713"/>
+  <rect x="14" y="14" width="100" height="100" rx="18" fill="none" stroke="#c7a258" stroke-width="5"/>
+  <circle cx="64" cy="64" r="22" fill="#e3bd69"/>
+  <circle cx="64" cy="64" r="9" fill="#fff8e8"/>
+</svg>

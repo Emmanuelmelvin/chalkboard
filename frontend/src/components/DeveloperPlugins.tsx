@@ -19,7 +19,7 @@ const DEMO_BUNDLE = `(() => {
 
   window.addEventListener('message', (event) => {
     if (event.data?.type === 'chalkboard:execute' && event.data.pluginId === pluginId && event.data.command === 'focusDot.add') {
-      window.FocusDotPlugin?.add();
+      window.FocusDotPlugin?.add(event.data.payload);
       return;
     }
     if (event.data?.type !== 'chalkboard:init' || event.data.pluginId !== pluginId) return;
@@ -31,8 +31,21 @@ const DEMO_BUNDLE = `(() => {
   });
 
   window.FocusDotPlugin = {
-    add() {
-      send({ type: 'chalkboard:command', command: 'focusDot.add', payload: { source: 'demo' } });
+    add(executionPayload) {
+      const center = executionPayload?.context?.viewportCenter;
+      if (!center || typeof center.x !== 'number' || typeof center.y !== 'number') return;
+      const points = Array.from({ length: 20 }, (_, index) => {
+        const angle = (Math.PI * 2 * index) / 20;
+        return { x: center.x + Math.cos(angle) * 10, y: center.y + Math.sin(angle) * 10 };
+      });
+      send({
+        type: 'chalkboard:command',
+        command: 'board.insertStrokes',
+        payload: {
+          strokes: [{ tool: 'chalk', color: '#f6c85f', size: 3, intensity: 1, pathType: 'linear', closed: true, fillColor: '#f6c85f', points }],
+          options: { select: true, closeInsertPanel: true },
+        },
+      });
     },
   };
 })();`;

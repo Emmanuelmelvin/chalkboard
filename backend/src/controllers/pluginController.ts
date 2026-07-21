@@ -1,14 +1,16 @@
-import { createPluginForUser, createPluginVersionForUser, getPluginDetail, listPluginsForAdmin, listPluginsForAuthor, listPublishedPlugins, publishPlugin, reviewPlugin, submitPluginForReview } from '@/services/plugins';
+import { createPluginForUser, createPluginVersionForUser, getPluginDetail, listPluginsForAdmin, listPluginsForAuthor, listPublishedPlugins, publishPlugin, removePluginFromRegistry, reviewPlugin, submitPluginForReview } from '@/services/plugins';
 import { createPluginSchema, createPluginVersionSchema, pluginReviewSchema } from '@/validators/pluginValidators';
 import { APIError } from '@/utils/error';
+import type { Context } from 'hono';
+import type { User } from '@prisma/client';
 
-function requireUser(c: any) {
+function requireUser(c: Context): User {
   const user = c.get('user');
   if (!user) throw new APIError('unauthorized', 401);
   return user;
 }
 
-export async function listMyPluginsHandler(c: any) {
+export async function listMyPluginsHandler(c: Context) {
   const user = requireUser(c);
   return c.json({ plugins: await listPluginsForAuthor(user.id) });
 }
@@ -64,4 +66,9 @@ export async function reviewAdminPluginHandler(c: any) {
 
 export async function publishAdminPluginHandler(c: any) {
   return c.json({ plugin: await publishPlugin(c.req.param('pluginId')) });
+}
+
+export async function removeAdminPluginFromRegistryHandler(c: any) {
+  const user = requireUser(c);
+  return c.json({ plugin: await removePluginFromRegistry(c.req.param('pluginId'), user.id) });
 }

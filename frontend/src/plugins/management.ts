@@ -55,7 +55,7 @@ export async function listMyPlugins() {
 }
 
 export async function listPluginCatalogue() {
-  return request<{ plugins: ManagedPlugin[] }>('/api/plugins/catalog');
+  return request<{ plugins: ManagedPlugin[] }>('/api/plugins/catalog', { cache: 'no-store' });
 }
 
 export async function createPlugin(input: {

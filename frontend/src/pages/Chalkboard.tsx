@@ -18,7 +18,6 @@ import type {
   ShapeType,
   ChalkboardProps,
   RoomMember,
-  Stroke,
 } from '@/types';
 import type { PluginManifest, PluginSelectionToolContribution, PluginToolContribution } from '@/plugins/types';
 import ActionSticks from '@/components/tools/ActionSticks';
@@ -44,6 +43,10 @@ import {
   type PublishedPluginDefinition,
   type PublishedPluginCommandRequest
 } from '@/plugins/publishedRuntime';
+import {
+  normalizePublishedBoardInsertStrokes,
+  PUBLISHED_PLUGIN_INSERT_STROKES,
+} from '@/plugins/publishedBridge';
 import {
   handleUndo,
   handleRedo,
@@ -110,31 +113,23 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const pluginApi = useMemo(() => createPluginAPI(), []);
   const [publishedPlugins, setPublishedPlugins] = useState<PublishedPluginDefinition[]>([]);
   const handlePublishedPluginCommand = useCallback((request: PublishedPluginCommandRequest) => {
-    if (request.pluginId !== 'demo.focus-dot' || request.command !== 'focusDot.add') return false;
+    if (request.command !== PUBLISHED_PLUGIN_INSERT_STROKES) return false;
     if (!useBoardStore.getState().canEdit) return false;
-    const center = pluginApi.board.getViewportCenter();
-    if (!center) return false;
-    const radius = 10;
-    const points = Array.from({ length: 20 }, (_, index) => {
-      const angle = (Math.PI * 2 * index) / 20;
-      return { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius };
-    });
-    const focusDot: Stroke = {
-      id: `${pluginApi.board.getUserId()}-${request.pluginId}-${Date.now()}`,
-      userId: pluginApi.board.getUserId(),
-      tool: 'chalk',
-      color: '#f6c85f',
-      size: 3,
-      intensity: 1,
-      pathType: 'linear',
-      closed: true,
-      fillColor: '#f6c85f',
-      points,
-      pluginId: request.pluginId,
-    };
-    return pluginApi.board.insertStrokes([focusDot], { select: true, closeInsertPanel: true, pluginId: request.pluginId });
+    const normalized = normalizePublishedBoardInsertStrokes(
+      request.payload,
+      pluginApi.board.getUserId(),
+      request.pluginId,
+    );
+    if (!normalized) return false;
+    return pluginApi.board.insertStrokes(normalized.strokes, normalized.options);
   }, [pluginApi]);
-  const publishedRuntime = useMemo(() => new PublishedPluginRuntime(handlePublishedPluginCommand), [handlePublishedPluginCommand]);
+  const getPublishedPluginContext = useCallback(() => ({
+    viewportCenter: pluginApi.board.getViewportCenter(),
+  }), [pluginApi]);
+  const publishedRuntime = useMemo(
+    () => new PublishedPluginRuntime(handlePublishedPluginCommand, getPublishedPluginContext),
+    [getPublishedPluginContext, handlePublishedPluginCommand],
+  );
 
   useEffect(() => () => publishedRuntime.dispose(), [publishedRuntime]);
 

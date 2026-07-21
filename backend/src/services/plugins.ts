@@ -288,3 +288,11 @@ export async function publishPlugin(pluginId: string) {
   });
   return getPluginDetail(pluginId);
 }
+
+export async function removePluginFromRegistry(pluginId: string, reviewerId: string) {
+  const plugin = await getPluginByKey(pluginId);
+  if (!plugin) throw new APIError('plugin_not_found', 404);
+  if (plugin.status !== 'published') throw new APIError('plugin_not_published', 409);
+
+  return reviewPlugin(pluginId, reviewerId, 'suspended', 'Plugin removed from the published registry.');
+}

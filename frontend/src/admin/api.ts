@@ -54,6 +54,10 @@ export function publishAdminPlugin(pluginId: string) {
   return request<{ plugin: AdminPlugin }>(`/admin/plugins/${encodeURIComponent(pluginId)}/publish`, { method: 'POST', body: JSON.stringify({}) });
 }
 
+export function removeAdminPluginFromRegistry(pluginId: string) {
+  return request<{ plugin: AdminPlugin }>(`/admin/plugins/${encodeURIComponent(pluginId)}/registry`, { method: 'DELETE' });
+}
+
 export function logoutAdminTwoFactor() {
   return request<{ ok: true }>('/admin/2fa/logout', { method: 'POST', body: JSON.stringify({}) });
 }

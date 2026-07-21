@@ -16,6 +16,10 @@ interface SandboxPoint {
 interface SandboxStroke {
   id: string;
   points: SandboxPoint[];
+  closed?: boolean;
+  fillColor?: string;
+  color?: string;
+  size?: number;
 }
 
 function readTools(manifest: Record<string, unknown> | undefined): SandboxTool[] {
@@ -44,7 +48,6 @@ export default function AdminPluginSandbox({ plugin, onClose }: { plugin: AdminP
   const drawingIdRef = useRef<string | null>(null);
   const activeStrokeRef = useRef<SandboxStroke | null>(null);
   const [strokes, setStrokes] = useState<SandboxStroke[]>([]);
-  const [dots, setDots] = useState<SandboxPoint[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [frameReady, setFrameReady] = useState(false);
   const [registeredTools, setRegisteredTools] = useState<SandboxTool[]>([]);
@@ -52,7 +55,6 @@ export default function AdminPluginSandbox({ plugin, onClose }: { plugin: AdminP
   const manifestTools = useMemo(() => readTools(version?.manifest), [version?.manifest]);
   const tools = registeredTools.length > 0 ? registeredTools : manifestTools;
   const frameSource = sandboxDocument(version?.entryCode || '');
-  const supportsExecuteBridge = version?.entryCode?.includes('chalkboard:execute') ?? false;
 
   const log = (message: string) => setLogs((current) => [`${new Date().toLocaleTimeString()} · ${message}`, ...current].slice(0, 10));
 
@@ -98,22 +100,15 @@ export default function AdminPluginSandbox({ plugin, onClose }: { plugin: AdminP
     strokes.forEach((stroke) => {
       if (stroke.points.length < 2) return;
       context.beginPath();
-      context.strokeStyle = '#e3c77e';
-      context.lineWidth = 3;
+      context.strokeStyle = stroke.color || '#e3c77e';
+      context.fillStyle = stroke.fillColor || 'transparent';
+      context.lineWidth = stroke.size || 3;
       stroke.points.forEach((point, index) => index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y));
+      if (stroke.closed) context.closePath();
+      if (stroke.closed && stroke.fillColor) context.fill();
       context.stroke();
     });
-    dots.forEach((point) => {
-      context.beginPath();
-      context.fillStyle = '#e3bd69';
-      context.arc(point.x, point.y, 13, 0, Math.PI * 2);
-      context.fill();
-      context.beginPath();
-      context.fillStyle = '#fff8e8';
-      context.arc(point.x, point.y, 4, 0, Math.PI * 2);
-      context.fill();
-    });
-  }, [canvasSize, dots, strokes]);
+  }, [canvasSize, strokes]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent<unknown>) => {
@@ -126,13 +121,33 @@ export default function AdminPluginSandbox({ plugin, onClose }: { plugin: AdminP
       } else if (data.type === 'chalkboard:register') {
         setRegisteredTools(readTools({ contributes: data.contributions }));
         log('Plugin contributions registered.');
-      } else if (data.type === 'chalkboard:command' && typeof data.command === 'string') {
-        if (data.command === 'focusDot.add' || data.command === 'board.addFocusDot') {
-          setDots((current) => [...current, { x: canvasSize.width / 2, y: canvasSize.height / 2 }]);
-          log(`Command received: ${data.command}. Added a sandbox focus mark.`);
-        } else {
-          log(`Command received: ${data.command}. No sandbox board adapter is mapped for it yet.`);
+      } else if (data.type === 'chalkboard:command' && data.command === 'board.insertStrokes') {
+        const payload = data.payload && typeof data.payload === 'object' ? data.payload as Record<string, unknown> : null;
+        const incoming = payload?.strokes;
+        if (!Array.isArray(incoming)) {
+          log('Rejected board.insertStrokes: strokes must be an array.');
+          return;
         }
+        const nextStrokes = incoming.flatMap((candidate, index) => {
+          if (!candidate || typeof candidate !== 'object') return [];
+          const stroke = candidate as Record<string, unknown>;
+          const points = Array.isArray(stroke.points) ? stroke.points : [];
+          if (points.length === 0 || !points.every((point) => point && typeof point === 'object' && typeof (point as Record<string, unknown>).x === 'number' && typeof (point as Record<string, unknown>).y === 'number')) return [];
+          return [{
+            id: `sandbox-plugin-stroke-${Date.now()}-${index}`,
+            points: points as SandboxPoint[],
+            closed: stroke.closed === true,
+            fillColor: typeof stroke.fillColor === 'string' ? stroke.fillColor : undefined,
+            color: typeof stroke.color === 'string' ? stroke.color : undefined,
+            size: typeof stroke.size === 'number' ? stroke.size : undefined,
+          }];
+        });
+        if (nextStrokes.length !== incoming.length) {
+          log('Rejected board.insertStrokes: one or more strokes were invalid.');
+          return;
+        }
+        setStrokes((current) => [...current, ...nextStrokes]);
+        log(`Command received: board.insertStrokes. Added ${nextStrokes.length} sandbox stroke${nextStrokes.length === 1 ? '' : 's'}.`);
       }
     };
     window.addEventListener('message', handleMessage);
@@ -150,12 +165,16 @@ export default function AdminPluginSandbox({ plugin, onClose }: { plugin: AdminP
   };
 
   const runTool = (tool: SandboxTool) => {
-    frameRef.current?.contentWindow?.postMessage({ type: 'chalkboard:execute', pluginId: plugin.pluginId, command: tool.command, payload: { source: 'admin-sandbox' } }, '*');
+    frameRef.current?.contentWindow?.postMessage({
+      type: 'chalkboard:execute',
+      pluginId: plugin.pluginId,
+      command: tool.command,
+      payload: {
+        source: 'admin-sandbox',
+        context: { viewportCenter: { x: canvasSize.width / 2, y: canvasSize.height / 2 } },
+      },
+    }, '*');
     log(`Requested tool: ${tool.label}.`);
-    if (tool.command === 'focusDot.add' && !supportsExecuteBridge) {
-      setDots((current) => [...current, { x: canvasSize.width / 2, y: canvasSize.height / 2 }]);
-      log('Applied the legacy Focus Dot host adapter for this saved bundle.');
-    }
   };
 
   const getPoint = (event: PointerEvent<HTMLCanvasElement>) => {
@@ -203,11 +222,11 @@ export default function AdminPluginSandbox({ plugin, onClose }: { plugin: AdminP
       <section className="admin-sandbox-shell">
         <header className="admin-sandbox-header"><div><p className="admin-eyebrow">Plugin test room / local only</p><h2>{plugin.name}</h2><span>{plugin.pluginId} · v{version?.version || '—'}</span></div><button className="admin-sandbox-close" type="button" onClick={onClose} aria-label="Close sandbox"><X size={18} /></button></header>
         <div className="admin-sandbox-layout">
-          <section className="admin-sandbox-board"><div className="admin-sandbox-board-toolbar"><span><FlaskConical size={14} /> Isolated chalkboard</span><button type="button" onClick={() => { setStrokes([]); setDots([]); log('Cleared local sandbox marks.'); }}><Eraser size={13} /> Clear board</button></div><div className="admin-sandbox-canvas-wrap"><canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={stopDrawing} onPointerCancel={stopDrawing} /></div><p className="admin-sandbox-board-note">Draw here to test board interaction. Nothing is saved to a real room or shared with users.</p></section>
+          <section className="admin-sandbox-board"><div className="admin-sandbox-board-toolbar"><span><FlaskConical size={14} /> Isolated chalkboard</span><button type="button" onClick={() => { setStrokes([]); log('Cleared local sandbox marks.'); }}><Eraser size={13} /> Clear board</button></div><div className="admin-sandbox-canvas-wrap"><canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={stopDrawing} onPointerCancel={stopDrawing} /></div><p className="admin-sandbox-board-note">Draw here to test board interaction. Nothing is saved to a real room or shared with users.</p></section>
           <aside className="admin-sandbox-controls"><div><p className="admin-eyebrow">Plugin runtime</p><strong className={frameReady ? 'is-ready' : ''}>{frameReady ? 'Ready in sandbox' : 'Waiting for runtime'}</strong></div><button className="admin-secondary-button admin-sandbox-init" type="button" onClick={sendInit}><RotateCcw size={14} /> Reconnect runtime</button><div className="admin-sandbox-tools"><p className="admin-eyebrow">Contributed tools</p>{tools.length === 0 ? <span className="admin-sandbox-muted">No tools declared in this manifest.</span> : tools.map((tool) => <button type="button" key={tool.id} disabled={!frameReady} onClick={() => runTool(tool)}><Play size={13} /> {tool.label}</button>)}</div><div className="admin-sandbox-log"><p className="admin-eyebrow">Bridge log</p>{logs.length === 0 ? <span className="admin-sandbox-muted">Waiting for plugin messages.</span> : logs.map((entry) => <code key={entry}>{entry}</code>)}</div></aside>
         </div>
         <iframe key={`${plugin.pluginId}-${version?.version || 'draft'}`} ref={frameRef} title="Sandboxed plugin runtime" className="admin-sandbox-frame" sandbox="allow-scripts" srcDoc={frameSource} onLoad={sendInit} />
-        <footer className="admin-sandbox-footer"><span>Sandbox security: scripts only · no cookies · no live room connection</span><span>{strokes.length + dots.length} local marks</span></footer>
+        <footer className="admin-sandbox-footer"><span>Sandbox security: scripts only · no cookies · no live room connection</span><span>{strokes.length} local marks</span></footer>
       </section>
     </div>
   );

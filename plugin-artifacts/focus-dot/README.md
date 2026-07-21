@@ -26,4 +26,4 @@ The current simulation stores the bundle, validates the manifest, compiles the J
 
 ## Bridge shape
 
-The entry listens for `chalkboard:init`, responds with `chalkboard:ready`, registers its contributions, and requests the `focusDot.add` command through `chalkboard:command`. The host must validate the plugin ID, permissions, message origin, and command payload before changing the board.
+The entry listens for `chalkboard:init`, responds with `chalkboard:ready`, registers its contributions, and handles the `focusDot.add` tool. It generates the focus-dot geometry in the plugin bundle, then requests the generic `board.insertStrokes` capability through `chalkboard:command`. The host must validate the plugin ID, permissions, message origin, and command payload before changing the board.

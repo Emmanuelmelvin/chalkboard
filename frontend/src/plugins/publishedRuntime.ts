@@ -6,6 +6,7 @@ import type {
   PluginSelectionToolContribution,
   PluginToolContribution,
 } from '@/plugins/types';
+import type { Point } from '@/types';
 
 export interface PublishedPluginDefinition {
   pluginId: string;
@@ -20,6 +21,12 @@ export interface PublishedPluginCommandRequest {
   payload?: unknown;
 }
 
+export interface PublishedPluginExecutionContext {
+  viewportCenter: Point | null;
+}
+
+type PublishedPluginContextProvider = (pluginId: string) => PublishedPluginExecutionContext;
+
 const allowedPermissions: PluginPermission[] = [
   'board:read',
   'board:write',
@@ -29,6 +36,10 @@ const allowedPermissions: PluginPermission[] = [
   'ui:modal',
   'room:sync',
 ];
+
+const hostCommandPermissions: Record<string, PluginPermission> = {
+  'board.insertStrokes': 'board:write',
+};
 
 function normalizeTools(value: unknown): PluginToolContribution[] {
   if (!Array.isArray(value)) return [];
@@ -104,9 +115,14 @@ export class PublishedPluginRuntime {
   private pendingCommands = new Map<string, Array<{ command: string; payload?: unknown }>>();
   private listening = false;
   private onCommand: (request: PublishedPluginCommandRequest) => boolean | void;
+  private getContext: PublishedPluginContextProvider;
 
-  constructor(onCommand: (request: PublishedPluginCommandRequest) => boolean | void) {
+  constructor(
+    onCommand: (request: PublishedPluginCommandRequest) => boolean | void,
+    getContext: PublishedPluginContextProvider,
+  ) {
     this.onCommand = onCommand;
+    this.getContext = getContext;
     this.ensureMessageListener();
   }
 
@@ -134,7 +150,12 @@ export class PublishedPluginRuntime {
         // can safely receive commands even if it does not implement the
         // optional chalkboard:ready handshake.
         this.readyPlugins.add(definition.pluginId);
-        frame.contentWindow?.postMessage({ type: 'chalkboard:init', pluginId: definition.pluginId }, '*');
+        frame.contentWindow?.postMessage({
+          type: 'chalkboard:init',
+          pluginId: definition.pluginId,
+          permissions: definition.manifest.permissions,
+          manifest: definition.manifest,
+        }, '*');
         this.flushPendingCommands(definition.pluginId, frame);
       });
       this.frames.set(definition.pluginId, frame);
@@ -147,11 +168,11 @@ export class PublishedPluginRuntime {
     if (!frame?.contentWindow) return false;
     if (!this.readyPlugins.has(pluginId)) {
       const commands = this.pendingCommands.get(pluginId) ?? [];
-      commands.push({ command, payload });
+      commands.push({ command, payload: this.withContext(pluginId, payload) });
       this.pendingCommands.set(pluginId, commands);
       return true;
     }
-    frame.contentWindow.postMessage({ type: 'chalkboard:execute', pluginId, command, payload }, '*');
+    frame.contentWindow.postMessage({ type: 'chalkboard:execute', pluginId, command, payload: this.withContext(pluginId, payload) }, '*');
     return true;
   }
 
@@ -182,15 +203,35 @@ export class PublishedPluginRuntime {
     if (!data || typeof data !== 'object' || typeof data.pluginId !== 'string') return;
     const frame = this.frames.get(data.pluginId);
     if (!frame || event.source !== frame.contentWindow || !this.definitions.has(data.pluginId)) return;
+    if (event.origin !== 'null' && event.origin !== window.location.origin) return;
     if (data.type === 'chalkboard:ready') {
       this.readyPlugins.add(data.pluginId);
       this.flushPendingCommands(data.pluginId, frame);
       return;
     }
     if (data.type === 'chalkboard:command' && typeof data.command === 'string') {
-      this.onCommand({ pluginId: data.pluginId, command: data.command, payload: data.payload });
+      const definition = this.definitions.get(data.pluginId);
+      const requiredPermission = hostCommandPermissions[data.command];
+      if (!definition || !requiredPermission || !definition.manifest.permissions.includes(requiredPermission)) {
+        this.sendError(frame, data.pluginId, 'capability_not_allowed');
+        return;
+      }
+      const handled = this.onCommand({ pluginId: data.pluginId, command: data.command, payload: data.payload });
+      if (handled === false) this.sendError(frame, data.pluginId, 'command_rejected');
     }
   };
+
+  private withContext(pluginId: string, payload?: unknown) {
+    const context = this.getContext(pluginId);
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return { ...(payload as Record<string, unknown>), context };
+    }
+    return { value: payload, context };
+  }
+
+  private sendError(frame: HTMLIFrameElement, pluginId: string, code: string) {
+    frame.contentWindow?.postMessage({ type: 'chalkboard:error', pluginId, code }, '*');
+  }
 
   private flushPendingCommands(pluginId: string, frame: HTMLIFrameElement) {
     const pending = this.pendingCommands.get(pluginId) ?? [];

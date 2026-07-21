@@ -83,11 +83,20 @@ window.addEventListener('message', (event) => {
 
   if (message.type === 'chalkboard:execute') {
     if (message.command === 'geometry.insertCircle') {
-      // Validate message.payload, then ask the host to perform the action.
+      const center = message.payload?.context?.viewportCenter;
+      const radius = Number(message.payload?.formValues?.radius || 120);
+      if (!center || !Number.isFinite(center.x) || !Number.isFinite(center.y) || !Number.isFinite(radius)) return;
+      const points = Array.from({ length: 32 }, (_, index) => {
+        const angle = (Math.PI * 2 * index) / 32;
+        return { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius };
+      });
       send({
         type: 'chalkboard:command',
-        command: 'geometry.insertCircle',
-        payload: message.payload
+        command: 'board.insertStrokes',
+        payload: {
+          strokes: [{ tool: 'chalk', color: '#ffffff', size: 3, pathType: 'linear', closed: true, points }],
+          options: { select: true, closeInsertPanel: true },
+        },
       });
     }
   }
@@ -261,13 +270,13 @@ function Docs() {
             <section className="docs-section" id="bridge">
               <p className="docs-section-kicker">05 / Runtime messages</p>
               <h2>Use the host message contract</h2>
-              <p>The uploaded bundle communicates with Chalkboard through browser messages. It should not assume access to the host&apos;s internal state. Wait for initialization, announce readiness, declare contributions, and handle execution requests by command ID.</p>
+              <p>The uploaded bundle communicates with Chalkboard through browser messages. It should not assume access to the host&apos;s internal state. Wait for initialization, announce readiness, declare contributions, and handle execution requests by command ID. Feature code stays in the bundle; board changes use a permission-checked host capability.</p>
               <div className="docs-message-list">
                 <div><span className="docs-message-direction is-in">IN</span><div><strong><code>chalkboard:init</code></strong><p>Sent by the host with the plugin ID, declared permissions, and manifest. Use it to initialize your runtime and confirm the package identity.</p></div></div>
                 <div><span className="docs-message-direction is-out">OUT</span><div><strong><code>chalkboard:ready</code></strong><p>Sent by the bundle after it has installed its listeners and is ready to receive commands.</p></div></div>
                 <div><span className="docs-message-direction is-out">OUT</span><div><strong><code>chalkboard:register</code></strong><p>Sent by the bundle with the contributions it has implemented. Keep this aligned with the manifest.</p></div></div>
                 <div><span className="docs-message-direction is-in">IN</span><div><strong><code>chalkboard:execute</code></strong><p>Sent by the host when a user runs a contribution. It contains the command ID and an optional payload with form values or selection IDs.</p></div></div>
-                <div><span className="docs-message-direction is-out">OUT</span><div><strong><code>chalkboard:command</code></strong><p>Sent by the bundle to request a host command after validation. Return the original payload or a normalized payload the host understands.</p></div></div>
+                <div><span className="docs-message-direction is-out">OUT</span><div><strong><code>chalkboard:command</code></strong><p>Sent by the bundle to request a host capability after validation. For example, <code>board.insertStrokes</code> accepts declarative strokes; the host supplies trusted identity fields and synchronizes them.</p></div></div>
               </div>
               <pre className="docs-code"><code>{bridgeExample}</code></pre>
               <p className="docs-muted-note">The current review sandbox uses this bridge to test uploaded bundles in an isolated iframe. Approval and publication are still controlled from the dashboard; a bundle must never treat a browser message as trusted without verifying the plugin ID and validating the payload.</p>

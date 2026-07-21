@@ -458,7 +458,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                 ))}
                 {room.members.length === 0 && <span className="dashboard-room-members-empty">No one has joined yet.</span>}
               </div>
-              {room.members.length > ROOM_MEMBER_PREVIEW_LIMIT && (
+              {room.members.length > ROOM_MEMBER_PREVIEW_LIMIT && (room.accessMode !== 'approval_required' || roomRole(room) === 'viewer') && (
                 <button className="dashboard-room-show-more" type="button" onClick={() => setRoomMembersModal(room)}>
                   Show more <ChevronRight size={13} strokeWidth={1.8} />
                 </button>

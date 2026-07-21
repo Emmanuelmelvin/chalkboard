@@ -40,6 +40,10 @@ export async function listMyPlugins() {
   return request<{ plugins: ManagedPlugin[] }>('/api/plugins/mine');
 }
 
+export async function listPluginCatalogue() {
+  return request<{ plugins: ManagedPlugin[] }>('/api/plugins/catalog');
+}
+
 export async function createPlugin(input: {
   pluginId: string;
   name: string;

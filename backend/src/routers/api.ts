@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { currentUser, googleAuth, googleAuthConfig, logout } from '@/controllers/authController';
 import { addAdminHandler, adminSessionHandler, adminTwoFactorLogoutHandler, adminTwoFactorSetupHandler, adminTwoFactorVerifyHandler, listAdminsHandler, removeAdminHandler } from '@/controllers/adminController';
-import { createMyPluginHandler, createMyPluginVersionHandler, getMyPluginHandler, listAdminPluginsHandler, listMyPluginsHandler, getAdminPluginHandler, publishAdminPluginHandler, reviewAdminPluginHandler, submitMyPluginHandler } from '@/controllers/pluginController';
+import { createMyPluginHandler, createMyPluginVersionHandler, getMyPluginHandler, listAdminPluginsHandler, listMyPluginsHandler, getAdminPluginHandler, listPublishedPluginsHandler, publishAdminPluginHandler, reviewAdminPluginHandler, submitMyPluginHandler } from '@/controllers/pluginController';
 import { createRoomHandler, deleteRoomHandler, getRoomHandler, joinRoomHandler, listRoomsHandler, resetRoomPasswordHandler, updateRoomHandler, updateRoomMemberRoleHandler, voiceTokenHandler } from '@/controllers/roomController';
 import { requireAuth } from '@/middlewares/auth';
 import { requireAdmin, requireSuperAdmin } from '@/services/adminAuth';
@@ -18,6 +18,7 @@ api.post('/auth/logout', logout);
 api.use('/plugins', requireAuth);
 api.use('/plugins/*', requireAuth);
 api.get('/plugins/mine', listMyPluginsHandler);
+api.get('/plugins/catalog', listPublishedPluginsHandler);
 api.post('/plugins', createMyPluginHandler);
 api.get('/plugins/:pluginId', getMyPluginHandler);
 api.post('/plugins/:pluginId/versions', createMyPluginVersionHandler);

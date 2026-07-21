@@ -1,4 +1,4 @@
-import { createPluginForUser, createPluginVersionForUser, getPluginDetail, listPluginsForAdmin, listPluginsForAuthor, publishPlugin, reviewPlugin, submitPluginForReview } from '@/services/plugins';
+import { createPluginForUser, createPluginVersionForUser, getPluginDetail, listPluginsForAdmin, listPluginsForAuthor, listPublishedPlugins, publishPlugin, reviewPlugin, submitPluginForReview } from '@/services/plugins';
 import { createPluginSchema, createPluginVersionSchema, pluginReviewSchema } from '@/validators/pluginValidators';
 import { APIError } from '@/utils/error';
 
@@ -11,6 +11,11 @@ function requireUser(c: any) {
 export async function listMyPluginsHandler(c: any) {
   const user = requireUser(c);
   return c.json({ plugins: await listPluginsForAuthor(user.id) });
+}
+
+export async function listPublishedPluginsHandler(c: any) {
+  requireUser(c);
+  return c.json({ plugins: await listPublishedPlugins() });
 }
 
 export async function createMyPluginHandler(c: any) {

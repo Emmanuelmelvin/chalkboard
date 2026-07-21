@@ -1,0 +1,27 @@
+{
+  "id": "demo.inscribed-circles",
+  "name": "Inscribed Circles",
+  "version": "0.1.0",
+  "description": "Adds a simple pair of circles with one smaller circle inside the other.",
+  "author": "Chalkboard Demo",
+  "icon": "logo.svg",
+  "entry": "index.js",
+  "permissions": [
+    "board:write"
+  ],
+  "contributes": {
+    "tools": [
+      {
+        "id": "inscribed-circles.add",
+        "label": "Add Inscribed Circles",
+        "command": "inscribedCircles.add"
+      }
+    ],
+    "commands": [
+      {
+        "id": "inscribedCircles.add",
+        "title": "Inscribed Circles: Add Circles"
+      }
+    ]
+  }
+}

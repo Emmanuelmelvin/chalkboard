@@ -1,0 +1,13 @@
+{
+  "name": "demo.inscribed-circles",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A small external Chalkboard plugin that draws two concentric circles.",
+  "main": "index.js",
+  "files": [
+    "manifest.json",
+    "index.js",
+    "logo.svg",
+    "README.md"
+  ]
+}

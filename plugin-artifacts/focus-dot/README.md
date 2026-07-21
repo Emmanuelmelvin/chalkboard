@@ -11,6 +11,8 @@ It is intentionally not bundled into Chalkboard. The package contains:
 
 ## Manual upload simulation
 
+Before the first run, apply the latest backend migrations with `npm run db:migrate` from `backend`, and set `SUPER_ADMIN_EMAIL` in `backend/.env` to the Google account that should own the first admin session.
+
 1. Sign in to Chalkboard and open the Developer tab.
 2. Select **New plugin**.
 3. Choose `manifest.json` as the manifest file.

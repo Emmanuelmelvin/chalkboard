@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { ArrowLeft, CheckCircle2, Code2, FileJson, GitBranch, LoaderCircle, Plus, Send, Sparkles } from 'lucide-react';
 import { installedPlugins } from '@/plugins/installedPlugins';
-import { createPlugin, createPluginVersion, listMyPlugins, submitPlugin, type ManagedPlugin, type ManagedPluginPlan } from '@/plugins/management';
+import { createPlugin, createPluginVersion, listMyPlugins, listPluginCatalogue, submitPlugin, type ManagedPlugin, type ManagedPluginPlan } from '@/plugins/management';
 
 const DEFAULT_MANIFEST = (pluginId: string, name: string, version: string) => JSON.stringify({
   id: pluginId || 'your.plugin',
@@ -12,6 +12,28 @@ const DEFAULT_MANIFEST = (pluginId: string, name: string, version: string) => JS
   permissions: ['board:write'],
   contributes: { tools: [], commands: [] },
 }, null, 2);
+
+const DEMO_PLUGIN = {
+  pluginId: 'demo.focus-dot',
+  name: 'Focus Dot',
+  description: 'A tiny starter plugin that marks one idea on the canvas.',
+  plan: 'free' as ManagedPluginPlan,
+  version: '0.1.0',
+  manifest: JSON.stringify({
+    id: 'demo.focus-dot',
+    name: 'Focus Dot',
+    version: '0.1.0',
+    description: 'Adds a small focus marker to the canvas.',
+    author: 'Chalkboard Demo',
+    permissions: ['board:write'],
+    contributes: {
+      tools: [{ id: 'focus-dot.add', label: 'Add Focus Dot', command: 'focusDot.add' }],
+      commands: [{ id: 'focusDot.add', title: 'Focus Dot: Add Focus Dot' }],
+    },
+  }, null, 2),
+  changelog: 'First demo release.',
+  entryUrl: '',
+};
 
 function statusLabel(status: ManagedPlugin['status']) {
   return status.replace('_', ' ');
@@ -30,13 +52,14 @@ function parseManifest(value: string) {
 
 export default function DeveloperPlugins() {
   const [plugins, setPlugins] = useState<ManagedPlugin[]>([]);
+  const [catalogue, setCatalogue] = useState<ManagedPlugin[]>([]);
   const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ pluginId: '', name: '', description: '', plan: 'free' as ManagedPluginPlan, version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '' });
+  const [createForm, setCreateForm] = useState({ pluginId: '', name: '', description: '', logoDataUrl: '', plan: 'free' as ManagedPluginPlan, version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '' });
   const [versionForm, setVersionForm] = useState({ version: '0.2.0', manifest: '', changelog: '', entryUrl: '' });
 
   const selectedPlugin = useMemo(() => plugins.find((plugin) => plugin.pluginId === selectedPluginId) ?? null, [plugins, selectedPluginId]);
@@ -45,8 +68,9 @@ export default function DeveloperPlugins() {
   const loadPlugins = async () => {
     setLoading(true);
     try {
-      const payload = await listMyPlugins();
+      const [payload, cataloguePayload] = await Promise.all([listMyPlugins(), listPluginCatalogue()]);
       setPlugins(payload.plugins);
+      setCatalogue(cataloguePayload.plugins);
       const nextPlugin = selectedPluginId && payload.plugins.some((plugin) => plugin.pluginId === selectedPluginId)
         ? payload.plugins.find((plugin) => plugin.pluginId === selectedPluginId)
         : payload.plugins[0];
@@ -79,8 +103,9 @@ export default function DeveloperPlugins() {
       const payload = await createPlugin({ ...createForm, manifest: parseManifest(createForm.manifest) });
       setPlugins((current) => [payload.plugin, ...current]);
       setSelectedPluginId(payload.plugin.pluginId);
+      setVersionForm({ version: '0.2.0', manifest: JSON.stringify(payload.plugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: payload.plugin.versions[0]?.entryUrl ?? '' });
       setCreateOpen(false);
-      setCreateForm({ pluginId: '', name: '', description: '', plan: 'free', version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '' });
+      setCreateForm({ pluginId: '', name: '', description: '', logoDataUrl: '', plan: 'free', version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '' });
       setNotice('Draft created. Add a version and submit it when it is ready for review.');
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'We could not create the plugin.');
@@ -126,15 +151,44 @@ export default function DeveloperPlugins() {
     setCreateForm((current) => ({ ...current, pluginId, name, version, manifest: DEFAULT_MANIFEST(pluginId, name, version) }));
   };
 
+  const useDemoPlugin = () => {
+    setCreateForm((current) => ({ ...current, ...DEMO_PLUGIN, logoDataUrl: '' }));
+    setError('');
+    setNotice('Starter example loaded. Add a logo if you want, then create the draft.');
+  };
+
+  const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(file.type)) {
+      setError('Choose a PNG, JPEG, WebP, or SVG logo.');
+      return;
+    }
+    if (file.size > 240_000) {
+      setError('Logo files must be smaller than 240 KB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setCreateForm((current) => ({ ...current, logoDataUrl: reader.result as string }));
+        setError('');
+      }
+    };
+    reader.onerror = () => setError('We could not read that logo file.');
+    reader.readAsDataURL(file);
+  };
+
   const renderCreateForm = () => (
     <section className="dashboard-developer-create-panel dashboard-developer-create-screen">
       <div className="dashboard-developer-form-heading">
         <div><p className="dashboard-panel-kicker">New plugin</p><strong>Start with the contract.</strong></div>
-        <button className="dashboard-link-button" type="button" onClick={() => setCreateOpen(false)}><ArrowLeft size={14} /> Go back</button>
+        <div className="dashboard-developer-create-actions"><button className="dashboard-link-button" type="button" onClick={useDemoPlugin}><Sparkles size={14} /> Use starter example</button><button className="dashboard-link-button" type="button" onClick={() => setCreateOpen(false)}><ArrowLeft size={14} /> Go back</button></div>
       </div>
       <form className="dashboard-developer-form" onSubmit={handleCreate}>
         <div className="dashboard-developer-two-col"><div><label htmlFor="developer-plugin-id">Plugin ID</label><input id="developer-plugin-id" value={createForm.pluginId} onChange={(event) => updateManifestFromBasics(event.target.value, createForm.name, createForm.version)} placeholder="studio.geometry" /></div><div><label htmlFor="developer-plugin-name">Name</label><input id="developer-plugin-name" value={createForm.name} onChange={(event) => updateManifestFromBasics(createForm.pluginId, event.target.value, createForm.version)} placeholder="Geometry Studio" /></div></div>
         <label htmlFor="developer-plugin-description">Description</label><textarea id="developer-plugin-description" rows={3} value={createForm.description} onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))} placeholder="What does this plugin help people do?" />
+        <div className="dashboard-developer-logo-field"><label htmlFor="developer-plugin-logo">Plugin logo <small>PNG, JPEG, WebP, or SVG · 240 KB max</small></label><div className="dashboard-developer-logo-row">{createForm.logoDataUrl ? <img src={createForm.logoDataUrl} alt="Plugin logo preview" /> : <span className="dashboard-developer-logo-placeholder"><Code2 size={18} /></span>}<input id="developer-plugin-logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={handleLogoChange} /></div></div>
         <div className="dashboard-developer-two-col"><div><label htmlFor="developer-plugin-version">First version</label><input id="developer-plugin-version" value={createForm.version} onChange={(event) => updateManifestFromBasics(createForm.pluginId, createForm.name, event.target.value)} placeholder="0.1.0" /></div><div><label htmlFor="developer-plugin-plan">Access plan</label><select id="developer-plugin-plan" value={createForm.plan} onChange={(event) => setCreateForm((current) => ({ ...current, plan: event.target.value as ManagedPluginPlan }))}><option value="free">Free</option><option value="pro">Pro</option></select></div></div>
         <label htmlFor="developer-plugin-entry-url">Bundle URL <small>optional for now</small></label><input id="developer-plugin-entry-url" value={createForm.entryUrl} onChange={(event) => setCreateForm((current) => ({ ...current, entryUrl: event.target.value }))} placeholder="https://…" type="url" />
         <label htmlFor="developer-plugin-manifest">Manifest JSON</label><textarea id="developer-plugin-manifest" className="dashboard-developer-manifest" rows={10} value={createForm.manifest} onChange={(event) => setCreateForm((current) => ({ ...current, manifest: event.target.value }))} />
@@ -173,6 +227,7 @@ export default function DeveloperPlugins() {
       <section className="dashboard-section-intro"><div><p className="dashboard-kicker"><span /> Developer workspace / 04</p><h2>Build the next<br /><em>useful tool.</em></h2></div><p>Create plugin drafts, ship versioned manifests, and send finished work to the Chalkboard review queue.</p></section>
       <section className="dashboard-developer-summary" aria-label="Plugin workspace summary"><article><span>My plugins</span><strong>{plugins.length.toString().padStart(2, '0')}</strong><small>owned by you</small></article><article><span>In review</span><strong>{plugins.filter((plugin) => plugin.status === 'in_review').length.toString().padStart(2, '0')}</strong><small>waiting for a decision</small></article><article><span>Runtime plugins</span><strong>{installedPlugins.length.toString().padStart(2, '0')}</strong><small>bundled in Chalkboard</small></article></section>
       {createOpen ? renderCreateForm() : renderWorkspace()}
+      {!createOpen && <section className="dashboard-developer-catalogue"><div className="dashboard-developer-catalogue-heading"><div><p className="dashboard-panel-kicker">Chalkboard catalogue</p><h3>Published plugins</h3></div><span>Available after admin approval</span></div>{catalogue.length === 0 ? <p className="dashboard-developer-catalogue-empty">No published community plugins yet. Your approved plugin will appear here.</p> : <div className="dashboard-developer-catalogue-grid">{catalogue.map((plugin) => <article key={plugin.pluginId}>{plugin.logoDataUrl ? <img src={plugin.logoDataUrl} alt="" /> : <span className="dashboard-developer-catalogue-mark"><Sparkles size={17} /></span>}<div><strong>{plugin.name}</strong><small>{plugin.pluginId} · v{plugin.currentVersion || plugin.versions[0]?.version || '—'}</small></div><em className={`dashboard-plugin-status is-${plugin.status}`}>{plugin.plan === 'pro' ? 'Pro' : 'Free'}</em></article>)}</div>}</section>}
       {(error || notice) && <p className={`dashboard-error dashboard-developer-feedback${notice && !error ? ' is-success' : ''}`} role="status">{error || notice}</p>}
     </div>
   );

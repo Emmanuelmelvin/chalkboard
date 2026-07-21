@@ -36,6 +36,7 @@ export default function AdminDashboard() {
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminRole, setNewAdminRole] = useState<'admin' | 'super_admin'>('admin');
+  const [testResult, setTestResult] = useState<{ pluginId: string; passed: boolean; message: string } | null>(null);
 
   const selectedPlugin = useMemo(() => plugins.find((plugin) => plugin.pluginId === selectedPluginId) ?? null, [plugins, selectedPluginId]);
 
@@ -106,6 +107,10 @@ export default function AdminDashboard() {
 
   const handleReview = async (decision: 'approved' | 'rejected' | 'suspended') => {
     if (!selectedPlugin) return;
+    if (decision === 'approved' && (!testResult || testResult.pluginId !== selectedPlugin.pluginId || !testResult.passed)) {
+      setError('Run the plugin smoke test before approving this submission.');
+      return;
+    }
     setBusy(true);
     setError('');
     setNotice('');
@@ -119,6 +124,22 @@ export default function AdminDashboard() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const runPluginTest = () => {
+    if (!selectedPlugin) return;
+    const version = selectedPlugin.versions[0];
+    const manifest = version?.manifest;
+    const issues: string[] = [];
+    if (!version) issues.push('No version is attached.');
+    if (!manifest || manifest.id !== selectedPlugin.pluginId) issues.push('Manifest ID does not match the plugin ID.');
+    if (version && manifest?.version !== version.version) issues.push('Manifest version does not match the submitted version.');
+    if (!manifest || !Array.isArray(manifest.permissions)) issues.push('Manifest permissions are missing.');
+    if (!manifest || !manifest.contributes || typeof manifest.contributes !== 'object') issues.push('Manifest contributions are missing.');
+    const passed = issues.length === 0;
+    setTestResult({ pluginId: selectedPlugin.pluginId, passed, message: passed ? 'Manifest and contribution contract passed.' : issues.join(' ') });
+    setError('');
+    setNotice(passed ? 'Plugin smoke test passed.' : 'Plugin smoke test found issues.');
   };
 
   const handlePublish = async () => {
@@ -206,6 +227,7 @@ export default function AdminDashboard() {
           <section className="admin-plugin-workspace"><div className="admin-panel admin-plugin-list"><div className="admin-panel-heading"><div><p className="admin-eyebrow">Submissions</p><h2>Plugin queue</h2></div><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); void loadPlugins(event.target.value); }}><option value="in_review">In review</option><option value="approved">Approved</option><option value="published">Published</option><option value="rejected">Rejected</option><option value="">All plugins</option></select></div>{busy && plugins.length === 0 ? <div className="admin-empty"><LoaderCircle className="admin-spin" size={18} /> Loading queue…</div> : plugins.length === 0 ? <div className="admin-empty"><FileCheck2 size={23} /><strong>Nothing in this queue.</strong><span>New submissions will appear here when developers send them for review.</span></div> : <div className="admin-queue">{plugins.map((plugin) => <button className={`admin-queue-row${selectedPluginId === plugin.pluginId ? ' is-selected' : ''}`} type="button" key={plugin.pluginId} onClick={() => setSelectedPluginId(plugin.pluginId)}><span className="admin-queue-icon"><Code2 size={15} /></span><span><strong>{plugin.name}</strong><small>{plugin.author?.email || 'Unknown author'} · v{plugin.versions[0]?.version || '—'}</small></span><em className={`admin-status is-${plugin.status}`}>{formatStatus(plugin.status)}</em></button>)}</div>}</div><div className="admin-panel admin-plugin-detail">{selectedPlugin ? <><div className="admin-detail-heading"><div><p className="admin-eyebrow">Submission detail</p><h2>{selectedPlugin.name}</h2><span>{selectedPlugin.pluginId}</span></div><em className={`admin-status is-${selectedPlugin.status}`}>{formatStatus(selectedPlugin.status)}</em></div><div className="admin-detail-meta"><span>Author <strong>{selectedPlugin.author?.displayName || 'Unknown'}</strong></span><span>Access <strong>{selectedPlugin.plan === 'pro' ? 'Pro' : 'Free'}</strong></span><span>Updated <strong>{formatDate(selectedPlugin.updatedAt)}</strong></span></div><p className="admin-detail-description">{selectedPlugin.description}</p><div className="admin-version-card"><div><p className="admin-eyebrow">Latest version</p><strong>v{selectedPlugin.versions[0]?.version || '—'}</strong><small>{selectedPlugin.versions[0]?.changelog || 'No changelog provided.'}</small></div>{selectedPlugin.versions[0]?.entryUrl && <a href={selectedPlugin.versions[0].entryUrl} target="_blank" rel="noreferrer">Open bundle <ExternalLink size={13} /></a>}</div><details className="admin-manifest-details"><summary>Inspect manifest</summary><pre>{JSON.stringify(selectedPlugin.versions[0]?.manifest || {}, null, 2)}</pre></details>{['in_review', 'approved'].includes(selectedPlugin.status) && <div className="admin-review-form"><label htmlFor="admin-review-notes">Review notes</label><textarea id="admin-review-notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Record what was tested or what needs to change." /><div className="admin-review-actions">{selectedPlugin.status === 'in_review' && <><button className="admin-secondary-button" type="button" disabled={busy} onClick={() => { void handleReview('rejected'); }}><XCircle size={14} /> Reject</button><button className="admin-secondary-button admin-approve-button" type="button" disabled={busy} onClick={() => { void handleReview('approved'); }}><Check size={14} /> Approve</button></>}{selectedPlugin.status === 'approved' && <button className="admin-primary-button" type="button" disabled={busy} onClick={() => { void handlePublish(); }}><Sparkles size={14} /> Publish to catalogue</button>}</div></div>}{(error || notice) && <p className={`admin-feedback${notice && !error ? ' is-success' : ''}`}>{error || notice}</p>}</> : <div className="admin-empty admin-detail-empty"><FileCheck2 size={28} /><h2>Select a submission.</h2><p>Choose a plugin from the queue to inspect its manifest and record a review decision.</p></div>}</div></section>
         </>}
       </main>
+      {view === 'plugins' && selectedPlugin && <section className={`admin-quick-test${testResult?.pluginId === selectedPlugin.pluginId && testResult.passed ? ' is-passed' : ''}`}><div><p className="admin-eyebrow">Test lab</p><strong>{testResult?.pluginId === selectedPlugin.pluginId ? testResult.message : 'Run the smoke test before approval.'}</strong></div><button className="admin-secondary-button" type="button" disabled={busy} onClick={runPluginTest}><FileCheck2 size={14} /> Run test</button></section>}
       {recoveryCodes.length > 0 && <div className="admin-recovery-overlay"><section className="admin-recovery-card"><div className="admin-auth-icon"><KeyRound size={22} /></div><p className="admin-eyebrow">Save these once</p><h2>Recovery codes</h2><p>Store these somewhere secure. Each code can be used once if you lose access to your authenticator.</p><div className="admin-recovery-grid">{recoveryCodes.map((recoveryCode) => <code key={recoveryCode}>{recoveryCode}</code>)}</div><button className="admin-primary-button" type="button" onClick={() => setRecoveryCodes([])}>I saved my codes</button></section></div>}
     </div>
   );

@@ -80,6 +80,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .admin-placeholder svg { color: var(--admin-gold-bright); }
 .admin-placeholder h2 { margin: 3px 0 0; color: var(--admin-white); font-family: Georgia, serif; font-size: 32px; font-weight: 400; letter-spacing: -0.06em; }
 .admin-placeholder p { max-width: 480px; margin: 0; font-size: 12px; line-height: 1.8; }
+.admin-quick-test { position: fixed; z-index: 4; right: 29px; bottom: 28px; display: flex; max-width: min(430px, calc(100vw - 40px)); align-items: center; gap: 18px; padding: 14px 16px; border: 1px solid rgba(199, 162, 88, 0.45); background: rgba(23, 23, 21, 0.97); box-shadow: 0 14px 35px rgba(0, 0, 0, 0.28); }
+.admin-quick-test > div { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
+.admin-quick-test strong { color: var(--admin-muted); font-size: 10px; font-weight: 500; line-height: 1.5; }
+.admin-quick-test.is-passed { border-color: rgba(145, 206, 150, 0.5); }
+.admin-quick-test.is-passed strong { color: var(--admin-green); }
 .admin-admin-workspace { max-width: 900px; border: 1px solid var(--admin-line); background: var(--admin-line); }
 .admin-admin-workspace .admin-panel { min-height: 0; }
 .admin-admin-list { display: flex; flex-direction: column; gap: 4px; margin-top: 25px; }
@@ -157,4 +162,5 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .admin-admin-row .admin-secondary-button { grid-column: 2 / -1; justify-self: start; }
   .admin-add-form > div { flex-wrap: wrap; }
   .admin-add-form input { flex-basis: 100%; }
+  .admin-quick-test { right: 16px; bottom: 16px; }
 }

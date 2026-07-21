@@ -95,6 +95,7 @@ export const pluginVersions = pgTable('plugin_versions', {
   changelog: text('changelog'),
   entryUrl: text('entry_url'),
   entryCode: text('entry_code'),
+  bundleArchiveDataUrl: text('bundle_archive_data_url'),
   status: pluginVersionStatus('status').default('draft').notNull(),
   createdById: uuid('created_by_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

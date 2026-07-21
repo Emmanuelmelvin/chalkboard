@@ -14,6 +14,7 @@ type PluginInput = {
   changelog?: string;
   entryUrl?: string;
   entryCode?: string;
+  bundleArchiveDataUrl?: string;
 };
 
 type PluginVersionInput = Omit<PluginInput, 'pluginId' | 'name' | 'description' | 'plan'>;
@@ -93,6 +94,7 @@ export async function createPluginForUser(authorId: string, input: PluginInput) 
       changelog: input.changelog || null,
       entryUrl: input.entryUrl || null,
       entryCode: input.entryCode || null,
+      bundleArchiveDataUrl: input.bundleArchiveDataUrl || null,
       createdById: authorId,
     });
     return plugin;
@@ -122,6 +124,7 @@ export async function createPluginVersionForUser(pluginId: string, authorId: str
     changelog: input.changelog || null,
     entryUrl: input.entryUrl || null,
     entryCode: input.entryCode || null,
+    bundleArchiveDataUrl: input.bundleArchiveDataUrl || null,
     createdById: authorId,
   });
   return getPluginDetail(pluginId);

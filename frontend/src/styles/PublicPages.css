@@ -3216,6 +3216,8 @@ html[data-theme='light'] .dashboard-generated-password {
 .dashboard-developer-two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
 .dashboard-developer-two-col > div { display: flex; min-width: 0; flex-direction: column; gap: 9px; }
 .dashboard-developer-upload-note { display: block; min-height: 13px; margin-top: 4px; color: var(--dashboard-muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9px; }
+.dashboard-developer-upload-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+.dashboard-developer-upload-grid > div { display: flex; min-width: 0; flex-direction: column; gap: 9px; }
 .dashboard-developer-form input[type='file'] { min-height: 38px; padding: 8px 10px; font-size: 10px; }
 .dashboard-developer-feedback { margin-top: 20px; }
 .dashboard-developer-feedback.is-success { border-color: rgba(121, 179, 125, 0.45); color: #91ce96; }
@@ -3232,6 +3234,7 @@ html[data-theme='light'] .dashboard-developer-form select { background: rgba(255
   .dashboard-developer-list, .dashboard-developer-detail { min-height: 0; padding: 21px; }
   .dashboard-developer-detail { border-top: 1px solid var(--dashboard-line); }
   .dashboard-developer-two-col { grid-template-columns: 1fr; }
+  .dashboard-developer-upload-grid { grid-template-columns: 1fr; }
   .dashboard-developer-catalogue-grid { grid-template-columns: 1fr; }
   .dashboard-developer-catalogue-heading { align-items: start; flex-direction: column; gap: 8px; }
 }

@@ -479,10 +479,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         className="insert-shapes-fab"
         onClick={() => setShowInsertShapes(prev => !prev)}
         title="Insert Shape (Ctrl+1)"
-        style={{ position: 'absolute', left: '48px', top: '50%', transform: 'translateY(-50%)', zIndex: 100, pointerEvents: 'auto', width: 44, height: 44, borderRadius: '0', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.08)', color: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)', transition: 'all 0.2s ease' }}
+        style={{ position: 'absolute', left: '48px', top: '50%', transform: 'translateY(-50%)', zIndex: 100, pointerEvents: 'auto', width: 38, height: 38, borderRadius: '0', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.08)', color: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)', transition: 'all 0.2s ease' }}
         onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.85)'; e.currentTarget.style.color = '#fff'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(15, 23, 42, 0.75)'; e.currentTarget.style.color = '#cbd5e1'; }}>
-        <Shapes size={20} />
+        <Shapes size={18} />
       </button>}
       <div className="hud-layer">
         {trimState.active && trimState.cropBox && (() => {
@@ -654,9 +654,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 aria-expanded={roomDetailsOpen}
                 aria-label="Open room details"
               >
-                <UsersRound size={16} />
+                <UsersRound size={13} />
                 <span>{onlineCount}</span>
-                <ChevronDown size={14} className={roomDetailsOpen ? 'room-details-chevron open' : 'room-details-chevron'} />
+                <ChevronDown size={11} className={roomDetailsOpen ? 'room-details-chevron open' : 'room-details-chevron'} />
               </button>
               {roomDetailsOpen && (
                 <div className="room-details-popover">
@@ -715,10 +715,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             <Card className="share-panel">
               <span className="room-code-badge">{roomId.toUpperCase()}</span>
               <Button variant="icon" onClick={handleCopyLink} title="Copy Invite Link">
-                {isCopied ? <Check size={18} style={{ color: '#10b981' }} /> : <Copy size={18} />}
+                {isCopied ? <Check size={14} style={{ color: '#10b981' }} /> : <Copy size={14} />}
               </Button>
             </Card>
-            <Button variant="primary" className="hud-panel" onClick={onLeaveRoom} style={{ padding: '8px 18px', height: 'fit-content' }}>Exit</Button>
+            <Button variant="primary" className="hud-panel" onClick={onLeaveRoom} style={{ padding: '5px 12px', height: 'fit-content' }}>Exit</Button>
           </div>
         </div>
 

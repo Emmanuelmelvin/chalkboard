@@ -94,6 +94,15 @@ function parseManifest(value: string) {
   return parsed as Record<string, unknown>;
 }
 
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('We could not read that file.'));
+    reader.onerror = () => reject(new Error('We could not read that file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function DeveloperPlugins() {
   const [plugins, setPlugins] = useState<ManagedPlugin[]>([]);
   const [catalogue, setCatalogue] = useState<ManagedPlugin[]>([]);
@@ -120,7 +129,7 @@ export default function DeveloperPlugins() {
         ? payload.plugins.find((plugin) => plugin.pluginId === selectedPluginId)
         : payload.plugins[0];
       setSelectedPluginId(nextPlugin?.pluginId ?? null);
-      if (nextPlugin) setVersionForm({ version: '0.2.0', manifest: JSON.stringify(nextPlugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: nextPlugin.versions[0]?.entryUrl ?? '', entryCode: nextPlugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: nextPlugin.versions[0]?.hasBundleArchive || nextPlugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(nextPlugin.versions[0]?.hasBundleArchive || nextPlugin.versions[0]?.bundleArchiveDataUrl) });
+      if (nextPlugin) setVersionForm({ version: '0.2.0', manifest: JSON.stringify(nextPlugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: nextPlugin.versions[0]?.entryUrl ?? '', entryCode: nextPlugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: nextPlugin.versions[0]?.hasBundleArchive || nextPlugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(nextPlugin.versions[0]?.hasBundleArchive || nextPlugin.versions[0]?.bundleArchiveDataUrl), packageFiles: [] });
     } catch (loadError) {
       useLoggerStore.getState().notify(loadError instanceof Error ? loadError.message : 'We could not load your plugins.', 'error', 5000);
     } finally {
@@ -146,9 +155,9 @@ export default function DeveloperPlugins() {
       const payload = await createPlugin({ pluginId: createForm.pluginId, name: createForm.name, description: createForm.description, logoDataUrl: createForm.logoDataUrl, plan: createForm.plan, version: createForm.version, manifest: parseManifest(createForm.manifest), changelog: createForm.changelog, entryUrl: createForm.entryUrl, entryCode: createForm.entryCode, bundleArchiveDataUrl: createForm.bundleArchiveDataUrl });
       setPlugins((current) => [payload.plugin, ...current]);
       setSelectedPluginId(payload.plugin.pluginId);
-      setVersionForm({ version: '0.2.0', manifest: JSON.stringify(payload.plugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: payload.plugin.versions[0]?.entryUrl ?? '', entryCode: payload.plugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: payload.plugin.versions[0]?.hasBundleArchive || payload.plugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(payload.plugin.versions[0]?.hasBundleArchive || payload.plugin.versions[0]?.bundleArchiveDataUrl) });
+      setVersionForm({ version: '0.2.0', manifest: JSON.stringify(payload.plugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: payload.plugin.versions[0]?.entryUrl ?? '', entryCode: payload.plugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: payload.plugin.versions[0]?.hasBundleArchive || payload.plugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(payload.plugin.versions[0]?.hasBundleArchive || payload.plugin.versions[0]?.bundleArchiveDataUrl), packageFiles: [] });
       setCreateOpen(false);
-      setCreateForm({ pluginId: '', name: '', description: '', logoDataUrl: '', plan: 'free', version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '' });
+      setCreateForm({ pluginId: '', name: '', description: '', logoDataUrl: '', plan: 'free', version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '', packageFiles: [] });
       useLoggerStore.getState().notify('Draft created. Add a version and submit it when it is ready for review.', 'success');
     } catch (createError) {
       useLoggerStore.getState().notify(createError instanceof Error ? createError.message : 'We could not create the plugin.', 'error', 5000);
@@ -165,7 +174,7 @@ export default function DeveloperPlugins() {
       const payload = await createPluginVersion(selectedPlugin.pluginId, { ...versionForm, manifest: parseManifest(versionForm.manifest) });
       updateSelectedPlugin(payload.plugin);
       const latestVersion = payload.plugin.versions[0];
-      setVersionForm((current) => ({ ...current, version: '0.3.0', changelog: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: latestVersion?.hasBundleArchive || latestVersion?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(latestVersion?.hasBundleArchive || latestVersion?.bundleArchiveDataUrl) }));
+      setVersionForm((current) => ({ ...current, version: '0.3.0', changelog: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: latestVersion?.hasBundleArchive || latestVersion?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(latestVersion?.hasBundleArchive || latestVersion?.bundleArchiveDataUrl), packageFiles: [] }));
       useLoggerStore.getState().notify(`Version ${versionForm.version} added.`, 'success');
     } catch (versionError) {
       useLoggerStore.getState().notify(versionError instanceof Error ? versionError.message : 'We could not add that version.', 'error', 5000);
@@ -193,7 +202,7 @@ export default function DeveloperPlugins() {
   };
 
   const useDemoPlugin = () => {
-    setCreateForm((current) => ({ ...current, ...DEMO_PLUGIN, logoDataUrl: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '' }));
+    setCreateForm((current) => ({ ...current, ...DEMO_PLUGIN, logoDataUrl: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '', packageFiles: [] }));
     useLoggerStore.getState().notify('Starter example loaded. Add a logo if you want, then create the draft.', 'info');
   };
 
@@ -209,8 +218,8 @@ export default function DeveloperPlugins() {
       if (typeof reader.result !== 'string') return;
       try {
         const parsed = parseManifest(reader.result);
-        if (target === 'create') setCreateForm((current) => ({ ...current, manifest: JSON.stringify(parsed, null, 2), manifestFileName: file.name }));
-        else setVersionForm((current) => ({ ...current, manifest: JSON.stringify(parsed, null, 2) }));
+        if (target === 'create') setCreateForm((current) => ({ ...current, manifest: JSON.stringify(parsed, null, 2), manifestFileName: file.name, bundleArchiveDataUrl: '', archiveFileName: '', packageFiles: [] }));
+        else setVersionForm((current) => ({ ...current, manifest: JSON.stringify(parsed, null, 2), bundleArchiveDataUrl: '', archiveFileName: '', hasBundleArchive: false, packageFiles: [] }));
       } catch (manifestError) {
         useLoggerStore.getState().notify(manifestError instanceof Error ? manifestError.message : 'That manifest is not valid JSON.', 'error');
       }
@@ -229,28 +238,72 @@ export default function DeveloperPlugins() {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== 'string') return;
-      if (target === 'create') setCreateForm((current) => ({ ...current, entryCode: reader.result as string, bundleFileName: file.name }));
-      else setVersionForm((current) => ({ ...current, entryCode: reader.result as string, bundleFileName: file.name }));
+      if (target === 'create') setCreateForm((current) => ({ ...current, entryCode: reader.result as string, bundleFileName: file.name, bundleArchiveDataUrl: '', archiveFileName: '', packageFiles: [] }));
+      else setVersionForm((current) => ({ ...current, entryCode: reader.result as string, bundleFileName: file.name, bundleArchiveDataUrl: '', archiveFileName: '', hasBundleArchive: false, packageFiles: [] }));
     };
     reader.onerror = () => useLoggerStore.getState().notify('We could not read that plugin bundle.', 'error');
     reader.readAsText(file);
   };
 
-  const handleArchiveFileChange = (event: ChangeEvent<HTMLInputElement>, target: 'create' | 'version') => {
-    const file = event.target.files?.[0];
+  const handlePackageFile = async (file: File, target: 'create' | 'version') => {
     if (!file) return;
     if (file.size > 2_000_000 || !file.name.toLowerCase().endsWith('.zip')) {
       useLoggerStore.getState().notify('Plugin packages must be ZIP files smaller than 2 MB.', 'error');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== 'string') return;
-      if (target === 'create') setCreateForm((current) => ({ ...current, bundleArchiveDataUrl: reader.result as string, archiveFileName: file.name }));
-      else setVersionForm((current) => ({ ...current, bundleArchiveDataUrl: reader.result as string, archiveFileName: file.name, hasBundleArchive: true }));
-    };
-    reader.onerror = () => useLoggerStore.getState().notify('We could not read that ZIP package.', 'error');
-    reader.readAsDataURL(file);
+    setPackageLoadingTarget(target);
+    try {
+      const [entries, archiveDataUrl] = await Promise.all([readZipArchive(file), readFileAsDataUrl(file)]);
+      const manifestEntry = findZipEntry(entries, 'manifest.json');
+      if (!manifestEntry) throw new Error('The ZIP package must include manifest.json.');
+      const manifest = parseManifest(zipEntryText(manifestEntry));
+      const declaredEntry = typeof manifest.entry === 'string' ? manifest.entry : '';
+      const entry = (declaredEntry ? findZipEntry(entries, declaredEntry) : undefined)
+        ?? findZipEntry(entries, 'index.js')
+        ?? findZipEntry(entries, 'index.mjs');
+      if (!entry) throw new Error('The ZIP package must include index.js or index.mjs.');
+      const entryCode = createBrowserModuleBundle(entries, entry.name);
+      if (entryCode.length > 500_000) throw new Error('The packaged JavaScript must be smaller than 500 KB.');
+      const packageFiles = entries.map((item) => ({ name: item.name, size: item.size }));
+      const manifestText = JSON.stringify(manifest, null, 2);
+      const manifestId = typeof manifest.id === 'string' ? manifest.id : '';
+      const manifestName = typeof manifest.name === 'string' ? manifest.name : '';
+      const manifestDescription = typeof manifest.description === 'string' ? manifest.description : '';
+      const manifestVersion = typeof manifest.version === 'string' ? manifest.version : '';
+      if (target === 'create') {
+        setCreateForm((current) => ({
+          ...current,
+          pluginId: manifestId || current.pluginId,
+          name: manifestName || current.name,
+          description: manifestDescription || current.description,
+          version: manifestVersion || current.version,
+          manifest: manifestText,
+          manifestFileName: manifestEntry.name,
+          entryCode,
+          bundleFileName: entry.name,
+          bundleArchiveDataUrl: archiveDataUrl,
+          archiveFileName: file.name,
+          packageFiles,
+        }));
+      } else {
+        setVersionForm((current) => ({
+          ...current,
+          version: manifestVersion || current.version,
+          manifest: manifestText,
+          entryCode,
+          bundleFileName: entry.name,
+          bundleArchiveDataUrl: archiveDataUrl,
+          archiveFileName: file.name,
+          hasBundleArchive: true,
+          packageFiles,
+        }));
+      }
+      useLoggerStore.getState().notify(`${file.name} loaded. Found ${packageFiles.length} files; ${manifestEntry.name} and ${entry.name} were imported.`, 'success');
+    } catch (packageError) {
+      useLoggerStore.getState().notify(packageError instanceof Error ? packageError.message : 'We could not read that ZIP package.', 'error', 5000);
+    } finally {
+      setPackageLoadingTarget(null);
+    }
   };
 
   const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -285,7 +338,8 @@ export default function DeveloperPlugins() {
         <label htmlFor="developer-plugin-description">Description</label><textarea id="developer-plugin-description" rows={3} value={createForm.description} onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))} placeholder="What does this plugin help people do?" />
         <div className="dashboard-developer-logo-field"><label htmlFor="developer-plugin-logo">Plugin logo <small>PNG, JPEG, WebP, or SVG · 240 KB max</small></label><div className="dashboard-developer-logo-row">{createForm.logoDataUrl ? <img src={createForm.logoDataUrl} alt="Plugin logo preview" /> : <span className="dashboard-developer-logo-placeholder"><Code2 size={18} /></span>}<input id="developer-plugin-logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={handleLogoChange} /></div></div>
         <div className="dashboard-developer-two-col"><div><label htmlFor="developer-plugin-version">First version</label><input id="developer-plugin-version" value={createForm.version} onChange={(event) => updateManifestFromBasics(createForm.pluginId, createForm.name, event.target.value)} placeholder="0.1.0" /></div><div><label htmlFor="developer-plugin-plan">Access plan</label><select id="developer-plugin-plan" value={createForm.plan} onChange={(event) => setCreateForm((current) => ({ ...current, plan: event.target.value as ManagedPluginPlan }))}><option value="free">Free</option><option value="pro">Pro</option></select></div></div>
-        <div className="dashboard-developer-upload-grid"><div><label htmlFor="developer-plugin-manifest-file">Manifest file <small>optional if editing below</small></label><input id="developer-plugin-manifest-file" type="file" accept="application/json,.json" onChange={(event) => handleManifestFileChange(event, 'create')} /><span className="dashboard-developer-upload-note">{createForm.manifestFileName || 'Choose manifest.json'}</span></div><div><label htmlFor="developer-plugin-bundle">Plugin bundle <small>JavaScript · 480 KB max</small></label><input id="developer-plugin-bundle" type="file" accept="text/javascript,.js,.mjs" onChange={(event) => handleBundleFileChange(event, 'create')} /><span className="dashboard-developer-upload-note">{createForm.bundleFileName || 'Choose index.js'}</span></div><div><label htmlFor="developer-plugin-archive">ZIP package <small>2 MB max</small></label><input id="developer-plugin-archive" type="file" accept=".zip,application/zip,application/x-zip-compressed" onChange={(event) => handleArchiveFileChange(event, 'create')} /><span className="dashboard-developer-upload-note">{createForm.archiveFileName || 'Choose plugin.zip'}</span></div></div>
+        <PluginPackagePicker inputId="developer-plugin-package" fileName={createForm.archiveFileName} files={createForm.packageFiles} loading={packageLoadingTarget === 'create'} manualOpen={manualCreateOpen} onFile={(file) => { void handlePackageFile(file, 'create'); }} onToggleManual={() => setManualCreateOpen((current) => !current)} />
+        {manualCreateOpen && <div className="dashboard-developer-upload-grid"><div><label htmlFor="developer-plugin-manifest-file">Manifest file <small>optional if editing below</small></label><input id="developer-plugin-manifest-file" type="file" accept="application/json,.json" onChange={(event) => handleManifestFileChange(event, 'create')} /><span className="dashboard-developer-upload-note">{createForm.manifestFileName || 'Choose manifest.json'}</span></div><div><label htmlFor="developer-plugin-bundle">Plugin bundle <small>JavaScript · 480 KB max</small></label><input id="developer-plugin-bundle" type="file" accept="text/javascript,.js,.mjs" onChange={(event) => handleBundleFileChange(event, 'create')} /><span className="dashboard-developer-upload-note">{createForm.bundleFileName || 'Choose index.js'}</span></div></div>}
         <label htmlFor="developer-plugin-entry-url">Bundle URL <small>optional external alternative</small></label><input id="developer-plugin-entry-url" value={createForm.entryUrl} onChange={(event) => setCreateForm((current) => ({ ...current, entryUrl: event.target.value }))} placeholder="https://…" type="url" />
         <label htmlFor="developer-plugin-manifest">Manifest JSON</label><textarea id="developer-plugin-manifest" className="dashboard-developer-manifest" rows={10} value={createForm.manifest} onChange={(event) => setCreateForm((current) => ({ ...current, manifest: event.target.value }))} />
         <label htmlFor="developer-plugin-changelog">Changelog</label><textarea id="developer-plugin-changelog" rows={2} value={createForm.changelog} onChange={(event) => setCreateForm((current) => ({ ...current, changelog: event.target.value }))} placeholder="What is included in the first release?" />
@@ -301,7 +355,7 @@ export default function DeveloperPlugins() {
         {loading ? <div className="dashboard-empty-state"><LoaderCircle className="is-spinning" size={20} /> Loading your plugins…</div> : plugins.length === 0 ? (
           <div className="dashboard-developer-empty"><Code2 size={24} /><strong>Your first plugin starts here.</strong><span>Create a draft with a stable ID and manifest, then send it to review when it is ready.</span><button className="dashboard-link-button" type="button" onClick={() => setCreateOpen(true)}>Create a draft <Plus size={14} /></button></div>
         ) : (
-        <div className="dashboard-developer-plugin-list">{plugins.map((plugin) => <button className={`dashboard-developer-plugin-row${selectedPluginId === plugin.pluginId ? ' is-selected' : ''}`} type="button" key={plugin.pluginId} onClick={() => { setSelectedPluginId(plugin.pluginId); setVersionForm({ version: '0.2.0', manifest: JSON.stringify(plugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: plugin.versions[0]?.entryUrl ?? '', entryCode: plugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: plugin.versions[0]?.hasBundleArchive || plugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(plugin.versions[0]?.hasBundleArchive || plugin.versions[0]?.bundleArchiveDataUrl) }); }}><span className="dashboard-developer-plugin-mark">{(plugin.logoUrl || plugin.logoDataUrl) ? <img src={plugin.logoUrl || plugin.logoDataUrl || ''} alt="" /> : <Sparkles size={16} />}</span><span><strong>{plugin.name}</strong><small>{plugin.pluginId} · v{plugin.versions[0]?.version ?? 'draft'}</small></span><em className={`dashboard-plugin-status is-${plugin.status}`}>{statusLabel(plugin.status)}</em></button>)}</div>
+        <div className="dashboard-developer-plugin-list">{plugins.map((plugin) => <button className={`dashboard-developer-plugin-row${selectedPluginId === plugin.pluginId ? ' is-selected' : ''}`} type="button" key={plugin.pluginId} onClick={() => { setSelectedPluginId(plugin.pluginId); setVersionForm({ version: '0.2.0', manifest: JSON.stringify(plugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: plugin.versions[0]?.entryUrl ?? '', entryCode: plugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: plugin.versions[0]?.hasBundleArchive || plugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(plugin.versions[0]?.hasBundleArchive || plugin.versions[0]?.bundleArchiveDataUrl), packageFiles: [] }); }}><span className="dashboard-developer-plugin-mark">{(plugin.logoUrl || plugin.logoDataUrl) ? <img src={plugin.logoUrl || plugin.logoDataUrl || ''} alt="" /> : <Sparkles size={16} />}</span><span><strong>{plugin.name}</strong><small>{plugin.pluginId} · v{plugin.versions[0]?.version ?? 'draft'}</small></span><em className={`dashboard-plugin-status is-${plugin.status}`}>{statusLabel(plugin.status)}</em></button>)}</div>
         )}
         <div className="dashboard-developer-runtime"><p className="dashboard-panel-kicker">Bundled runtime</p>{installedPlugins.map((plugin) => <div key={plugin.id}><CheckCircle2 size={14} /><span><strong>{plugin.name}</strong><small>v{plugin.version} · available in Chalkboard</small></span></div>)}</div>
       </div>
@@ -312,7 +366,20 @@ export default function DeveloperPlugins() {
           <div className="dashboard-developer-meta"><span><GitBranch size={14} /> {selectedPlugin.plan === 'pro' ? 'Pro access' : 'Free access'}</span><span>Updated {dateLabel(selectedPlugin.updatedAt)}</span></div>
           <div className="dashboard-developer-version-heading"><div><p className="dashboard-panel-kicker">Versions</p><strong>{selectedPlugin.versions.length} release{selectedPlugin.versions.length === 1 ? '' : 's'}</strong></div>{selectedPlugin.currentVersion && <span>Live v{selectedPlugin.currentVersion}</span>}</div>
           <div className="dashboard-developer-versions">{selectedPlugin.versions.map((version) => <div key={version.id}><span><strong>v{version.version}</strong><small>{version.changelog || 'No changelog yet.'}</small></span><em className={`dashboard-plugin-status is-${version.status}`}>{statusLabel(version.status)}</em></div>)}</div>
-          <form className="dashboard-developer-form" onSubmit={handleCreateVersion}><div className="dashboard-developer-form-heading"><div><p className="dashboard-panel-kicker">New version</p><strong>Keep releases immutable.</strong></div><span>Latest: v{latestVersion?.version ?? '—'}</span></div><label htmlFor="developer-version">Version</label><input id="developer-version" value={versionForm.version} onChange={(event) => setVersionForm((current) => ({ ...current, version: event.target.value }))} placeholder="0.2.0" /><div className="dashboard-developer-upload-grid"><div><label htmlFor="developer-version-bundle">Plugin bundle <small>replace the entry for this release</small></label><input id="developer-version-bundle" type="file" accept="text/javascript,.js,.mjs" onChange={(event) => handleBundleFileChange(event, 'version')} /><span className="dashboard-developer-upload-note">{versionForm.bundleFileName || (versionForm.entryCode ? 'Using previous bundle' : 'Choose index.js')}</span></div><div><label htmlFor="developer-version-archive">ZIP package <small>2 MB max</small></label><input id="developer-version-archive" type="file" accept=".zip,application/zip,application/x-zip-compressed" onChange={(event) => handleArchiveFileChange(event, 'version')} /><span className="dashboard-developer-upload-note">{versionForm.archiveFileName || (versionForm.hasBundleArchive ? 'Using previous ZIP package' : 'Choose plugin.zip')}</span></div></div><label htmlFor="developer-entry-url">Bundle URL <small>optional external alternative</small></label><input id="developer-entry-url" value={versionForm.entryUrl} onChange={(event) => setVersionForm((current) => ({ ...current, entryUrl: event.target.value }))} placeholder="https://…" type="url" /><label htmlFor="developer-changelog">Changelog</label><textarea id="developer-changelog" rows={2} value={versionForm.changelog} onChange={(event) => setVersionForm((current) => ({ ...current, changelog: event.target.value }))} placeholder="What changed in this version?" /><div><label htmlFor="developer-version-manifest-file">Manifest file <small>optional if editing below</small></label><input id="developer-version-manifest-file" type="file" accept="application/json,.json" onChange={(event) => handleManifestFileChange(event, 'version')} /></div><label htmlFor="developer-manifest">Manifest JSON</label><textarea id="developer-manifest" className="dashboard-developer-manifest" rows={9} value={versionForm.manifest} onChange={(event) => setVersionForm((current) => ({ ...current, manifest: event.target.value }))} /><div className="dashboard-developer-actions"><button className="dashboard-button dashboard-button-dark" type="submit" disabled={saving}><GitBranch size={15} /> {saving ? 'Saving…' : 'Add version'}</button>{['draft', 'rejected'].includes(selectedPlugin.status) && <button className="dashboard-button dashboard-button-gold" type="button" disabled={saving} onClick={() => { void handleSubmit(); }}><Send size={15} /> Submit for review</button>}</div></form>
+          <form className="dashboard-developer-form" onSubmit={handleCreateVersion}>
+            <div className="dashboard-developer-form-heading"><div><p className="dashboard-panel-kicker">New version</p><strong>Keep releases immutable.</strong></div><span>Latest: v{latestVersion?.version ?? '—'}</span></div>
+            <label htmlFor="developer-version">Version</label>
+            <input id="developer-version" value={versionForm.version} onChange={(event) => setVersionForm((current) => ({ ...current, version: event.target.value }))} placeholder="0.2.0" />
+            <PluginPackagePicker inputId="developer-version-package" fileName={versionForm.archiveFileName} files={versionForm.packageFiles} loading={packageLoadingTarget === 'version'} manualOpen={manualVersionOpen} onFile={(file) => { void handlePackageFile(file, 'version'); }} onToggleManual={() => setManualVersionOpen((current) => !current)} />
+            {manualVersionOpen && <div className="dashboard-developer-upload-grid"><div><label htmlFor="developer-version-manifest-file">Manifest file <small>optional if editing below</small></label><input id="developer-version-manifest-file" type="file" accept="application/json,.json" onChange={(event) => handleManifestFileChange(event, 'version')} /><span className="dashboard-developer-upload-note">{versionForm.manifest ? 'Choose another manifest.json' : 'Choose manifest.json'}</span></div><div><label htmlFor="developer-version-bundle">Plugin bundle <small>JavaScript · 480 KB max</small></label><input id="developer-version-bundle" type="file" accept="text/javascript,.js,.mjs" onChange={(event) => handleBundleFileChange(event, 'version')} /><span className="dashboard-developer-upload-note">{versionForm.bundleFileName || (versionForm.entryCode ? 'Using previous bundle' : 'Choose index.js')}</span></div></div>}
+            <label htmlFor="developer-entry-url">Bundle URL <small>optional external alternative</small></label>
+            <input id="developer-entry-url" value={versionForm.entryUrl} onChange={(event) => setVersionForm((current) => ({ ...current, entryUrl: event.target.value }))} placeholder="https://…" type="url" />
+            <label htmlFor="developer-changelog">Changelog</label>
+            <textarea id="developer-changelog" rows={2} value={versionForm.changelog} onChange={(event) => setVersionForm((current) => ({ ...current, changelog: event.target.value }))} placeholder="What changed in this version?" />
+            <label htmlFor="developer-manifest">Manifest JSON</label>
+            <textarea id="developer-manifest" className="dashboard-developer-manifest" rows={9} value={versionForm.manifest} onChange={(event) => setVersionForm((current) => ({ ...current, manifest: event.target.value }))} />
+            <div className="dashboard-developer-actions"><button className="dashboard-button dashboard-button-dark" type="submit" disabled={saving}><GitBranch size={15} /> {saving ? 'Saving…' : 'Add version'}</button>{['draft', 'rejected'].includes(selectedPlugin.status) && <button className="dashboard-button dashboard-button-gold" type="button" disabled={saving} onClick={() => { void handleSubmit(); }}><Send size={15} /> Submit for review</button>}</div>
+          </form>
         </> : <div className="dashboard-developer-detail-empty"><FileJson size={30} /><h3>Select a plugin</h3><p>Create a plugin draft or select one from the list to manage versions and submissions.</p></div>}
       </div>
     </section>

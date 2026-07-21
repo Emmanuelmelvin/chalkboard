@@ -1,3 +1,6 @@
+/* The generated browser module wrapper contains escaped regular-expression source. */
+/* eslint-disable no-useless-escape */
+
 export interface BrowserZipEntry {
   name: string;
   bytes: Uint8Array;
@@ -41,7 +44,9 @@ async function inflateRaw(bytes: Uint8Array) {
   if (typeof DecompressionStream === 'undefined') {
     throw new Error('This browser cannot unpack deflated ZIP files.');
   }
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  const blobBytes = new Uint8Array(bytes.byteLength);
+  blobBytes.set(bytes);
+  const stream = new Blob([blobBytes.buffer]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
@@ -105,20 +110,6 @@ export function findZipEntry(entries: BrowserZipEntry[], filename: string) {
     || entries.find((entry) => entry.name.endsWith(`/${filename}`));
 }
 
-function resolveModuleName(fromName: string, requestedName: string, sources: Record<string, string>) {
-  if (!requestedName.startsWith('.')) return null;
-  const parts = fromName.split('/');
-  parts.pop();
-  requestedName.split('/').forEach((part) => {
-    if (!part || part === '.') return;
-    if (part === '..') parts.pop();
-    else parts.push(part);
-  });
-  const base = parts.join('/');
-  return [base, `${base}.js`, `${base}.mjs`, `${base}/index.js`, `${base}/index.mjs`]
-    .find((candidate) => candidate in sources) || null;
-}
-
 export function createBrowserModuleBundle(entries: BrowserZipEntry[], entryName: string) {
   const sourceEntries = entries.filter((entry) => /\.(?:js|mjs)$/i.test(entry.name));
   const sources = Object.fromEntries(sourceEntries.map((entry) => [entry.name, zipEntryText(entry)]));
@@ -158,10 +149,10 @@ export function createBrowserModuleBundle(entries: BrowserZipEntry[], entryName:
       return prefix + moduleUrl(resolvedName) + suffix;
     };
     const source = sources[name]
-      .replace(/(\bfrom\s*["'])(\.{1,2}\/[^"']+)(["'])/g, rewrite)
-      .replace(/(\bimport\s*\(\s*["'])(\.{1,2}\/[^"']+)(["']\s*\))/g, rewrite)
-      .replace(/(\bimport\s*["'])(\.{1,2}\/[^"']+)(["'])/g, rewrite)
-      .replace(/(\bexport\s*\*?\s*from\s*["'])(\.{1,2}\/[^"']+)(["'])/g, rewrite);
+      .replace(/(\\bfrom\\s*["'])(\\.{1,2}\\\/[^"']+)(["'])/g, rewrite)
+      .replace(/(\\bimport\\s*\\(\\s*["'])(\\.{1,2}\\\/[^"']+)(["']\\s*\\))/g, rewrite)
+      .replace(/(\\bimport\\s*["'])(\\.{1,2}\\\/[^"']+)(["'])/g, rewrite)
+      .replace(/(\\bexport\\s*\\*?\\s*from\\s*["'])(\\.{1,2}\\\/[^"']+)(["'])/g, rewrite);
     building.delete(name);
     const url = encode(source);
     cache.set(name, url);

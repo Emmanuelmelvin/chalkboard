@@ -225,13 +225,13 @@ function Docs() {
               <ol className="docs-numbered-list docs-dashboard-steps">
                 <li><strong>Enable Developer Mode.</strong><span>Open your Profile, turn on Developer mode, and choose Developer from the workspace navigation.</span></li>
                 <li><strong>Create a draft.</strong><span>Choose New plugin. Enter a globally unique plugin ID, display name, description, access plan, and first version.</span></li>
-                <li><strong>Write the contract.</strong><span>Paste or upload <code>manifest.json</code>. The manifest must describe the same ID and version you entered in the form.</span></li>
-                <li><strong>Upload the implementation.</strong><span>Provide the JavaScript bundle in the Plugin bundle field. You may also attach a ZIP package, logo, and optional external bundle URL.</span></li>
+                <li><strong>Write the contract.</strong><span>Drop in a ZIP package and Chalkboard reads <code>manifest.json</code> for you. You can still open Add files manually when you want to provide the manifest and entry separately.</span></li>
+                <li><strong>Upload the implementation.</strong><span>Drop a ZIP package or browse for one. The dashboard lists its files, imports the manifest and <code>index.js</code>/<code>index.mjs</code>, and packages relative JavaScript imports into the runnable entry.</span></li>
                 <li><strong>Create the draft.</strong><span>Chalkboard validates the identity, version format, JSON shape, and artifact limits before saving the draft.</span></li>
                 <li><strong>Submit for review.</strong><span>After testing the draft, submit it. Reviewers inspect the manifest, bundle, declared behavior, and package safety before approval and publication.</span></li>
               </ol>
               <div className="docs-dashboard-panels">
-                <div><UploadCloud size={18} /><strong>What the dashboard accepts</strong><span>Manifest JSON, JavaScript bundle, optional ZIP archive, optional logo, and an optional bundle URL.</span></div>
+                <div><UploadCloud size={18} /><strong>What the dashboard accepts</strong><span>A ZIP package with manifest.json and index.js/index.mjs, or those files added manually, plus an optional logo and bundle URL.</span></div>
                 <div><LockKeyhole size={18} /><strong>What the dashboard does not do</strong><span>It does not expose the Chalkboard source tree or require developers to register imports in application code.</span></div>
               </div>
             </section>
@@ -239,7 +239,7 @@ function Docs() {
             <section className="docs-section" id="package">
               <p className="docs-section-kicker">03 / Package contract</p>
               <h2>Prepare one clear, reviewable package</h2>
-              <p>Your package should be understandable without opening the Chalkboard application. The manifest is the source of truth for identity and declared capabilities. The bundle is the executable implementation. The optional archive groups the release artifacts for distribution and review.</p>
+              <p>Your package should be understandable without opening the Chalkboard application. The manifest is the source of truth for identity and declared capabilities. The dashboard reads the archive in the browser, shows its files, and prepares the entry with relative JavaScript imports included. Non-JavaScript assets remain available in the uploaded archive for review and distribution.</p>
               <pre className="docs-code docs-code-tree"><code>{packageTree}</code></pre>
               <div className="docs-contract-list">
                 <div><strong><code>manifest.json</code></strong><span>Required. Valid JSON containing the plugin identity, permissions, and contributions.</span></div>
@@ -247,7 +247,7 @@ function Docs() {
                 <div><strong><code>logo.svg</code></strong><span>Optional. Used as the catalogue identity for the plugin. PNG, JPEG, WebP, and SVG are accepted by the dashboard.</span></div>
                 <div><strong><code>README.md</code></strong><span>Optional. Useful for release notes and human review, but it does not replace the manifest or bundle.</span></div>
               </div>
-              <div className="docs-callout docs-callout-dark"><CircleAlert size={18} /><div><strong>Inline bundle versus ZIP</strong><p>The Plugin bundle field is the executable JavaScript that the review sandbox can inspect and test. The ZIP is the complete package artifact. Uploading a ZIP alone does not make its internal files discoverable unless the required bundle and manifest are also available to the dashboard workflow.</p></div></div>
+              <div className="docs-callout docs-callout-dark"><CircleAlert size={18} /><div><strong>ZIP-first authoring</strong><p>ZIP upload is the normal path: Chalkboard detects manifest.json and index.js/index.mjs, then creates the executable entry bundle in the browser. Use Add files manually for a separate manifest and entry file, or use an external bundle URL when the implementation is hosted elsewhere.</p></div></div>
             </section>
 
             <section className="docs-section" id="manifest">

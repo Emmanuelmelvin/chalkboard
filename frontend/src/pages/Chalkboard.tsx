@@ -543,7 +543,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         <div key={p.id} className="dust-puff" style={{ left: p.x - 12, top: p.y - 12, width: 24, height: 24 }} />
       ))}
       {Object.entries(collaborators).map(([id, coll]) => {
-        if (!coll.cursor) return null;
+        if (coll.role === 'viewer' || !coll.cursor) return null;
         const x = coll.cursor.x * zoom + panOffset.x + 24;
         const y = coll.cursor.y * zoom + panOffset.y + 24;
         if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null;

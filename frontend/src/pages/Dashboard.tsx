@@ -127,7 +127,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [roomToDelete, setRoomToDelete] = useState<RoomSummary | null>(null);
   const [createdRoomInvite, setCreatedRoomInvite] = useState<{ slug: string; title: string; password: string | null } | null>(null);
   const [roomMembersModal, setRoomMembersModal] = useState<RoomSummary | null>(null);
-  const [passwordCopied, setPasswordCopied] = useState(false);
+  const [copiedInviteValue, setCopiedInviteValue] = useState<'code' | 'password' | null>(null);
   const [copiedRoomValue, setCopiedRoomValue] = useState<string | null>(null);
   const [openRoomDetailsSlug, setOpenRoomDetailsSlug] = useState<string | null>(null);
   const [resettingPasswordSlug, setResettingPasswordSlug] = useState<string | null>(null);
@@ -295,6 +295,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
         title: payload.room.title || roomTitle.trim() || 'New room',
         password: typeof payload.password === 'string' && payload.password ? payload.password : null,
       });
+      void loadRooms();
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'We could not create the room.');
     } finally {
@@ -846,13 +847,13 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                 type="button"
                 onClick={() => {
                   void navigator.clipboard.writeText(createdRoomInvite.slug).then(() => {
-                    setPasswordCopied(true);
-                    window.setTimeout(() => setPasswordCopied(false), 1800);
+                    setCopiedInviteValue('code');
+                    window.setTimeout(() => setCopiedInviteValue((current) => current === 'code' ? null : current), 1800);
                   });
                 }}
               >
-                {passwordCopied ? <Check size={14} /> : <Copy size={14} />}
-                {passwordCopied ? 'Copied' : 'Copy'}
+                {copiedInviteValue === 'code' ? <Check size={14} /> : <Copy size={14} />}
+                {copiedInviteValue === 'code' ? 'Copied' : 'Copy'}
               </button>
             </div>
           </div>
@@ -865,13 +866,13 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                   type="button"
                   onClick={() => {
                     void navigator.clipboard.writeText(createdRoomInvite.password || '').then(() => {
-                      setPasswordCopied(true);
-                      window.setTimeout(() => setPasswordCopied(false), 1800);
+                      setCopiedInviteValue('password');
+                      window.setTimeout(() => setCopiedInviteValue((current) => current === 'password' ? null : current), 1800);
                     });
                   }}
                 >
-                  {passwordCopied ? <Check size={14} /> : <Copy size={14} />}
-                  {passwordCopied ? 'Copied' : 'Copy'}
+                  {copiedInviteValue === 'password' ? <Check size={14} /> : <Copy size={14} />}
+                  {copiedInviteValue === 'password' ? 'Copied' : 'Copy'}
                 </button>
               </div>
             </div>

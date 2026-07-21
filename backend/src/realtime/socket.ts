@@ -560,7 +560,7 @@ export async function attachSocket(server: any) {
       runSafely(socket, 'stroke-draw', ack, () => relayValidated(socket, 'stroke-draw', strokeDrawSchema, payload, ack, 'instructor'));
     });
     socket.on('cursor-move', (payload, ack) => {
-      runSafely(socket, 'cursor-move', ack, () => relayValidated(socket, 'cursor-move', cursorMoveSchema, payload, ack));
+      runSafely(socket, 'cursor-move', ack, () => relayValidated(socket, 'cursor-move', cursorMoveSchema, payload, ack, 'instructor'));
     });
     socket.on('plugin:event', (payload, ack) => {
       runSafely(socket, 'plugin:event', ack, () => relayValidated(socket, 'plugin:event', pluginEventSchema, payload, ack, 'instructor'));

@@ -3,7 +3,9 @@ import { ArrowLeft, CheckCircle2, Code2, FileJson, GitBranch, LoaderCircle, Plus
 import PluginPackagePicker, { type PluginPackageFile } from '@/components/PluginPackagePicker';
 import { createBrowserModuleBundle, findZipEntry, readZipArchive, zipEntryText, type BrowserZipEntry } from '@/lib/zip';
 import { installedPlugins } from '@/plugins/installedPlugins';
-import { createPlugin, createPluginVersion, getManagedPluginLogo, listMyPlugins, listPluginCatalogue, submitPlugin, type ManagedPlugin, type ManagedPluginPlan } from '@/plugins/management';
+import { getManagedPluginLogo } from '@/api/plugins';
+import { useCreatePluginMutation, useCreatePluginVersionMutation, useMyPluginsQuery, usePluginCatalogueQuery, useSubmitPluginMutation } from '@/api/hooks';
+import type { ManagedPlugin, ManagedPluginPlan } from '@/api/types';
 import { useLoggerStore } from '@/stores/loggerStore';
 
 const DEFAULT_MANIFEST = (pluginId: string, name: string, version: string) => JSON.stringify({
@@ -156,6 +158,11 @@ export default function DeveloperPlugins() {
   const [manualVersionOpen, setManualVersionOpen] = useState(false);
   const [createForm, setCreateForm] = useState({ pluginId: '', name: '', description: '', logoDataUrl: '', logoSource: '' as '' | 'manual' | 'package', plan: 'free' as ManagedPluginPlan, version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '', packageFiles: [] as PluginPackageFile[] });
   const [versionForm, setVersionForm] = useState({ version: '0.2.0', manifest: '', changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', hasBundleArchive: false, packageFiles: [] as PluginPackageFile[] });
+  const myPluginsQuery = useMyPluginsQuery(false);
+  const catalogueQuery = usePluginCatalogueQuery(false);
+  const createPluginMutation = useCreatePluginMutation();
+  const createPluginVersionMutation = useCreatePluginVersionMutation();
+  const submitPluginMutation = useSubmitPluginMutation();
 
   const selectedPlugin = useMemo(() => plugins.find((plugin) => plugin.pluginId === selectedPluginId) ?? null, [plugins, selectedPluginId]);
   const latestVersion = selectedPlugin?.versions[0] ?? null;
@@ -163,7 +170,8 @@ export default function DeveloperPlugins() {
   const loadPlugins = async () => {
     setLoading(true);
     try {
-      const [payload, cataloguePayload] = await Promise.all([listMyPlugins(), listPluginCatalogue()]);
+      const [{ data: payload }, { data: cataloguePayload }] = await Promise.all([myPluginsQuery.refetch(), catalogueQuery.refetch()]);
+      if (!payload || !cataloguePayload) throw new Error('We could not load your plugins.');
       setPlugins(payload.plugins);
       setCatalogue(cataloguePayload.plugins);
       const nextPlugin = selectedPluginId && payload.plugins.some((plugin) => plugin.pluginId === selectedPluginId)
@@ -193,7 +201,7 @@ export default function DeveloperPlugins() {
     event.preventDefault();
     setSaving(true);
     try {
-      const payload = await createPlugin({ pluginId: createForm.pluginId, name: createForm.name, description: createForm.description, logoDataUrl: createForm.logoDataUrl, plan: createForm.plan, version: createForm.version, manifest: parseManifest(createForm.manifest), changelog: createForm.changelog, entryUrl: createForm.entryUrl, entryCode: createForm.entryCode, bundleArchiveDataUrl: createForm.bundleArchiveDataUrl });
+      const payload = await createPluginMutation.mutateAsync({ pluginId: createForm.pluginId, name: createForm.name, description: createForm.description, logoDataUrl: createForm.logoDataUrl, plan: createForm.plan, version: createForm.version, manifest: parseManifest(createForm.manifest), changelog: createForm.changelog, entryUrl: createForm.entryUrl, entryCode: createForm.entryCode, bundleArchiveDataUrl: createForm.bundleArchiveDataUrl });
       setPlugins((current) => [payload.plugin, ...current]);
       setSelectedPluginId(payload.plugin.pluginId);
       setVersionForm({ version: '0.2.0', manifest: JSON.stringify(payload.plugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: payload.plugin.versions[0]?.entryUrl ?? '', entryCode: payload.plugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: payload.plugin.versions[0]?.hasBundleArchive || payload.plugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(payload.plugin.versions[0]?.hasBundleArchive || payload.plugin.versions[0]?.bundleArchiveDataUrl), packageFiles: [] });
@@ -212,7 +220,7 @@ export default function DeveloperPlugins() {
     if (!selectedPlugin) return;
     setSaving(true);
     try {
-      const payload = await createPluginVersion(selectedPlugin.pluginId, { ...versionForm, manifest: parseManifest(versionForm.manifest) });
+      const payload = await createPluginVersionMutation.mutateAsync({ pluginId: selectedPlugin.pluginId, input: { ...versionForm, manifest: parseManifest(versionForm.manifest) } });
       updateSelectedPlugin(payload.plugin);
       const latestVersion = payload.plugin.versions[0];
       setVersionForm((current) => ({ ...current, version: '0.3.0', changelog: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: latestVersion?.hasBundleArchive || latestVersion?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(latestVersion?.hasBundleArchive || latestVersion?.bundleArchiveDataUrl), packageFiles: [] }));
@@ -228,7 +236,7 @@ export default function DeveloperPlugins() {
     if (!selectedPlugin) return;
     setSaving(true);
     try {
-      const payload = await submitPlugin(selectedPlugin.pluginId);
+      const payload = await submitPluginMutation.mutateAsync(selectedPlugin.pluginId);
       updateSelectedPlugin(payload.plugin);
       useLoggerStore.getState().notify('Plugin submitted for admin review.', 'success');
     } catch (submitError) {

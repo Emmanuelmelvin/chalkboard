@@ -33,10 +33,8 @@ import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import RoomMembersModal from '@/components/RoomMembersModal';
 import DeveloperPlugins from '@/components/DeveloperPlugins';
-import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
-import type { RoomMember } from '@/types';
-import { useCreateRoomMutation, useDeleteRoomMutation, useResetRoomPasswordMutation, useRoomsQuery } from '@/api/hooks';
+import { useCreateRoomMutation, useDeleteRoomMutation, useResetRoomPasswordMutation, useRoomsQuery, useSignOutMutation } from '@/api/hooks';
 import type { RoomAccessMode, RoomSummary } from '@/api/types';
 import '@/styles/PublicPages.css';
 
@@ -96,7 +94,7 @@ function roomRole(room: RoomSummary) {
 function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [, setLocation] = useLocation();
   const search = useSearch();
-  const { signOut } = useAuthStore();
+  const signOutMutation = useSignOutMutation();
   const roomsQuery = useRoomsQuery();
   const createRoomMutation = useCreateRoomMutation();
   const deleteRoomMutation = useDeleteRoomMutation();
@@ -195,7 +193,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     setSigningOut(true);
     setError('');
     try {
-      await signOut();
+      await signOutMutation.mutateAsync();
       setLocation('/login');
     } catch {
       setSigningOut(false);

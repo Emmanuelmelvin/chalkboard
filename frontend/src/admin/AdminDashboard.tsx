@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Check, Clipboard, Code2, ExternalLink, FileCheck2, FlaskConical, KeyRound, LoaderCircle, LogOut, ShieldCheck, Sparkles, UsersRound, WalletCards, XCircle } from 'lucide-react';
-import { addAdmin, beginAdminTwoFactorSetup, getAdminSession, listAdminPlugins, listAdmins, logoutAdminTwoFactor, publishAdminPlugin, removeAdmin, removeAdminPluginFromRegistry, reviewAdminPlugin, verifyAdminTwoFactor, type AdminPlugin, type AdminSession, type AdminUser } from '@/admin/api';
+import { listAdminPlugins } from '@/api/admin';
+import { apiKeys } from '@/api/keys';
+import { useAddAdminMutation, useAdminPluginsQuery, useAdminLogoutMutation, useAdminSessionQuery, useAdminSetupMutation, useAdminVerifyMutation, useAdminsQuery, usePublishAdminPluginMutation, useRemoveAdminMutation, useRemoveAdminPluginMutation, useReviewAdminPluginMutation } from '@/api/hooks';
+import type { AdminPlugin, AdminSession, AdminUser } from '@/api/types';
 import AdminPluginSandbox from '@/admin/AdminPluginSandbox';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import './Admin.css';
@@ -41,6 +45,18 @@ function AdminAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | nu
 }
 
 export default function AdminDashboard() {
+  const queryClient = useQueryClient();
+  const adminSessionQuery = useAdminSessionQuery(false);
+  const adminPluginsQuery = useAdminPluginsQuery('in_review', false);
+  const adminsQuery = useAdminsQuery(false);
+  const setupMutation = useAdminSetupMutation();
+  const verifyMutation = useAdminVerifyMutation();
+  const reviewMutation = useReviewAdminPluginMutation();
+  const publishMutation = usePublishAdminPluginMutation();
+  const removePluginMutation = useRemoveAdminPluginMutation();
+  const logoutMutation = useAdminLogoutMutation();
+  const addAdminMutation = useAddAdminMutation();
+  const removeAdminMutation = useRemoveAdminMutation();
   const [session, setSession] = useState<AdminSession | null>(null);
   const [twoFactorMode, setTwoFactorMode] = useState<TwoFactorMode>('loading');
   const [setup, setSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
@@ -66,7 +82,10 @@ export default function AdminDashboard() {
   const loadPlugins = async (filter = statusFilter) => {
     setBusy(true);
     try {
-      const payload = await listAdminPlugins(filter || undefined);
+      const payload = await queryClient.fetchQuery({
+        queryKey: apiKeys.admin.plugins(filter || undefined),
+        queryFn: () => listAdminPlugins(filter || undefined),
+      });
       setPlugins(payload.plugins);
       setSelectedPluginId((current) => current && payload.plugins.some((plugin) => plugin.pluginId === current) ? current : payload.plugins[0]?.pluginId ?? null);
     } catch (loadError) {
@@ -78,7 +97,7 @@ export default function AdminDashboard() {
 
   const prepareTwoFactor = async () => {
     try {
-      const payload = await beginAdminTwoFactorSetup();
+      const payload = await setupMutation.mutateAsync();
       setSetup(payload);
       setTwoFactorMode('setup');
     } catch (setupError) {
@@ -89,7 +108,8 @@ export default function AdminDashboard() {
 
   // This bootstrap effect intentionally runs once; subsequent plugin reloads are explicit user actions.
   useEffect(() => {
-    void getAdminSession().then(async (payload) => {
+    void adminSessionQuery.refetch().then(async ({ data: payload }) => {
+      if (!payload) throw new Error('Admin service unavailable.');
       setSession(payload);
       if (!payload.twoFactorEnabled) {
         await prepareTwoFactor();
@@ -117,7 +137,7 @@ export default function AdminDashboard() {
     setBusy(true);
     setError('');
     try {
-      const payload = await verifyAdminTwoFactor(code);
+      const payload = await verifyMutation.mutateAsync({ code });
       setRecoveryCodes(payload.recoveryCodes);
       setCode('');
       setTwoFactorMode('ready');
@@ -144,7 +164,7 @@ export default function AdminDashboard() {
     setError('');
     setNotice('');
     try {
-      const payload = await reviewAdminPlugin(selectedPlugin.pluginId, decision, notes);
+      const payload = await reviewMutation.mutateAsync({ pluginId: selectedPlugin.pluginId, input: { decision, notes } });
       replacePlugin(payload.plugin);
       setNotice(`Plugin ${decision}.`);
       setNotes('');
@@ -187,7 +207,7 @@ export default function AdminDashboard() {
     setError('');
     setNotice('');
     try {
-      const payload = await publishAdminPlugin(selectedPlugin.pluginId);
+      const payload = await publishMutation.mutateAsync(selectedPlugin.pluginId);
       replacePlugin(payload.plugin);
       setNotice('Plugin published to the Chalkboard catalogue.');
     } catch (publishError) {
@@ -209,7 +229,7 @@ export default function AdminDashboard() {
     setError('');
     setNotice('');
     try {
-      await removeAdminPluginFromRegistry(selectedPlugin.pluginId);
+      await removePluginMutation.mutateAsync(selectedPlugin.pluginId);
       await loadPlugins(statusFilter);
       setNotice(`${selectedPlugin.name} was removed from the plugin registry.`);
     } catch (removeError) {
@@ -220,14 +240,15 @@ export default function AdminDashboard() {
   };
 
   const handleLogout = async () => {
-    await logoutAdminTwoFactor().catch(() => undefined);
+    await logoutMutation.mutateAsync().catch(() => undefined);
     window.location.href = '/';
   };
 
   const loadAdmins = async () => {
     setBusy(true);
     try {
-      const payload = await listAdmins();
+      const { data: payload } = await adminsQuery.refetch();
+      if (!payload) throw new Error('We could not load administrators.');
       setAdmins(payload.admins);
     } catch (adminError) {
       setError(adminError instanceof Error ? adminError.message : 'We could not load administrators.');
@@ -242,7 +263,7 @@ export default function AdminDashboard() {
     setError('');
     setNotice('');
     try {
-      const payload = await addAdmin(newAdminEmail, newAdminRole);
+      const payload = await addAdminMutation.mutateAsync({ email: newAdminEmail, role: newAdminRole });
       setAdmins((current) => [...current.filter((admin) => admin.id !== payload.admin.id), payload.admin]);
       setNewAdminEmail('');
       setNotice(`${payload.admin.email} can now enter the admin console.`);
@@ -257,7 +278,7 @@ export default function AdminDashboard() {
     setBusy(true);
     setError('');
     try {
-      await removeAdmin(admin.id);
+      await removeAdminMutation.mutateAsync(admin.id);
       setAdmins((current) => current.filter((item) => item.id !== admin.id));
       setNotice(`${admin.email} no longer has admin access.`);
     } catch (adminError) {

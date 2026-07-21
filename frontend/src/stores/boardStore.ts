@@ -145,9 +145,7 @@ export const useBoardStore = create<BoardState>((set) => ({
   clipboard: [],
 
   panOffset: { x: 0, y: 0 },
-  // Start with the board content slightly reduced so the room has more
-  // breathing space while keeping the canvas controls at their normal size.
-  zoom: 0.45,
+  zoom: 0.5,
 
   trimState: { ...initialTrimState },
 
@@ -247,7 +245,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       clipboard: [],
       canEdit: true,
       panOffset: { x: 0, y: 0 },
-      zoom: 0.45,
+      zoom: 0.5,
       trimState: { ...initialTrimState },
       cursorPos: { x: 0, y: 0 },
       showInsertShapes: false,

@@ -1149,7 +1149,7 @@ export function setZoom(level: number): CommandResult<number> {
 }
 
 /**
- * Reset pan to origin and zoom to the room's slightly reduced default view.
+ * Reset pan to origin and zoom to 100%.
  *
  * @returns `{ ok: true }` on success.
  *
@@ -1160,7 +1160,7 @@ export function setZoom(level: number): CommandResult<number> {
  */
 export function resetViewport(): CommandResult {
     const { setZoom, setPanOffset } = getBoard();
-    setZoom(0.9);
+    setZoom(1);
     setPanOffset({ x: 0, y: 0 });
     return { ok: true };
 }

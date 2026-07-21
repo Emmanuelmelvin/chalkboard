@@ -105,7 +105,7 @@ export function publishedPluginDefinition(plugin: ManagedPlugin): PublishedPlugi
 
 function sandboxDocument(code: string) {
   const safeCode = code.replace(/<\/script/gi, '<\\/script');
-  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; connect-src 'none'; img-src data: blob:; style-src 'unsafe-inline'"></head><body><script>${safeCode}</script></body></html>`;
+  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' data:; connect-src 'none'; img-src data: blob:; style-src 'unsafe-inline'"></head><body><script>${safeCode}</script></body></html>`;
 }
 
 export class PublishedPluginRuntime {

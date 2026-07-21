@@ -167,6 +167,6 @@ export function createBrowserModuleBundle(entries: BrowserZipEntry[], entryName:
     cache.set(name, url);
     return url;
   };
-  import(moduleUrl(entryName)).catch((error) => window.parent.postMessage({ type: 'chalkboard:error', pluginId: ${JSON.stringify('PACKAGE_PLUGIN_ID')}, code: 'bundle_execution_failed', message: String(error && error.message || error) }, '*'));
+  import(moduleUrl(entryName)).catch((error) => window.parent.postMessage({ type: 'chalkboard:error', code: 'bundle_execution_failed', message: String(error && error.message || error) }, '*'));
 })();`;
 }

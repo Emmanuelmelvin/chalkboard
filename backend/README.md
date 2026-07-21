@@ -47,6 +47,13 @@ Plugin authoring uses `/api/plugins` and persists plugin drafts, immutable versi
 submissions, and user installations in Postgres. Admin plugin routes live under
 `/api/admin/plugins` and require an admin role plus a verified eight-hour admin 2FA session.
 
+Plugin assets use the storage adapter in `src/services/pluginStorage.ts`. Development defaults
+to a local object-store directory at `backend/.data/plugin-storage`. To use Cloudflare R2,
+set `PLUGIN_STORAGE_MODE=r2` and provide `R2_ENDPOINT`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`,
+and `R2_SECRET_ACCESS_KEY`. New logos, JavaScript bundles, and ZIP packages are written to
+storage; PostgreSQL keeps only their storage keys and plugin metadata. The `0011_plugin_storage`
+migration adds the storage-key columns while legacy base64 columns remain readable for migration.
+
 ## Scripts
 
 - `npm run dev` loads `.env` and starts `src/index.ts` using its `PROCESS_TYPE` value (currently `server`) through Node watch mode.

@@ -151,7 +151,8 @@ export default function DeveloperPlugins() {
     try {
       const payload = await createPluginVersion(selectedPlugin.pluginId, { ...versionForm, manifest: parseManifest(versionForm.manifest) });
       updateSelectedPlugin(payload.plugin);
-      setVersionForm((current) => ({ ...current, version: '0.3.0', changelog: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', hasBundleArchive: false }));
+      const latestVersion = payload.plugin.versions[0];
+      setVersionForm((current) => ({ ...current, version: '0.3.0', changelog: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: latestVersion?.hasBundleArchive || latestVersion?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(latestVersion?.hasBundleArchive || latestVersion?.bundleArchiveDataUrl) }));
       setNotice(`Version ${versionForm.version} added.`);
     } catch (versionError) {
       setError(versionError instanceof Error ? versionError.message : 'We could not add that version.');

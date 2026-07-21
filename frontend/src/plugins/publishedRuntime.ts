@@ -78,7 +78,9 @@ function normalizeSelectionTools(value: unknown): PluginSelectionToolContributio
 }
 
 export function publishedPluginDefinition(plugin: ManagedPlugin): PublishedPluginDefinition | null {
-  const version = plugin.versions[0];
+  const publishedVersions = plugin.versions.filter((version) => version.status === 'published');
+  const version = publishedVersions.find((candidate) => candidate.version === plugin.currentVersion)
+    ?? publishedVersions[0];
   if (!version?.entryCode?.trim()) return null;
   const rawManifest = version.manifest ?? {};
   const rawContributes = rawManifest.contributes && typeof rawManifest.contributes === 'object'

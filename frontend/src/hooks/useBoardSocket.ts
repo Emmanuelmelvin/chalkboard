@@ -230,7 +230,6 @@ export function useBoardSocket(
 
     setStrokes([]);
     setLinks([]);
-    setOnlineCount(0);
     previousUsersRef.current = null;
     socket.on('room-history', handleRoomHistory);
     socket.on('room-state', handleRoomState);

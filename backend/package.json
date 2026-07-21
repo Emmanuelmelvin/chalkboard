@@ -8,6 +8,7 @@
     "start": "node --env-file=.env dist/index.js",
     "dev": "node --env-file=.env --import tsx --watch src/index.ts",
     "check": "tsc --noEmit",
+    "test": "node --env-file=.env --import tsx --test test",
     "verify": "npm run check && npm run build",
     "db:generate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs migrate"

@@ -31,6 +31,16 @@ async function getVersions(pluginDbId: string) {
     .orderBy(desc(pluginVersions.createdAt));
 }
 
+function selectPublishedVersion(
+  plugin: typeof plugins.$inferSelect,
+  versions: (typeof pluginVersions.$inferSelect)[],
+) {
+  const publishedVersions = versions.filter((version) => version.status === 'published');
+  return publishedVersions.find((version) => version.version === plugin.currentVersion)
+    ?? publishedVersions[0]
+    ?? null;
+}
+
 function extensionForLogo(contentType: string) {
   if (contentType === 'image/jpeg') return 'jpg';
   if (contentType === 'image/webp') return 'webp';
@@ -75,7 +85,11 @@ async function hydrateVersion(version: typeof pluginVersions.$inferSelect) {
   };
 }
 
-async function withVersions(plugin: typeof plugins.$inferSelect) {
+async function withVersions(
+  plugin: typeof plugins.$inferSelect,
+  versions?: (typeof pluginVersions.$inferSelect)[],
+) {
+  const versionRows = versions ?? await getVersions(plugin.id);
   const { logoStorageKey, logoContentType, ...publicPlugin } = plugin;
   return {
     ...publicPlugin,
@@ -85,22 +99,35 @@ async function withVersions(plugin: typeof plugins.$inferSelect) {
     logoUrl: logoStorageKey
       ? ((await getPluginAssetReadUrl(logoStorageKey)) ?? await getPluginAssetDataUrl(logoStorageKey, logoContentType || 'image/png'))
       : plugin.logoDataUrl,
-    versions: await Promise.all((await getVersions(plugin.id)).map(hydrateVersion)),
+    versions: await Promise.all(versionRows.map(hydrateVersion)),
   };
+}
+
+async function withPublishedVersion(plugin: typeof plugins.$inferSelect) {
+  const versions = await getVersions(plugin.id);
+  const activeVersion = selectPublishedVersion(plugin, versions);
+  if (!activeVersion) return null;
+
+  const publicPlugin = await withVersions(plugin, [activeVersion]);
+  return { ...publicPlugin, currentVersion: activeVersion.version };
 }
 
 export async function listPluginsForAuthor(authorId: string) {
   const owned = await db.select().from(plugins)
     .where(eq(plugins.authorId, authorId))
     .orderBy(desc(plugins.updatedAt));
-  return Promise.all(owned.map(withVersions));
+  return Promise.all(owned.map((plugin) => withVersions(plugin)));
 }
 
 export async function listPublishedPlugins() {
-  const published = await db.select().from(plugins)
-    .where(eq(plugins.status, 'published'))
+  const candidates = await db.select().from(plugins)
     .orderBy(desc(plugins.updatedAt));
-  return Promise.all(published.map(withVersions));
+  const publicPlugins = await Promise.all(
+    candidates
+      .filter((plugin) => plugin.status !== 'suspended')
+      .map(withPublishedVersion),
+  );
+  return publicPlugins.filter((plugin): plugin is NonNullable<typeof plugin> => plugin !== null);
 }
 
 export async function listPluginsForAdmin(status?: typeof plugins.$inferSelect.status) {
@@ -283,6 +310,10 @@ export async function publishPlugin(pluginId: string) {
   if (!latestVersion) throw new APIError('plugin_must_be_approved_first', 409);
 
   await db.transaction(async (tx) => {
+    const publishedAt = new Date();
+    await tx.update(pluginVersions)
+      .set({ status: 'approved', updatedAt: publishedAt })
+      .where(and(eq(pluginVersions.pluginId, plugin.id), eq(pluginVersions.status, 'published')));
     await tx.update(plugins).set({ status: 'published', currentVersion: latestVersion.version, updatedAt: new Date() }).where(eq(plugins.id, plugin.id));
     await tx.update(pluginVersions).set({ status: 'published', updatedAt: new Date() }).where(eq(pluginVersions.id, latestVersion.id));
   });

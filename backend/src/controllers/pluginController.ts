@@ -2,7 +2,9 @@ import { createPluginForUser, createPluginVersionForUser, getPluginDetail, listP
 import { createPluginSchema, createPluginVersionSchema, pluginReviewSchema } from '@/validators/pluginValidators';
 import { APIError } from '@/utils/error';
 import type { Context } from 'hono';
-import type { User } from '@prisma/client';
+import type { users } from '@/db/schema';
+
+type User = typeof users.$inferSelect;
 
 function requireUser(c: Context): User {
   const user = c.get('user');

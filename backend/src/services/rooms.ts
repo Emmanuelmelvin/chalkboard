@@ -385,15 +385,6 @@ async function joinRoomInTransaction(
     return { ok: false, error: 'bad_password', roomId: room.id };
   }
 
-  if (await roomIsFull(tx, room)) {
-    logger.warn('Room join rejected because capacity is full', {
-      roomSlug,
-      userId,
-      maxAttendees: room.maxAttendees,
-    });
-    return { ok: false, error: 'room_full', roomId: room.id };
-  }
-
   if (room.accessMode === 'approval_required') {
     const approved = await getJoinRequest(tx, room.id, userId, 'approved');
     if (approved) {
@@ -414,6 +405,15 @@ async function joinRoomInTransaction(
     await tx.insert(joinRequests).values({ roomId: room.id, userId, status: 'pending' });
     logger.info('Room join request created', { roomSlug, roomId: room.id, userId });
     return { ok: false, error: 'approval_required', roomId: room.id, requestStatus: 'pending' };
+  }
+
+  if (await roomIsFull(tx, room)) {
+    logger.warn('Room join rejected because capacity is full', {
+      roomSlug,
+      userId,
+      maxAttendees: room.maxAttendees,
+    });
+    return { ok: false, error: 'room_full', roomId: room.id };
   }
 
   const accepted = await addRoomMembership(tx, room.id, userId, room.defaultRole);
@@ -438,6 +438,41 @@ export async function assertRoomJoinAllowed({
   return db.transaction((tx) => joinRoomInTransaction(tx, { roomSlug, userId, password }));
 }
 
+/** List pending join requests, after enforcing the room's instructor/owner guard. */
+export async function listJoinRequests({
+  roomSlug,
+  requestedById,
+}: {
+  roomSlug: string;
+  requestedById: string;
+}) {
+  const authorization = await authorizeRoomAction({ roomSlug, userId: requestedById, minimumRole: 'instructor' });
+  if (!authorization.ok) return authorization;
+
+  const room = await getRoomBySlug(db, roomSlug);
+  if (!room) return { ok: false as const, error: 'not_found' as const };
+  if (room.accessMode !== 'approval_required') {
+    return { ok: false as const, error: 'not_approval_required' as const };
+  }
+
+  const requests = await db
+    .select({
+      id: joinRequests.id,
+      userId: joinRequests.userId,
+      status: joinRequests.status,
+      createdAt: joinRequests.createdAt,
+      displayName: users.displayName,
+      email: users.email,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(joinRequests)
+    .innerJoin(users, eq(users.id, joinRequests.userId))
+    .where(and(eq(joinRequests.roomId, room.id), eq(joinRequests.status, 'pending')))
+    .orderBy(joinRequests.createdAt);
+
+  return { ok: true as const, requests };
+}
+
 export async function approveJoinRequest({
   roomSlug,
   targetUserId,
@@ -458,6 +493,9 @@ export async function approveJoinRequest({
 
     const actor = await authorizeInExecutor(tx, roomSlug, decidedById, 'instructor');
     if (!actor.ok) return actor;
+    if (room.accessMode !== 'approval_required') {
+      return { ok: false as const, error: 'not_approval_required' as const };
+    }
 
     const request = await getJoinRequest(tx, room.id, targetUserId, 'pending');
     if (!request) return { ok: false as const, error: 'join_request_not_found' as const };
@@ -490,6 +528,9 @@ export async function denyJoinRequest({
 
     const actor = await authorizeInExecutor(tx, roomSlug, decidedById, 'instructor');
     if (!actor.ok) return actor;
+    if (room.accessMode !== 'approval_required') {
+      return { ok: false as const, error: 'not_approval_required' as const };
+    }
 
     const request = await getJoinRequest(tx, room.id, targetUserId, 'pending');
     if (!request) return { ok: false as const, error: 'join_request_not_found' as const };

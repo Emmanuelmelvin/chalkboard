@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 interface UserAvatarProps {
   name: string;
@@ -17,16 +17,16 @@ function initials(name: string) {
     .toUpperCase() || 'C';
 }
 
-export default function UserAvatar({ name, avatarUrl, size = 'md', className = '' }: UserAvatarProps) {
-  const source = avatarUrl?.trim() || '';
+interface AvatarImageProps {
+  name: string;
+  source: string;
+  classes: string;
+}
+
+function AvatarImage({ name, source, classes }: AvatarImageProps) {
   const [imageFailed, setImageFailed] = useState(false);
 
-  useEffect(() => {
-    setImageFailed(false);
-  }, [source]);
-
-  const classes = `user-avatar user-avatar-${size}${className ? ` ${className}` : ''}`;
-  if (!source || imageFailed) {
+  if (imageFailed) {
     return <span className={`${classes} user-avatar-fallback`} aria-label={name}>{initials(name)}</span>;
   }
 
@@ -39,4 +39,14 @@ export default function UserAvatar({ name, avatarUrl, size = 'md', className = '
       onError={() => setImageFailed(true)}
     />
   );
+}
+
+export default function UserAvatar({ name, avatarUrl, size = 'md', className = '' }: UserAvatarProps) {
+  const source = avatarUrl?.trim() || '';
+  const classes = `user-avatar user-avatar-${size}${className ? ` ${className}` : ''}`;
+  if (!source) {
+    return <span className={`${classes} user-avatar-fallback`} aria-label={name}>{initials(name)}</span>;
+  }
+
+  return <AvatarImage key={source} name={name} source={source} classes={classes} />;
 }

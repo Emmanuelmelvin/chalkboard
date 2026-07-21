@@ -444,7 +444,12 @@ const PluginModal: React.FC<PluginModalProps> = ({
   sharedOutput,
   onPublishOutput,
 }) => {
-  const [position, setPosition] = useState({ x: 420, y: 120 });
+  const clampPosition = useCallback((x: number, y: number) => ({
+    x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 432)),
+    y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 120)),
+  }), []);
+
+  const [position, setPosition] = useState(() => clampPosition(420, 120));
   const [dragStart, setDragStart] = useState<{ pointerX: number; pointerY: number; x: number; y: number } | null>(null);
   const equationInputRef = useRef<HTMLInputElement | null>(null);
   const existingTag = selectedStrokes.find((stroke) => stroke.pluginId === TAG_PLUGIN_ID && stroke.text);
@@ -461,15 +466,6 @@ const PluginModal: React.FC<PluginModalProps> = ({
   const isMathSetPlugin = plugin.id === 'chalkboard.math-set';
   const isStatisticsPlugin = plugin.id === STATISTICS_PLUGIN_ID;
   const [activeToolId, setActiveToolId] = useState<string | null>(isTagPlugin ? tools[0]?.id ?? null : null);
-
-  const clampPosition = useCallback((x: number, y: number) => ({
-    x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 432)),
-    y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 120)),
-  }), []);
-
-  useEffect(() => {
-    setPosition(clampPosition(420, 120));
-  }, [clampPosition]);
 
   const handleDragMove = useCallback((event: PointerEvent) => {
     if (!dragStart) return;
@@ -534,7 +530,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
     await onRunPluginTool(tool.command, getToolFormValues(tool), selectionStrokeIds);
   };
 
-  const useSharedOutputAsTag = (toolId: string) => {
+  const applySharedOutputAsTag = (toolId: string) => {
     if (sharedOutput) setToolFieldValue(toolId, 'label', sharedOutput);
   };
 
@@ -591,7 +587,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
                 <TagPreview strokes={selectedStrokes} label={tagText} placement={placement} />
               )}
               {isTagPlugin && sharedOutput && (
-                <button type="button" className="plugin-shared-output" onClick={() => useSharedOutputAsTag(tool.id)}>
+                <button type="button" className="plugin-shared-output" onClick={() => applySharedOutputAsTag(tool.id)}>
                   Use selected symbol <strong>{sharedOutput}</strong>
                 </button>
               )}

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { Copy, Check, ChevronDown, UsersRound, Maximize2, Minus, Plus, Shapes, Eye, EyeOff } from 'lucide-react';
+import { Copy, Check, ChevronDown, UsersRound, Maximize2, Minimize2, Minus, Plus, Shapes, Eye, EyeOff } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -163,11 +163,36 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [roomDescription, setRoomDescription] = useState('');
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [roomDetailsOpen, setRoomDetailsOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [roleUpdateError, setRoleUpdateError] = useState('');
   const [closeRoomPending, setCloseRoomPending] = useState(false);
   const [closingRoom, setClosingRoom] = useState(false);
   const roomClosureHandledRef = useRef(false);
   const roomDetailsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === containerRef.current);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    handleFullscreenChange();
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const board = containerRef.current;
+    if (!board) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await board.requestFullscreen();
+      }
+    } catch {
+      useLoggerStore.getState().notify('Fullscreen mode is unavailable in this browser.', 'warning');
+    }
+  };
 
   const hasNavigatedToLink = useRef<boolean>(false);
   const openPluginModal = (pluginId: string, ids = selectedStrokeIds) => {
@@ -718,6 +743,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 {isCopied ? <Check size={14} style={{ color: '#10b981' }} /> : <Copy size={14} />}
               </Button>
             </Card>
+            <Button
+              variant="icon"
+              className="hud-panel fullscreen-toggle"
+              onClick={() => { void toggleFullscreen(); }}
+              title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </Button>
             <Button variant="primary" className="hud-panel" onClick={onLeaveRoom} style={{ padding: '5px 12px', height: 'fit-content' }}>Exit</Button>
           </div>
         </div>

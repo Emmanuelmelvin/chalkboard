@@ -2486,10 +2486,10 @@ body {
   position: fixed;
   z-index: 260;
   width: fit-content;
-  min-width: 300px;
-  min-height: 220px;
-  max-width: min(560px, calc(100vw - 24px));
-  max-height: min(560px, calc(100vh - 24px));
+  min-width: 280px;
+  min-height: 200px;
+  max-width: min(520px, calc(100vw - 24px));
+  max-height: min(520px, calc(100vh - 24px));
   height: auto;
   resize: both;
   overflow: hidden;
@@ -2506,8 +2506,8 @@ body {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 9px;
   background: rgba(255, 255, 255, 0.04);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   cursor: grab;
@@ -2522,8 +2522,8 @@ body {
 .plugin-floating-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 9px;
   overflow-y: auto;
   min-height: 0;
 }
@@ -2531,34 +2531,34 @@ body {
 .plugin-tool-card { 
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 9px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.plugin-logo-svg { width: 22px; height: 22px; display: block; }
+.plugin-logo-svg { width: 20px; height: 20px; display: block; }
 .sel-plugin-subpanel { margin-top: 250px; }
 .insert-plugin-card:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.35); }
 .plugin-tool-card:not(.plugin-tool-list-item) .plugin-form-field { display: inline-flex; width: calc(50% - 5px); margin-right: 6px; vertical-align: top; }
 .plugin-tool-list-item { width: 100%; text-align: left; cursor: pointer; }
 .plugin-tool-list-item:hover { border-color: rgba(96,165,250,.7); background: rgba(30,41,59,.8); }
-.plugin-tool-back { border: 0; background: transparent; color: #93c5fd; cursor: pointer; padding: 0 0 8px; }
-.tag-placement-options { display: flex; gap: 8px; }
-.tag-placement-option { flex: 1; padding: 8px; border: 1px solid rgba(148,163,184,.35); background: rgba(15,23,42,.65); color: #cbd5e1; cursor: pointer; }
+.plugin-tool-back { border: 0; background: transparent; color: #93c5fd; cursor: pointer; padding: 0 0 6px; }
+.tag-placement-options { display: flex; gap: 6px; }
+.tag-placement-option { flex: 1; padding: 6px; border: 1px solid rgba(148,163,184,.35); background: rgba(15,23,42,.65); color: #cbd5e1; cursor: pointer; }
 .tag-placement-option.active { border-color: #60a5fa; color: #fff; background: rgba(37,99,235,.35); box-shadow: 0 0 0 1px #60a5fa; }
 .plugin-floating-modal { z-index: 2500; }
-.plugin-floating-modal.tag-plugin-modal { width: 320px; max-width: min(320px, calc(100vw - 24px)); }
-.plugin-floating-modal.math-set-plugin-modal { width: 380px; max-width: min(380px, calc(100vw - 24px)); }
-.plugin-floating-modal.math-set-plugin-modal:has(.matrix-grid-field) { width: 460px; max-width: min(460px, calc(100vw - 24px)); }
-.plugin-floating-modal.statistics-plugin-modal { width: 430px; max-width: min(430px, calc(100vw - 24px)); }
+.plugin-floating-modal.tag-plugin-modal { width: 290px; max-width: min(290px, calc(100vw - 24px)); }
+.plugin-floating-modal.math-set-plugin-modal { width: 340px; max-width: min(340px, calc(100vw - 24px)); }
+.plugin-floating-modal.math-set-plugin-modal:has(.matrix-grid-field) { width: 420px; max-width: min(420px, calc(100vw - 24px)); }
+.plugin-floating-modal.statistics-plugin-modal { width: 390px; max-width: min(390px, calc(100vw - 24px)); }
 .plugin-floating-modal.notes-plugin-modal {
-  width: 480px;
-  height: 420px;
-  min-width: 360px;
-  min-height: 300px;
-  max-width: min(480px, calc(100vw - 24px));
-  max-height: min(520px, calc(100vh - 24px));
+  width: 430px;
+  height: 380px;
+  min-width: 330px;
+  min-height: 270px;
+  max-width: min(430px, calc(100vw - 24px));
+  max-height: min(480px, calc(100vh - 24px));
 }
 .math-set-plugin-modal .plugin-tool-card { display: flex; flex-wrap: wrap; flex-direction: row; align-items: center; }
 .math-set-plugin-modal .plugin-tool-heading,

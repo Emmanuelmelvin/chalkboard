@@ -125,7 +125,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [roomsLoading, setRoomsLoading] = useState(true);
   const [deletingRoomSlug, setDeletingRoomSlug] = useState<string | null>(null);
   const [roomToDelete, setRoomToDelete] = useState<RoomSummary | null>(null);
-  const [createdRoomInvite, setCreatedRoomInvite] = useState<{ slug: string; title: string; password: string } | null>(null);
+  const [createdRoomInvite, setCreatedRoomInvite] = useState<{ slug: string; title: string; password: string | null } | null>(null);
   const [roomMembersModal, setRoomMembersModal] = useState<RoomSummary | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [copiedRoomValue, setCopiedRoomValue] = useState<string | null>(null);
@@ -290,11 +290,11 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.room?.slug) throw new Error(payload.error || 'We could not create the room.');
-      if (typeof payload.password === 'string' && payload.password) {
-        setCreatedRoomInvite({ slug: payload.room.slug, title: payload.room.title, password: payload.password });
-      } else {
-        onJoinRoom(payload.room.slug);
-      }
+      setCreatedRoomInvite({
+        slug: payload.room.slug,
+        title: payload.room.title || roomTitle.trim() || 'New room',
+        password: typeof payload.password === 'string' && payload.password ? payload.password : null,
+      });
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'We could not create the room.');
     } finally {
@@ -824,25 +824,28 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       )}
       {createdRoomInvite && (
         <ConfirmModal
-          title="Private room ready"
-          message={`Share this password with everyone you want to invite to “${createdRoomInvite.title}”. They will need the room code and this password to enter.`}
-          confirmLabel="Open room"
+          title="Room created"
+          message={createdRoomInvite.password
+            ? `Your room “${createdRoomInvite.title}” is ready. Share the room code and password with everyone you want to invite.`
+            : `Your room “${createdRoomInvite.title}” is ready. You can enter it now or stay on the dashboard and open it later.`}
+          confirmLabel="Go to room"
+          cancelLabel="Stay on dashboard"
           variant="dashboard"
           onCancel={() => setCreatedRoomInvite(null)}
           onConfirm={() => {
             const invite = createdRoomInvite;
             setCreatedRoomInvite(null);
-            onJoinRoom(invite.slug);
+            onJoinRoom(invite.slug, invite.password || undefined);
           }}
         >
           <div className="dashboard-generated-password">
-            <span>Generated password</span>
+            <span>Room code</span>
             <div className="dashboard-generated-password-row">
-              <code>{createdRoomInvite.password}</code>
+              <code>{createdRoomInvite.slug}</code>
               <button
                 type="button"
                 onClick={() => {
-                  void navigator.clipboard.writeText(createdRoomInvite.password).then(() => {
+                  void navigator.clipboard.writeText(createdRoomInvite.slug).then(() => {
                     setPasswordCopied(true);
                     window.setTimeout(() => setPasswordCopied(false), 1800);
                   });
@@ -853,6 +856,26 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
               </button>
             </div>
           </div>
+          {createdRoomInvite.password && (
+            <div className="dashboard-generated-password">
+              <span>Generated password</span>
+              <div className="dashboard-generated-password-row">
+                <code>{createdRoomInvite.password}</code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(createdRoomInvite.password || '').then(() => {
+                      setPasswordCopied(true);
+                      window.setTimeout(() => setPasswordCopied(false), 1800);
+                    });
+                  }}
+                >
+                  {passwordCopied ? <Check size={14} /> : <Copy size={14} />}
+                  {passwordCopied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          )}
         </ConfirmModal>
       )}
     </>

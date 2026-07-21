@@ -23,7 +23,47 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
   const [approvalRoom, setApprovalRoom] = useState<PendingPrivateRoom | null>(null);
   const [approvalState, setApprovalState] = useState<ApprovalState | null>(null);
   const attemptedUrlCode = useRef(false);
+  const approvalPollInFlight = useRef(false);
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!approvalRoom || approvalState !== 'pending') return;
+    let active = true;
+
+    const checkApprovalStatus = async () => {
+      if (!active || approvalPollInFlight.current) return;
+      approvalPollInFlight.current = true;
+      try {
+        const response = await fetch(`/api/rooms/${encodeURIComponent(approvalRoom.slug)}/join`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!active) return;
+
+        if (response.ok && payload.ok === true) {
+          setApprovalRoom(null);
+          setApprovalState(null);
+          onJoinRoom(approvalRoom.slug);
+        } else if (payload.error === 'join_denied' || payload.requestStatus === 'denied') {
+          setApprovalState('denied');
+        }
+      } catch {
+        // Keep the request screen active and retry transient network failures.
+      } finally {
+        approvalPollInFlight.current = false;
+      }
+    };
+
+    const pollTimer = window.setInterval(() => { void checkApprovalStatus(); }, 2000);
+    return () => {
+      active = false;
+      window.clearInterval(pollTimer);
+      approvalPollInFlight.current = false;
+    };
+  }, [approvalRoom, approvalState, onJoinRoom]);
 
   const handleJoinRoom = useCallback(async (code = roomCode) => {
     const normalizedRoomCode = code.trim().toLowerCase();
@@ -203,9 +243,12 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
                   : `Your request to join “${approvalRoom.title}” was denied by an instructor or owner.`}
               </p>
               {approvalState === 'pending' ? (
-                <button className="lobby-simple-back" type="button" onClick={() => { void handleJoinRoom(approvalRoom.slug); }} disabled={loading}>
-                  {loading ? 'Checking...' : 'Check approval status'}
-                </button>
+                <div className="lobby-approval-waiting">
+                  <div className="lobby-approval-progress" role="progressbar" aria-label="Waiting for owner approval" aria-valuetext="Checking automatically">
+                    <span />
+                  </div>
+                  <span>Checking automatically until the owner responds...</span>
+                </div>
               ) : (
                 <button
                   className="lobby-simple-back"

@@ -1778,6 +1778,36 @@
   line-height: 1.5;
 }
 
+.lobby-approval-waiting {
+  display: grid;
+  gap: 9px;
+  margin-top: 22px;
+  color: var(--public-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.lobby-approval-progress {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  background: rgba(245, 242, 234, 0.16);
+}
+
+.lobby-approval-progress span {
+  position: absolute;
+  inset: 0 auto 0 -35%;
+  width: 35%;
+  background: var(--public-gold-bright);
+  box-shadow: 0 0 14px rgba(210, 169, 91, 0.7);
+  animation: lobby-approval-progress 1.6s ease-in-out infinite;
+}
+
+@keyframes lobby-approval-progress {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(385%); }
+}
+
 .lobby-simple-back {
   margin-top: 24px;
   border: 0;

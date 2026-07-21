@@ -9,6 +9,10 @@
 
   window.addEventListener('message', function (event) {
     var message = event.data;
+    if (message && message.type === 'chalkboard:execute' && message.pluginId === pluginId && message.command === 'focusDot.add') {
+      window.FocusDotPlugin.add();
+      return;
+    }
     if (!message || message.type !== 'chalkboard:init' || message.pluginId !== pluginId) return;
 
     send({ type: 'chalkboard:ready' });

@@ -5,6 +5,7 @@ import Chalkboard from '@/pages/Chalkboard';
 import Home from '@/pages/Home';
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
+import Docs from '@/pages/Docs';
 import Lobby from '@/pages/Lobby';
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
@@ -128,6 +129,11 @@ function App() {
         <RequireAuth>
           {(user) => <Dashboard profile={user} onJoinRoom={handleJoinRoom} />}
         </RequireAuth>
+      </Route>
+
+      {/* Public plugin documentation */}
+      <Route path="/docs">
+        <Docs />
       </Route>
 
       {/* Public landing page */}

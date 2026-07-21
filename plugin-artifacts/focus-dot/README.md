@@ -22,7 +22,7 @@ Before the first run, apply the latest backend migrations with `npm run db:migra
 7. Open `/admin`, complete 2FA setup, run the plugin smoke test, approve it, and publish it.
 8. Return to the Developer tab and refresh. Focus Dot should appear in the published catalogue.
 
-The current simulation stores the bundle, validates the manifest, compiles the JavaScript without executing it, and publishes the plugin metadata. It does not yet install arbitrary third-party code into the live board. Production execution should happen in an iframe sandbox with a permission-checked message bridge.
+The current simulation stores the bundle, validates the manifest, compiles the JavaScript, and lets an admin execute it inside the isolated admin sandbox. It does not install arbitrary third-party code into the live board. Production execution should use the same iframe sandbox pattern with a permission-checked message bridge.
 
 ## Bridge shape
 

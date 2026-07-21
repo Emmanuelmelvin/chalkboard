@@ -79,15 +79,29 @@ const toolItems = [
 
 const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
 const ROOM_MEMBER_PREVIEW_LIMIT = 4;
+const DEVELOPER_MODE_STORAGE_KEY = 'chalkboard-developer-mode';
 
-function getTab(location: string): DashboardTab {
+function developerModeStorageKey(userId: string) {
+  return `${DEVELOPER_MODE_STORAGE_KEY}:${userId}`;
+}
+
+function readDeveloperMode(userId: string) {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(developerModeStorageKey(userId)) === 'enabled';
+  } catch {
+    return false;
+  }
+}
+
+function getTab(location: string, allowDeveloper = true): DashboardTab {
   const query = location.includes('?')
     ? location.split('?')[1]
     : typeof window !== 'undefined'
       ? window.location.search.slice(1)
       : '';
   const value = new URLSearchParams(query).get('tab');
-  return tabItems.some((item) => item.id === value) ? value as DashboardTab : 'overview';
+  return tabItems.some((item) => item.id === value && (allowDeveloper || item.id !== 'developer')) ? value as DashboardTab : 'overview';
 }
 
 function formatActivity(value: string) {
@@ -123,13 +137,25 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [resettingPasswordSlug, setResettingPasswordSlug] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const [activeTab, setActiveTab] = useState<DashboardTab>(() => getTab(location));
+  const initialDeveloperMode = readDeveloperMode(profile.id);
+  const [developerMode, setDeveloperMode] = useState(initialDeveloperMode);
+  const [activeTab, setActiveTab] = useState<DashboardTab>(() => getTab(location, initialDeveloperMode));
   const firstName = profile.displayName.trim().split(/\s+/)[0] || 'friend';
   const openRooms = useMemo(() => rooms.filter((room) => room.status === 'open'), [rooms]);
+  const visibleTabItems = useMemo(
+    () => tabItems.filter(({ id }) => id !== 'developer' || developerMode),
+    [developerMode],
+  );
 
   useEffect(() => {
-    setActiveTab(getTab(location));
-  }, [location]);
+    setActiveTab(getTab(location, developerMode));
+  }, [developerMode, location]);
+
+  useEffect(() => {
+    if (!developerMode && getTab(location) === 'developer') {
+      setLocation('/dashboard?tab=overview');
+    }
+  }, [developerMode, location, setLocation]);
 
   useEffect(() => {
     document.documentElement.classList.add('dashboard-active');
@@ -171,6 +197,20 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     setMobileMenuOpen(false);
     setActiveTab(tab);
     setLocation(`/dashboard?tab=${tab}`);
+  };
+
+  const toggleDeveloperMode = () => {
+    const nextValue = !developerMode;
+    setDeveloperMode(nextValue);
+    try {
+      window.localStorage.setItem(developerModeStorageKey(profile.id), nextValue ? 'enabled' : 'disabled');
+    } catch {
+      // Developer mode still works for this session when storage is unavailable.
+    }
+    if (!nextValue && getTab(location) === 'developer') {
+      setActiveTab('overview');
+      setLocation('/dashboard?tab=overview');
+    }
   };
 
   const handleSignOut = async () => {
@@ -614,6 +654,27 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           <h3>{profile.displayName}</h3>
           <p>{profile.email}</p>
           <div className="dashboard-profile-rule" />
+          <div className="dashboard-developer-setting">
+            <div className="dashboard-developer-setting-heading">
+              <div>
+                <p className="dashboard-panel-kicker">Developer access</p>
+                <strong>Developer mode</strong>
+                <span>Reveal the plugin studio and technical documentation in your workspace.</span>
+              </div>
+              <button
+                className={`dashboard-developer-toggle${developerMode ? ' is-on' : ''}`}
+                type="button"
+                role="switch"
+                aria-checked={developerMode}
+                onClick={toggleDeveloperMode}
+              >
+                <span className="dashboard-developer-toggle-track" aria-hidden="true"><span /></span>
+                <span>{developerMode ? 'On' : 'Off'}</span>
+              </button>
+            </div>
+            <p className="dashboard-developer-setting-note">Off by default. This preference is saved only for this Chalkboard account on this device.</p>
+          </div>
+          <div className="dashboard-profile-rule" />
           <button className="dashboard-button dashboard-button-outline" type="button" onClick={() => { void handleSignOut(); }} disabled={signingOut}>
             <LogOut size={15} /> {signingOut ? 'Logging out...' : 'Log out'}
           </button>
@@ -648,11 +709,12 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
         <div className="dashboard-rail-rule" />
         <p className="dashboard-rail-label">Workspace</p>
         <nav className="dashboard-tabs" aria-label="Dashboard sections">
-          {tabItems.map(({ id, label, icon: Icon }) => (
+          {visibleTabItems.map(({ id, label, icon: Icon }) => (
             <button className={`dashboard-tab${activeTab === id ? ' is-active' : ''}`} type="button" key={id} onClick={() => selectTab(id)} aria-current={activeTab === id ? 'page' : undefined}>
               <Icon size={17} strokeWidth={activeTab === id ? 1.9 : 1.5} /><span>{label}</span>{id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
             </button>
           ))}
+          {developerMode && <button className="dashboard-tab dashboard-tab-external" type="button" onClick={() => setLocation('/docs')}><BookOpen size={17} strokeWidth={1.5} /><span>Go to docs</span><ArrowUpRight size={13} strokeWidth={1.7} /></button>}
         </nav>
         <div className="dashboard-rail-bottom">
           <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
@@ -709,7 +771,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           </button>
         </div>
         <nav className="dashboard-mobile-drawer-nav" aria-label="Workspace sections">
-          {tabItems.map(({ id, label, icon: Icon }) => (
+          {visibleTabItems.map(({ id, label, icon: Icon }) => (
             <button
               className={`dashboard-mobile-drawer-tab${activeTab === id ? ' is-active' : ''}`}
               type="button"
@@ -722,6 +784,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
               {id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
             </button>
           ))}
+          {developerMode && <button className="dashboard-mobile-drawer-tab dashboard-mobile-drawer-tab-external" type="button" onClick={() => { setMobileMenuOpen(false); setLocation('/docs'); }}><BookOpen size={18} strokeWidth={1.5} /><span>Go to docs</span><ArrowUpRight size={14} strokeWidth={1.7} /></button>}
         </nav>
         <button className="dashboard-mobile-drawer-new-room" type="button" onClick={() => selectTab('rooms')}>
           <Plus size={16} strokeWidth={1.9} /> New room

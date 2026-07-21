@@ -65,6 +65,7 @@ export interface PluginManifest {
   version: string;
   description: string;
   author: string;
+  logoUrl?: string | null;
   permissions: PluginPermission[];
   contributes: PluginContributions;
 }

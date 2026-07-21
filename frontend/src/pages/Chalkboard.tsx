@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { Copy, Check, ChevronDown, UsersRound, Maximize2, Minus, Plus, Shapes, Eye, EyeOff } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
@@ -18,7 +18,9 @@ import type {
   ShapeType,
   ChalkboardProps,
   RoomMember,
+  Stroke,
 } from '@/types';
+import type { PluginManifest, PluginSelectionToolContribution, PluginToolContribution } from '@/plugins/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
@@ -35,6 +37,8 @@ import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useBoardSocket } from '@/hooks/useBoardSocket';
 import { createPluginAPI, pluginRegistry, registerInstalledPlugins } from '@/plugins';
+import { listPluginCatalogue } from '@/plugins/management';
+import { publishedPluginDefinition, PublishedPluginRuntime, type PublishedPluginDefinition, type PublishedPluginCommandRequest } from '@/plugins/publishedRuntime';
 import {
   handleUndo,
   handleRedo,
@@ -99,12 +103,56 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const { links, removeLink } = useLinksStore();
   const pluginApi = useMemo(() => createPluginAPI(), []);
+  const [publishedPlugins, setPublishedPlugins] = useState<PublishedPluginDefinition[]>([]);
+  const handlePublishedPluginCommand = useCallback((request: PublishedPluginCommandRequest) => {
+    if (request.pluginId !== 'demo.focus-dot' || request.command !== 'focusDot.add') return false;
+    if (!useBoardStore.getState().canEdit) return false;
+    const center = pluginApi.board.getViewportCenter();
+    if (!center) return false;
+    const radius = 10;
+    const points = Array.from({ length: 20 }, (_, index) => {
+      const angle = (Math.PI * 2 * index) / 20;
+      return { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius };
+    });
+    const focusDot: Stroke = {
+      id: `${pluginApi.board.getUserId()}-${request.pluginId}-${Date.now()}`,
+      userId: pluginApi.board.getUserId(),
+      tool: 'chalk',
+      color: '#f6c85f',
+      size: 3,
+      intensity: 1,
+      pathType: 'linear',
+      closed: true,
+      fillColor: '#f6c85f',
+      points,
+      pluginId: request.pluginId,
+    };
+    return pluginApi.board.insertStrokes([focusDot], { select: true, closeInsertPanel: true, pluginId: request.pluginId });
+  }, [pluginApi]);
+  const publishedRuntime = useMemo(() => new PublishedPluginRuntime(handlePublishedPluginCommand), [handlePublishedPluginCommand]);
+  useEffect(() => () => publishedRuntime.dispose(), [publishedRuntime]);
+  useEffect(() => {
+    let active = true;
+    void listPluginCatalogue().then((payload) => {
+      if (!active) return;
+      setPublishedPlugins(payload.plugins.map(publishedPluginDefinition).filter((plugin): plugin is PublishedPluginDefinition => Boolean(plugin)));
+    }).catch(() => {
+      if (active) useLoggerStore.getState().notify('Published plugins could not be loaded for this room.', 'warning');
+    });
+    return () => { active = false; };
+  }, [roomId]);
+  useEffect(() => {
+    publishedRuntime.mount(publishedPlugins);
+  }, [publishedPlugins, publishedRuntime]);
+  const publishedManifests = useMemo<PluginManifest[]>(() => publishedPlugins.map((plugin) => plugin.manifest), [publishedPlugins]);
   const pluginManifests = useMemo(() => {
     registerInstalledPlugins();
-    return pluginRegistry.getManifests();
-  }, []);
-  const pluginTools = useMemo(() => pluginRegistry.getTools(), []);
-  const pluginSelectionTools = useMemo(() => pluginRegistry.getSelectionTools(), []);
+    return [...pluginRegistry.getManifests(), ...publishedManifests];
+  }, [publishedManifests]);
+  const publishedTools = useMemo<PluginToolContribution[]>(() => publishedPlugins.flatMap((plugin) => plugin.manifest.contributes.tools?.map((tool) => ({ ...tool, pluginId: plugin.pluginId, description: tool.description ?? plugin.manifest.description })) ?? []), [publishedPlugins]);
+  const pluginTools = useMemo(() => [...pluginRegistry.getTools(), ...publishedTools], [publishedTools]);
+  const publishedSelectionTools = useMemo<PluginSelectionToolContribution[]>(() => publishedPlugins.flatMap((plugin) => plugin.manifest.contributes.selectionTools?.map((tool) => ({ ...tool, pluginId: plugin.pluginId, description: tool.description ?? plugin.manifest.description })) ?? []), [publishedPlugins]);
+  const pluginSelectionTools = useMemo(() => [...pluginRegistry.getSelectionTools(), ...publishedSelectionTools], [publishedSelectionTools]);
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string; selectionStrokeIds: string[] }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
   const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
@@ -540,6 +588,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                     const tool = pluginSelectionTools.find((candidate) => candidate.command === commandId);
                     if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId, selectedStrokeIds);
                     else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId, selectedStrokeIds);
+                    else if (tool?.pluginId && publishedPlugins.some((plugin) => plugin.pluginId === tool.pluginId)) void publishedRuntime.execute(tool.pluginId, commandId);
                     else void pluginRegistry.executeCommand(commandId);
                   }}
                   selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
@@ -701,7 +750,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           sharedOutput={sharedPluginOutput}
           onPublishOutput={setSharedPluginOutput}
           onClose={() => setActivePluginModals((current) => current.filter((item) => item.pluginId !== modal.pluginId))}
-          onRunPluginTool={(commandId, formValues, selectionIds) => pluginRegistry.executeCommand(commandId, { formValues, selectionStrokeIds: selectionIds })} />;
+          onRunPluginTool={(commandId, formValues, selectionIds) => publishedPlugins.some((publishedPlugin) => publishedPlugin.pluginId === plugin.id)
+            ? publishedRuntime.execute(plugin.id, commandId, { formValues, selectionStrokeIds: selectionIds })
+            : pluginRegistry.executeCommand(commandId, { formValues, selectionStrokeIds: selectionIds })} />;
       })}
       {noteEditorRequest && <NotesEditor />}
       {closeRoomPending && (

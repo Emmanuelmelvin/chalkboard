@@ -548,7 +548,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
       aria-label={`${plugin.name} plugin`}
     >
       <div className="plugin-floating-header" onPointerDown={handleHeaderPointerDown}>
-        <span className="insert-plugin-logo"><PluginIcon pluginId={plugin.id} fallback={plugin.name.slice(0, 1)} /></span>
+        <span className="insert-plugin-logo">{plugin.logoUrl ? <img src={plugin.logoUrl} alt="" /> : <PluginIcon pluginId={plugin.id} fallback={plugin.name.slice(0, 1)} />}</span>
         <div>
           <strong>{plugin.name}</strong>
           <small>{plugin.description}</small>

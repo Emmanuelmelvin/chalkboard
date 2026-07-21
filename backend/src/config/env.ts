@@ -12,6 +12,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
   GOOGLE_CLIENT_ID: z.string().min(1),
+  SUPER_ADMIN_EMAIL: z.string().email().optional().or(z.literal('')),
   AUTH_SESSION_SECRET: z.string().min(32),
   LIVEKIT_URL: z.string().min(1),
   LIVEKIT_API_KEY: z.string().min(1),

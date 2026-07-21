@@ -5,6 +5,7 @@ export interface UserProfile {
   email: string;
   displayName: string;
   avatarUrl: string | null;
+  platformRole: 'user' | 'admin' | 'super_admin';
 }
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';

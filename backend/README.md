@@ -28,6 +28,7 @@ Hono serves REST routes from `/api` and Socket.IO attaches to the same raw HTTP 
 - `DATABASE_URL` is required for Drizzle/Postgres persistence and is validated at boot
 - `REDIS_URL` is required for Redis ephemeral state, BullMQ jobs, and the Socket.IO Redis adapter
 - `GOOGLE_CLIENT_ID` is required for Google Sign-In verification
+- `SUPER_ADMIN_EMAIL` optionally promotes the matching Google account to the initial `super_admin` role when it signs in
 - `AUTH_SESSION_SECRET` signs the HTTP-only same-origin session cookie created after Google Sign-In
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` are required for voice token issuance
 - `ROOM_INACTIVITY_MS` defaults to 24 hours. An open room is permanently closed after this period without a join or canvas update.
@@ -41,6 +42,10 @@ Authentication is handled by `POST /api/auth/google`, which accepts a Google Ide
 Services credential and sets an HTTP-only session cookie. `GET /api/auth/me` hydrates the
 signed-in profile, `POST /api/auth/logout` clears it, and room/API/Socket.IO access requires
 that session.
+
+Plugin authoring uses `/api/plugins` and persists plugin drafts, immutable versions, review
+submissions, and user installations in Postgres. Admin plugin routes live under
+`/api/admin/plugins` and require an admin role plus a verified eight-hour admin 2FA session.
 
 ## Scripts
 

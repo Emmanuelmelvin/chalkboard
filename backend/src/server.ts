@@ -81,6 +81,7 @@ export async function startServer() {
     app.use('/assets/*', staticFile);
     app.get('/favicon.svg', staticFile);
     app.get('/icons.svg', staticFile);
+    app.get('/admin', serveStatic({ root: frontendRoot, path: 'admin.html' }));
     app.get('/', spaFallback);
     app.get('*', spaFallback);
   } else {

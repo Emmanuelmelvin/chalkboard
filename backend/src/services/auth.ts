@@ -18,6 +18,7 @@ export type PublicUser = {
   email: string;
   displayName: string;
   avatarUrl: string | null;
+  platformRole: 'user' | 'admin' | 'super_admin';
 };
 
 export function toPublicUser(user): PublicUser {
@@ -26,6 +27,7 @@ export function toPublicUser(user): PublicUser {
     email: user.email,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl ?? null,
+    platformRole: user.platformRole,
   };
 }
 
@@ -46,11 +48,21 @@ export async function verifyGoogleIdToken(idToken) {
 
 export async function upsertGoogleUser(profile) {
   const [existing] = await db.select().from(users).where(eq(users.googleSub, profile.googleSub)).limit(1);
+  const shouldPromoteToSuperAdmin = Boolean(env.SUPER_ADMIN_EMAIL && profile.email.toLowerCase() === env.SUPER_ADMIN_EMAIL.toLowerCase());
   if (existing) {
-    const [updated] = await db.update(users).set({ email: profile.email, displayName: profile.displayName, avatarUrl: profile.avatarUrl, updatedAt: new Date() }).where(eq(users.id, existing.id)).returning();
+    const [updated] = await db.update(users).set({
+      email: profile.email,
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarUrl,
+      ...(shouldPromoteToSuperAdmin ? { platformRole: 'super_admin' as const } : {}),
+      updatedAt: new Date(),
+    }).where(eq(users.id, existing.id)).returning();
     return updated;
   }
-  const [created] = await db.insert(users).values(profile).returning();
+  const [created] = await db.insert(users).values({
+    ...profile,
+    platformRole: shouldPromoteToSuperAdmin ? 'super_admin' : 'user',
+  }).returning();
   return created;
 }
 

@@ -11,6 +11,8 @@
 - **Presence Tracking**: See cursors and names of other active room members.
 - **Room Isolation**: Join existing rooms via a code or share a generated room-link to invite others.
 - **Canvas Navigation**: Pan and zoom across the infinite canvas, making it easy to create spacious diagrams.
+- **Plugin workspace**: Developers can create plugin drafts, add immutable versions, choose Free or Pro access, and submit releases for review.
+- **Protected admin console**: Admins can review plugin manifests, approve releases, publish them to the catalogue, and access the console behind mandatory TOTP 2FA.
 
 ---
 
@@ -51,6 +53,17 @@ npm run dev # runs Vite dev server on port 5173
 ```
 
 Now open `http://localhost:5173` in your browser. Vite listens on `0.0.0.0`, so it also prints a `Network` URL such as `http://192.168.1.25:5173`; share that URL with devices on the same network. Development CORS allows private LAN origins, and the backend binds to `0.0.0.0` for production/static serving as well. Make sure the computer firewall allows ports `5173` (Vite) and `3001` (backend), and configure the LAN URL as an authorized origin in Google Identity Services if sign-in is enabled. Open multiple windows or devices to test real-time collaborative drawing and cursor synchronization. Copy `backend/.env.example` to `backend/.env` and provide Postgres, Redis, Google Identity, session, and LiveKit settings before starting the backend.
+
+### Plugin and admin setup
+
+After copying `backend/.env.example`, set `SUPER_ADMIN_EMAIL` to the first Google account that should receive the `super_admin` role. Apply the database migration before using the Developer tab or admin console:
+
+```bash
+cd backend
+npm run db:migrate
+```
+
+The Developer tab is available at `/dashboard?tab=developer`. The separate admin frontend entry is available at `/admin` in the production/static build, or `/admin.html` while using the Vite development server. The first admin must enroll an authenticator-app TOTP code before plugin review actions are available.
 
 ### Production verification
 

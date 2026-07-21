@@ -5,6 +5,7 @@ export const PUBLISHED_PLUGIN_INSERT_STROKES = 'board.insertStrokes';
 
 const MAX_INSERTED_STROKES = 100;
 const MAX_POINTS_PER_STROKE = 10_000;
+const MAX_TOTAL_POINTS = 20_000;
 const MAX_TEXT_LENGTH = 20_000;
 const MAX_COLOR_LENGTH = 128;
 const MAX_COORDINATE = 1_000_000;
@@ -100,7 +101,7 @@ export function normalizePublishedBoardInsertStrokes(
     const normalized = normalizeStroke(source, userId, pluginId, index);
     return normalized ? [normalized] : [];
   });
-  if (strokes.length !== payload.strokes.length) return null;
+  if (strokes.length !== payload.strokes.length || strokes.reduce((total, stroke) => total + stroke.points.length, 0) > MAX_TOTAL_POINTS) return null;
 
   const rawOptions = isRecord(payload.options) ? payload.options : {};
   const options: InsertStrokeOptions = {

@@ -2205,31 +2205,31 @@ body {
 .insert-plugins-content {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 140px;
+  gap: 8px;
+  min-height: 120px;
 }
 
 /* ── Insert Links Tab Content ── */
 .insert-links-content {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 140px;
+  gap: 8px;
+  min-height: 120px;
 }
 
 .insert-links-add-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 10px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px dashed rgba(255, 255, 255, 0.15);
   border-radius: 0;
   color: #94a3b8;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: all 0.12s ease;
 }
@@ -2253,13 +2253,13 @@ body {
 
 .insert-links-input {
   flex: 1;
-  padding: 7px 10px;
+  padding: 6px 8px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 0;
   color: #e2e8f0;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 11px;
   outline: none;
   transition: border-color 0.12s ease;
 }
@@ -2276,8 +2276,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   background: rgba(59, 130, 246, 0.6);
   border: none;
   border-radius: 0;

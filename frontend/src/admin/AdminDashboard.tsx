@@ -6,6 +6,13 @@ import './Admin.css';
 type AdminView = 'plugins' | 'billing' | 'admins';
 type TwoFactorMode = 'loading' | 'setup' | 'verify' | 'ready' | 'forbidden';
 
+const adminViews: AdminView[] = ['plugins', 'billing', 'admins'];
+
+function getAdminViewFromUrl(): AdminView {
+  const value = new URLSearchParams(window.location.search).get('tab');
+  return adminViews.includes(value as AdminView) ? value as AdminView : 'plugins';
+}
+
 function formatStatus(value: string) {
   return value.replace('_', ' ');
 }
@@ -40,7 +47,7 @@ export default function AdminDashboard() {
   const [plugins, setPlugins] = useState<AdminPlugin[]>([]);
   const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('in_review');
-  const [view, setView] = useState<AdminView>('plugins');
+  const [view, setView] = useState<AdminView>(() => getAdminViewFromUrl());
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -93,6 +100,12 @@ export default function AdminDashboard() {
       setTwoFactorMode(sessionError.status === 403 ? 'forbidden' : 'verify');
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => setView(getAdminViewFromUrl());
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const handleVerify = async (event: FormEvent) => {
@@ -232,6 +245,9 @@ export default function AdminDashboard() {
     setView(nextView);
     setError('');
     setNotice('');
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set('tab', nextView);
+    window.history.pushState({ adminTab: nextView }, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
     if (nextView === 'admins') void loadAdmins();
   };
 

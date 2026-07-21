@@ -447,7 +447,7 @@ export async function listJoinRequests({
   requestedById: string;
 }) {
   const authorization = await authorizeRoomAction({ roomSlug, userId: requestedById, minimumRole: 'instructor' });
-  if (!authorization.ok) return authorization;
+  if (authorization.ok === false) return authorization;
 
   const room = await getRoomBySlug(db, roomSlug);
   if (!room) return { ok: false as const, error: 'not_found' as const };

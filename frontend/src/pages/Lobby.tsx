@@ -11,6 +11,8 @@ interface PendingPrivateRoom {
   description?: string | null;
 }
 
+type ApprovalState = 'pending' | 'denied';
+
 export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
   const [roomCode, setRoomCode] = useState(initialRoomId?.trim() || '');
   const [error, setError] = useState('');
@@ -18,6 +20,8 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
   const [roomPassword, setRoomPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [pendingPrivateRoom, setPendingPrivateRoom] = useState<PendingPrivateRoom | null>(null);
+  const [approvalRoom, setApprovalRoom] = useState<PendingPrivateRoom | null>(null);
+  const [approvalState, setApprovalState] = useState<ApprovalState | null>(null);
   const attemptedUrlCode = useRef(false);
   const [, setLocation] = useLocation();
 
@@ -57,6 +61,37 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
           description: payload.room.description,
         });
         return;
+      }
+
+      if (payload.room.accessMode === 'approval_required') {
+        const approvalResponse = await fetch(`/api/rooms/${encodeURIComponent(payload.room.slug)}/join`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const approvalPayload = await approvalResponse.json().catch(() => ({}));
+        if (approvalResponse.ok && approvalPayload.ok === true) {
+          onJoinRoom(payload.room.slug);
+          return;
+        }
+
+        const room = {
+          slug: payload.room.slug,
+          title: payload.room.title || 'Approval-required room',
+          description: payload.room.description,
+        };
+        if (approvalPayload.error === 'approval_required' || approvalPayload.requestStatus === 'pending') {
+          setApprovalRoom(room);
+          setApprovalState('pending');
+          return;
+        }
+        if (approvalPayload.error === 'join_denied' || approvalPayload.requestStatus === 'denied') {
+          setApprovalRoom(room);
+          setApprovalState('denied');
+          return;
+        }
+        throw new Error(approvalPayload.error || 'We could not request access to that room.');
       }
 
       onJoinRoom(payload.room.slug);
@@ -144,6 +179,8 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
                 onChange={(event) => {
                   setRoomCode(event.target.value);
                   setError('');
+                  setApprovalRoom(null);
+                  setApprovalState(null);
                 }}
                 placeholder="e.g. field-notes"
                 autoComplete="off"
@@ -156,6 +193,34 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
             </div>
             {error && <p id="lobby-error" className="lobby-simple-error" role="alert">{error}</p>}
           </form>
+
+          {approvalRoom && approvalState && (
+            <div className="lobby-simple-approval-state" role="status" aria-live="polite">
+              <p className="lobby-simple-kicker">{approvalState === 'pending' ? 'Request sent' : 'Access denied'}</p>
+              <p className={approvalState === 'denied' ? 'lobby-simple-error' : 'lobby-simple-copy'}>
+                {approvalState === 'pending'
+                  ? `Your request to join “${approvalRoom.title}” is waiting for an instructor or owner to approve it.`
+                  : `Your request to join “${approvalRoom.title}” was denied by an instructor or owner.`}
+              </p>
+              {approvalState === 'pending' ? (
+                <button className="lobby-simple-back" type="button" onClick={() => { void handleJoinRoom(approvalRoom.slug); }} disabled={loading}>
+                  {loading ? 'Checking...' : 'Check approval status'}
+                </button>
+              ) : (
+                <button
+                  className="lobby-simple-back"
+                  type="button"
+                  onClick={() => {
+                    setRoomCode('');
+                    setApprovalRoom(null);
+                    setApprovalState(null);
+                  }}
+                >
+                  Try another room
+                </button>
+              )}
+            </div>
+          )}
 
           <button className="lobby-simple-back" type="button" onClick={() => setLocation('/dashboard?tab=rooms')}>
             Back to your rooms

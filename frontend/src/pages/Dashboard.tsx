@@ -27,7 +27,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react';
-import { useLocation } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
 import { getRoomThemeLabel, roomThemes, type RoomTheme } from '@/constants/roomThemes';
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
@@ -94,13 +94,8 @@ function readDeveloperMode(userId: string) {
   }
 }
 
-function getTab(location: string, allowDeveloper = true): DashboardTab {
-  const query = location.includes('?')
-    ? location.split('?')[1]
-    : typeof window !== 'undefined'
-      ? window.location.search.slice(1)
-      : '';
-  const value = new URLSearchParams(query).get('tab');
+function getTab(search: string, allowDeveloper = true): DashboardTab {
+  const value = new URLSearchParams(search).get('tab');
   return tabItems.some((item) => item.id === value && (allowDeveloper || item.id !== 'developer')) ? value as DashboardTab : 'overview';
 }
 
@@ -115,7 +110,8 @@ function roomRole(room: RoomSummary) {
 }
 
 function Dashboard({ profile, onJoinRoom }: DashboardProps) {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
   const { signOut } = useAuthStore();
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [roomTitle, setRoomTitle] = useState('');
@@ -139,7 +135,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [signingOut, setSigningOut] = useState(false);
   const initialDeveloperMode = readDeveloperMode(profile.id);
   const [developerMode, setDeveloperMode] = useState(initialDeveloperMode);
-  const activeTab = getTab(location, developerMode);
+  const activeTab = getTab(search, developerMode);
   const firstName = profile.displayName.trim().split(/\s+/)[0] || 'friend';
   const openRooms = useMemo(() => rooms.filter((room) => room.status === 'open'), [rooms]);
   const visibleTabItems = useMemo(
@@ -148,10 +144,10 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   );
 
   useEffect(() => {
-    if (!developerMode && getTab(location) === 'developer') {
+    if (!developerMode && getTab(search) === 'developer') {
       setLocation('/dashboard?tab=overview');
     }
-  }, [developerMode, location, setLocation]);
+  }, [developerMode, search, setLocation]);
 
   useEffect(() => {
     document.documentElement.classList.add('dashboard-active');
@@ -202,7 +198,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     } catch {
       // Developer mode still works for this session when storage is unavailable.
     }
-    if (!nextValue && getTab(location) === 'developer') {
+    if (!nextValue && getTab(search) === 'developer') {
       setLocation('/dashboard?tab=overview');
     }
   };

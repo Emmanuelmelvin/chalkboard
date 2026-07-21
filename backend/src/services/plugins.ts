@@ -13,6 +13,7 @@ type PluginInput = {
   manifest: Record<string, unknown>;
   changelog?: string;
   entryUrl?: string;
+  entryCode?: string;
 };
 
 type PluginVersionInput = Omit<PluginInput, 'pluginId' | 'name' | 'description' | 'plan'>;
@@ -91,6 +92,7 @@ export async function createPluginForUser(authorId: string, input: PluginInput) 
       manifest: input.manifest,
       changelog: input.changelog || null,
       entryUrl: input.entryUrl || null,
+      entryCode: input.entryCode || null,
       createdById: authorId,
     });
     return plugin;
@@ -119,6 +121,7 @@ export async function createPluginVersionForUser(pluginId: string, authorId: str
     manifest: input.manifest,
     changelog: input.changelog || null,
     entryUrl: input.entryUrl || null,
+    entryCode: input.entryCode || null,
     createdById: authorId,
   });
   return getPluginDetail(pluginId);

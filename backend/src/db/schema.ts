@@ -94,6 +94,7 @@ export const pluginVersions = pgTable('plugin_versions', {
   manifest: jsonb('manifest').$type<Record<string, unknown>>().notNull(),
   changelog: text('changelog'),
   entryUrl: text('entry_url'),
+  entryCode: text('entry_code'),
   status: pluginVersionStatus('status').default('draft').notNull(),
   createdById: uuid('created_by_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

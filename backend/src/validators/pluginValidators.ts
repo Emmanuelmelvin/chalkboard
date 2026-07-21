@@ -23,6 +23,7 @@ export const createPluginSchema = z.object({
   manifest: manifestSchema,
   changelog: z.string().trim().max(2000).optional(),
   entryUrl: z.string().trim().url().max(1000).optional().or(z.literal('')),
+  entryCode: z.string().max(500_000).optional().or(z.literal('')),
 });
 
 export const createPluginVersionSchema = z.object({
@@ -30,6 +31,7 @@ export const createPluginVersionSchema = z.object({
   manifest: manifestSchema,
   changelog: z.string().trim().max(2000).optional(),
   entryUrl: z.string().trim().url().max(1000).optional().or(z.literal('')),
+  entryCode: z.string().max(500_000).optional().or(z.literal('')),
 });
 
 export const pluginReviewSchema = z.object({

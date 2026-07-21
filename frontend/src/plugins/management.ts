@@ -8,6 +8,7 @@ export interface ManagedPluginVersion {
   manifest: Record<string, unknown>;
   changelog: string | null;
   entryUrl: string | null;
+  entryCode: string | null;
   status: ManagedPluginVersionStatus;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +55,7 @@ export async function createPlugin(input: {
   manifest: Record<string, unknown>;
   changelog?: string;
   entryUrl?: string;
+  entryCode?: string;
 }) {
   return request<{ plugin: ManagedPlugin }>('/api/plugins', { method: 'POST', body: JSON.stringify(input) });
 }
@@ -63,6 +65,7 @@ export async function createPluginVersion(pluginId: string, input: {
   manifest: Record<string, unknown>;
   changelog?: string;
   entryUrl?: string;
+  entryCode?: string;
 }) {
   return request<{ plugin: ManagedPlugin }>(`/api/plugins/${encodeURIComponent(pluginId)}/versions`, { method: 'POST', body: JSON.stringify(input) });
 }

@@ -3215,6 +3215,8 @@ html[data-theme='light'] .dashboard-generated-password {
 .dashboard-developer-create-panel .dashboard-developer-form { max-width: 720px; }
 .dashboard-developer-two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
 .dashboard-developer-two-col > div { display: flex; min-width: 0; flex-direction: column; gap: 9px; }
+.dashboard-developer-upload-note { display: block; min-height: 13px; margin-top: 4px; color: var(--dashboard-muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9px; }
+.dashboard-developer-form input[type='file'] { min-height: 38px; padding: 8px 10px; font-size: 10px; }
 .dashboard-developer-feedback { margin-top: 20px; }
 .dashboard-developer-feedback.is-success { border-color: rgba(121, 179, 125, 0.45); color: #91ce96; }
 

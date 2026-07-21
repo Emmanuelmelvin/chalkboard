@@ -3167,7 +3167,8 @@ html[data-theme='light'] .dashboard-generated-password {
 .dashboard-developer-plugin-row > span:nth-child(2) { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
 .dashboard-developer-plugin-row strong { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-developer-plugin-row small { overflow: hidden; color: var(--dashboard-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.dashboard-developer-plugin-mark { display: grid; width: 31px; height: 31px; place-items: center; border: 1px solid rgba(199, 162, 88, 0.3); color: var(--dashboard-gold-bright); }
+.dashboard-developer-plugin-mark { display: grid; width: 31px; height: 31px; overflow: hidden; place-items: center; border: 1px solid rgba(199, 162, 88, 0.3); background: rgba(199, 162, 88, 0.08); color: var(--dashboard-gold-bright); }
+.dashboard-developer-plugin-mark img { width: 100%; height: 100%; object-fit: cover; }
 .dashboard-plugin-status { display: inline-flex; width: max-content; align-items: center; padding: 4px 7px; border: 1px solid rgba(141, 136, 127, 0.35); color: var(--dashboard-muted); font-size: 8px; font-style: normal; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 .dashboard-plugin-status.is-published, .dashboard-plugin-status.is-approved { border-color: rgba(121, 179, 125, 0.45); color: #91ce96; }
 .dashboard-plugin-status.is-in_review { border-color: rgba(199, 162, 88, 0.45); color: var(--dashboard-gold-bright); }

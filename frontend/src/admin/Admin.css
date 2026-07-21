@@ -41,7 +41,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .admin-queue { display: flex; flex-direction: column; gap: 4px; margin: 24px -9px 0; }
 .admin-queue-row { display: grid; grid-template-columns: 31px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 10px 9px; border: 1px solid transparent; background: transparent; color: var(--admin-white); cursor: pointer; text-align: left; }
 .admin-queue-row:hover, .admin-queue-row:focus-visible, .admin-queue-row.is-selected { border-color: rgba(199, 162, 88, 0.36); background: rgba(199, 162, 88, 0.1); outline: 0; }
-.admin-queue-icon { display: grid; width: 31px; height: 31px; place-items: center; border: 1px solid rgba(199, 162, 88, 0.32); color: var(--admin-gold-bright); }
+.admin-queue-icon { display: grid; width: 31px; height: 31px; overflow: hidden; place-items: center; border: 1px solid rgba(199, 162, 88, 0.32); background: rgba(199, 162, 88, 0.08); color: var(--admin-gold-bright); }
+.admin-queue-icon img { width: 100%; height: 100%; object-fit: cover; }
 .admin-queue-row > span:nth-child(2) { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
 .admin-queue-row strong { overflow: hidden; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .admin-queue-row small { overflow: hidden; color: var(--admin-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }

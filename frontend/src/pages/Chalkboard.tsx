@@ -383,7 +383,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         setSelectionRotation(0);
       }
     }
-  }, [activeTool, trimState.active, selectedStrokeIds.length, handleApplyTrim, setSelectedStrokeIds, setTransformBox, setSelectionRotation]);
+  }, [activeTool, trimState.active, selectedStrokeIds.length, setSelectedStrokeIds, setTransformBox, setSelectionRotation]);
 
   // Navigate to link from URL on initial load
   useEffect(() => {

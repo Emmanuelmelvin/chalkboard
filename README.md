@@ -135,6 +135,75 @@ chalkboard/
 | Plugin storage | Local filesystem or S3-compatible Cloudflare R2 | Logos, JavaScript bundles, and ZIP archives |
 | Validation/logging | Zod, Winston | Runtime input validation and structured server logs |
 
+## Dependency inventory
+
+The following are the direct packages declared in the repository’s `package.json` files. Their transitive dependencies are pinned by the committed `package-lock.json` files. Use `npm ci` rather than manually installing individual packages.
+
+### Root package
+
+| Package | Type | Purpose |
+| --- | --- | --- |
+| `typescript` | Development | Repository-level TypeScript tooling. |
+
+### Frontend runtime dependencies
+
+| Package | Purpose |
+| --- | --- |
+| `lucide-react` | UI icons. |
+| `react` | React component runtime. |
+| `react-dom` | React DOM renderer. |
+| `socket.io-client` | Browser realtime connection to the backend. |
+| `wouter` | Lightweight client-side routing. |
+| `zustand` | Global application and board state. |
+
+### Frontend development dependencies
+
+| Package | Purpose |
+| --- | --- |
+| `@eslint/js` | ESLint base configuration. |
+| `@types/node` | Node.js type declarations used by the Vite configuration. |
+| `@types/react` | React type declarations. |
+| `@types/react-dom` | React DOM type declarations. |
+| `@vitejs/plugin-react` | React support for Vite. |
+| `eslint` | Frontend linting. |
+| `eslint-plugin-react-hooks` | React Hooks lint rules. |
+| `eslint-plugin-react-refresh` | React Fast Refresh lint rules. |
+| `globals` | Standard global variable definitions for ESLint. |
+| `typescript` | Frontend type checking and compilation. |
+| `typescript-eslint` | TypeScript-aware ESLint support. |
+| `vite` | Frontend development server and production bundler. |
+
+### Backend runtime dependencies
+
+| Package | Purpose |
+| --- | --- |
+| `@aws-sdk/client-s3` | S3-compatible object storage operations for Cloudflare R2. |
+| `@aws-sdk/s3-request-presigner` | Signed R2 asset URLs. |
+| `@hono/node-server` | Runs Hono on Node’s HTTP server. |
+| `@socket.io/redis-adapter` | Socket.IO fan-out through Redis. |
+| `bcryptjs` | Password hashing support. |
+| `bullmq` | Background jobs and room cleanup scheduling. |
+| `drizzle-orm` | Typed PostgreSQL queries and schema access. |
+| `google-auth-library` | Verification of Google Identity Services credentials. |
+| `hono` | HTTP API framework and middleware. |
+| `livekit-server-sdk` | LiveKit access-token generation. |
+| `postgres` | PostgreSQL driver used by Drizzle. |
+| `redis` | Redis client for room state and coordination. |
+| `socket.io` | Authenticated realtime room server. |
+| `winston` | Structured server logging. |
+| `zod` | Runtime validation for environment, HTTP, and Socket.IO payloads. |
+
+### Backend development dependencies
+
+| Package | Purpose |
+| --- | --- |
+| `@types/node` | Node.js type declarations. |
+| `drizzle-kit` | PostgreSQL migration generation and application. |
+| `nodemon` | Development dependency retained for backend workflows. |
+| `tsup` | Backend TypeScript bundling. |
+| `tsx` | Running TypeScript directly in development and tests. |
+| `typescript` | Backend type checking. |
+
 ## Requirements
 
 Install or provision the following before running the full application locally:

@@ -29,7 +29,7 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
         disabled={!canUndo}
         style={{ opacity: canUndo ? 1 : 0.4, cursor: canUndo ? 'pointer' : 'not-allowed' }}
       >
-        <Undo2 size={16} />
+        <Undo2 size={14} />
         <span>Undo</span>
       </button>
 
@@ -41,7 +41,7 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
         disabled={!canRedo}
         style={{ opacity: canRedo ? 1 : 0.4, cursor: canRedo ? 'pointer' : 'not-allowed' }}
       >
-        <Redo2 size={16} />
+        <Redo2 size={14} />
         <span>Redo</span>
       </button>
 
@@ -51,7 +51,7 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
         title="Clear Blackboard"
         onClick={() => setConfirmingClear(true)}
       >
-        <Trash2 size={16} />
+        <Trash2 size={14} />
         <span>Clear</span>
       </button>
 

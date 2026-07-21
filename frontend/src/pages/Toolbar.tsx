@@ -61,7 +61,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }}
             title="Chalk (Ctrl+B)"
           >
-            <PenTool size={20} />
+            <PenTool size={18} />
           </button>
 
           {showChalkSettings && activeTool === 'chalk' && (
@@ -113,7 +113,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }}
             title="Eraser (Ctrl+E)"
           >
-            <Eraser size={20} />
+            <Eraser size={18} />
           </button>
 
           {showEraserSettings && activeTool === 'eraser' && (
@@ -200,7 +200,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           }}
           title="Move Board (Ctrl+H / Ctrl+M)"
         >
-          <Hand size={20} />
+          <Hand size={18} />
         </button>
 
         <button
@@ -213,7 +213,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           }}
           title="Select Items (Ctrl+S)"
         >
-          <MousePointer2 size={20} />
+          <MousePointer2 size={18} />
         </button>
       </div>
     </div>

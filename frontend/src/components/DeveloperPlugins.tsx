@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { ArrowLeft, CheckCircle2, Code2, FileJson, GitBranch, LoaderCircle, Plus, Send, Sparkles } from 'lucide-react';
+import PluginPackagePicker, { type PluginPackageFile } from '@/components/PluginPackagePicker';
+import { createBrowserModuleBundle, findZipEntry, readZipArchive, zipEntryText } from '@/lib/zip';
 import { installedPlugins } from '@/plugins/installedPlugins';
 import { createPlugin, createPluginVersion, getManagedPluginLogo, listMyPlugins, listPluginCatalogue, submitPlugin, type ManagedPlugin, type ManagedPluginPlan } from '@/plugins/management';
 import { useLoggerStore } from '@/stores/loggerStore';
@@ -99,8 +101,11 @@ export default function DeveloperPlugins() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ pluginId: '', name: '', description: '', logoDataUrl: '', plan: 'free' as ManagedPluginPlan, version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '' });
-  const [versionForm, setVersionForm] = useState({ version: '0.2.0', manifest: '', changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', hasBundleArchive: false });
+  const [packageLoadingTarget, setPackageLoadingTarget] = useState<'create' | 'version' | null>(null);
+  const [manualCreateOpen, setManualCreateOpen] = useState(false);
+  const [manualVersionOpen, setManualVersionOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({ pluginId: '', name: '', description: '', logoDataUrl: '', plan: 'free' as ManagedPluginPlan, version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '', packageFiles: [] as PluginPackageFile[] });
+  const [versionForm, setVersionForm] = useState({ version: '0.2.0', manifest: '', changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', hasBundleArchive: false, packageFiles: [] as PluginPackageFile[] });
 
   const selectedPlugin = useMemo(() => plugins.find((plugin) => plugin.pluginId === selectedPluginId) ?? null, [plugins, selectedPluginId]);
   const latestVersion = selectedPlugin?.versions[0] ?? null;

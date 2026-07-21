@@ -36,27 +36,11 @@ import DeveloperPlugins from '@/components/DeveloperPlugins';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
 import type { RoomMember } from '@/types';
+import { useCreateRoomMutation, useDeleteRoomMutation, useResetRoomPasswordMutation, useRoomsQuery } from '@/api/hooks';
+import type { RoomAccessMode, RoomSummary } from '@/api/types';
 import '@/styles/PublicPages.css';
 
 type DashboardTab = 'overview' | 'rooms' | 'toolkit' | 'developer' | 'profile';
-type RoomAccessMode = 'open' | 'approval_required' | 'password_protected';
-
-interface RoomSummary {
-  slug: string;
-  title: string;
-  description: string | null;
-  status: 'open' | 'closed';
-  accessMode: 'open' | 'approval_required' | 'password_protected';
-  theme: RoomTheme;
-  voiceEnabled: boolean;
-  lastActivityAt: string;
-  createdAt: string;
-  role: 'owner' | 'instructor' | 'viewer' | null;
-  password: string | null;
-  members: RoomMember[];
-  peakAttendeeCount: number;
-}
-
 interface DashboardProps {
   profile: UserProfile;
   onJoinRoom: (room: string, password?: string) => void;
@@ -113,7 +97,11 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const { signOut } = useAuthStore();
-  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const roomsQuery = useRoomsQuery();
+  const createRoomMutation = useCreateRoomMutation();
+  const deleteRoomMutation = useDeleteRoomMutation();
+  const resetRoomPasswordMutation = useResetRoomPasswordMutation();
+  const rooms = roomsQuery.data?.rooms ?? [];
   const [roomTitle, setRoomTitle] = useState('');
   const [roomDescription, setRoomDescription] = useState('');
   const [roomAccessMode, setRoomAccessMode] = useState<RoomAccessMode>('password_protected');
@@ -122,7 +110,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [roomsLoading, setRoomsLoading] = useState(true);
+  const roomsLoading = roomsQuery.isLoading || roomsQuery.isFetching;
   const [deletingRoomSlug, setDeletingRoomSlug] = useState<string | null>(null);
   const [roomToDelete, setRoomToDelete] = useState<RoomSummary | null>(null);
   const [createdRoomInvite, setCreatedRoomInvite] = useState<{ slug: string; title: string; password: string | null } | null>(null);
@@ -229,17 +217,8 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     setResettingPasswordSlug(roomSlug);
     setError('');
     try {
-      const response = await fetch(`/api/rooms/${encodeURIComponent(roomSlug)}/password`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || typeof payload.password !== 'string' || !payload.password) {
-        throw new Error(payload.error || 'We could not generate a room password.');
-      }
-      setRooms((current) => current.map((room) => room.slug === roomSlug ? { ...room, password: payload.password } : room));
+      await resetRoomPasswordMutation.mutateAsync(roomSlug);
+      await roomsQuery.refetch();
     } catch (passwordError) {
       setError(passwordError instanceof Error ? passwordError.message : 'We could not generate a room password.');
     } finally {
@@ -248,25 +227,12 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   };
 
   const loadRooms = async () => {
-    setRoomsLoading(true);
     try {
-      const response = await fetch('/api/rooms', { credentials: 'include' });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || 'We could not load your rooms.');
-      setRooms(payload.rooms || []);
+      await roomsQuery.refetch();
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'We could not load your rooms.');
-    } finally {
-      setRoomsLoading(false);
     }
   };
-
-  useEffect(() => {
-    const roomLoad = window.setTimeout(() => {
-      void loadRooms();
-    }, 0);
-    return () => window.clearTimeout(roomLoad);
-  }, [profile.id]);
 
   const handleCreateRoom = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -274,22 +240,15 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     setLoading(true);
     try {
       const generatedSlug = Math.random().toString(36).slice(2, 8).toLowerCase();
-      const response = await fetch('/api/rooms', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: roomTitle.trim() || `${profile.displayName}'s room`,
-          slug: generatedSlug,
-          description: roomDescription.trim(),
-          accessMode: roomAccessMode,
-          defaultRole: defaultMemberRole,
-          theme: roomTheme,
-          voiceEnabled: false,
-        }),
+      const payload = await createRoomMutation.mutateAsync({
+        title: roomTitle.trim() || `${profile.displayName}'s room`,
+        slug: generatedSlug,
+        description: roomDescription.trim(),
+        accessMode: roomAccessMode,
+        defaultRole: defaultMemberRole,
+        theme: roomTheme,
+        voiceEnabled: false,
       });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.room?.slug) throw new Error(payload.error || 'We could not create the room.');
       setCreatedRoomInvite({
         slug: payload.room.slug,
         title: payload.room.title || roomTitle.trim() || 'New room',
@@ -334,13 +293,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     setError('');
     setDeletingRoomSlug(room.slug);
     try {
-      const response = await fetch(`/api/rooms/${encodeURIComponent(room.slug)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || 'We could not delete the room.');
-      setRooms((currentRooms) => currentRooms.filter((currentRoom) => currentRoom.slug !== room.slug));
+      await deleteRoomMutation.mutateAsync(room.slug);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'We could not delete the room.');
     } finally {

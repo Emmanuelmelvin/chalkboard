@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import UserAvatar from '@/components/UserAvatar';
 import type { RoomMember } from '@/types';
+import { useJoinRequestsQuery, useResolveJoinRequestMutation } from '@/api/hooks';
 
 interface RoomMembersModalProps {
   roomSlug: string;
@@ -13,16 +14,6 @@ interface RoomMembersModalProps {
   peakAttendeeCount: number;
   onRequestsChanged?: () => void;
   onClose: () => void;
-}
-
-interface JoinRequest {
-  id: string;
-  userId: string;
-  status: 'pending';
-  createdAt: string;
-  displayName: string;
-  email: string;
-  avatarUrl?: string | null;
 }
 
 function roleLabel(role: RoomMember['role']) {
@@ -44,52 +35,19 @@ export default function RoomMembersModal({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onlineCount = members.filter((member) => member.online).length;
   const canManageRequests = roomAccessMode === 'approval_required' && (viewerRole === 'owner' || viewerRole === 'instructor');
-  const [requests, setRequests] = useState<JoinRequest[]>([]);
-  const [requestsLoading, setRequestsLoading] = useState(false);
+  const requestsQuery = useJoinRequestsQuery(roomSlug, canManageRequests);
+  const resolveRequestMutation = useResolveJoinRequestMutation();
+  const requests = requestsQuery.data?.requests ?? [];
+  const requestsLoading = requestsQuery.isLoading || requestsQuery.isFetching;
   const [requestAction, setRequestAction] = useState<string | null>(null);
   const [requestError, setRequestError] = useState('');
 
-  const loadRequests = useCallback(async () => {
-    if (!canManageRequests) {
-      setRequests([]);
-      return;
-    }
-
-    setRequestsLoading(true);
-    setRequestError('');
-    try {
-      const response = await fetch(`/api/rooms/${encodeURIComponent(roomSlug)}/join-requests`, { credentials: 'include' });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(response.status === 403 ? 'Only room owners and instructors can review join requests.' : payload.error || 'We could not load join requests.');
-      }
-      setRequests(Array.isArray(payload.requests) ? payload.requests : []);
-    } catch (error) {
-      setRequestError(error instanceof Error ? error.message : 'We could not load join requests.');
-    } finally {
-      setRequestsLoading(false);
-    }
-  }, [canManageRequests, roomSlug]);
-
-  useEffect(() => {
-    const requestLoad = window.setTimeout(() => {
-      void loadRequests();
-    }, 0);
-    return () => window.clearTimeout(requestLoad);
-  }, [loadRequests]);
-
-  const resolveRequest = async (request: JoinRequest, decision: 'approve' | 'deny') => {
+  const resolveRequest = async (request: typeof requests[number], decision: 'approve' | 'deny') => {
     const actionKey = `${decision}:${request.userId}`;
     setRequestAction(actionKey);
     setRequestError('');
     try {
-      const response = await fetch(`/api/rooms/${encodeURIComponent(roomSlug)}/join-requests/${encodeURIComponent(request.userId)}/${decision}`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || `We could not ${decision} this request.`);
-      setRequests((current) => current.filter((item) => item.userId !== request.userId));
+      await resolveRequestMutation.mutateAsync({ slug: roomSlug, userId: request.userId, decision });
       onRequestsChanged?.();
     } catch (error) {
       setRequestError(error instanceof Error ? error.message : `We could not ${decision} this request.`);
@@ -137,7 +95,7 @@ export default function RoomMembersModal({
               <span className="dashboard-members-modal-kicker" id="room-join-requests-title">Pending join requests</span>
               <span>{requests.length}</span>
             </div>
-            {requestError && <p className="app-modal-field-error" role="alert">{requestError}</p>}
+            {(requestError || requestsQuery.error) && <p className="app-modal-field-error" role="alert">{requestError || (requestsQuery.error instanceof Error ? requestsQuery.error.message : 'We could not load join requests.')}</p>}
             <div className="dashboard-members-modal-list" role="list" aria-label="Pending join requests">
               {requestsLoading ? (
                 <p className="dashboard-members-modal-empty">Loading requests...</p>

@@ -1,8 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { useLocation } from 'wouter';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import type { LobbyProps } from '@/types';
+import { apiKeys } from '@/api/keys';
+import { getRoom } from '@/api/rooms';
+import { useJoinApprovalQuery, useJoinRoomMutation } from '@/api/hooks';
+import { useQueryClient } from '@tanstack/react-query';
 import '@/styles/PublicPages.css';
 
 interface PendingPrivateRoom {
@@ -22,48 +26,23 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
   const [pendingPrivateRoom, setPendingPrivateRoom] = useState<PendingPrivateRoom | null>(null);
   const [approvalRoom, setApprovalRoom] = useState<PendingPrivateRoom | null>(null);
   const [approvalState, setApprovalState] = useState<ApprovalState | null>(null);
-  const attemptedUrlCode = useRef(false);
-  const approvalPollInFlight = useRef(false);
+  const attemptedUrlCode = React.useRef(false);
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const joinRoomMutation = useJoinRoomMutation();
+  const approvalQuery = useJoinApprovalQuery(approvalRoom?.slug ?? null, Boolean(approvalRoom && approvalState === 'pending'));
 
   useEffect(() => {
-    if (!approvalRoom || approvalState !== 'pending') return;
-    let active = true;
-
-    const checkApprovalStatus = async () => {
-      if (!active || approvalPollInFlight.current) return;
-      approvalPollInFlight.current = true;
-      try {
-        const response = await fetch(`/api/rooms/${encodeURIComponent(approvalRoom.slug)}/join`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!active) return;
-
-        if (response.ok && payload.ok === true) {
-          setApprovalRoom(null);
-          setApprovalState(null);
-          onJoinRoom(approvalRoom.slug);
-        } else if (payload.error === 'join_denied' || payload.requestStatus === 'denied') {
-          setApprovalState('denied');
-        }
-      } catch {
-        // Keep the request screen active and retry transient network failures.
-      } finally {
-        approvalPollInFlight.current = false;
-      }
-    };
-
-    const pollTimer = window.setInterval(() => { void checkApprovalStatus(); }, 2000);
-    return () => {
-      active = false;
-      window.clearInterval(pollTimer);
-      approvalPollInFlight.current = false;
-    };
-  }, [approvalRoom, approvalState, onJoinRoom]);
+    const payload = approvalQuery.data;
+    if (!approvalRoom || approvalState !== 'pending' || !payload) return;
+    if (payload.ok === true) {
+      setApprovalRoom(null);
+      setApprovalState(null);
+      onJoinRoom(approvalRoom.slug);
+    } else if (payload.error === 'join_denied' || payload.requestStatus === 'denied') {
+      setApprovalState('denied');
+    }
+  }, [approvalQuery.data, approvalRoom, approvalState, onJoinRoom]);
 
   const handleJoinRoom = useCallback(async (code = roomCode) => {
     const normalizedRoomCode = code.trim().toLowerCase();
@@ -75,22 +54,10 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
     setError('');
     setLoading(true);
     try {
-      const response = await fetch(`/api/rooms/${encodeURIComponent(normalizedRoomCode)}`, {
-        credentials: 'include',
+      const payload = await queryClient.fetchQuery({
+        queryKey: apiKeys.rooms.detail(normalizedRoomCode),
+        queryFn: () => getRoom(normalizedRoomCode),
       });
-      const payload = await response.json().catch(() => ({}));
-
-      if (!response.ok || !payload.room?.slug) {
-        throw new Error(
-          payload.error === 'rate_limited'
-            ? 'Too many attempts. Please wait a moment and try again.'
-            : payload.error === 'not_found'
-              ? 'That room could not be found. Check the code and try again.'
-              : payload.error === 'room_closed'
-                ? 'That room has already been closed.'
-                : payload.error || 'We could not open that room. Please try again.',
-        );
-      }
 
       if (payload.room.accessMode === 'password_protected') {
         setRoomPassword('');
@@ -104,14 +71,8 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
       }
 
       if (payload.room.accessMode === 'approval_required') {
-        const approvalResponse = await fetch(`/api/rooms/${encodeURIComponent(payload.room.slug)}/join`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-        const approvalPayload = await approvalResponse.json().catch(() => ({}));
-        if (approvalResponse.ok && approvalPayload.ok === true) {
+        const approvalPayload = await joinRoomMutation.mutateAsync({ slug: payload.room.slug, input: {} });
+        if (approvalPayload.ok === true) {
           onJoinRoom(payload.room.slug);
           return;
         }
@@ -131,7 +92,7 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
           setApprovalState('denied');
           return;
         }
-        throw new Error(approvalPayload.error || 'We could not request access to that room.');
+        throw new Error(('error' in approvalPayload && approvalPayload.error) || 'We could not request access to that room.');
       }
 
       onJoinRoom(payload.room.slug);
@@ -140,7 +101,7 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
     } finally {
       setLoading(false);
     }
-  }, [onJoinRoom, roomCode]);
+  }, [joinRoomMutation, onJoinRoom, queryClient, roomCode]);
 
   const closePasswordModal = () => {
     setPendingPrivateRoom(null);
@@ -159,14 +120,8 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
     setPasswordError('');
     setLoading(true);
     try {
-      const response = await fetch(`/api/rooms/${encodeURIComponent(pendingPrivateRoom.slug)}/join`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      const payload = await joinRoomMutation.mutateAsync({ slug: pendingPrivateRoom.slug, input: { password } });
+      if (payload.ok !== true) {
         throw new Error(payload.error === 'bad_password'
           ? 'That password is not correct.'
           : payload.error === 'room_closed'

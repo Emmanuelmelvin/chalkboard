@@ -1,12 +1,10 @@
 import { create } from 'zustand';
+import { getCurrentUser, signOut as signOutRequest } from '@/api/auth';
+import { apiKeys } from '@/api/keys';
+import { queryClient } from '@/api/queryClient';
+import type { UserProfile } from '@/api/types';
 
-export interface UserProfile {
-  id: string;
-  email: string;
-  displayName: string;
-  avatarUrl: string | null;
-  platformRole: 'user' | 'admin' | 'super_admin';
-}
+export type { UserProfile } from '@/api/types';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -15,16 +13,8 @@ interface AuthState {
   status: AuthStatus;
   error: string | null;
   hydrate: () => Promise<void>;
-  signInWithGoogle: (idToken: string) => Promise<void>;
   signOut: () => Promise<void>;
-}
-
-async function readUserResponse(response: Response) {
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.user) {
-    throw new Error(payload.error || 'Unable to authenticate with Google.');
-  }
-  return payload.user as UserProfile;
+  setAuthenticated: (profile: UserProfile) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => {
@@ -44,17 +34,13 @@ export const useAuthStore = create<AuthState>((set) => {
     hydrate: async () => {
       const requestId = beginAuthRequest();
       try {
-        const response = await fetch('/api/auth/me', {
-          credentials: 'include',
-          cache: 'no-store',
+        const payload = await queryClient.fetchQuery({
+          queryKey: apiKeys.auth.me,
+          queryFn: getCurrentUser,
+          staleTime: 0,
         });
-        const payload = await response.json().catch(() => ({}));
         if (!isCurrentRequest(requestId)) return;
-        if (!response.ok || !payload.user) {
-          set({ profile: null, status: 'unauthenticated', error: null });
-          return;
-        }
-        set({ profile: payload.user as UserProfile, status: 'authenticated', error: null });
+        set({ profile: payload.user, status: 'authenticated', error: null });
       } catch {
         if (isCurrentRequest(requestId)) {
           set({ profile: null, status: 'unauthenticated', error: 'The authentication service is unavailable.' });
@@ -62,36 +48,17 @@ export const useAuthStore = create<AuthState>((set) => {
       }
     },
 
-    signInWithGoogle: async (idToken) => {
-      const requestId = beginAuthRequest();
-      set({ status: 'loading', error: null });
-      try {
-        const profile = await readUserResponse(await fetch('/api/auth/google', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken }),
-        }));
-        if (isCurrentRequest(requestId)) {
-          set({ profile, status: 'authenticated', error: null });
-        }
-      } catch (error) {
-        if (!isCurrentRequest(requestId)) return;
-        const message = error instanceof Error ? error.message : 'Unable to sign in with Google.';
-        set({ profile: null, status: 'unauthenticated', error: message });
-        throw error;
-      }
-    },
-
     signOut: async () => {
       const requestId = beginAuthRequest();
       try {
-        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+        await signOutRequest();
       } finally {
         if (isCurrentRequest(requestId)) {
           set({ profile: null, status: 'unauthenticated', error: null });
         }
       }
     },
+
+    setAuthenticated: (profile) => set({ profile, status: 'authenticated', error: null }),
   };
 });

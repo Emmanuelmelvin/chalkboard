@@ -1,5 +1,17 @@
 import { apiRequest } from '@/api/client';
-import type { AddAdminRequest, AddAdminResponse, AdminListResponse, AdminPluginListResponse, AdminPluginResponse, AdminSession, AdminSetupResponse, AdminPluginReviewRequest, OkResponse, VerifyAdminTwoFactorRequest, VerifyAdminTwoFactorResponse } from '@/api/types';
+import type {
+  AddAdminRequest,
+  AddAdminResponse,
+  AdminListResponse,
+  AdminPluginListResponse,
+  AdminPluginResponse,
+  AdminSession,
+  AdminSetupResponse,
+  AdminPluginReviewRequest,
+  OkResponse,
+  VerifyAdminTwoFactorRequest,
+  VerifyAdminTwoFactorResponse
+} from '@/api/types';
 
 export function getAdminSession() {
   return apiRequest<AdminSession>({ url: '/admin/session', method: 'GET' });

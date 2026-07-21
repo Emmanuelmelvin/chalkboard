@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, ShieldCheck } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useAuthStore } from '@/stores/authStore';
+import { useGoogleConfigQuery, useGoogleSignInMutation } from '@/api/hooks';
 import '@/styles/PublicPages.css';
 
 interface GoogleCredentialResponse {
@@ -42,7 +43,9 @@ function waitForGoogleIdentity() {
 function Login() {
   const [, setLocation] = useLocation();
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
-  const { profile, status, error, signInWithGoogle } = useAuthStore();
+  const { profile, status, error, setAuthenticated } = useAuthStore();
+  const googleConfigQuery = useGoogleConfigQuery(!import.meta.env.VITE_CLIENT_ID?.trim());
+  const googleSignInMutation = useGoogleSignInMutation();
   const [setupError, setSetupError] = useState<string | null>(null);
   const [redirectTarget] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -60,13 +63,10 @@ function Login() {
     let cancelled = false;
     const renderGoogleButton = async () => {
       try {
-        let clientId = import.meta.env.VITE_CLIENT_ID?.trim();
+        const clientId = import.meta.env.VITE_CLIENT_ID?.trim() || googleConfigQuery.data?.clientId?.trim();
         if (!clientId) {
-          const configResponse = await fetch('/api/auth/google/config', { credentials: 'include' });
-          const responseText = await configResponse.text();
-          const config = responseText ? JSON.parse(responseText) as { clientId?: string } : {};
-          clientId = config.clientId?.trim();
-          if (!configResponse.ok || !clientId) throw new Error('Google Sign-In is not configured on the server.');
+          if (googleConfigQuery.isLoading) return;
+          throw new Error('Google Sign-In is not configured on the server.');
         }
         await waitForGoogleIdentity();
         if (cancelled || !googleButtonRef.current || !window.google) return;
@@ -74,7 +74,9 @@ function Login() {
         window.google.accounts.id.initialize({
           client_id: clientId,
           callback: (response) => {
-            void signInWithGoogle(response.credential).catch(() => undefined);
+            googleSignInMutation.mutate({ idToken: response.credential }, {
+              onSuccess: (payload) => setAuthenticated(payload.user),
+            });
           },
         });
         googleButtonRef.current.replaceChildren();
@@ -94,7 +96,7 @@ function Login() {
 
     void renderGoogleButton();
     return () => { cancelled = true; };
-  }, [signInWithGoogle]);
+  }, [googleConfigQuery.data?.clientId, googleConfigQuery.isLoading, googleSignInMutation, setAuthenticated]);
 
   return (
     <div className="auth-page">
@@ -119,7 +121,7 @@ function Login() {
           <h2 id="auth-panel-heading">Continue to Chalkboard.</h2>
           <p className="lobby-panel-copy">Use your Google account to enter your shared workspace.</p>
           <div className="auth-google-slot" ref={googleButtonRef} aria-label="Continue with Google" />
-          {(setupError || error) && <p className="lobby-error" role="alert">{setupError || error}</p>}
+          {(setupError || error || googleSignInMutation.error) && <p className="lobby-error" role="alert">{setupError || error || (googleSignInMutation.error instanceof Error ? googleSignInMutation.error.message : 'Unable to authenticate with Google.')}</p>}
           <p className="lobby-panel-footnote"><ShieldCheck size={14} strokeWidth={1.7} /> Your sign-in is handled securely by Google.</p>
         </section>
       </main>

@@ -14,7 +14,12 @@ export function createRoom(input: CreateRoomRequest) {
 }
 
 export function joinRoom(slug: string, input: JoinRoomRequest = {}) {
-  return apiRequest<JoinRoomResponse>({ url: `/rooms/${encodeURIComponent(slug)}/join`, method: 'POST', data: input });
+  return apiRequest<JoinRoomResponse>({
+    url: `/rooms/${encodeURIComponent(slug)}/join`,
+    method: 'POST',
+    data: input,
+    validateStatus: (status) => (status >= 200 && status < 300) || status === 403,
+  });
 }
 
 export function resetRoomPassword(slug: string) {

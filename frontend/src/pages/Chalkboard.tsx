@@ -35,8 +35,8 @@ import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useBoardSocket } from '@/hooks/useBoardSocket';
+import { useJoinRequestsQuery, usePluginCatalogueQuery, useResolveJoinRequestMutation, useRoomQuery } from '@/api/hooks';
 import { createPluginAPI, pluginRegistry, registerInstalledPlugins } from '@/plugins';
-import { listPluginCatalogue } from '@/plugins/management';
 import {
   publishedPluginDefinition,
   PublishedPluginRuntime,
@@ -120,7 +120,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const { links, removeLink } = useLinksStore();
   const pluginApi = useMemo(() => createPluginAPI(), []);
-  const [publishedPlugins, setPublishedPlugins] = useState<PublishedPluginDefinition[]>([]);
   const handlePublishedPluginCommand = useCallback((request: PublishedPluginCommandRequest) => {
     if (request.command !== PUBLISHED_PLUGIN_INSERT_STROKES) return false;
     if (!useBoardStore.getState().canEdit) return false;
@@ -142,16 +141,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   useEffect(() => () => publishedRuntime.dispose(), [publishedRuntime]);
 
+  const publishedPluginsQuery = usePluginCatalogueQuery();
+  const publishedPlugins = useMemo(
+    () => (publishedPluginsQuery.data?.plugins ?? []).map(publishedPluginDefinition).filter((plugin): plugin is PublishedPluginDefinition => Boolean(plugin)),
+    [publishedPluginsQuery.data],
+  );
+
   useEffect(() => {
-    let active = true;
-    void listPluginCatalogue().then((payload) => {
-      if (!active) return;
-      setPublishedPlugins(payload.plugins.map(publishedPluginDefinition).filter((plugin): plugin is PublishedPluginDefinition => Boolean(plugin)));
-    }).catch(() => {
-      if (active) useLoggerStore.getState().notify('Published plugins could not be loaded for this room.', 'warning');
-    });
-    return () => { active = false; };
-  }, [roomId]);
+    if (publishedPluginsQuery.error) useLoggerStore.getState().notify('Published plugins could not be loaded for this room.', 'warning');
+  }, [publishedPluginsQuery.error]);
 
   useEffect(() => {
     publishedRuntime.mount(publishedPlugins);
@@ -172,8 +170,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [roomTitle, setRoomTitle] = useState(() => `Room ${roomId}`);
   const [roomDescription, setRoomDescription] = useState('');
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
-  const [joinRequests, setJoinRequests] = useState<PendingJoinRequest[]>([]);
-  const [joinRequestsLoading, setJoinRequestsLoading] = useState(false);
   const [joinRequestAction, setJoinRequestAction] = useState<string | null>(null);
   const [joinRequestError, setJoinRequestError] = useState('');
   const [roomDetailsOpen, setRoomDetailsOpen] = useState(false);
@@ -238,42 +234,21 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   } = useCanvasInteraction(canvasRef);
 
   const { collaborators, userCursorColor, currentRole, onlineCount } = useBoardSocket(socket, roomId, userName, userId, roomPassword);
+  const roomQuery = useRoomQuery(roomId);
   const effectiveRole = roomMembers.find((member) => member.userId === userId)?.role ?? currentRole;
   const canEdit = effectiveRole !== 'viewer';
   const canManageMembers = effectiveRole === 'owner';
-
-  const loadJoinRequests = useCallback(async () => {
-    if (!canManageMembers) {
-      setJoinRequests([]);
-      return;
-    }
-
-    setJoinRequestsLoading(true);
-    setJoinRequestError('');
-    try {
-      const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/join-requests`, { credentials: 'include' });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || 'We could not load join requests.');
-      setJoinRequests(Array.isArray(payload.requests) ? payload.requests : []);
-    } catch (error) {
-      setJoinRequestError(error instanceof Error ? error.message : 'We could not load join requests.');
-    } finally {
-      setJoinRequestsLoading(false);
-    }
-  }, [canManageMembers, roomId]);
+  const joinRequestsQuery = useJoinRequestsQuery(roomId, canManageMembers && roomDetailsOpen && roomAccessMode === 'approval_required');
+  const resolveJoinRequestMutation = useResolveJoinRequestMutation();
+  const joinRequests = joinRequestsQuery.data?.requests ?? [];
+  const joinRequestsLoading = joinRequestsQuery.isLoading || joinRequestsQuery.isFetching;
 
   const resolveJoinRequest = useCallback(async (request: PendingJoinRequest, decision: 'approve' | 'deny') => {
     const actionKey = `${decision}:${request.userId}`;
     setJoinRequestAction(actionKey);
     setJoinRequestError('');
     try {
-      const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/join-requests/${encodeURIComponent(request.userId)}/${decision}`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || `We could not ${decision} this request.`);
-      setJoinRequests((current) => current.filter((item) => item.userId !== request.userId));
+      await resolveJoinRequestMutation.mutateAsync({ slug: roomId, userId: request.userId, decision });
       useLoggerStore.getState().notify(
         `${request.displayName} was ${decision === 'approve' ? 'approved' : 'declined'}.`,
         decision === 'approve' ? 'success' : 'info',
@@ -283,7 +258,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     } finally {
       setJoinRequestAction(null);
     }
-  }, [roomId]);
+  }, [resolveJoinRequestMutation, roomId]);
 
   const displayedRoomMembers = useMemo(() => {
     const members = new Map<string, RoomMember>(roomMembers.map((member) => [member.userId, member]));
@@ -323,30 +298,17 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   }, [roomId, roomTitle]);
 
   useEffect(() => {
-    let cancelled = false;
-    const loadRoomTheme = async () => {
-      setRoomTitle(`Room ${roomId}`);
-      setRoomDescription('');
-      try {
-        const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`, { credentials: 'include' });
-        const payload = await response.json().catch(() => ({}));
-        if (!cancelled) {
-          if (isRoomTheme(payload.room?.theme)) setRoomTheme(payload.room.theme);
-          if (payload.room?.accessMode === 'open' || payload.room?.accessMode === 'approval_required' || payload.room?.accessMode === 'password_protected') {
-            setRoomAccessMode(payload.room.accessMode);
-          }
-          if (typeof payload.room?.title === 'string' && payload.room.title) setRoomTitle(payload.room.title);
-          if (typeof payload.room?.description === 'string') setRoomDescription(payload.room.description);
-          if (Array.isArray(payload.room?.members)) setRoomMembers(payload.room.members);
-        }
-      } catch {
-        // The classroom theme remains a safe fallback if metadata is unavailable.
-      }
-    };
-
-    void loadRoomTheme();
-    return () => { cancelled = true; };
-  }, [roomId]);
+    setRoomTitle(`Room ${roomId}`);
+    setRoomDescription('');
+    setRoomAccessMode('open');
+    if (!roomQuery.data) return;
+    const { room, members } = roomQuery.data;
+    if (isRoomTheme(room.theme)) setRoomTheme(room.theme);
+    setRoomAccessMode(room.accessMode);
+    if (room.title) setRoomTitle(room.title);
+    if (typeof room.description === 'string') setRoomDescription(room.description);
+    setRoomMembers(members);
+  }, [roomId, roomQuery.data]);
 
   useEffect(() => {
     initSession({ roomId, socket, userId, canEdit });
@@ -377,12 +339,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     socket.on('room:join-requested', handleJoinRequest);
     return () => { socket.off('room:join-requested', handleJoinRequest); };
   }, [socket, roomId, canManageMembers]);
-
-  useEffect(() => {
-    if (!roomDetailsOpen || !canManageMembers || roomAccessMode !== 'approval_required') return;
-    const requestLoad = window.setTimeout(() => { void loadJoinRequests(); }, 0);
-    return () => window.clearTimeout(requestLoad);
-  }, [roomDetailsOpen, canManageMembers, roomAccessMode, loadJoinRequests]);
 
   const leaveClosedRoom = useCallback(() => {
     if (roomClosureHandledRef.current) return;
@@ -776,7 +732,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                       <div className="room-details-section-title" id="room-join-requests-heading">
                         Join requests <span>{joinRequests.length}</span>
                       </div>
-                      {joinRequestError && <p className="room-details-error" role="alert">{joinRequestError}</p>}
+                      {(joinRequestError || joinRequestsQuery.error) && <p className="room-details-error" role="alert">{joinRequestError || (joinRequestsQuery.error instanceof Error ? joinRequestsQuery.error.message : 'We could not load join requests.')}</p>}
                       {joinRequestsLoading ? (
                         <p className="room-join-requests-empty">Loading requests...</p>
                       ) : joinRequests.length === 0 ? (

@@ -122,7 +122,14 @@ export interface JoinRoomDeniedResponse {
   requestStatus: 'denied';
 }
 
-export type JoinRoomResponse = JoinRoomSuccessResponse | JoinRoomPendingResponse | JoinRoomDeniedResponse;
+export interface JoinRoomErrorResponse {
+  ok?: false;
+  error: string;
+  roomId?: string;
+  requestStatus?: JoinRoomPendingResponse['requestStatus'] | JoinRoomDeniedResponse['requestStatus'];
+}
+
+export type JoinRoomResponse = JoinRoomSuccessResponse | JoinRoomPendingResponse | JoinRoomDeniedResponse | JoinRoomErrorResponse;
 
 export interface ResetRoomPasswordResponse {
   password: string;

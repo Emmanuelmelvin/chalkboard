@@ -531,8 +531,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
   };
 
   const handleSubmit = async (tool: PluginToolContribution) => {
-    const didRun = await onRunPluginTool(tool.command, getToolFormValues(tool), selectionStrokeIds);
-    if (didRun) onClose();
+    await onRunPluginTool(tool.command, getToolFormValues(tool), selectionStrokeIds);
   };
 
   const useSharedOutputAsTag = (toolId: string) => {

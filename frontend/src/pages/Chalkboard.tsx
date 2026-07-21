@@ -156,7 +156,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const pluginTools = useMemo(() => [...pluginRegistry.getTools(), ...publishedTools], [publishedTools]);
   const publishedSelectionTools = useMemo<PluginSelectionToolContribution[]>(() => publishedPlugins.flatMap((plugin) => plugin.manifest.contributes.selectionTools?.map((tool) => ({ ...tool, pluginId: plugin.pluginId, description: tool.description ?? plugin.manifest.description })) ?? []), [publishedPlugins]);
   const pluginSelectionTools = useMemo(() => [...pluginRegistry.getSelectionTools(), ...publishedSelectionTools], [publishedSelectionTools]);
-  const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string; selectionStrokeIds: string[] }>>([]);
+  const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
   const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
   const [roomTitle, setRoomTitle] = useState(() => `Room ${roomId}`);
@@ -195,7 +195,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   };
 
   const hasNavigatedToLink = useRef<boolean>(false);
-  const openPluginModal = (pluginId: string, ids = selectedStrokeIds) => {
+  const openPluginModal = (pluginId: string) => {
     setShowInsertShapes(false);
     if (pluginId === NOTES_PLUGIN_ID) {
       void pluginRegistry.executeCommand('notes.create');
@@ -203,15 +203,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     }
     setActivePluginModals((current) => current.some((modal) => modal.pluginId === pluginId)
       ? current
-      : [...current, { pluginId, selectionStrokeIds: [...ids] }]);
+      : [...current, { pluginId }]);
   };
-
-  // A tag editor is only meaningful while its source selection exists.
-  useEffect(() => {
-    if (selectedStrokeIds.length === 0) {
-      setActivePluginModals((current) => current.filter((modal) => modal.pluginId !== 'chalkboard.tag'));
-    }
-  }, [selectedStrokeIds.length]);
 
   useCanvasRenderer(canvasRef);
 
@@ -614,8 +607,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   pluginSelectionTools={pluginSelectionTools}
                   onRunPluginSelectionTool={(commandId) => {
                     const tool = pluginSelectionTools.find((candidate) => candidate.command === commandId);
-                    if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId, selectedStrokeIds);
-                    else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId, selectedStrokeIds);
+                    if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId);
+                    else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId);
                     else if (tool?.pluginId && publishedPlugins.some((plugin) => plugin.pluginId === tool.pluginId)) void publishedRuntime.execute(tool.pluginId, commandId);
                     else void pluginRegistry.executeCommand(commandId);
                   }}
@@ -782,8 +775,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         if (!plugin) return null;
         const tools = pluginTools.filter((tool) => (tool.pluginId ?? plugin.id) === plugin.id);
         return <PluginModal key={modal.pluginId} plugin={plugin} tools={tools}
-          selectedStrokes={strokes.filter((stroke) => modal.selectionStrokeIds.includes(stroke.id))}
-          selectionStrokeIds={modal.selectionStrokeIds}
+          selectedStrokes={strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id))}
+          selectionStrokeIds={selectedStrokeIds}
           sharedOutput={sharedPluginOutput}
           onPublishOutput={setSharedPluginOutput}
           onClose={() => setActivePluginModals((current) => current.filter((item) => item.pluginId !== modal.pluginId))}

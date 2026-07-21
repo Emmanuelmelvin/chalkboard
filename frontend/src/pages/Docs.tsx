@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ArrowUpRight,
+  AudioLines,
   BookOpen,
+  Bot,
   CheckCircle2,
   ChevronRight,
   CircleAlert,
@@ -124,7 +126,7 @@ function Docs() {
   }, []);
 
   useEffect(() => {
-    const sections = Array.from(document.querySelectorAll<HTMLElement>('.docs-section'));
+    const sections = Array.from(document.querySelectorAll<HTMLElement>('.docs-section, .docs-future-ideas'));
     if (sections.length === 0) return undefined;
 
     let animationFrame = 0;
@@ -202,6 +204,7 @@ function Docs() {
               <a className={activeSection === 'updates' ? 'is-active' : undefined} aria-current={activeSection === 'updates' ? 'location' : undefined} href="#updates">08 / Update</a>
               <a className={activeSection === 'security' ? 'is-active' : undefined} aria-current={activeSection === 'security' ? 'location' : undefined} href="#security">09 / Safety</a>
               <a className={activeSection === 'checklist' ? 'is-active' : undefined} aria-current={activeSection === 'checklist' ? 'location' : undefined} href="#checklist">10 / Checklist</a>
+              <a className={activeSection === 'plugin-ideas' ? 'is-active' : undefined} aria-current={activeSection === 'plugin-ideas' ? 'location' : undefined} href="#plugin-ideas">Ideas / Future possibilities</a>
             </nav>
           </aside>
 
@@ -216,6 +219,25 @@ function Docs() {
                 <article><span className="docs-card-icon"><Database size={18} /></span><strong>Publish</strong><p>The dashboard stores each version, sends it through review, and keeps the release history intact.</p></article>
               </div>
               <div className="docs-callout docs-callout-gold"><CheckCircle2 size={18} /><div><strong>The important rule</strong><p>Plugin authors do not need access to Chalkboard application source. The supported authoring path is the dashboard: create a draft, upload the package contract, test it, submit it, and publish it from Developer workspace.</p></div></div>
+              <div className="docs-future-ideas" id="plugin-ideas">
+                <p className="docs-section-kicker">Future possibilities</p>
+                <h3>Plugins can make the room feel much more alive</h3>
+                <p>These are examples of directions the plugin platform could support. They are ideas for future plugins, not built-in features today.</p>
+                <div className="docs-future-grid">
+                  <article>
+                    <span className="docs-card-icon"><Bot size={18} /></span>
+                    <strong>AI agents that draw on the canvas</strong>
+                    <p>An agent plugin could turn a prompt into diagrams, lesson plans, charts, or worked examples, then insert the result as normal Chalkboard strokes for the room to review and edit.</p>
+                    <code>board:read + board:write</code>
+                  </article>
+                  <article>
+                    <span className="docs-card-icon"><AudioLines size={18} /></span>
+                    <strong>Voice-enabled collaboration</strong>
+                    <p>A voice plugin could support dictation, spoken canvas commands, narrated explanations, and voice notes—making hands-free collaboration possible during a live session.</p>
+                    <code>microphone + room-aware commands</code>
+                  </article>
+                </div>
+              </div>
             </section>
 
             <section className="docs-section" id="dashboard-flow">

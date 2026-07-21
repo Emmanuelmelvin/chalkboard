@@ -69,7 +69,7 @@
               points: circlePoints(center, innerRadius)
             }
           ],
-          options: { select: true, closeInsertPanel: true, group: true }
+          options: { select: true, group: true }
         }
       });
     }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { ArrowLeft, CheckCircle2, Code2, FileJson, GitBranch, LoaderCircle, Plus, Send, Sparkles } from 'lucide-react';
 import PluginPackagePicker, { type PluginPackageFile } from '@/components/PluginPackagePicker';
-import { createBrowserModuleBundle, findZipEntry, readZipArchive, zipEntryText } from '@/lib/zip';
+import { createBrowserModuleBundle, findZipEntry, readZipArchive, zipEntryText, type BrowserZipEntry } from '@/lib/zip';
 import { installedPlugins } from '@/plugins/installedPlugins';
 import { createPlugin, createPluginVersion, getManagedPluginLogo, listMyPlugins, listPluginCatalogue, submitPlugin, type ManagedPlugin, type ManagedPluginPlan } from '@/plugins/management';
 import { useLoggerStore } from '@/stores/loggerStore';
@@ -103,6 +103,47 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
+const PACKAGE_LOGO_MIME_TYPES: Record<string, string> = {
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+};
+
+function packageLogoMimeType(filename: string) {
+  const extension = filename.slice(filename.lastIndexOf('.')).toLowerCase();
+  return PACKAGE_LOGO_MIME_TYPES[extension] || null;
+}
+
+function packageLogoDataUrl(entry: BrowserZipEntry) {
+  const mimeType = packageLogoMimeType(entry.name);
+  if (!mimeType) return null;
+  let binary = '';
+  for (let offset = 0; offset < entry.bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...entry.bytes.subarray(offset, offset + 0x8000));
+  }
+  return `data:${mimeType};base64,${btoa(binary)}`;
+}
+
+function findPackageLogo(entries: BrowserZipEntry[], manifest: Record<string, unknown>) {
+  const declaredLogo = typeof manifest.icon === 'string' ? manifest.icon : typeof manifest.logo === 'string' ? manifest.logo : '';
+  const candidateNames = [
+    declaredLogo.replace(/^\.\//, ''),
+    'logo.svg',
+    'logo.png',
+    'logo.webp',
+    'logo.jpg',
+    'logo.jpeg',
+    'icon.svg',
+    'icon.png',
+  ].filter(Boolean);
+  const logoEntry = candidateNames
+    .map((filename) => findZipEntry(entries, filename))
+    .find((entry) => entry && packageLogoMimeType(entry.name));
+  return logoEntry ? packageLogoDataUrl(logoEntry) : null;
+}
+
 export default function DeveloperPlugins() {
   const [plugins, setPlugins] = useState<ManagedPlugin[]>([]);
   const [catalogue, setCatalogue] = useState<ManagedPlugin[]>([]);
@@ -113,7 +154,7 @@ export default function DeveloperPlugins() {
   const [packageLoadingTarget, setPackageLoadingTarget] = useState<'create' | 'version' | null>(null);
   const [manualCreateOpen, setManualCreateOpen] = useState(false);
   const [manualVersionOpen, setManualVersionOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ pluginId: '', name: '', description: '', logoDataUrl: '', plan: 'free' as ManagedPluginPlan, version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '', packageFiles: [] as PluginPackageFile[] });
+  const [createForm, setCreateForm] = useState({ pluginId: '', name: '', description: '', logoDataUrl: '', logoSource: '' as '' | 'manual' | 'package', plan: 'free' as ManagedPluginPlan, version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '', packageFiles: [] as PluginPackageFile[] });
   const [versionForm, setVersionForm] = useState({ version: '0.2.0', manifest: '', changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', hasBundleArchive: false, packageFiles: [] as PluginPackageFile[] });
 
   const selectedPlugin = useMemo(() => plugins.find((plugin) => plugin.pluginId === selectedPluginId) ?? null, [plugins, selectedPluginId]);
@@ -157,7 +198,7 @@ export default function DeveloperPlugins() {
       setSelectedPluginId(payload.plugin.pluginId);
       setVersionForm({ version: '0.2.0', manifest: JSON.stringify(payload.plugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: payload.plugin.versions[0]?.entryUrl ?? '', entryCode: payload.plugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: payload.plugin.versions[0]?.hasBundleArchive || payload.plugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(payload.plugin.versions[0]?.hasBundleArchive || payload.plugin.versions[0]?.bundleArchiveDataUrl), packageFiles: [] });
       setCreateOpen(false);
-      setCreateForm({ pluginId: '', name: '', description: '', logoDataUrl: '', plan: 'free', version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '', packageFiles: [] });
+      setCreateForm({ pluginId: '', name: '', description: '', logoDataUrl: '', logoSource: '', plan: 'free', version: '0.1.0', manifest: DEFAULT_MANIFEST('', '', '0.1.0'), changelog: '', entryUrl: '', entryCode: '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '', packageFiles: [] });
       useLoggerStore.getState().notify('Draft created. Add a version and submit it when it is ready for review.', 'success');
     } catch (createError) {
       useLoggerStore.getState().notify(createError instanceof Error ? createError.message : 'We could not create the plugin.', 'error', 5000);
@@ -202,7 +243,7 @@ export default function DeveloperPlugins() {
   };
 
   const useDemoPlugin = () => {
-    setCreateForm((current) => ({ ...current, ...DEMO_PLUGIN, logoDataUrl: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '', packageFiles: [] }));
+    setCreateForm((current) => ({ ...current, ...DEMO_PLUGIN, logoDataUrl: '', logoSource: '', bundleArchiveDataUrl: '', archiveFileName: '', manifestFileName: '', packageFiles: [] }));
     useLoggerStore.getState().notify('Starter example loaded. Add a logo if you want, then create the draft.', 'info');
   };
 
@@ -257,6 +298,7 @@ export default function DeveloperPlugins() {
       const manifestEntry = findZipEntry(entries, 'manifest.json');
       if (!manifestEntry) throw new Error('The ZIP package must include manifest.json.');
       const manifest = parseManifest(zipEntryText(manifestEntry));
+      const packageLogo = findPackageLogo(entries, manifest);
       const declaredEntry = typeof manifest.entry === 'string' ? manifest.entry : '';
       const entry = (declaredEntry ? findZipEntry(entries, declaredEntry) : undefined)
         ?? findZipEntry(entries, 'index.js')
@@ -276,6 +318,8 @@ export default function DeveloperPlugins() {
           pluginId: manifestId || current.pluginId,
           name: manifestName || current.name,
           description: manifestDescription || current.description,
+          logoDataUrl: packageLogo || (current.logoSource === 'package' ? '' : current.logoDataUrl),
+          logoSource: packageLogo ? 'package' : current.logoSource === 'package' ? '' : current.logoSource,
           version: manifestVersion || current.version,
           manifest: manifestText,
           manifestFileName: manifestEntry.name,
@@ -298,7 +342,7 @@ export default function DeveloperPlugins() {
           packageFiles,
         }));
       }
-      useLoggerStore.getState().notify(`${file.name} loaded. Found ${packageFiles.length} files; ${manifestEntry.name} and ${entry.name} were imported.`, 'success');
+      useLoggerStore.getState().notify(`${file.name} loaded. Found ${packageFiles.length} files; ${manifestEntry.name} and ${entry.name} were imported${packageLogo ? ', including the package logo' : ''}.`, 'success');
     } catch (packageError) {
       useLoggerStore.getState().notify(packageError instanceof Error ? packageError.message : 'We could not read that ZIP package.', 'error', 5000);
     } finally {
@@ -320,7 +364,7 @@ export default function DeveloperPlugins() {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        setCreateForm((current) => ({ ...current, logoDataUrl: reader.result as string }));
+        setCreateForm((current) => ({ ...current, logoDataUrl: reader.result as string, logoSource: 'manual' }));
       }
     };
     reader.onerror = () => useLoggerStore.getState().notify('We could not read that logo file.', 'error');
@@ -355,7 +399,7 @@ export default function DeveloperPlugins() {
         {loading ? <div className="dashboard-empty-state"><LoaderCircle className="is-spinning" size={20} /> Loading your plugins…</div> : plugins.length === 0 ? (
           <div className="dashboard-developer-empty"><Code2 size={24} /><strong>Your first plugin starts here.</strong><span>Create a draft with a stable ID and manifest, then send it to review when it is ready.</span><button className="dashboard-link-button" type="button" onClick={() => setCreateOpen(true)}>Create a draft <Plus size={14} /></button></div>
         ) : (
-        <div className="dashboard-developer-plugin-list">{plugins.map((plugin) => <button className={`dashboard-developer-plugin-row${selectedPluginId === plugin.pluginId ? ' is-selected' : ''}`} type="button" key={plugin.pluginId} onClick={() => { setSelectedPluginId(plugin.pluginId); setVersionForm({ version: '0.2.0', manifest: JSON.stringify(plugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: plugin.versions[0]?.entryUrl ?? '', entryCode: plugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: plugin.versions[0]?.hasBundleArchive || plugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(plugin.versions[0]?.hasBundleArchive || plugin.versions[0]?.bundleArchiveDataUrl), packageFiles: [] }); }}><span className="dashboard-developer-plugin-mark">{(plugin.logoUrl || plugin.logoDataUrl) ? <img src={plugin.logoUrl || plugin.logoDataUrl || ''} alt="" /> : <Sparkles size={16} />}</span><span><strong>{plugin.name}</strong><small>{plugin.pluginId} · v{plugin.versions[0]?.version ?? 'draft'}</small></span><em className={`dashboard-plugin-status is-${plugin.status}`}>{statusLabel(plugin.status)}</em></button>)}</div>
+        <div className="dashboard-developer-plugin-list">{plugins.map((plugin) => { const logoUrl = getManagedPluginLogo(plugin); return <button className={`dashboard-developer-plugin-row${selectedPluginId === plugin.pluginId ? ' is-selected' : ''}`} type="button" key={plugin.pluginId} onClick={() => { setSelectedPluginId(plugin.pluginId); setVersionForm({ version: '0.2.0', manifest: JSON.stringify(plugin.versions[0]?.manifest ?? {}, null, 2), changelog: '', entryUrl: plugin.versions[0]?.entryUrl ?? '', entryCode: plugin.versions[0]?.entryCode ?? '', bundleFileName: '', bundleArchiveDataUrl: '', archiveFileName: plugin.versions[0]?.hasBundleArchive || plugin.versions[0]?.bundleArchiveDataUrl ? 'Using previous ZIP package' : '', hasBundleArchive: Boolean(plugin.versions[0]?.hasBundleArchive || plugin.versions[0]?.bundleArchiveDataUrl), packageFiles: [] }); }}><span className="dashboard-developer-plugin-mark">{logoUrl ? <img src={logoUrl} alt={`${plugin.name} logo`} /> : <Sparkles size={16} />}</span><span><strong>{plugin.name}</strong><small>{plugin.pluginId} · v{plugin.versions[0]?.version ?? 'draft'}</small></span><em className={`dashboard-plugin-status is-${plugin.status}`}>{statusLabel(plugin.status)}</em></button>; })}</div>
         )}
         <div className="dashboard-developer-runtime"><p className="dashboard-panel-kicker">Bundled runtime</p>{installedPlugins.map((plugin) => <div key={plugin.id}><CheckCircle2 size={14} /><span><strong>{plugin.name}</strong><small>v{plugin.version} · available in Chalkboard</small></span></div>)}</div>
       </div>

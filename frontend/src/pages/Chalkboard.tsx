@@ -112,7 +112,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     isCopied, setIsCopied,
     initSession,
     setCanvas,
-    spacePressed,
     activeFillColor, setActiveFillColor,
     showSelectionToolbox, setShowSelectionToolbox,
     noteEditorRequest,
@@ -228,8 +227,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     handlePointerUp,
     handleWheel,
     transformMode,
-    hoveredHandle,
-    isPanning,
     dustPuffs,
   } = useCanvasInteraction(canvasRef);
 
@@ -451,52 +448,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setPanOffset({ x: 0, y: 0 });
   };
 
-  const getCanvasCursor = () => {
-    if (isPanning) return 'grabbing';
-    if (spacePressed || activeTool === 'pan') return 'grab';
-    if (activeTool === 'select') {
-      const mode = transformMode || hoveredHandle;
-      if (mode === 'move') return 'move';
-      if (mode === 'resize-tl' || mode === 'resize-br') return 'nwse-resize';
-      if (mode === 'resize-tr' || mode === 'resize-bl') return 'nesw-resize';
-      if (mode === 'resize-l' || mode === 'resize-r') return 'ew-resize';
-      if (mode === 'resize-t' || mode === 'resize-b') return 'ns-resize';
-      return 'default';
-    }
-    if (activeTool === 'chalk') {
-      const penSvg = encodeURIComponent(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" fill="${activeColor}" stroke="#000000" stroke-width="2.5"/>
-          <path d="M7 19l-4 1 1-4Z" fill="${activeColor}" stroke="#000000" stroke-width="1"/>
-        </svg>
-      `.trim());
-      return `url("data:image/svg+xml;utf8,${penSvg}") 3 20, crosshair`;
-    }
-    if (activeTool === 'eraser') {
-      const MAX_CURSOR = 128;
-      const w = Math.min(Math.max(Math.round(eraserWidth * zoom), 8), MAX_CURSOR);
-      const h = Math.min(Math.max(Math.round(eraserHeight * zoom), 4), MAX_CURSOR);
-      const svgW = w + 4;
-      const svgH = h + 4;
-      const hx = Math.round(svgW / 2);
-      const hy = Math.round(svgH / 2);
-      const eraserSvg = encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}">` +
-        `<rect x="3" y="3" width="${w}" height="${h}" rx="2" fill="rgba(0,0,0,0.35)"/>` +
-        `<rect x="2" y="2" width="${w}" height="${h}" rx="2" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-dasharray="3 2"/>` +
-        `<circle cx="${hx}" cy="${hy}" r="1.5" fill="rgba(255,255,255,0.9)"/>` +
-        `</svg>`
-      );
-      return `url("data:image/svg+xml;utf8,${eraserSvg}") ${hx} ${hy}, crosshair`;
-    }
-    return 'crosshair';
-  };
-
   return (
     <div className={`board-container room-theme-${roomTheme}`} ref={containerRef}>
       <div className="blackboard-slate" />
       {dustPuffs.map((p) => (
-        <div key={p.id} className="dust-puff" style={{ left: p.x - 12, top: p.y - 12, width: 24, height: 24 }} />
+        <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" />
       ))}
       {Object.entries(collaborators).map(([id, coll]) => {
         if (coll.role === 'viewer' || !coll.cursor) return null;
@@ -507,20 +463,21 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           <div
             key={id}
             className="collaborator-cursor"
-            style={{ left: x - 24, top: y - 24 }}
+            data-left={x - 24}
+            data-top={y - 24}
             title={`${coll.name}'s cursor`}
             aria-label={`${coll.name}'s cursor`}
           >
             <UserAvatar name={coll.name} avatarUrl={coll.avatarUrl} size="sm" className="collaborator-avatar" />
             <span
               className="collaborator-cursor-dot"
-              style={{ backgroundColor: coll.color }}
+              data-color={coll.color}
               aria-hidden="true"
             />
           </div>
         );
       })}
-      <canvas ref={canvasRef} className="chalk-canvas" style={{ cursor: getCanvasCursor() }}
+      <canvas ref={canvasRef} className={`chalk-canvas chalk-canvas-${activeTool}`}
         onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp} onWheel={handleWheel} />
       <NotesLayer />
@@ -535,12 +492,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           initialTab={insertShapesTab} highlightedLinkId={highlightedLinkId} />
       )}
       {canEdit && <button
-        className="insert-shapes-fab"
         onClick={() => setShowInsertShapes(prev => !prev)}
         title="Insert Shape (Ctrl+1)"
-        style={{ position: 'absolute', left: '48px', top: '50%', transform: 'translateY(-50%)', zIndex: 100, pointerEvents: 'auto', width: 38, height: 38, borderRadius: '0', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.08)', color: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)', transition: 'all 0.2s ease' }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.85)'; e.currentTarget.style.color = '#fff'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(15, 23, 42, 0.75)'; e.currentTarget.style.color = '#cbd5e1'; }}>
+        className="insert-shapes-fab"
+      >
         <Shapes size={18} />
       </button>}
       <div className="hud-layer">
@@ -558,22 +513,22 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           const fullBottom = initBox.maxY * zoom + panOffset.y;
           return (
             <>
-              <div style={{ position: 'absolute', left: fullLeft, top: fullTop, width: fullRight - fullLeft, height: Math.max(0, screenTop - fullTop), background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)', pointerEvents: 'none', zIndex: 150 }} />
-              <div style={{ position: 'absolute', left: fullLeft, top: screenBottom, width: fullRight - fullLeft, height: Math.max(0, fullBottom - screenBottom), background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)', pointerEvents: 'none', zIndex: 150 }} />
-              <div style={{ position: 'absolute', left: fullLeft, top: screenTop, width: Math.max(0, screenLeft - fullLeft), height: screenBottom - screenTop, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)', pointerEvents: 'none', zIndex: 150 }} />
-              <div style={{ position: 'absolute', left: screenRight, top: screenTop, width: Math.max(0, fullRight - screenRight), height: screenBottom - screenTop, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)', pointerEvents: 'none', zIndex: 150 }} />
-              <div style={{ position: 'absolute', left: screenLeft, top: screenTop, width: screenRight - screenLeft, height: screenBottom - screenTop, border: '2px dashed rgba(59,130,246,0.8)', borderRadius: 0, pointerEvents: 'none', zIndex: 151, boxShadow: '0 0 12px rgba(59,130,246,0.3)' }} />
+              <div className="trim-overlay trim-overlay-top" data-left={fullLeft} data-top={fullTop} data-width={fullRight - fullLeft} data-height={Math.max(0, screenTop - fullTop)} />
+              <div className="trim-overlay trim-overlay-bottom" data-left={fullLeft} data-top={screenBottom} data-width={fullRight - fullLeft} data-height={Math.max(0, fullBottom - screenBottom)} />
+              <div className="trim-overlay trim-overlay-left" data-left={fullLeft} data-top={screenTop} data-width={Math.max(0, screenLeft - fullLeft)} data-height={screenBottom - screenTop} />
+              <div className="trim-overlay trim-overlay-right" data-left={screenRight} data-top={screenTop} data-width={Math.max(0, fullRight - screenRight)} data-height={screenBottom - screenTop} />
+              <div className="trim-selection-box" data-left={screenLeft} data-top={screenTop} data-width={screenRight - screenLeft} data-height={screenBottom - screenTop} />
               {[{ left: screenLeft - 5, top: screenTop - 5 }, { left: screenRight - 5, top: screenTop - 5 }, { left: screenLeft - 5, top: screenBottom - 5 }, { left: screenRight - 5, top: screenBottom - 5 }].map((pos, i) => (
-                <div key={i} style={{ position: 'absolute', left: pos.left, top: pos.top, width: 10, height: 10, background: '#3b82f6', border: '2px solid #fff', borderRadius: 0, pointerEvents: 'none', zIndex: 152 }} />
+                <div key={i} className="trim-handle" data-left={pos.left} data-top={pos.top} />
               ))}
-              <div style={{ position: 'absolute', left: (screenLeft + screenRight) / 2, top: screenTop - 60, transform: 'translateX(-50%)', zIndex: 152, background: 'rgba(15,23,42,0.95)', backdropFilter: 'blur(12px)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '0', padding: '10px 18px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', gap: '14px', pointerEvents: 'auto', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <div style={{ color: '#3b82f6', fontFamily: 'var(--font-sketch)', fontSize: '13px', letterSpacing: '0.5px', textAlign: 'left' }}>CROP MODE</div>
-                  <div style={{ color: '#94a3b8', fontSize: '10px', fontFamily: 'var(--font-sans)' }}>Enter to apply · Esc to cancel</div>
+              <div className="trim-toolbar" data-left={(screenLeft + screenRight) / 2} data-top={screenTop - 60}>
+                <div className="trim-toolbar-copy">
+                  <div className="trim-toolbar-title">CROP MODE</div>
+                  <div className="trim-toolbar-hint">Enter to apply · Esc to cancel</div>
                 </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button onClick={handleApplyTrim} style={{ padding: '5px 10px', background: 'rgba(59,130,246,0.25)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '0', color: '#60a5fa', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>Apply</button>
-                  <button onClick={handleCancelTrim} style={{ padding: '5px 10px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0', color: '#ef4444', cursor: 'pointer', fontSize: '11px', fontFamily: 'var(--font-sans)' }}>Cancel</button>
+                <div className="trim-toolbar-actions">
+                  <button className="trim-apply-button" onClick={handleApplyTrim}>Apply</button>
+                  <button className="trim-cancel-button" onClick={handleCancelTrim}>Cancel</button>
                 </div>
               </div>
             </>
@@ -588,7 +543,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
           return (
             <button onClick={() => { setHighlightedLinkId(linkedLink.id); setInsertShapesTab('links'); setShowInsertShapes(true); }}
-              style={{ position: 'absolute', left: linkX, top: linkY, zIndex: 300, background: 'rgba(59,130,246,0.9)', borderRadius: '0', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', border: '2px solid rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0 }}
+              className="selection-link-button"
+              data-left={linkX}
+              data-top={linkY}
               title="Click to view linked location">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
@@ -659,29 +616,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               <button
                 onClick={() => setShowSelectionToolbox(prev => !prev)}
                 title={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
-                style={{
-                  position: 'absolute',
-                  left: BOX_SCREEN_RIGHT + 14,
-                  top: BOX_SCREEN_CENTER_Y - 14,
-                  zIndex: 2001,
-                  pointerEvents: 'auto',
-                  width: 28,
-                  height: 28,
-                  borderRadius: '0',
-                  background: showSelectionToolbox ? 'rgba(59,130,246,0.3)' : 'rgba(15,23,42,0.75)',
-                  backdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  color: showSelectionToolbox ? '#60a5fa' : '#94a3b8',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  padding: 0,
-                  fontSize: 12,
-                  transition: 'all 0.15s',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(59,130,246,0.4)'; e.currentTarget.style.color = '#fff'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = showSelectionToolbox ? 'rgba(59,130,246,0.3)' : 'rgba(15,23,42,0.75)'; e.currentTarget.style.color = showSelectionToolbox ? '#60a5fa' : '#94a3b8'; }}
+                className={`selection-toolbox-toggle ${showSelectionToolbox ? 'active' : ''}`}
+                data-left={BOX_SCREEN_RIGHT + 14}
+                data-top={BOX_SCREEN_CENTER_Y - 14}
               >
                 {showSelectionToolbox ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
@@ -789,7 +726,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                             size="sm"
                             className="room-member-avatar"
                           />
-                          <span className="room-member-presence" style={{ backgroundColor: collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b') }} />
+                          <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} />
                           <div className="room-member-name">
                             <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>
                             <span>{isOnline ? 'Online' : 'Offline'}</span>
@@ -823,7 +760,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             <Card className="share-panel">
               <span className="room-code-badge">{roomId.toUpperCase()}</span>
               <Button variant="icon" onClick={handleCopyLink} title="Copy Invite Link">
-                {isCopied ? <Check size={14} style={{ color: '#10b981' }} /> : <Copy size={14} />}
+                {isCopied ? <Check size={14} className="copy-success-icon" /> : <Copy size={14} />}
               </Button>
             </Card>
             <Button
@@ -835,15 +772,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             >
               {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </Button>
-            <Button variant="primary" className="hud-panel" onClick={onLeaveRoom} style={{ padding: '5px 12px', height: 'fit-content' }}>Exit</Button>
+            <Button variant="primary" className="hud-panel board-exit-button" onClick={onLeaveRoom}>Exit</Button>
           </div>
         </div>
 
         <div className="zoom-indicator">
-          <Button variant="icon" onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))} style={{ padding: 2 }}><Minus size={12} /></Button>
-          <span style={{ margin: '0 4px', width: '36px', textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-          <Button variant="icon" onClick={() => setZoom((z) => Math.min(5, z + 0.1))} style={{ padding: 2 }}><Plus size={12} /></Button>
-          <Button variant="icon" onClick={resetPanZoom} title="Reset Pan/Zoom" style={{ padding: 2, marginLeft: 4 }}><Maximize2 size={12} /></Button>
+          <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))}><Minus size={12} /></Button>
+          <span className="zoom-value">{Math.round(zoom * 100)}%</span>
+          <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.min(5, z + 0.1))}><Plus size={12} /></Button>
+          <Button variant="icon" className="zoom-control-button zoom-reset-button" onClick={resetPanZoom} title="Reset Pan/Zoom"><Maximize2 size={12} /></Button>
         </div>
 
         {canEdit && <Toolbar

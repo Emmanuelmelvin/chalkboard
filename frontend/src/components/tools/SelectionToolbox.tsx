@@ -234,7 +234,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
       <div className="sel-toolbox-panel" onMouseLeave={handlePanelLeave}>
         <button
             type="button"
-            className="sel-scroll-control sel-scroll-control-top"
             onClick={() => scrollPanel(-1)}
             disabled={!canScrollUp}
             className={`sel-scroll-control sel-scroll-control-top ${canScrollUp ? '' : 'sel-scroll-control-hidden'}`}
@@ -302,7 +301,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         {/* ── Copy ── */}
         <button
           type="button"
-          className="sel-toolbox-row sel-action-row"
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onCopy(); }}
         >
@@ -314,7 +312,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         {/* ── Duplicate ── */}
         <button
           type="button"
-          className="sel-toolbox-row sel-action-row"
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onDuplicate(); }}
         >
@@ -326,7 +323,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         {/* ── Cut ── */}
         <button
           type="button"
-          className="sel-toolbox-row sel-action-row"
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onCut(); }}
         >
@@ -351,7 +347,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         {/* ── Group ── */}
         <button
           type="button"
-          className="sel-toolbox-row sel-action-row"
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onGroup(); }}
           disabled={selectedCount < 2 || isGrouped}
@@ -365,7 +360,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         {/* ── Ungroup ── */}
         <button
           type="button"
-          className="sel-toolbox-row sel-action-row"
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onUngroup(); }}
           disabled={!isGrouped || selectedCount < 1}
@@ -412,7 +406,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         </div>
         <button
             type="button"
-            className="sel-scroll-control sel-scroll-control-bottom"
             onClick={() => scrollPanel(1)}
             disabled={!canScrollDown}
             className={`sel-scroll-control sel-scroll-control-bottom ${canScrollDown ? '' : 'sel-scroll-control-hidden'}`}
@@ -451,7 +444,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           {/* Native color picker */}
           <input
             type="color"
-            className="native-color-picker"
             value={colorMode === 'stroke' ? activeColor : activeFillColor === 'transparent' ? '#ffffff' : activeFillColor}
             onChange={(e) => {
               if (colorMode === 'stroke') {
@@ -485,7 +477,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           {colorMode === 'fill' && (
             <button
               type="button"
-              className="sel-toolbox-row sel-action-row"
               className="sel-toolbox-row sel-action-row sel-transparent-fill-button"
               onClick={() => onFillColorChange?.('transparent')}
             >
@@ -542,7 +533,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             />
             <input
               type="number"
-              className="number-input"
               min={1}
               max={100}
               value={brushSize}
@@ -566,29 +556,27 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           onMouseLeave={handlePanelLeave}
         >
           <p className="sel-subpanel-title">Dimensions</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <label style={{ fontSize: 11, color: '#94a3b8', minWidth: 20 }}>W</label>
+          <div className="sel-dimensions-fields">
+            <div className="sel-dimension-field">
+              <label>W</label>
               <input
                 type="number"
-                className="number-input"
                 min={1}
                 value={dimW}
-                style={{ flex: 1, width: '100%' }}
+                className="number-input sel-dimension-input"
                 onChange={(e) => handleDimWChange(e.target.value)}
                 onBlur={commitDimW}
                 onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
 
               />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <label style={{ fontSize: 11, color: '#94a3b8', minWidth: 20 }}>H</label>
+            <div className="sel-dimension-field">
+              <label>H</label>
               <input
                 type="number"
-                className="number-input"
                 min={1}
                 value={dimH}
-                style={{ flex: 1, width: '100%' }}
+                className="number-input sel-dimension-input"
                 onChange={(e) => handleDimHChange(e.target.value)}
                 onBlur={commitDimH}
                 onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
@@ -596,7 +584,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               />
             </div>
           </div>
-          <p className="sel-size-hint" style={{ marginTop: 8 }}>
+          <p className="sel-size-hint sel-size-hint-spaced">
             Set exact width & height
           </p>
         </div>
@@ -611,103 +599,94 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         >
           <p className="sel-subpanel-title">
             Rotate
-            <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>
+            <span className="sel-rotation-value sel-rotation-value-inline">
               {Math.round(currentRotation)}°
             </span>
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="sel-rotate-actions">
             <button
               type="button"
-              className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
+              className="sel-toolbox-row sel-action-row sel-wide-action"
               onClick={() => onRotate?.(90)}
             >
-              <RotateCw size={14} style={{ marginRight: 8 }} />
+              <RotateCw size={14} className="sel-action-icon" />
               Rotate 90° CW
-              <kbd className="sel-kbd" style={{ marginLeft: 'auto' }}>Ctrl+]</kbd>
+              <kbd className="sel-kbd sel-kbd-auto">Ctrl+]</kbd>
             </button>
             <button
               type="button"
-              className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
+              className="sel-toolbox-row sel-action-row sel-wide-action"
               onClick={() => onRotate?.(-90)}
             >
-              <RotateCcw size={14} style={{ marginRight: 8 }} />
+              <RotateCcw size={14} className="sel-action-icon" />
               Rotate 90° CCW
-              <kbd className="sel-kbd" style={{ marginLeft: 'auto' }}>Ctrl+[</kbd>
+              <kbd className="sel-kbd sel-kbd-auto">Ctrl+[</kbd>
             </button>
             <button
               type="button"
-              className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
+              className="sel-toolbox-row sel-action-row sel-wide-action"
               onClick={() => onRotate?.(180)}
             >
-              <RotateCw size={14} style={{ marginRight: 8 }} />
+              <RotateCw size={14} className="sel-action-icon" />
               Rotate 180°
             </button>
             <button
               type="button"
-              className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
+              className="sel-toolbox-row sel-action-row sel-wide-action"
               onClick={() => onRotate?.(45)}
             >
-              <RotateCw size={14} style={{ marginRight: 8 }} />
+              <RotateCw size={14} className="sel-action-icon" />
               Rotate 45° CW
             </button>
             <button
               type="button"
-              className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
+              className="sel-toolbox-row sel-action-row sel-wide-action"
               onClick={() => onRotate?.(-45)}
             >
-              <RotateCcw size={14} style={{ marginRight: 8 }} />
+              <RotateCcw size={14} className="sel-action-icon" />
               Rotate 45° CCW
             </button>
-            <div className="sel-divider" style={{ margin: '4px 0' }} />
+            <div className="sel-divider sel-divider-spaced" />
             <button
               type="button"
-              className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
+              className="sel-toolbox-row sel-action-row sel-wide-action"
               onClick={() => onResetRotation?.()}
             >
-              <Undo2 size={14} style={{ marginRight: 8 }} />
+              <Undo2 size={14} className="sel-action-icon" />
               Reset Rotation
-              <kbd className="sel-kbd" style={{ marginLeft: 'auto' }}>Ctrl+Shift+R</kbd>
+              <kbd className="sel-kbd sel-kbd-auto">Ctrl+Shift+R</kbd>
             </button>
           </div>
-          <p className="sel-size-hint" style={{ marginTop: 8 }}>Or drag the rotate handle below selection</p>
+          <p className="sel-size-hint sel-size-hint-spaced">Or drag the rotate handle below selection</p>
         </div>
       )}
       {/* ── Sub-panel: Trim ── */}
       {openSubPanel === 'trim' && (
         <div
-          className={`sel-subpanel ${subPanelSide === 'right' ? 'sel-subpanel-right' : 'sel-subpanel-left'}`}
-          style={{ alignSelf: 'flex-end' }}
+          className={`sel-subpanel ${subPanelSide === 'right' ? 'sel-subpanel-right' : 'sel-subpanel-left'} sel-subpanel-end`}
           onMouseEnter={clearCloseTimer}
           onMouseLeave={handlePanelLeave}
         >
           <p className="sel-subpanel-title">Crop</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="sel-rotate-actions">
             <button
               type="button"
-              className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
+              className="sel-toolbox-row sel-action-row sel-wide-action"
               onClick={() => onTrim?.()}
             >
-              <Scissors size={14} style={{ marginRight: 8 }} />
+              <Scissors size={14} className="sel-action-icon" />
               Crop Selection
             </button>
             <button
               type="button"
-              className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', padding: '10px 16px', borderRadius: 0, width: '100%' }}
+              className="sel-toolbox-row sel-action-row sel-wide-action"
               onClick={() => onResetTrim?.()}
             >
-              <Undo2 size={14} style={{ marginRight: 8 }} />
+              <Undo2 size={14} className="sel-action-icon" />
               Reset Crop
             </button>
           </div>
-          <p className="sel-size-hint" style={{ marginTop: 8 }}>
+          <p className="sel-size-hint sel-size-hint-spaced">
             Drag edges to crop, Enter to apply
           </p>
         </div>

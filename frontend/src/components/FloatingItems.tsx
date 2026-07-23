@@ -185,32 +185,10 @@ const items = [
   { Component: Highlighter, id: 'highlighter' },
 ];
 
-interface Position {
-  top: string;
-  left: string;
-  size: string;
-  delay: string;
-  duration: string;
-  rotation: string;
-}
-
-const positions: Position[] = [
-  { top: '8%', left: '5%', size: '52px', delay: '0s', duration: '18s', rotation: '-15deg' },
-  { top: '15%', left: '85%', size: '60px', delay: '2s', duration: '22s', rotation: '10deg' },
-  { top: '30%', left: '2%', size: '44px', delay: '4s', duration: '20s', rotation: '25deg' },
-  { top: '45%', left: '90%', size: '56px', delay: '1s', duration: '16s', rotation: '-8deg' },
-  { top: '60%', left: '8%', size: '48px', delay: '3s', duration: '24s', rotation: '30deg' },
-  { top: '70%', left: '80%', size: '42px', delay: '5s', duration: '19s', rotation: '-20deg' },
-  { top: '20%', left: '50%', size: '64px', delay: '6s', duration: '21s', rotation: '5deg' },
-  { top: '80%', left: '15%', size: '36px', delay: '7s', duration: '17s', rotation: '-12deg' },
-  { top: '85%', left: '70%', size: '46px', delay: '8s', duration: '23s', rotation: '18deg' },
-];
-
 export const FloatingItems: React.FC = () => {
   return (
     <div className="floating-items-container">
       {items.map(({ Component, id }, index) => {
-        const pos = positions[index];
         return (
           <div key={id} className={`floating-item floating-item-${index}`}>
             <Component />

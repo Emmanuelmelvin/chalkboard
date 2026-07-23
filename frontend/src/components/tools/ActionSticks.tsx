@@ -23,7 +23,6 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
     <>
       <button
         type="button"
-        className="action-stick"
         title="Undo Action"
         onClick={onUndo}
         disabled={!canUndo}
@@ -35,7 +34,6 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
 
       <button
         type="button"
-        className="action-stick"
         title="Redo Action"
         onClick={onRedo}
         disabled={!canRedo}

@@ -225,7 +225,7 @@ export function useCanvasInteraction(
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    if (spacePressed || e.button === 1 || activeTool === 'pan') {
+    if (spacePressed || e.button === 1 || activeTool === 'pan' || !canEdit) {
       setIsPanning(true);
       panStart.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
       canvas.setPointerCapture(e.pointerId);

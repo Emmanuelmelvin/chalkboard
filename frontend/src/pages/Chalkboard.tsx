@@ -613,8 +613,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   }), [activeColor, activeTool, eraserHeight, eraserWidth, hoveredHandle, isPanning, spacePressed, transformMode, zoom]);
 
   useEffect(() => {
-    if (canvasRef.current) canvasRef.current.style.cursor = canvasCursor;
-  }, [canvasCursor]);
+    if (canvasRef.current) canvasRef.current.style.cursor = canEdit ? canvasCursor : isPanning ? 'grabbing' : 'grab';
+  }, [canEdit, canvasCursor, isPanning]);
 
   return (
     <div className={`board-container room-theme-${roomTheme}`} ref={containerRef}>

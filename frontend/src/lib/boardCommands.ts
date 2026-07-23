@@ -15,8 +15,7 @@
  */
 
 import { getBoard, type BoardState } from '@/stores/boardStore';
-import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
-import { viewportToCanvas } from '@/lib/zoom';
+import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, viewportToCanvas } from '@/lib/zoom';
 import { useLinksStore } from '@/stores/linksStore';
 import { getCombinedBoundingBox, getSelectionBoundingBox } from '@/lib/geometry';
 import { rotateStrokesTo, transformStrokes, clipStrokeToRect } from '@/lib/strokes';

@@ -112,6 +112,7 @@ const strokeSchema = z.object({
   eraserHeight: finiteNumber.min(0.1).max(1_000).optional(),
   points: z.array(pointSchema).min(1).max(SOCKET_LIMITS.maxStrokePoints),
   groupId: boundedText(SOCKET_LIMITS.maxStrokeIdLength).optional(),
+  groupPath: z.array(boundedText(SOCKET_LIMITS.maxStrokeIdLength)).max(32).optional(),
   pluginId: boundedText(SOCKET_LIMITS.maxPluginIdLength).optional(),
   text: z.string().max(SOCKET_LIMITS.maxTextLength).optional(),
   noteHtml: z.string().max(SOCKET_LIMITS.maxTextLength).optional(),

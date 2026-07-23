@@ -8,6 +8,7 @@
  */
 
 import { getCombinedBoundingBox } from '@/lib/geometry';
+import { nestStrokeGroup, restorePreviousStrokeGroup } from '@/lib/grouping';
 import { transformStrokes } from '@/lib/strokes';
 import { getBoard } from '@/stores/boardStore';
 import { useLinksStore } from '@/stores/linksStore';
@@ -70,7 +71,8 @@ export function handleDeselect(): void {
 }
 
 /**
- * Group the currently selected strokes under a shared `groupId`.
+ * Group the currently selected strokes under a shared `groupId`, retaining
+ * any existing group memberships so nested groups can be restored later.
  * Requires at least 2 selected strokes.
  *
  * @returns `true` if grouping succeeded, `false` otherwise.
@@ -87,7 +89,7 @@ export function handleGroup(): boolean {
 
   const groupId = `${socket.id}-${Date.now()}`;
   const updated = strokes.map((s) =>
-    selectedStrokeIds.includes(s.id) ? { ...s, groupId } : s
+    selectedStrokeIds.includes(s.id) ? nestStrokeGroup(s, groupId) : s
   );
 
   setStrokes(updated);
@@ -96,7 +98,8 @@ export function handleGroup(): boolean {
 }
 
 /**
- * Remove the `groupId` from all currently selected strokes.
+ * Remove the current group from all currently selected strokes and restore
+ * each stroke's previous group, if it had one.
  *
  * @returns `true` if any stroke was ungrouped, `false` if selection was empty.
  *
@@ -112,7 +115,7 @@ export function handleUngroup(): boolean {
 
   const updated = strokes.map((s) =>
     selectedStrokeIds.includes(s.id) && s.groupId
-      ? { ...s, groupId: undefined }
+      ? restorePreviousStrokeGroup(s)
       : s
   );
 

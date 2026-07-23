@@ -18,6 +18,7 @@ import { getBoard, type BoardState } from '@/stores/boardStore';
 import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, viewportToCanvas } from '@/lib/zoom';
 import { useLinksStore } from '@/stores/linksStore';
 import { getCombinedBoundingBox, getSelectionBoundingBox } from '@/lib/geometry';
+import { nestStrokeGroup, restorePreviousStrokeGroup } from '@/lib/grouping';
 import { rotateStrokesTo, transformStrokes, clipStrokeToRect } from '@/lib/strokes';
 import { generateShapeStrokes } from '@/utils/shapes';
 import type { Socket } from 'socket.io-client';
@@ -240,7 +241,8 @@ export function deleteSelection(): CommandResult {
 }
 
 /**
- * Group the currently selected strokes under a shared `groupId`.
+ * Group the currently selected strokes under a shared `groupId`, retaining
+ * any existing group memberships so nested groups can be restored later.
  * Requires at least 2 selected strokes.
  *
  * @returns `{ ok: true }` on success,
@@ -262,7 +264,7 @@ export function groupSelection(): CommandResult {
 
     const groupId = `${socket.id}-${Date.now()}`;
     const updated = strokes.map((s) =>
-        selectedStrokeIds.includes(s.id) ? { ...s, groupId } : s
+        selectedStrokeIds.includes(s.id) ? nestStrokeGroup(s, groupId) : s
     );
     setStrokes(updated);
     socket.emit('undo-stroke', { roomId, strokes: updated });
@@ -270,7 +272,8 @@ export function groupSelection(): CommandResult {
 }
 
 /**
- * Remove the `groupId` from all currently selected strokes.
+ * Remove the current group from all currently selected strokes and restore
+ * each stroke's previous group, if it had one.
  *
  * @returns `{ ok: true }` on success,
  *          `{ ok: false, error: 'no selection' }` if nothing was selected.
@@ -290,7 +293,7 @@ export function ungroupSelection(): CommandResult {
     const { selectedStrokeIds, strokes, socket, roomId, setStrokes } = getBoard();
     const updated = strokes.map((s) =>
         selectedStrokeIds.includes(s.id) && s.groupId
-            ? { ...s, groupId: undefined }
+            ? restorePreviousStrokeGroup(s)
             : s
     );
     setStrokes(updated);

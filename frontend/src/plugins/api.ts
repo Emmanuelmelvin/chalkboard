@@ -1,4 +1,5 @@
 import { getSelectionBoundingBox } from '@/lib/geometry';
+import { nestStrokeGroup } from '@/lib/grouping';
 import { viewportToCanvas } from '@/lib/zoom';
 import { getBoard } from '@/stores/boardStore';
 import { useLoggerStore } from '@/stores/loggerStore';
@@ -22,8 +23,7 @@ function insertStrokes(strokes: Stroke[], options: InsertStrokeOptions = {}): bo
 
   const groupId = options.group ? `${socket.id ?? 'local'}-plugin-${Date.now()}` : undefined;
   const preparedStrokes = strokes.map((stroke) => ({
-    ...stroke,
-    groupId: groupId ?? stroke.groupId,
+    ...(groupId ? nestStrokeGroup(stroke, groupId) : stroke),
     pluginId: options.pluginId ?? stroke.pluginId,
   }));
 

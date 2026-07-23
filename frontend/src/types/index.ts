@@ -23,6 +23,8 @@ export interface Stroke {
   points: Point[];
   /** Optional group identifier for grouped strokes */
   groupId?: string;
+  /** Previous group identifiers, nearest parent first, for nested groups */
+  groupPath?: string[];
   /** Plugin that created this stroke, if any */
   pluginId?: string;
   /** Optional text rendered by the canvas renderer */

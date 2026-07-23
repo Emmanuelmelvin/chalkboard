@@ -51,11 +51,28 @@ export const getStrokeBoundingBox = (stroke: Stroke): Rect | null => {
 
   if (stroke.text) {
     const fontSize = stroke.fontSize ?? 28;
+    const textWidth = Math.max(fontSize * 2, maxX - minX);
+    const averageGlyphWidth = fontSize * 0.56;
+    const words = stroke.text.split(/\s+/).filter(Boolean);
+    let lineCount = 1;
+    let currentLineWidth = 0;
+
+    words.forEach((word) => {
+      const wordWidth = word.length * averageGlyphWidth;
+      const nextWidth = currentLineWidth === 0 ? wordWidth : currentLineWidth + averageGlyphWidth + wordWidth;
+      if (currentLineWidth > 0 && nextWidth > textWidth) {
+        lineCount += 1;
+        currentLineWidth = wordWidth;
+      } else {
+        currentLineWidth = nextWidth;
+      }
+    });
+
     return {
       minX,
       minY,
       maxX: maxX === minX ? minX + fontSize * 2 : maxX,
-      maxY: maxY === minY ? minY + fontSize * 1.25 : maxY,
+      maxY: minY + Math.max(maxY - minY, lineCount * fontSize * 1.25),
     };
   }
 

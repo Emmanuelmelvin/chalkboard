@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { MessageCircle, Send, X } from 'lucide-react';
 import type { Socket } from 'socket.io-client';
 import UserAvatar from '@/components/UserAvatar';
@@ -52,13 +52,10 @@ export default function ChatPanel({
 
   const mentionMatch = draft.match(/(?:^|\s)@([^\s@]*)$/);
   const mentionQuery = mentionMatch?.[1]?.toLocaleLowerCase() ?? null;
-  const mentionSuggestions = useMemo(() => {
-    if (mentionQuery === null) return [];
-    return members
+  const mentionSuggestions = mentionQuery === null ? [] : members
       .filter((member) => member.userId !== userId)
       .filter((member) => member.displayName.toLocaleLowerCase().includes(mentionQuery))
       .slice(0, 6);
-  }, [mentionQuery, members, userId]);
 
   useEffect(() => {
     if (!open) return;
@@ -67,11 +64,8 @@ export default function ChatPanel({
   }, [messages.length, open, unreadMentions, onClearUnread]);
 
   const toggleOpen = () => {
-    setOpen((current) => {
-      const next = !current;
-      if (next) onClearUnread();
-      return next;
-    });
+    if (!open) onClearUnread();
+    setOpen(!open);
   };
 
   const selectMention = (member: RoomMember) => {

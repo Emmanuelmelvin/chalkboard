@@ -270,6 +270,8 @@ export function useBoardSocket(
     };
 
     const joinRoom = () => {
+      setChatMessages([]);
+      setChatUnreadMentions(0);
       socket.emit('join-room', {
         roomId,
         color: userCursorColor,
@@ -291,8 +293,6 @@ export function useBoardSocket(
 
     setStrokes([]);
     setLinks([]);
-    setChatMessages([]);
-    setChatUnreadMentions(0);
     previousUsersRef.current = null;
     socket.on('room-history', handleRoomHistory);
     socket.on('room-state', handleRoomState);
@@ -344,8 +344,6 @@ export function useBoardSocket(
       socket.off('connect_error', handleConnectError);
       setCollaborators({});
       setOnlineCount(0);
-      setChatMessages([]);
-      setChatUnreadMentions(0);
       previousUsersRef.current = null;
     };
   }, [socket, roomId, userName, userId, password, userCursorColor, clientSessionId, setStrokes, setRedoStack, setLinks]);

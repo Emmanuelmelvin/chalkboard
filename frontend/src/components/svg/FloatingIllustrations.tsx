@@ -103,15 +103,3 @@ export const Highlighter: FC<FloatingIllustrationProps> = ({ className }) => (
     <rect x="10" y="8" width="10" height="20" fill="rgba(250, 204, 21, 0.6)" />
   </svg>
 );
-
-export const floatingIllustrations = [
-  { Component: Pencil, id: 'pencil' },
-  { Component: Ruler, id: 'ruler' },
-  { Component: Eraser, id: 'eraser' },
-  { Component: Protractor, id: 'protractor' },
-  { Component: Compass, id: 'compass' },
-  { Component: Scissors, id: 'scissors' },
-  { Component: Book, id: 'book' },
-  { Component: Paperclip, id: 'paperclip' },
-  { Component: Highlighter, id: 'highlighter' },
-] as const;

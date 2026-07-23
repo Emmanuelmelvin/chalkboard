@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { floatingIllustrations } from '@/components/svg/FloatingIllustrations';
+import { floatingIllustrations } from '@/components/svg/FloatingIllustrationRegistry';
 
 export const FloatingItems: FC = () => (
   <div className="floating-items-container">

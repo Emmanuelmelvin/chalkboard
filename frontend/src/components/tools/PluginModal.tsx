@@ -4,6 +4,7 @@ import type { Stroke } from '@/types';
 import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
 import PluginIcon from '@/components/svg/PluginIcons';
 import { MathToolPreview, TagPreview } from '@/components/svg/MathPreviews';
+import { parseMatrixValues, validateMatrixRequest } from '@/plugins/builtin/mathSet/generators';
 import { calculateSummary, parseStatisticRows } from '@/plugins/builtin/statistics/generators';
 
 const TAG_PLUGIN_ID = 'chalkboard.tag';
@@ -165,124 +166,11 @@ interface PluginModalProps {
   onPublishOutput?: (value: string) => void;
 }
 
-const MatrixPreview: React.FC<{ values: Record<string, string> }> = ({ values }) => {
-  const matrix = parseMatrixValues(values.matrixValues).map((row) => row.map((value) => value.trim() || '0'));
-  const mode = values.operation === 'determinant' || values.operation === 'row-operation' ? values.operation : 'display';
-  const error = validateMatrixRequest(values);
-  const numeric = parseNumericMatrix(matrix);
-  const rowResult = mode === 'row-operation' ? getMatrixRowOperationResult(values) : null;
-  const label = values.matrixLabel?.trim() || '';
+/*
 
-  return (
-    <div className="matrix-preview" aria-label="Matrix preview">
-      {error ? <div className="matrix-preview-error">{error}</div> : (
-        <>
-          <div className="matrix-preview-layout">
-            <MatrixPreviewMatrix matrix={matrix} label={label || undefined} determinant={mode === 'determinant'} />
-            {mode === 'row-operation' && rowResult && (
-              <>
                 <span className="matrix-preview-arrow">→</span>
-                <MatrixPreviewMatrix matrix={rowResult.matrix.map((row) => row.map(formatMatrixNumber))} label={label ? `${label}'` : undefined} />
-              </>
-            )}
-          </div>
-          {mode === 'determinant' && numeric && (
-            <strong className="matrix-preview-result">{label ? `det(${label})` : 'det'} = {formatMatrixNumber(calculateMatrixDeterminant(numeric) ?? 0)}</strong>
-          )}
-          {mode === 'row-operation' && rowResult && <small className="matrix-preview-operation">{rowResult.description}</small>}
-        </>
-      )}
-    </div>
-  );
-};
 
-const MathToolPreview: React.FC<{ toolId: string; values: Record<string, string> }> = ({ toolId, values }) => (
-  <div className="math-tool-preview" aria-label="Tool preview">
-    {toolId.includes('matrix') ? <MatrixPreview values={values} /> : toolId.includes('coordinate-grid') ? <CoordinateGridPreview values={values} /> : toolId.includes('graph') ? <GraphPreview values={values} /> : toolId.includes('number-line') ? <NumberLinePreview values={values} /> : toolId.includes('two-set-venn') ? <svg viewBox="0 0 260 130"><circle cx="105" cy="65" r="42" /><circle cx="155" cy="65" r="42" /><text x="70" y="25">{values.leftSet || 'A'}</text><text x="175" y="25">{values.rightSet || 'B'}</text><text x="82" y="70">{values.leftValue || '1'}</text><text x="130" y="70">{values.intersectionValue || '2'}</text><text x="168" y="70">{values.rightValue || '3'}</text></svg> : toolId.includes('three-set-venn') ? <svg viewBox="0 0 260 150"><circle cx="105" cy="62" r="42" /><circle cx="155" cy="62" r="42" /><circle cx="130" cy="94" r="42" /><text x="70" y="20">{values.leftSet || 'A'}</text><text x="190" y="20">{values.rightSet || 'B'}</text><text x="130" y="145">{values.bottomSet || 'C'}</text><text x="82" y="62">{values.leftValue || '1'}</text><text x="178" y="62">{values.rightValue || '2'}</text><text x="130" y="116">{values.bottomValue || '3'}</text><text x="130" y="42">{values.leftRightValue || '4'}</text><text x="108" y="103">{values.leftBottomValue || '5'}</text><text x="152" y="103">{values.rightBottomValue || '6'}</text><text x="130" y="78">{values.centerValue || '7'}</text></svg> : <div className="math-tool-preview-generic">{values.title || values.symbol || 'Preview of inserted chalk object'}</div>}
-  </div>
-);
-
-const TagPreview: React.FC<TagPreviewProps> = ({ strokes, label, placement }) => {
-  const box = useMemo(() => getCombinedBoundingBox(strokes), [strokes]);
-
-  if (!box) {
-    return (
-      <div className="tag-plugin-preview-empty">
-        Select an object on the canvas to preview its tag.
-      </div>
-    );
-  }
-
-  const objectWidth = Math.max(1, box.maxX - box.minX);
-  const objectHeight = Math.max(1, box.maxY - box.minY);
-  const padding = Math.max(18, Math.min(36, Math.max(objectWidth, objectHeight) * 0.16));
-  const tagGap = 16;
-  const tagHeight = 20;
-  const tagY = placement === 'top'
-    ? box.minY - tagGap
-    : box.maxY + tagGap + tagHeight;
-  const minY = Math.min(box.minY - padding, tagY - tagHeight - padding / 2);
-  const maxY = Math.max(box.maxY + padding, tagY + padding / 2);
-  const minX = box.minX - padding;
-  const maxX = box.maxX + padding;
-  const viewWidth = Math.max(120, maxX - minX);
-  const viewHeight = Math.max(100, maxY - minY);
-  const tagX = (box.minX + box.maxX) / 2;
-
-  return (
-    <div className="tag-plugin-preview" aria-label="Selected object and tag preview">
-      <svg viewBox={`${minX} ${minY} ${viewWidth} ${viewHeight}`} role="img">
-        {strokes.map((stroke) => {
-          if (stroke.text) {
-            const x = Math.min(...stroke.points.map((point) => point.x));
-            const y = Math.min(...stroke.points.map((point) => point.y));
-            return (
-              <text
-                key={stroke.id}
-                x={x}
-                y={y}
-                fill={stroke.color}
-                fontSize={stroke.fontSize ?? 18}
-              >
-                {stroke.text}
-              </text>
-            );
-          }
-
-          if (stroke.points.length === 1) {
-            const [point] = stroke.points;
-            return <circle key={stroke.id} cx={point.x} cy={point.y} r={Math.max(2, stroke.size)} fill={stroke.color} />;
-          }
-
-          const points = stroke.points.map((point) => `${point.x},${point.y}`).join(' ');
-          const fill = stroke.closed && stroke.fillColor && stroke.fillColor !== 'transparent'
-            ? stroke.fillColor
-            : 'none';
-          const commonProps = {
-            fill,
-            stroke: stroke.color,
-            strokeWidth: Math.max(2, stroke.size),
-            strokeLinecap: 'round' as const,
-            strokeLinejoin: 'round' as const,
-          };
-
-          return stroke.closed
-            ? <polygon key={stroke.id} points={points} {...commonProps} />
-            : <polyline key={stroke.id} points={points} {...commonProps} />;
-        })}
-        <text
-          className="tag-plugin-preview-label"
-          x={tagX}
-          y={tagY}
-          textAnchor="middle"
-        >
-          {label || 'Your tag'}
-        </text>
-      </svg>
-    </div>
-  );
-};
-
+*/
 const PluginModal: React.FC<PluginModalProps> = ({
   plugin,
   tools,

@@ -1,4 +1,5 @@
 import { getSelectionBoundingBox } from '@/lib/geometry';
+import { viewportToCanvas } from '@/lib/zoom';
 import { getBoard } from '@/stores/boardStore';
 import { useLoggerStore } from '@/stores/loggerStore';
 import { pluginRegistry } from '@/plugins/registry';
@@ -57,10 +58,7 @@ export function createPluginAPI(): ChalkboardPluginAPI {
         const { canvas, panOffset, zoom } = getBoard();
         if (!canvas) return null;
         const rect = canvas.getBoundingClientRect();
-        return {
-          x: (rect.width / 2 - panOffset.x) / zoom,
-          y: (rect.height / 2 - panOffset.y) / zoom,
-        };
+        return viewportToCanvas({ x: rect.width / 2, y: rect.height / 2 }, panOffset, zoom);
       },
       insertStrokes,
       updateStrokes: (updatedStrokes) => {

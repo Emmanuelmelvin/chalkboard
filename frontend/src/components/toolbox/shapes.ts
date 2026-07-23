@@ -8,6 +8,7 @@
 
 import { generateShapeStrokes } from '@/utils/shapes';
 import { getCombinedBoundingBox } from '@/lib/geometry';
+import { viewportToCanvas } from '@/lib/zoom';
 import { getBoard } from '@/stores/boardStore';
 import type { ShapeType } from '@/types';
 
@@ -54,8 +55,9 @@ export function handleInsertShape(
   if (cx === undefined || cy === undefined) {
     if (!canvas) return false;
     const rect = canvas.getBoundingClientRect();
-    cx = (rect.width / 2 - panOffset.x) / zoom;
-    cy = (rect.height / 2 - panOffset.y) / zoom;
+    const center = viewportToCanvas({ x: rect.width / 2, y: rect.height / 2 }, panOffset, zoom);
+    cx = center.x;
+    cy = center.y;
   }
 
   const newStrokes = generateShapeStrokes(

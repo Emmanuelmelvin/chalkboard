@@ -56,6 +56,7 @@ import { NOTES_PLUGIN_ID } from '@/plugins/builtin/notes';
 import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
 import { useLoggerStore } from '@/stores/loggerStore';
+import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -467,7 +468,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   };
 
   const resetPanZoom = () => {
-    setZoom(1);
+    setZoom(DEFAULT_ZOOM);
     setPanOffset({ x: 0, y: 0 });
   };
 
@@ -813,9 +814,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         </div>
 
         <div className="zoom-indicator">
-          <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))}><Minus size={12} /></Button>
+          <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.1))}><Minus size={12} /></Button>
           <span className="zoom-value">{Math.round(zoom * 100)}%</span>
-          <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.min(5, z + 0.1))}><Plus size={12} /></Button>
+          <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.1))}><Plus size={12} /></Button>
           <Button variant="icon" className="zoom-control-button zoom-reset-button" onClick={resetPanZoom} title="Reset Pan/Zoom"><Maximize2 size={12} /></Button>
         </div>
 

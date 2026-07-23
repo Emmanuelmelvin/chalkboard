@@ -15,6 +15,7 @@ import {
   hitTestTransformBox,
   handleApplyTrim,
 } from '@/components/toolbox';
+import { clampZoom, viewportToCanvas } from '@/lib/zoom';
 import type { Point, Rect, Stroke } from '@/types';
 
 /**
@@ -83,10 +84,7 @@ export function useCanvasInteraction(
       const rect = canvas.getBoundingClientRect();
       const cssX = screenX - rect.left;
       const cssY = screenY - rect.top;
-      return {
-        x: (cssX - panOffset.x) / zoom,
-        y: (cssY - panOffset.y) / zoom,
-      };
+      return viewportToCanvas({ x: cssX, y: cssY }, panOffset, zoom);
     },
     [panOffset, zoom, canvasRef]
   );
@@ -638,7 +636,7 @@ export function useCanvasInteraction(
     };
 
     const zoomFactor = e.deltaY < 0 ? 1 + zoomIntensity : 1 - zoomIntensity;
-    const nextZoom = Math.min(Math.max(zoom * zoomFactor, 0.15), 4);
+    const nextZoom = clampZoom(zoom * zoomFactor);
 
     const nextPanOffset = {
       x: mouseX - wheelPos.x * nextZoom,

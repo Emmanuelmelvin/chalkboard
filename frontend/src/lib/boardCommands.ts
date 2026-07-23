@@ -15,6 +15,8 @@
  */
 
 import { getBoard, type BoardState } from '@/stores/boardStore';
+import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
+import { viewportToCanvas } from '@/lib/zoom';
 import { useLinksStore } from '@/stores/linksStore';
 import { getCombinedBoundingBox, getSelectionBoundingBox } from '@/lib/geometry';
 import { rotateStrokesTo, transformStrokes, clipStrokeToRect } from '@/lib/strokes';
@@ -868,8 +870,9 @@ export function insertShape(
         if (!canvas)
             return { ok: false, error: 'no canvas element available' };
         const rect = canvas.getBoundingClientRect();
-        cx = (rect.width / 2 - panOffset.x) / zoom;
-        cy = (rect.height / 2 - panOffset.y) / zoom;
+        const center = viewportToCanvas({ x: rect.width / 2, y: rect.height / 2 }, panOffset, zoom);
+        cx = center.x;
+        cy = center.y;
     }
 
     const newStrokes = generateShapeStrokes(
@@ -1108,7 +1111,7 @@ export function setPanOffset(offset: Point): CommandResult {
  */
 export function zoomIn(step: number = 0.15): CommandResult<number> {
     const { zoom, setZoom } = getBoard();
-    const next = Math.min(4, zoom + step);
+    const next = Math.min(MAX_ZOOM, zoom + step);
     setZoom(next);
     return { ok: true, data: next };
 }
@@ -1126,13 +1129,13 @@ export function zoomIn(step: number = 0.15): CommandResult<number> {
  */
 export function zoomOut(step: number = 0.15): CommandResult<number> {
     const { zoom, setZoom } = getBoard();
-    const next = Math.max(0.15, zoom - step);
+    const next = Math.max(MIN_ZOOM, zoom - step);
     setZoom(next);
     return { ok: true, data: next };
 }
 
 /**
- * Set an absolute zoom level (clamped to [0.15, 4]).
+ * Set an absolute zoom level (clamped to the shared canvas zoom range).
  *
  * @param level - Desired zoom factor (1 = 100%).
  * @returns `{ ok: true, data: number }` with the clamped zoom level that was applied.
@@ -1143,13 +1146,13 @@ export function zoomOut(step: number = 0.15): CommandResult<number> {
  * ```
  */
 export function setZoom(level: number): CommandResult<number> {
-    const next = Math.min(4, Math.max(0.15, level));
+    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, level));
     getBoard().setZoom(next);
     return { ok: true, data: next };
 }
 
 /**
- * Reset pan to origin and zoom to 100%.
+ * Reset pan to origin and zoom to the default 70%.
  *
  * @returns `{ ok: true }` on success.
  *
@@ -1160,7 +1163,7 @@ export function setZoom(level: number): CommandResult<number> {
  */
 export function resetViewport(): CommandResult {
     const { setZoom, setPanOffset } = getBoard();
-    setZoom(1);
+    setZoom(DEFAULT_ZOOM);
     setPanOffset({ x: 0, y: 0 });
     return { ok: true };
 }

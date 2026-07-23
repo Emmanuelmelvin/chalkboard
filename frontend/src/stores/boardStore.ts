@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Socket } from 'socket.io-client';
 import type { NoteEditorRequest, Point, Rect, Stroke, TrimState } from '@/types';
+import { clampZoom, DEFAULT_ZOOM } from '@/lib/zoom';
 
 /**
  * Core chalkboard board state shared by the UI and the agent-callable toolbox.
@@ -145,7 +146,7 @@ export const useBoardStore = create<BoardState>((set) => ({
   clipboard: [],
 
   panOffset: { x: 0, y: 0 },
-  zoom: 0.5,
+  zoom: DEFAULT_ZOOM,
 
   trimState: { ...initialTrimState },
 
@@ -191,7 +192,7 @@ export const useBoardStore = create<BoardState>((set) => ({
     })),
   setZoom: (zoom) =>
     set((state) => ({
-      zoom: typeof zoom === 'function' ? zoom(state.zoom) : zoom,
+      zoom: clampZoom(typeof zoom === 'function' ? zoom(state.zoom) : zoom),
     })),
   setTrimState: (trimState) =>
     set((state) => ({
@@ -245,7 +246,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       clipboard: [],
       canEdit: true,
       panOffset: { x: 0, y: 0 },
-      zoom: 0.5,
+      zoom: DEFAULT_ZOOM,
       trimState: { ...initialTrimState },
       cursorPos: { x: 0, y: 0 },
       showInsertShapes: false,

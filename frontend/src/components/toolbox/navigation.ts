@@ -7,6 +7,7 @@
  */
 
 import { getBoard } from '@/stores/boardStore';
+import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
 import type { Point } from '@/types';
 
 /** Default pan step used by arrow-key panning (CSS pixels). */
@@ -16,9 +17,6 @@ const DEFAULT_PAN_AMOUNT = 30;
 const DEFAULT_ZOOM_STEP = 0.15;
 
 /** Absolute zoom limits. */
-const MIN_ZOOM = 0.15;
-const MAX_ZOOM = 4;
-
 /**
  * Pan the viewport by a relative offset in CSS pixels.
  *
@@ -118,7 +116,7 @@ export function handleZoomOut(step: number = DEFAULT_ZOOM_STEP): number {
 }
 
 /**
- * Set an absolute zoom level (clamped to [0.15, 4]).
+ * Set an absolute zoom level (clamped to the shared canvas zoom range).
  *
  * @param level - Desired zoom factor (1 = 100%).
  * @returns The clamped zoom level that was applied.
@@ -136,7 +134,7 @@ export function handleSetZoom(level: number): number {
 }
 
 /**
- * Reset pan to origin and zoom to 100%.
+ * Reset pan to origin and zoom to the default 70%.
  *
  * @example
  * ```ts
@@ -146,7 +144,7 @@ export function handleSetZoom(level: number): number {
  */
 export function handleResetPanZoom(): void {
   const { setZoom, setPanOffset } = getBoard();
-  setZoom(1);
+  setZoom(DEFAULT_ZOOM);
   setPanOffset({ x: 0, y: 0 });
 }
 

@@ -34,38 +34,28 @@ export const getStrokeBoundingBox = (stroke: Stroke): Rect | null => {
   }
 
   if (stroke.noteHtml) {
+    const pointWidth = maxX - minX;
+    const pointHeight = maxY - minY;
+    const width = stroke.noteWidth ?? (pointWidth || 360);
+    const height = stroke.noteHeight ?? (pointHeight || 220);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
     return {
-      minX,
-      minY,
-      maxX,
-      maxY,
+      minX: centerX - width / 2,
+      minY: centerY - height / 2,
+      maxX: centerX + width / 2,
+      maxY: centerY + height / 2,
     };
   }
 
   if (stroke.text) {
     const fontSize = stroke.fontSize ?? 28;
-    const textWidth = Math.max(fontSize * 2, maxX - minX);
-    const averageGlyphWidth = fontSize * 0.56;
-    const words = stroke.text.split(/\s+/).filter(Boolean);
-    let lineCount = 1;
-    let currentLineWidth = 0;
-
-    words.forEach((word) => {
-      const wordWidth = word.length * averageGlyphWidth;
-      const nextWidth = currentLineWidth === 0 ? wordWidth : currentLineWidth + averageGlyphWidth + wordWidth;
-      if (currentLineWidth > 0 && nextWidth > textWidth) {
-        lineCount += 1;
-        currentLineWidth = wordWidth;
-      } else {
-        currentLineWidth = nextWidth;
-      }
-    });
-
     return {
       minX,
       minY,
-      maxX: minX + textWidth,
-      maxY: minY + Math.max(fontSize * 1.25, lineCount * fontSize * 1.25),
+      maxX: maxX === minX ? minX + fontSize * 2 : maxX,
+      maxY: maxY === minY ? minY + fontSize * 1.25 : maxY,
     };
   }
 

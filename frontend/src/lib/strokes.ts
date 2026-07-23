@@ -70,6 +70,7 @@ export const transformStrokes = (
 
   const scaleX = origWidth === 0 ? 1 : newWidth / origWidth;
   const scaleY = origHeight === 0 ? 1 : newHeight / origHeight;
+  const textScale = Math.max(Math.abs(scaleX), Math.abs(scaleY));
 
   return strokes.map(stroke => ({
     ...stroke,
@@ -79,6 +80,7 @@ export const transformStrokes = (
     })),
     noteWidth: stroke.noteWidth === undefined ? undefined : stroke.noteWidth * Math.abs(scaleX),
     noteHeight: stroke.noteHeight === undefined ? undefined : stroke.noteHeight * Math.abs(scaleY),
+    fontSize: stroke.fontSize === undefined ? undefined : stroke.fontSize * textScale,
     originalPoints: stroke.originalPoints
       ? stroke.originalPoints.map(p => ({
           x: newBox.minX + (p.x - originalBox.minX) * scaleX,

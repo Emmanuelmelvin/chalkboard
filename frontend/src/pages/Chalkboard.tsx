@@ -695,10 +695,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 onClick={() => setShowSelectionToolbox(prev => !prev)}
                 title={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
                 className={`selection-toolbox-toggle ${showSelectionToolbox ? 'active' : ''}`}
-                data-left={BOX_SCREEN_RIGHT + 14}
-                data-top={BOX_SCREEN_CENTER_Y - 14}
+                data-left={BOX_SCREEN_RIGHT + 12}
+                data-top={BOX_SCREEN_CENTER_Y - 11}
               >
-                {showSelectionToolbox ? <EyeOff size={14} /> : <Eye size={14} />}
+                {showSelectionToolbox ? <EyeOff size={12} /> : <Eye size={12} />}
               </button>
             </>
           );

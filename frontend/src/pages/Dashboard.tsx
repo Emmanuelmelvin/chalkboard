@@ -276,7 +276,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       setError('Closed rooms are kept as history and cannot be reopened.');
       return;
     }
-    onJoinRoom(room.slug);
+    window.open(`/room/${encodeURIComponent(room.slug)}`, '_blank', 'noopener,noreferrer');
   };
 
   const requestDeleteRoom = (room: RoomSummary) => {

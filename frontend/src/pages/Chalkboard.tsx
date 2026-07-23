@@ -77,7 +77,6 @@ import {
   publishedPluginDefinition,
   publishedPluginManifest,
   PublishedPluginRuntime,
-  type PublishedPluginDefinition,
   type PublishedPluginCommandRequest
 } from '@/plugins/publishedRuntime';
 import {

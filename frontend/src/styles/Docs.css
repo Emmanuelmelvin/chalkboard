@@ -56,20 +56,24 @@ body.docs-active {
   align-items: center;
   gap: 10px;
   color: var(--docs-ink);
-  font-family: Georgia, serif;
-  font-size: 22px;
-  letter-spacing: -0.06em;
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
 .docs-brand .home-brand-mark {
-  display: grid;
-  width: 27px;
-  height: 27px;
+  display: inline-grid;
+  width: 31px;
+  height: 31px;
   place-items: center;
-  background: var(--docs-gold);
-  color: #17140f;
+  border: 1px solid var(--docs-gold);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--docs-gold-bright);
   font-family: Georgia, serif;
   font-size: 17px;
+  font-style: italic;
 }
 
 .docs-header-actions {
@@ -332,7 +336,6 @@ body.docs-active {
 
 @media (max-width: 520px) {
   .docs-header, .docs-main { width: calc(100% - 28px); }
-  .docs-brand { font-size: 19px; }
   .docs-back-link { font-size: 8px; }
   .docs-hero { padding-top: 58px; }
   .docs-hero h1 { font-size: 51px; }

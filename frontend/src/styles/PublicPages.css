@@ -80,9 +80,9 @@
   width: 31px;
   height: 31px;
   place-items: center;
-  border: 1px solid var(--public-gold);
+  border: 1px solid var(--public-gold, var(--dashboard-gold, var(--docs-gold, #c7a258)));
   border-radius: 50%;
-  color: var(--public-gold-bright);
+  color: var(--public-gold-bright, var(--dashboard-gold-bright, var(--docs-gold-bright, #e3c77e)));
   font-family: Georgia, serif;
   font-size: 17px;
   font-style: italic;
@@ -2282,6 +2282,7 @@ body.dashboard-active #root {
   font-family: inherit;
   font-size: 14px;
   font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
 .dashboard-mobile-menu-button,

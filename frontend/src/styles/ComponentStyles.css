@@ -462,7 +462,7 @@
 }
 
 .insert-shapes-fab {
-  position: absolute;
+  position: fixed;
   right: 32px;
   bottom: 84px;
   z-index: 100;
@@ -489,7 +489,7 @@
 }
 
 .chat-widget {
-  position: absolute;
+  position: fixed;
   right: 32px;
   z-index: 240;
   display: flex;

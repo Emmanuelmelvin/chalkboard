@@ -158,7 +158,7 @@ export const useBoardStore = create<BoardState>((set) => ({
   highlightedLinkId: null,
   isCopied: false,
   spacePressed: false,
-  showSelectionToolbox: true,
+  showSelectionToolbox: false,
   noteEditorRequest: null,
 
   setRoomId: (roomId) => set({ roomId }),
@@ -255,7 +255,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       isCopied: false,
       activeTool: 'chalk',
       spacePressed: false,
-      showSelectionToolbox: true,
+      showSelectionToolbox: false,
       noteEditorRequest: null,
     }),
 }));

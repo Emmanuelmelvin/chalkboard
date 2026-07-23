@@ -65,7 +65,7 @@ export default function ChatPanel({
 
   const toggleOpen = () => {
     if (!open) onClearUnread();
-    setOpen(!open);
+    setOpen((current) => !current);
   };
 
   const selectMention = (member: RoomMember) => {

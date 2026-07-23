@@ -2,7 +2,7 @@ import type { Point } from '@/types';
 
 /** Zoom range for the shared canvas viewport. Values are scale factors. */
 export const MIN_ZOOM = 0.15;
-export const DEFAULT_ZOOM = 0.7;
+export const DEFAULT_ZOOM = 0.4;
 export const MAX_ZOOM = 2;
 
 export function clampZoom(value: number): number {

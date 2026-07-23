@@ -164,6 +164,7 @@ interface PluginModalProps {
   ) => Promise<boolean> | boolean;
   sharedOutput?: string;
   onPublishOutput?: (value: string) => void;
+  pluginReady?: boolean;
 }
 
 /*
@@ -180,6 +181,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
   onRunPluginTool,
   sharedOutput,
   onPublishOutput,
+  pluginReady = true,
 }) => {
   const clampPosition = useCallback((x: number, y: number) => ({
     x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 432)),
@@ -429,11 +431,11 @@ const PluginModal: React.FC<PluginModalProps> = ({
               <button
                 type="button"
                 className="insert-links-add-btn"
-                disabled={!canSubmit}
+                disabled={!canSubmit || !pluginReady}
                 onClick={() => void handleSubmit(tool)}
               >
                 <Check size={14} />
-                {isTagPlugin ? 'Add tag' : 'Add to canvas'}
+                {!pluginReady ? 'Loading plugin…' : isTagPlugin ? 'Add tag' : 'Add to canvas'}
               </button>
             </div>
           );

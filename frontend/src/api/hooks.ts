@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiKeys } from '@/api/keys';
 import { getCurrentUser, getGoogleConfig, signInWithGoogle, signOut } from '@/api/auth';
 import { createRoom, deleteRoom, getRoom, joinRoom, listJoinRequests, listRooms, resetRoomPassword, resolveJoinRequest } from '@/api/rooms';
-import { createPlugin, createPluginVersion, listMyPlugins, listPluginCatalogue, submitPlugin } from '@/api/plugins';
+import { createPlugin, createPluginVersion, getPluginCataloguePlugin, listMyPlugins, listPluginCatalogue, submitPlugin } from '@/api/plugins';
 import { addAdmin, beginAdminTwoFactorSetup, getAdminSession, listAdminPlugins, listAdmins, logoutAdminTwoFactor, publishAdminPlugin, removeAdmin, removeAdminPluginFromRegistry, reviewAdminPlugin, verifyAdminTwoFactor } from '@/api/admin';
 import type { AddAdminRequest, AdminPluginReviewRequest, CreatePluginRequest, CreatePluginVersionRequest, CreateRoomRequest, GoogleSignInRequest, JoinRoomRequest } from '@/api/types';
 
@@ -108,6 +108,14 @@ export function useMyPluginsQuery(enabled = true) {
 
 export function usePluginCatalogueQuery(enabled = true) {
   return useQuery({ queryKey: apiKeys.plugins.catalogue, queryFn: listPluginCatalogue, enabled });
+}
+
+export function usePluginCataloguePluginQuery(pluginId: string | null, enabled = Boolean(pluginId)) {
+  return useQuery({
+    queryKey: apiKeys.plugins.catalogueDetail(pluginId ?? ''),
+    queryFn: () => getPluginCataloguePlugin(pluginId as string),
+    enabled: enabled && Boolean(pluginId),
+  });
 }
 
 export function useCreatePluginMutation() {

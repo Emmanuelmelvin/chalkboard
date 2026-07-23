@@ -77,11 +77,15 @@ function normalizeSelectionTools(value: unknown): PluginSelectionToolContributio
   });
 }
 
-export function publishedPluginDefinition(plugin: ManagedPlugin): PublishedPluginDefinition | null {
+function getPublishedVersion(plugin: ManagedPlugin) {
   const publishedVersions = plugin.versions.filter((version) => version.status === 'published');
-  const version = publishedVersions.find((candidate) => candidate.version === plugin.currentVersion)
+  return publishedVersions.find((candidate) => candidate.version === plugin.currentVersion)
     ?? publishedVersions[0];
-  if (!version?.entryCode?.trim()) return null;
+}
+
+export function publishedPluginManifest(plugin: ManagedPlugin): PluginManifest | null {
+  const version = getPublishedVersion(plugin);
+  if (!version) return null;
   const rawManifest = version.manifest ?? {};
   const rawContributes = rawManifest.contributes && typeof rawManifest.contributes === 'object'
     ? rawManifest.contributes as Record<string, unknown>
@@ -102,6 +106,13 @@ export function publishedPluginDefinition(plugin: ManagedPlugin): PublishedPlugi
       selectionTools: normalizeSelectionTools(rawContributes.selectionTools),
     },
   };
+  return manifest;
+}
+
+export function publishedPluginDefinition(plugin: ManagedPlugin): PublishedPluginDefinition | null {
+  const version = getPublishedVersion(plugin);
+  const manifest = publishedPluginManifest(plugin);
+  if (!version?.entryCode?.trim() || !manifest) return null;
   return { pluginId: plugin.pluginId, manifest, entryCode: version.entryCode, logoUrl: manifest.logoUrl || null };
 }
 

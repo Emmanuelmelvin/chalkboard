@@ -11,6 +11,7 @@ export const apiKeys = {
   plugins: {
     mine: ['plugins', 'mine'] as const,
     catalogue: ['plugins', 'catalogue'] as const,
+    catalogueDetail: (pluginId: string) => ['plugins', 'catalogue', pluginId] as const,
   },
   admin: {
     session: ['admin', 'session'] as const,

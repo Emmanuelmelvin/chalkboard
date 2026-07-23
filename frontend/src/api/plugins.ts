@@ -13,6 +13,10 @@ export function listPluginCatalogue() {
   return apiRequest<PluginListResponse>({ url: '/plugins/catalog', method: 'GET' });
 }
 
+export function getPluginCataloguePlugin(pluginId: string) {
+  return apiRequest<PluginMutationResponse>({ url: `/plugins/catalog/${encodeURIComponent(pluginId)}`, method: 'GET' });
+}
+
 export function createPlugin(input: CreatePluginRequest) {
   return apiRequest<PluginMutationResponse>({ url: '/plugins', method: 'POST', data: input });
 }

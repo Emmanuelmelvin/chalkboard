@@ -64,6 +64,7 @@ import { useBoardSocket } from '@/hooks/useBoardSocket';
 import {
   useJoinRequestsQuery,
   usePluginCatalogueQuery,
+  usePluginCataloguePluginQuery,
   useResolveJoinRequestMutation,
   useRoomQuery
 } from '@/api/hooks';
@@ -74,6 +75,7 @@ import {
 } from '@/plugins';
 import {
   publishedPluginDefinition,
+  publishedPluginManifest,
   PublishedPluginRuntime,
   type PublishedPluginDefinition,
   type PublishedPluginCommandRequest
@@ -175,26 +177,40 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   useEffect(() => () => publishedRuntime.dispose(), [publishedRuntime]);
 
   const publishedPluginsQuery = usePluginCatalogueQuery();
-  const publishedPlugins = useMemo(
-    () => (publishedPluginsQuery.data?.plugins ?? []).map(publishedPluginDefinition).filter((plugin): plugin is PublishedPluginDefinition => Boolean(plugin)),
-    [publishedPluginsQuery.data],
+  const publishedCataloguePlugins = publishedPluginsQuery.data?.plugins ?? [];
+  const [activePublishedPluginId, setActivePublishedPluginId] = useState<string | null>(null);
+  const publishedPluginDetailQuery = usePluginCataloguePluginQuery(activePublishedPluginId);
+  const [pendingPublishedCommand, setPendingPublishedCommand] = useState<{ pluginId: string; commandId: string } | null>(null);
+  const publishedManifests = useMemo(
+    () => publishedCataloguePlugins.map(publishedPluginManifest).filter((plugin): plugin is PluginManifest => Boolean(plugin)),
+    [publishedCataloguePlugins],
   );
+  const publishedPluginDefinitions = useMemo(() => {
+    const plugin = publishedPluginDetailQuery.data?.plugin;
+    const definition = plugin ? publishedPluginDefinition(plugin) : null;
+    return definition ? [definition] : [];
+  }, [publishedPluginDetailQuery.data]);
 
   useEffect(() => {
     if (publishedPluginsQuery.error) useLoggerStore.getState().notify('Published plugins could not be loaded for this room.', 'warning');
   }, [publishedPluginsQuery.error]);
 
   useEffect(() => {
-    publishedRuntime.mount(publishedPlugins);
-  }, [publishedPlugins, publishedRuntime]);
-  const publishedManifests = useMemo<PluginManifest[]>(() => publishedPlugins.map((plugin) => plugin.manifest), [publishedPlugins]);
+    publishedRuntime.mount(publishedPluginDefinitions);
+  }, [publishedPluginDefinitions, publishedRuntime]);
+  useEffect(() => {
+    if (!pendingPublishedCommand || !publishedPluginDefinitions.some((definition) => definition.pluginId === pendingPublishedCommand.pluginId)) return;
+    if (publishedRuntime.execute(pendingPublishedCommand.pluginId, pendingPublishedCommand.commandId)) {
+      setPendingPublishedCommand(null);
+    }
+  }, [pendingPublishedCommand, publishedPluginDefinitions, publishedRuntime]);
   const pluginManifests = useMemo(() => {
     registerInstalledPlugins();
     return [...pluginRegistry.getManifests(), ...publishedManifests];
   }, [publishedManifests]);
-  const publishedTools = useMemo<PluginToolContribution[]>(() => publishedPlugins.flatMap((plugin) => plugin.manifest.contributes.tools?.map((tool) => ({ ...tool, pluginId: plugin.pluginId, description: tool.description ?? plugin.manifest.description })) ?? []), [publishedPlugins]);
+  const publishedTools = useMemo<PluginToolContribution[]>(() => publishedManifests.flatMap((manifest) => manifest.contributes.tools?.map((tool) => ({ ...tool, pluginId: manifest.id, description: tool.description ?? manifest.description })) ?? []), [publishedManifests]);
   const pluginTools = useMemo(() => [...pluginRegistry.getTools(), ...publishedTools], [publishedTools]);
-  const publishedSelectionTools = useMemo<PluginSelectionToolContribution[]>(() => publishedPlugins.flatMap((plugin) => plugin.manifest.contributes.selectionTools?.map((tool) => ({ ...tool, pluginId: plugin.pluginId, description: tool.description ?? plugin.manifest.description })) ?? []), [publishedPlugins]);
+  const publishedSelectionTools = useMemo<PluginSelectionToolContribution[]>(() => publishedManifests.flatMap((manifest) => manifest.contributes.selectionTools?.map((tool) => ({ ...tool, pluginId: manifest.id, description: tool.description ?? manifest.description })) ?? []), [publishedManifests]);
   const pluginSelectionTools = useMemo(() => [...pluginRegistry.getSelectionTools(), ...publishedSelectionTools], [publishedSelectionTools]);
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
@@ -234,12 +250,26 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   };
 
   const hasNavigatedToLink = useRef<boolean>(false);
+  const activateInstalledPlugin = useCallback(async (pluginId: string) => {
+    registerInstalledPlugins();
+    await pluginRegistry.activatePlugin(pluginId, pluginApi);
+  }, [pluginApi]);
+
   const openPluginModal = (pluginId: string) => {
     setShowInsertShapes(false);
-    if (pluginId === NOTES_PLUGIN_ID) {
-      void pluginRegistry.executeCommand('notes.create');
+    if (publishedCataloguePlugins.some((plugin) => plugin.pluginId === pluginId)) {
+      setActivePublishedPluginId(pluginId);
+      setActivePluginModals((current) => current.some((modal) => modal.pluginId === pluginId)
+        ? current
+        : [...current, { pluginId }]);
       return;
     }
+    if (pluginId === NOTES_PLUGIN_ID) {
+      setActivePublishedPluginId(null);
+      void activateInstalledPlugin(NOTES_PLUGIN_ID).then(() => pluginRegistry.executeCommand('notes.create'));
+      return;
+    }
+    setActivePublishedPluginId(null);
     setActivePluginModals((current) => current.some((modal) => modal.pluginId === pluginId)
       ? current
       : [...current, { pluginId }]);
@@ -644,8 +674,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                     const tool = pluginSelectionTools.find((candidate) => candidate.command === commandId);
                     if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId);
                     else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId);
-                    else if (tool?.pluginId && publishedPlugins.some((plugin) => plugin.pluginId === tool.pluginId)) void publishedRuntime.execute(tool.pluginId, commandId);
-                    else void pluginRegistry.executeCommand(commandId);
+                    else if (tool?.pluginId && publishedCataloguePlugins.some((plugin) => plugin.pluginId === tool.pluginId)) {
+                      setActivePublishedPluginId(tool.pluginId);
+                      setPendingPublishedCommand({ pluginId: tool.pluginId, commandId });
+                    } else if (tool?.pluginId) {
+                      void activateInstalledPlugin(tool.pluginId).then(() => pluginRegistry.executeCommand(commandId));
+                    } else {
+                      void pluginRegistry.executeCommand(commandId);
+                    }
                   }}
                   selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
               )}
@@ -843,10 +879,19 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           selectionStrokeIds={selectedStrokeIds}
           sharedOutput={sharedPluginOutput}
           onPublishOutput={setSharedPluginOutput}
-          onClose={() => setActivePluginModals((current) => current.filter((item) => item.pluginId !== modal.pluginId))}
-          onRunPluginTool={(commandId, formValues, selectionIds) => publishedPlugins.some((publishedPlugin) => publishedPlugin.pluginId === plugin.id)
-            ? publishedRuntime.execute(plugin.id, commandId, { formValues, selectionStrokeIds: selectionIds })
-            : pluginRegistry.executeCommand(commandId, { formValues, selectionStrokeIds: selectionIds })} />;
+          pluginReady={!publishedCataloguePlugins.some((candidate) => candidate.pluginId === plugin.id)
+            || publishedPluginDefinitions.some((definition) => definition.pluginId === plugin.id)}
+          onClose={() => {
+            setActivePluginModals((current) => current.filter((item) => item.pluginId !== modal.pluginId));
+            if (activePublishedPluginId === modal.pluginId) setActivePublishedPluginId(null);
+          }}
+          onRunPluginTool={async (commandId, formValues, selectionIds) => {
+            if (publishedCataloguePlugins.some((candidate) => candidate.pluginId === plugin.id)) {
+              return publishedRuntime.execute(plugin.id, commandId, { formValues, selectionStrokeIds: selectionIds });
+            }
+            await activateInstalledPlugin(plugin.id);
+            return pluginRegistry.executeCommand(commandId, { formValues, selectionStrokeIds: selectionIds });
+          }} />;
       })}
       {noteEditorRequest && <NotesEditor />}
       {closeRoomPending && (

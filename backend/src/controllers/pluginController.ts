@@ -1,4 +1,4 @@
-import { createPluginForUser, createPluginVersionForUser, getPluginDetail, listPluginsForAdmin, listPluginsForAuthor, listPublishedPlugins, publishPlugin, removePluginFromRegistry, reviewPlugin, submitPluginForReview } from '@/services/plugins';
+import { createPluginForUser, createPluginVersionForUser, getPluginDetail, getPublishedPluginDetail, listPluginsForAdmin, listPluginsForAuthor, listPublishedPlugins, publishPlugin, removePluginFromRegistry, reviewPlugin, submitPluginForReview } from '@/services/plugins';
 import { createPluginSchema, createPluginVersionSchema, pluginReviewSchema } from '@/validators/pluginValidators';
 import { APIError } from '@/utils/error';
 import type { Context } from 'hono';
@@ -20,6 +20,13 @@ export async function listMyPluginsHandler(c: Context) {
 export async function listPublishedPluginsHandler(c: any) {
   requireUser(c);
   return c.json({ plugins: await listPublishedPlugins() });
+}
+
+export async function getPublishedPluginHandler(c: any) {
+  requireUser(c);
+  const plugin = await getPublishedPluginDetail(c.req.param('pluginId'));
+  if (!plugin) throw new APIError('plugin_not_found', 404);
+  return c.json({ plugin });
 }
 
 export async function createMyPluginHandler(c: any) {

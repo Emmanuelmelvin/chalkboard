@@ -65,10 +65,12 @@ async function storeArchive(pluginId: string, version: string, dataUrl: string) 
   return putPluginAsset(pluginAssetKey(pluginId, version, 'archive', 'zip'), decoded.body, 'application/zip');
 }
 
-async function hydrateVersion(version: typeof pluginVersions.$inferSelect) {
-  const entryCode = version.bundleStorageKey
-    ? (await getPluginAsset(version.bundleStorageKey)).toString('utf8')
-    : version.entryCode;
+async function hydrateVersion(version: typeof pluginVersions.$inferSelect, includeBundle = true) {
+  const entryCode = includeBundle
+    ? version.bundleStorageKey
+      ? (await getPluginAsset(version.bundleStorageKey)).toString('utf8')
+      : version.entryCode
+    : null;
   const bundleUrl = version.bundleStorageKey
     ? await getPluginAssetReadUrl(version.bundleStorageKey)
     : version.entryUrl;
@@ -88,6 +90,7 @@ async function hydrateVersion(version: typeof pluginVersions.$inferSelect) {
 async function withVersions(
   plugin: typeof plugins.$inferSelect,
   versions?: (typeof pluginVersions.$inferSelect)[],
+  includeBundle = true,
 ) {
   const versionRows = versions ?? await getVersions(plugin.id);
   const { logoStorageKey, logoContentType, ...publicPlugin } = plugin;
@@ -99,16 +102,16 @@ async function withVersions(
     logoUrl: logoStorageKey
       ? ((await getPluginAssetReadUrl(logoStorageKey)) ?? await getPluginAssetDataUrl(logoStorageKey, logoContentType || 'image/png'))
       : plugin.logoDataUrl,
-    versions: await Promise.all(versionRows.map(hydrateVersion)),
+    versions: await Promise.all(versionRows.map((version) => hydrateVersion(version, includeBundle))),
   };
 }
 
-async function withPublishedVersion(plugin: typeof plugins.$inferSelect) {
+async function withPublishedVersion(plugin: typeof plugins.$inferSelect, includeBundle = true) {
   const versions = await getVersions(plugin.id);
   const activeVersion = selectPublishedVersion(plugin, versions);
   if (!activeVersion) return null;
 
-  const publicPlugin = await withVersions(plugin, [activeVersion]);
+  const publicPlugin = await withVersions(plugin, [activeVersion], includeBundle);
   return { ...publicPlugin, currentVersion: activeVersion.version };
 }
 
@@ -125,9 +128,15 @@ export async function listPublishedPlugins() {
   const publicPlugins = await Promise.all(
     candidates
       .filter((plugin) => plugin.status !== 'suspended')
-      .map(withPublishedVersion),
+      .map((plugin) => withPublishedVersion(plugin, false)),
   );
   return publicPlugins.filter((plugin): plugin is NonNullable<typeof plugin> => plugin !== null);
+}
+
+export async function getPublishedPluginDetail(pluginId: string) {
+  const plugin = await getPluginByKey(pluginId);
+  if (!plugin || plugin.status === 'suspended') return null;
+  return withPublishedVersion(plugin, true);
 }
 
 export async function listPluginsForAdmin(status?: typeof plugins.$inferSelect.status) {

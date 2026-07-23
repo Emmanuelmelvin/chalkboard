@@ -737,6 +737,19 @@
 .chat-send-button:disabled { cursor: not-allowed; opacity: 0.45; }
 .chat-panel-hint { display: block; margin-top: 6px; color: #64748b; font-size: 9px; }
 
+@media (max-width: 700px) {
+  .chat-widget {
+    top: 14px;
+    bottom: 14px;
+  }
+
+  .chat-panel {
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
 .trim-overlay {
   position: absolute;
   left: attr(data-left px);

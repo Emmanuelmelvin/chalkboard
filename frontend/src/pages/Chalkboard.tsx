@@ -228,6 +228,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [joinRequestError, setJoinRequestError] = useState('');
   const [roomDetailsOpen, setRoomDetailsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMobilePortrait, setIsMobilePortrait] = useState(false);
   const [roleUpdateError, setRoleUpdateError] = useState('');
   const [kickMemberError, setKickMemberError] = useState('');
   const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
@@ -246,6 +247,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  useEffect(() => {
+    const updateOrientation = () => {
+      setIsMobilePortrait(window.matchMedia('(max-width: 700px) and (orientation: portrait)').matches);
+    };
+    updateOrientation();
+    window.addEventListener('resize', updateOrientation);
+    return () => window.removeEventListener('resize', updateOrientation);
+  }, []);
+
   const toggleFullscreen = async () => {
     const board = containerRef.current;
     if (!board) return;
@@ -253,8 +263,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     try {
       if (document.fullscreenElement) {
         await document.exitFullscreen();
+        screen.orientation?.unlock?.();
       } else {
         await board.requestFullscreen();
+        if (window.matchMedia('(max-width: 700px)').matches) {
+          try {
+            await screen.orientation?.lock?.('landscape');
+          } catch {
+            // Orientation locking is unavailable in some mobile browsers.
+          }
+        }
       }
     } catch {
       useLoggerStore.getState().notify('Fullscreen mode is unavailable in this browser.', 'warning');
@@ -596,6 +614,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   return (
     <div className={`board-container room-theme-${roomTheme}`} ref={containerRef}>
+      {isMobilePortrait && (
+        <div className="mobile-landscape-hint" role="status" aria-live="polite">
+          <strong>Rotate your device</strong>
+          <span>Chalkboard works best in landscape.</span>
+        </div>
+      )}
       <div className="blackboard-slate" />
       {dustPuffs.map((p) => (
         <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" />

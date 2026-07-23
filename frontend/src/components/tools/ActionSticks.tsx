@@ -29,7 +29,6 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
         className={`action-stick ${canUndo ? '' : 'action-stick-disabled'}`}
       >
         <Undo2 size={14} />
-        <span>Undo</span>
       </button>
 
       <button
@@ -40,7 +39,6 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
         className={`action-stick ${canRedo ? '' : 'action-stick-disabled'}`}
       >
         <Redo2 size={14} />
-        <span>Redo</span>
       </button>
 
       <button
@@ -50,7 +48,6 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
         onClick={() => setConfirmingClear(true)}
       >
         <Trash2 size={14} />
-        <span>Clear</span>
       </button>
 
       {confirmingClear && (

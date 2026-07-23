@@ -90,6 +90,28 @@ body {
     0 15px 40px rgba(0, 0, 0, 0.8), 0 0 55px rgba(39, 127, 157, 0.16);
 }
 
+.mobile-landscape-hint {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 50%;
+  z-index: 2600;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: min(280px, calc(100vw - 32px));
+  padding: 10px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(10, 22, 17, 0.92);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.36);
+  color: #f8fafc;
+  pointer-events: none;
+  text-align: center;
+}
+
+.mobile-landscape-hint strong { color: var(--brass-light); font-size: 12px; }
+.mobile-landscape-hint span { color: rgba(255, 255, 255, 0.68); font-size: 10px; }
+
 /* Room themes keep the board interaction the same while changing its atmosphere. */
 .board-container.room-theme-classroom {
   --wood-dark: #3a1a0b;
@@ -2869,4 +2891,11 @@ html[data-theme='light'] .theme-toggle:focus-visible {
   .share-panel { padding: 6px; }
   .room-code-badge { padding: 6px 8px; font-size: 11px; }
   .board-readonly-badge { padding: 8px; font-size: 9px; }
+}
+
+@media (max-width: 768px) {
+  .board-header-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

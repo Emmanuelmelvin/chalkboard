@@ -6,7 +6,7 @@ import {
 import { useBoardStore } from '@/stores/boardStore';
 import { pluginRegistry } from '@/plugins/registry';
 import { plainTextFromHtml, sanitizeNoteHtml } from '@/plugins/builtin/notes/sanitize';
-import PluginIcon from '@/components/tools/PluginIcons';
+import PluginIcon from '@/components/svg/PluginIcons';
 
 const DEFAULT_HTML = '<p><br></p>';
 

@@ -1,10 +1,32 @@
-import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { Copy, Check, ChevronDown, UsersRound, Maximize2, Minimize2, Minus, Plus, Shapes, Eye, EyeOff } from 'lucide-react';
+import
+React,
+{
+  useRef,
+  useEffect,
+  useMemo,
+  useState,
+  useCallback
+} from 'react';
+import {
+  Copy,
+  Check,
+  ChevronDown,
+  UsersRound,
+  Maximize2,
+  Minimize2,
+  Minus,
+  Plus,
+  Shapes,
+  Eye,
+  EyeOff
+} from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import LinkIcon from '@/components/svg/LinkIcon';
+import { getCanvasCursor } from '@/components/svg/cursors';
 import {
   getCombinedBoundingBox,
   getSelectionBoundingBox,
@@ -19,7 +41,11 @@ import type {
   ChalkboardProps,
   RoomMember,
 } from '@/types';
-import type { PluginManifest, PluginSelectionToolContribution, PluginToolContribution } from '@/plugins/types';
+import type {
+  PluginManifest,
+  PluginSelectionToolContribution,
+  PluginToolContribution
+} from '@/plugins/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
@@ -34,8 +60,17 @@ import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useBoardSocket } from '@/hooks/useBoardSocket';
-import { useJoinRequestsQuery, usePluginCatalogueQuery, useResolveJoinRequestMutation, useRoomQuery } from '@/api/hooks';
-import { createPluginAPI, pluginRegistry, registerInstalledPlugins } from '@/plugins';
+import {
+  useJoinRequestsQuery,
+  usePluginCatalogueQuery,
+  useResolveJoinRequestMutation,
+  useRoomQuery
+} from '@/api/hooks';
+import {
+  createPluginAPI,
+  pluginRegistry,
+  registerInstalledPlugins
+} from '@/plugins';
 import {
   publishedPluginDefinition,
   PublishedPluginRuntime,
@@ -109,6 +144,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     isCopied, setIsCopied,
     initSession,
     setCanvas,
+    spacePressed,
     activeFillColor, setActiveFillColor,
     showSelectionToolbox, setShowSelectionToolbox,
     noteEditorRequest,
@@ -220,6 +256,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     handlePointerUp,
     handleWheel,
     transformMode,
+    hoveredHandle,
+    isPanning,
     dustPuffs,
   } = useCanvasInteraction(canvasRef);
 
@@ -433,6 +471,22 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setPanOffset({ x: 0, y: 0 });
   };
 
+  const canvasCursor = useMemo(() => getCanvasCursor({
+    activeTool,
+    activeColor,
+    eraserWidth,
+    eraserHeight,
+    zoom,
+    spacePressed,
+    isPanning,
+    transformMode,
+    hoveredHandle,
+  }), [activeColor, activeTool, eraserHeight, eraserWidth, hoveredHandle, isPanning, spacePressed, transformMode, zoom]);
+
+  useEffect(() => {
+    if (canvasRef.current) canvasRef.current.style.cursor = canvasCursor;
+  }, [canvasCursor]);
+
   return (
     <div className={`board-container room-theme-${roomTheme}`} ref={containerRef}>
       <div className="blackboard-slate" />
@@ -532,10 +586,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               data-left={linkX}
               data-top={linkY}
               title="Click to view linked location">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-              </svg>
+              <LinkIcon />
             </button>
           );
         })()}

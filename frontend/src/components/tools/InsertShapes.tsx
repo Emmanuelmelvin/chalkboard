@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 import type { ShapeType, SavedLink } from '@/types';
-import PluginIcon from '@/components/tools/PluginIcons';
+import PluginIcon from '@/components/svg/PluginIcons';
 import type { PluginManifest } from '@/plugins/types';
 
 interface InsertShapesProps {

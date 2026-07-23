@@ -1,23 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, X } from 'lucide-react';
-import { getCombinedBoundingBox } from '@/lib/geometry';
-import {
-  calculateMatrixDeterminant,
-  evaluateGraphExpression,
-  formatMatrixNumber,
-  getGraphRange,
-  getMatrixRowOperationResult,
-  getNumberLineDomain,
-  parseMatrixValues,
-  parseNumericMatrix,
-  parseCoordinatePoints,
-  parseGraphEquation,
-  parseNumberLineExpression,
-  validateMatrixRequest,
-} from '@/plugins/builtin/mathSet/generators';
 import type { Stroke } from '@/types';
 import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
-import PluginIcon from '@/components/tools/PluginIcons';
+import PluginIcon from '@/components/svg/PluginIcons';
+import { MathToolPreview, TagPreview } from '@/components/svg/MathPreviews';
 import { calculateSummary, parseStatisticRows } from '@/plugins/builtin/statistics/generators';
 
 const TAG_PLUGIN_ID = 'chalkboard.tag';
@@ -178,92 +164,6 @@ interface PluginModalProps {
   sharedOutput?: string;
   onPublishOutput?: (value: string) => void;
 }
-
-interface TagPreviewProps {
-  strokes: Stroke[];
-  label: string;
-  placement: 'top' | 'bottom';
-}
-
-const NumberLinePreview: React.FC<{ values: Record<string, string> }> = ({ values }) => {
-  const equation = values.equation || 'x >= 0';
-  const endpoints = parseNumberLineExpression(equation).sort((a, b) => a.value - b.value);
-  const { min, max, tickCount } = getNumberLineDomain(endpoints);
-  const span = Math.max(1, max - min);
-  const xFor = (value: number) => 18 + ((value - min) / span) * 224;
-  const lower = endpoints[0];
-  const upper = endpoints[endpoints.length - 1];
-  const between = endpoints.length > 1 && lower.direction === 'right' && upper.direction === 'left';
-  const outside = endpoints.length > 1 && lower.direction === 'left' && upper.direction === 'right';
-  const solutionSegments = between
-    ? [[xFor(lower.value) + 7, xFor(upper.value) - 7]]
-    : outside
-      ? [[18, xFor(lower.value) - 7], [xFor(upper.value) + 7, 242]]
-      : endpoints.flatMap((endpoint) => endpoint.direction === 'right'
-        ? [[xFor(endpoint.value) + 7, 242]]
-        : endpoint.direction === 'left' ? [[18, xFor(endpoint.value) - 7]] : []);
-
-  return (
-    <div className="number-line-preview" aria-label="Number line preview">
-      <svg viewBox="0 0 260 140" role="img">
-        <line x1="18" y1="55" x2="242" y2="55" stroke="#cbd5e1" strokeWidth="2" />
-        <path d="M18 55l8-5v10zM242 55l-8-5v10z" fill="#cbd5e1" />
-        {Array.from({ length: tickCount + 1 }, (_, index) => {
-          const x = 18 + (224 * index) / tickCount;
-          const value = min + ((max - min) * index) / tickCount;
-          return <g key={index}><line x1={x} y1="47" x2={x} y2="63" stroke="#cbd5e1" strokeWidth="1.5" /><text x={x} y="82" textAnchor="middle" fill="#cbd5e1" fontSize="9">{Number.isInteger(value) ? value : value.toFixed(1)}</text></g>;
-        })}
-        {solutionSegments.map(([start, end], index) => <line key={`solution-${index}`} x1={start} y1="55" x2={end} y2="55" stroke="#60a5fa" strokeWidth="4" strokeLinecap="round" />)}
-        {endpoints.map((endpoint, index) => <g key={`endpoint-${index}`}><circle cx={xFor(endpoint.value)} cy="55" r="6" fill={endpoint.inclusive ? '#60a5fa' : '#0f172a'} stroke="#93c5fd" strokeWidth="2" /><text x={xFor(endpoint.value)} y="101" textAnchor="middle" fill="#93c5fd" fontSize="10">{endpoint.value}</text></g>)}
-        <text x="130" y="126" textAnchor="middle" fill="#f8fafc" fontSize="12">{equation}</text>
-      </svg>
-    </div>
-  );
-};
-
-const GraphPreview: React.FC<{ values: Record<string, string> }> = ({ values }) => {
-  const equation = values.equation || 'y = x^2';
-  const graph = parseGraphEquation(equation);
-  const range = getGraphRange(values);
-  const left = 20;
-  const right = 240;
-  const top = 16;
-  const bottom = 112;
-  const mapX = (x: number) => left + ((x - range.xMin) / (range.xMax - range.xMin)) * (right - left);
-  const mapY = (y: number) => bottom - ((y - range.yMin) / (range.yMax - range.yMin)) * (bottom - top);
-  const points: string[] = [];
-  if (graph) {
-    for (let index = 0; index <= 160; index++) {
-      const x = range.xMin + ((range.xMax - range.xMin) * index) / 160;
-      const y = evaluateGraphExpression(graph.expression, x);
-      if (!Number.isFinite(y)) continue;
-      points.push(`${mapX(x)},${mapY(y)}`);
-    }
-  }
-  const path = points.join(' ');
-  const xAxis = range.xMin <= 0 && range.xMax >= 0 ? mapX(0) : left;
-  const yAxis = range.yMin <= 0 && range.yMax >= 0 ? mapY(0) : bottom;
-  const fillPath = graph && graph.relation !== '=' && points.length > 1
-    ? `${path} ${mapX(range.xMax)},${graph.relation === '>' || graph.relation === '>=' ? top : bottom} ${mapX(range.xMin)},${graph.relation === '>' || graph.relation === '>=' ? top : bottom} Z`
-    : '';
-
-  return (
-    <div className="graph-preview" aria-label="Graph preview">
-      <svg viewBox="0 0 260 140" role="img">
-        {Array.from({ length: 11 }, (_, index) => {
-          const x = left + ((right - left) * index) / 10;
-          const y = top + ((bottom - top) * index) / 10;
-          return <g key={index}><line x1={x} y1={top} x2={x} y2={bottom} stroke="#334155" strokeWidth="0.7" /><line x1={left} y1={y} x2={right} y2={y} stroke="#334155" strokeWidth="0.7" /></g>;
-        })}
-        <line x1={xAxis} y1={top} x2={xAxis} y2={bottom} stroke="#cbd5e1" strokeWidth="1.5" />
-        <line x1={left} y1={yAxis} x2={right} y2={yAxis} stroke="#cbd5e1" strokeWidth="1.5" />
-        {fillPath && <path d={fillPath} fill="rgba(96,165,250,.18)" stroke="none" />}
-        {path && <polyline points={path} fill="none" stroke="#60a5fa" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />}
-        <text x="130" y="132" textAnchor="middle" fill="#f8fafc" fontSize="12">{equation}</text>
-      </svg>
-    </div>
-  );
-};
 
 const CoordinateGridPreview: React.FC<{ values: Record<string, string> }> = ({ values }) => {
   const range = getGraphRange(values);

@@ -301,6 +301,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         {/* ── Copy ── */}
         <button
           type="button"
+          className="sel-toolbox-row sel-action-row"
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onCopy(); }}
         >
@@ -312,6 +313,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         {/* ── Duplicate ── */}
         <button
           type="button"
+          className="sel-toolbox-row sel-action-row"
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onDuplicate(); }}
         >
@@ -323,6 +325,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         {/* ── Cut ── */}
         <button
           type="button"
+          className="sel-toolbox-row sel-action-row"
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onCut(); }}
         >

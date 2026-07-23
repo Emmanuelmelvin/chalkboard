@@ -532,7 +532,10 @@ async function handleKick(io: Server, socket: any, payload: unknown, ack?: Socke
   });
   if (!ban.ok) {
     const banError = (ban as { error?: string }).error;
-    sendAck(ack, { ok: false, error: banError === 'not_found' ? 'not_found' : 'forbidden' });
+    sendAck(ack, {
+      ok: false,
+      error: banError === 'not_found' ? 'not_found' : banError === 'invalid_target' ? 'invalid_target' : 'forbidden',
+    });
     return;
   }
   io.to(data.targetSocketId).emit('member:kicked', { roomId: data.roomId, reason: data.reason });

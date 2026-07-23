@@ -570,6 +570,7 @@ export async function banRoomUser({
 }) {
   const room = await getRoomBySlug(db, roomSlug);
   if (!room) return { ok: false as const, error: 'not_found' as const };
+  if (room.ownerId === targetUserId) return { ok: false as const, error: 'invalid_target' as const };
 
   const actor = await authorizeRoomAction({ roomSlug, userId: bannedById, minimumRole: 'instructor' });
   if (!actor.ok) return actor;

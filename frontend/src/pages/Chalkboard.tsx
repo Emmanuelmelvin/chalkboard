@@ -229,6 +229,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [roomDetailsOpen, setRoomDetailsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [roleUpdateError, setRoleUpdateError] = useState('');
+  const [kickMemberError, setKickMemberError] = useState('');
+  const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
+  const [kickPending, setKickPending] = useState<{ member: RoomMember; targetSocketId: string } | null>(null);
   const [closeRoomPending, setCloseRoomPending] = useState(false);
   const [closingRoom, setClosingRoom] = useState(false);
   const roomClosureHandledRef = useRef(false);
@@ -440,6 +443,20 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   }, [socket, roomId, leaveClosedRoom]);
 
   useEffect(() => {
+    const handleMemberKicked = (payload: { roomId?: string; reason?: string }) => {
+      if (payload.roomId && payload.roomId !== roomId) return;
+      useLoggerStore.getState().notify(
+        payload.reason ? `You were removed from the room: ${payload.reason}` : 'You were removed from the room.',
+        'error',
+        5000,
+      );
+      onLeaveRoom();
+    };
+    socket.on('member:kicked', handleMemberKicked);
+    return () => { socket.off('member:kicked', handleMemberKicked); };
+  }, [socket, roomId, onLeaveRoom]);
+
+  useEffect(() => {
     if (!roomDetailsOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
       if (!roomDetailsRef.current?.contains(event.target as Node)) setRoomDetailsOpen(false);
@@ -531,6 +548,34 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const resetPanZoom = () => {
     setZoom(DEFAULT_ZOOM);
     setPanOffset({ x: 0, y: 0 });
+  };
+
+  const requestKickMember = (member: RoomMember, targetSocketId: string) => {
+    if (!canEdit || member.userId === userId || member.role === 'owner' || kickingMemberId) return;
+    setKickMemberError('');
+    setKickPending({ member, targetSocketId });
+  };
+
+  const kickMember = () => {
+    if (!kickPending) return;
+    const { member, targetSocketId } = kickPending;
+    setKickingMemberId(member.userId);
+    setKickMemberError('');
+    socket.emit('member:kick', { roomId, targetSocketId }, (response: { ok?: boolean; error?: string }) => {
+      setKickingMemberId(null);
+      if (!response?.ok) {
+        setKickMemberError(
+          response?.error === 'target_not_found'
+            ? `${member.displayName} is no longer online.`
+            : response?.error === 'forbidden'
+              ? 'You do not have permission to remove this member.'
+              : 'Unable to remove this member.',
+        );
+        return;
+      }
+      setKickPending(null);
+      useLoggerStore.getState().notify(`${member.displayName} was removed from the room.`, 'success');
+    });
   };
 
   const canvasCursor = useMemo(() => getCanvasCursor({
@@ -846,11 +891,22 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                           ) : (
                             <span className="room-member-role">{roleLabel(member.role)}</span>
                           )}
+                          {canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
+                            <button
+                              type="button"
+                              className="room-member-kick-button"
+                              onClick={() => requestKickMember(member, collaborator.id)}
+                              disabled={Boolean(kickingMemberId)}
+                              aria-label={`Kick ${member.displayName}`}
+                            >
+                              {kickingMemberId === member.userId ? '...' : 'Kick'}
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                   </div>
-                  {roleUpdateError && <p className="room-details-error">{roleUpdateError}</p>}
+                  {(roleUpdateError || kickMemberError) && <p className="room-details-error">{roleUpdateError || kickMemberError}</p>}
                   {canManageMembers && (
                     <button className="room-close-button" type="button" onClick={requestCloseRoom}>
                       Close room
@@ -932,6 +988,17 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           confirmDisabled={closingRoom}
           onCancel={() => setCloseRoomPending(false)}
           onConfirm={closeRoom}
+        />
+      )}
+      {kickPending && (
+        <ConfirmModal
+          title={`Kick ${kickPending.member.displayName}?`}
+          message="This member will be removed from the room and blocked from rejoining it."
+          confirmLabel={kickingMemberId ? 'Kicking...' : 'Kick member'}
+          confirmDisabled={Boolean(kickingMemberId)}
+          danger
+          onCancel={() => setKickPending(null)}
+          onConfirm={kickMember}
         />
       )}
     </div>

@@ -706,6 +706,9 @@ body {
 .room-member-name span { color: rgba(255, 255, 255, 0.42); font-size: 9px; }
 .room-member-role-select { max-width: 82px; padding: 4px 5px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); color: #f8fafc; font: 700 9px var(--font-sans); }
 .room-member-role-select option { color: #111827; }
+.room-member-kick-button { flex: 0 0 auto; padding: 4px 5px; border: 1px solid rgba(248, 113, 113, 0.38); background: rgba(248, 113, 113, 0.08); color: #fca5a5; cursor: pointer; font: 700 8px/1 var(--font-sans); }
+.room-member-kick-button:hover, .room-member-kick-button:focus-visible { border-color: rgba(248, 113, 113, 0.82); background: rgba(248, 113, 113, 0.16); color: #fecaca; outline: none; }
+.room-member-kick-button:disabled { cursor: wait; opacity: 0.55; }
 .room-details-error { margin: 8px 0 0; color: #fca5a5; font-size: 10px; }
 .room-join-requests-empty { margin: 7px 0 0; color: rgba(255, 255, 255, 0.48); font-size: 10px; }
 .room-join-request-row { align-items: flex-start; }

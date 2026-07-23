@@ -2838,6 +2838,7 @@ body.dashboard-active #root {
 .dashboard-members-modal-stats strong { color: var(--dashboard-gold-bright); font-size: 20px; font-weight: 500; }
 .dashboard-members-modal-stats span { color: #a6a29a; font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; }
 .dashboard-members-modal-list { display: grid; max-height: min(440px, 52vh); overflow-y: auto; border-top: 1px solid rgba(245, 242, 234, 0.12); border-bottom: 1px solid rgba(245, 242, 234, 0.12); }
+.dashboard-members-modal-list-empty { border-top: 0; border-bottom: 0; }
 .dashboard-members-modal-row { display: flex; min-width: 0; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid rgba(245, 242, 234, 0.08); }
 .dashboard-members-modal-row:last-child { border-bottom: 0; }
 .dashboard-members-modal-avatar { width: 34px; height: 34px; flex: 0 0 34px; font-size: 11px; }

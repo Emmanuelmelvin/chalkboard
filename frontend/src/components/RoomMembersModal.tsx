@@ -96,7 +96,7 @@ export default function RoomMembersModal({
               <span>{requests.length}</span>
             </div>
             {(requestError || requestsQuery.error) && <p className="app-modal-field-error" role="alert">{requestError || (requestsQuery.error instanceof Error ? requestsQuery.error.message : 'We could not load join requests.')}</p>}
-            <div className="dashboard-members-modal-list" role="list" aria-label="Pending join requests">
+            <div className={`dashboard-members-modal-list${requests.length === 0 ? ' dashboard-members-modal-list-empty' : ''}`} role="list" aria-label="Pending join requests">
               {requestsLoading ? (
                 <p className="dashboard-members-modal-empty">Loading requests...</p>
               ) : requests.length === 0 ? (

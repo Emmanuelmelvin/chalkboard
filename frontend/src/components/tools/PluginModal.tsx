@@ -165,57 +165,6 @@ interface PluginModalProps {
   onPublishOutput?: (value: string) => void;
 }
 
-const CoordinateGridPreview: React.FC<{ values: Record<string, string> }> = ({ values }) => {
-  const range = getGraphRange(values);
-  const stepValue = Number(values.gridStep);
-  const step = Number.isFinite(stepValue) && stepValue > 0 ? stepValue : 1;
-  const left = 20;
-  const right = 240;
-  const top = 16;
-  const bottom = 112;
-  const xCount = Math.min(30, Math.ceil((range.xMax - range.xMin) / step));
-  const yCount = Math.min(30, Math.ceil((range.yMax - range.yMin) / step));
-  const mapX = (value: number) => left + ((value - range.xMin) / (range.xMax - range.xMin)) * (right - left);
-  const mapY = (value: number) => bottom - ((value - range.yMin) / (range.yMax - range.yMin)) * (bottom - top);
-  const xAxis = range.xMin <= 0 && range.xMax >= 0 ? mapX(0) : left;
-  const yAxis = range.yMin <= 0 && range.yMax >= 0 ? mapY(0) : bottom;
-  const major = (value: number) => value !== 0 && Math.abs(value % 5) < 0.0001;
-  const points = parseCoordinatePoints(values.points).filter((point) => point.x >= range.xMin && point.x <= range.xMax && point.y >= range.yMin && point.y <= range.yMax);
-
-  return (
-    <div className="coordinate-grid-preview" aria-label="Coordinate grid preview">
-      <svg viewBox="0 0 260 140" role="img">
-        {Array.from({ length: xCount + 1 }, (_, index) => {
-          const value = range.xMin + ((range.xMax - range.xMin) * index) / xCount;
-          const x = mapX(value);
-          return <g key={`x-${index}`}><line x1={x} y1={top} x2={x} y2={bottom} stroke={major(value) ? '#64748b' : '#334155'} strokeOpacity={major(value) ? 0.45 : 0.22} strokeWidth="0.6" />{major(value) && <text x={x} y={yAxis + 13} textAnchor="middle" fill="#cbd5e1" fontSize="8">{Number(value.toFixed(1))}</text>}</g>;
-        })}
-        {Array.from({ length: yCount + 1 }, (_, index) => {
-          const value = range.yMin + ((range.yMax - range.yMin) * index) / yCount;
-          const y = mapY(value);
-          return <g key={`y-${index}`}><line x1={left} y1={y} x2={right} y2={y} stroke={major(value) ? '#64748b' : '#334155'} strokeOpacity={major(value) ? 0.45 : 0.22} strokeWidth="0.6" />{major(value) && <text x={xAxis + 5} y={y + 3} fill="#cbd5e1" fontSize="8">{Number(value.toFixed(1))}</text>}</g>;
-        })}
-        {range.yMin <= 0 && range.yMax >= 0 && <line x1={left} y1={yAxis} x2={right} y2={yAxis} stroke="#f8fafc" strokeWidth="1.8" />}
-        {range.xMin <= 0 && range.xMax >= 0 && <line x1={xAxis} y1={top} x2={xAxis} y2={bottom} stroke="#f8fafc" strokeWidth="1.8" />}
-        {points.map((point, index) => <g key={`point-${index}`}><circle cx={mapX(point.x)} cy={mapY(point.y)} r="4.5" fill="#60a5fa" stroke="#dbeafe" strokeWidth="1.2" /><text x={mapX(point.x) + 7} y={mapY(point.y) - 6} fill="#f8fafc" fontSize="8">({point.x}, {point.y})</text></g>)}
-        <text x="250" y={yAxis - 4} textAnchor="end" fill="#f8fafc" fontSize="10">{values.xAxis || 'x'}</text>
-        <text x={xAxis + 5} y="13" fill="#f8fafc" fontSize="10">{values.yAxis || 'y'}</text>
-      </svg>
-    </div>
-  );
-};
-
-const MatrixPreviewMatrix: React.FC<{ matrix: string[][]; label?: string; determinant?: boolean }> = ({ matrix, label, determinant = false }) => (
-  <div className="matrix-preview-matrix">
-    {label && <span className="matrix-preview-label">{label} =</span>}
-    <span className="matrix-preview-delimiter">{determinant ? '|' : '['}</span>
-    <div className="matrix-preview-grid" data-columns={matrix[0]?.length ?? 1}>
-      {matrix.flatMap((row, rowIndex) => row.map((value, columnIndex) => <span key={`${rowIndex}-${columnIndex}`}>{value || '0'}</span>))}
-    </div>
-    <span className="matrix-preview-delimiter">{determinant ? '|' : ']'}</span>
-  </div>
-);
-
 const MatrixPreview: React.FC<{ values: Record<string, string> }> = ({ values }) => {
   const matrix = parseMatrixValues(values.matrixValues).map((row) => row.map((value) => value.trim() || '0'));
   const mode = values.operation === 'determinant' || values.operation === 'row-operation' ? values.operation : 'display';

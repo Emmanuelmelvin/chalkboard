@@ -71,10 +71,12 @@ async function hydrateVersion(version: typeof pluginVersions.$inferSelect, inclu
       ? (await getPluginAsset(version.bundleStorageKey)).toString('utf8')
       : version.entryCode
     : null;
-  const bundleUrl = version.bundleStorageKey
-    ? await getPluginAssetReadUrl(version.bundleStorageKey)
-    : version.entryUrl;
-  const bundleArchiveUrl = version.bundleArchiveStorageKey
+  const bundleUrl = includeBundle
+    ? version.bundleStorageKey
+      ? await getPluginAssetReadUrl(version.bundleStorageKey)
+      : version.entryUrl
+    : null;
+  const bundleArchiveUrl = includeBundle && version.bundleArchiveStorageKey
     ? await getPluginAssetReadUrl(version.bundleArchiveStorageKey)
     : null;
   const { bundleStorageKey: _bundleStorageKey, bundleArchiveStorageKey: _bundleArchiveStorageKey, ...publicVersion } = version;

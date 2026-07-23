@@ -176,10 +176,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   useEffect(() => () => publishedRuntime.dispose(), [publishedRuntime]);
 
   const publishedPluginsQuery = usePluginCatalogueQuery();
-  const publishedCataloguePlugins = publishedPluginsQuery.data?.plugins ?? [];
+  const publishedCataloguePlugins = useMemo(
+    () => publishedPluginsQuery.data?.plugins ?? [],
+    [publishedPluginsQuery.data],
+  );
   const [activePublishedPluginId, setActivePublishedPluginId] = useState<string | null>(null);
   const publishedPluginDetailQuery = usePluginCataloguePluginQuery(activePublishedPluginId);
-  const [pendingPublishedCommand, setPendingPublishedCommand] = useState<{ pluginId: string; commandId: string } | null>(null);
+  const pendingPublishedCommandRef = useRef<{ pluginId: string; commandId: string } | null>(null);
   const publishedManifests = useMemo(
     () => publishedCataloguePlugins.map(publishedPluginManifest).filter((plugin): plugin is PluginManifest => Boolean(plugin)),
     [publishedCataloguePlugins],
@@ -198,11 +201,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     publishedRuntime.mount(publishedPluginDefinitions);
   }, [publishedPluginDefinitions, publishedRuntime]);
   useEffect(() => {
-    if (!pendingPublishedCommand || !publishedPluginDefinitions.some((definition) => definition.pluginId === pendingPublishedCommand.pluginId)) return;
-    if (publishedRuntime.execute(pendingPublishedCommand.pluginId, pendingPublishedCommand.commandId)) {
-      setPendingPublishedCommand(null);
+    const pendingCommand = pendingPublishedCommandRef.current;
+    if (!pendingCommand || !publishedPluginDefinitions.some((definition) => definition.pluginId === pendingCommand.pluginId)) return;
+    if (publishedRuntime.execute(pendingCommand.pluginId, pendingCommand.commandId)) {
+      pendingPublishedCommandRef.current = null;
     }
-  }, [pendingPublishedCommand, publishedPluginDefinitions, publishedRuntime]);
+  }, [publishedPluginDefinitions, publishedRuntime]);
   const pluginManifests = useMemo(() => {
     registerInstalledPlugins();
     return [...pluginRegistry.getManifests(), ...publishedManifests];
@@ -254,7 +258,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     await pluginRegistry.activatePlugin(pluginId, pluginApi);
   }, [pluginApi]);
 
-  const openPluginModal = (pluginId: string) => {
+  const openPluginModal = useCallback((pluginId: string) => {
     setShowInsertShapes(false);
     if (publishedCataloguePlugins.some((plugin) => plugin.pluginId === pluginId)) {
       setActivePublishedPluginId(pluginId);
@@ -272,7 +276,21 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     setActivePluginModals((current) => current.some((modal) => modal.pluginId === pluginId)
       ? current
       : [...current, { pluginId }]);
-  };
+  }, [activateInstalledPlugin, publishedCataloguePlugins, setShowInsertShapes]);
+
+  const runPluginSelectionTool = useCallback((commandId: string) => {
+    const tool = pluginSelectionTools.find((candidate) => candidate.command === commandId);
+    if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId);
+    else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId);
+    else if (tool?.pluginId && publishedCataloguePlugins.some((plugin) => plugin.pluginId === tool.pluginId)) {
+      setActivePublishedPluginId(tool.pluginId);
+      pendingPublishedCommandRef.current = { pluginId: tool.pluginId, commandId };
+    } else if (tool?.pluginId) {
+      void activateInstalledPlugin(tool.pluginId).then(() => pluginRegistry.executeCommand(commandId));
+    } else {
+      void pluginRegistry.executeCommand(commandId);
+    }
+  }, [activateInstalledPlugin, openPluginModal, pluginSelectionTools, publishedCataloguePlugins, selectedStrokeIds.length]);
 
   useCanvasRenderer(canvasRef);
 
@@ -669,19 +687,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
                   currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
                   pluginSelectionTools={pluginSelectionTools}
-                  onRunPluginSelectionTool={(commandId) => {
-                    const tool = pluginSelectionTools.find((candidate) => candidate.command === commandId);
-                    if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId);
-                    else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId);
-                    else if (tool?.pluginId && publishedCataloguePlugins.some((plugin) => plugin.pluginId === tool.pluginId)) {
-                      setActivePublishedPluginId(tool.pluginId);
-                      setPendingPublishedCommand({ pluginId: tool.pluginId, commandId });
-                    } else if (tool?.pluginId) {
-                      void activateInstalledPlugin(tool.pluginId).then(() => pluginRegistry.executeCommand(commandId));
-                    } else {
-                      void pluginRegistry.executeCommand(commandId);
-                    }
-                  }}
+                  onRunPluginSelectionTool={runPluginSelectionTool}
                   selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
               )}
               {/* ── Selection toolbox toggle button ── */}

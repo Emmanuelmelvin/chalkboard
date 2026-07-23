@@ -2853,6 +2853,10 @@ html[data-theme='light'] .theme-toggle:focus-visible {
 @media (max-width: 700px) {
   .board-container { border-width: 14px; }
   .hud-layer { padding: 14px; }
+  .insert-shapes-fab { right: 14px; bottom: 78px; }
+  .chat-widget { right: 14px; }
+  .chat-widget-editor { bottom: 26px; }
+  .chat-widget-viewer { bottom: 78px; }
   .board-actions-center { top: 14px; }
   .board-header { align-items: flex-start; gap: 8px; }
   .board-header-tools { min-width: 0; }

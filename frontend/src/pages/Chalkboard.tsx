@@ -253,7 +253,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     };
     updateOrientation();
     window.addEventListener('resize', updateOrientation);
-    return () => window.removeEventListener('resize', updateOrientation);
+    window.addEventListener('orientationchange', updateOrientation);
+    return () => {
+      window.removeEventListener('resize', updateOrientation);
+      window.removeEventListener('orientationchange', updateOrientation);
+    };
   }, []);
 
   const toggleFullscreen = async () => {

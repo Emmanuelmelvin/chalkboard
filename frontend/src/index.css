@@ -92,25 +92,25 @@ body {
 
 .mobile-landscape-hint {
   position: fixed;
-  top: calc(12px + env(safe-area-inset-top));
-  left: 50%;
-  z-index: 2600;
+  inset: 0;
+  z-index: 10000;
   display: flex;
+  align-items: center;
   flex-direction: column;
+  justify-content: center;
   gap: 3px;
-  width: min(280px, calc(100vw - 32px));
-  padding: 10px 12px;
-  transform: translateX(-50%);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(10, 22, 17, 0.92);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.36);
+  width: 100%;
+  min-height: 100dvh;
+  padding: calc(24px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
+  background: var(--slate-dark);
   color: #f8fafc;
-  pointer-events: none;
   text-align: center;
+  touch-action: none;
+  user-select: none;
 }
 
-.mobile-landscape-hint strong { color: var(--brass-light); font-size: 12px; }
-.mobile-landscape-hint span { color: rgba(255, 255, 255, 0.68); font-size: 10px; }
+.mobile-landscape-hint strong { color: var(--brass-light); font-size: 20px; }
+.mobile-landscape-hint span { color: rgba(255, 255, 255, 0.68); font-size: 12px; }
 
 /* Room themes keep the board interaction the same while changing its atmosphere. */
 .board-container.room-theme-classroom {
@@ -2878,6 +2878,7 @@ html[data-theme='light'] .theme-toggle:focus-visible {
 
 @media (max-width: 700px) {
   .board-container { border-width: 14px; }
+  .board-container.room-theme-classroom { border-width: 7px; }
   .hud-layer { padding: 14px; }
   .insert-shapes-fab { right: 14px; bottom: 78px; }
   .chat-widget { right: 14px; }

@@ -74,6 +74,8 @@ export function useCanvasInteraction(
   const marqueeStartPos = useRef<Point | null>(null);
   const isMarqueeDragging = useRef<boolean>(false);
   const activeStrokeRef = useRef<Stroke | null>(null);
+  const activeTouchPoints = useRef(new Map<number, Point>());
+  const pinchStart = useRef<{ distance: number; zoom: number; canvasPoint: Point } | null>(null);
   const MARQUEE_THRESHOLD = 5; // screen pixels before marquee appears
 
   // Screen to Canvas coordinate conversion
@@ -225,6 +227,29 @@ export function useCanvasInteraction(
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    if (!canEdit && e.pointerType === 'touch') {
+      activeTouchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activeTouchPoints.current.size === 2) {
+        const points = [...activeTouchPoints.current.values()];
+        const first = points[0];
+        const second = points[1];
+        if (!first || !second) return;
+        const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+        const rect = canvas.getBoundingClientRect();
+        pinchStart.current = {
+          distance: Math.max(Math.hypot(second.x - first.x, second.y - first.y), 1),
+          zoom,
+          canvasPoint: {
+            x: (midpoint.x - rect.left - panOffset.x) / zoom,
+            y: (midpoint.y - rect.top - panOffset.y) / zoom,
+          },
+        };
+        setIsPanning(true);
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+
     if (spacePressed || e.button === 1 || activeTool === 'pan' || !canEdit) {
       setIsPanning(true);
       panStart.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
@@ -346,6 +371,27 @@ export function useCanvasInteraction(
   }, [canvasRef, canEdit, spacePressed, activeTool, panOffset, screenToCanvas, trimState, zoom, selectionRotation, transformBox, strokes, selectedStrokeIds, setSelectedStrokeIds, setTransformBox, setSelectionRotation, startDrawing]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!canEdit && e.pointerType === 'touch') {
+      activeTouchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinchStart.current && activeTouchPoints.current.size >= 2) {
+        const points = [...activeTouchPoints.current.values()];
+        const first = points[0];
+        const second = points[1];
+        if (!first || !second) return;
+        const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+        const distance = Math.max(Math.hypot(second.x - first.x, second.y - first.y), 1);
+        const nextZoom = clampZoom(pinchStart.current.zoom * (distance / pinchStart.current.distance));
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        setZoom(nextZoom);
+        setPanOffset({
+          x: midpoint.x - rect.left - pinchStart.current.canvasPoint.x * nextZoom,
+          y: midpoint.y - rect.top - pinchStart.current.canvasPoint.y * nextZoom,
+        });
+        return;
+      }
+    }
+
     if (isPanning) {
       setPanOffset({
         x: e.clientX - panStart.current.x,
@@ -518,10 +564,30 @@ export function useCanvasInteraction(
     }
 
     draw(e);
-  }, [isPanning, isDrawing, screenToCanvas, activeTool, transformMode, selectionRotation, trimState, transformBox, setStrokes, setSelectionRotation, setTransformBox, setSelectionMarquee, setPanOffset, setTrimState, hoveredHandle, zoom, draw]);
+  }, [canvasRef, canEdit, isPanning, isDrawing, screenToCanvas, activeTool, transformMode, selectionRotation, trimState, transformBox, setStrokes, setSelectionRotation, setTransformBox, setSelectionMarquee, setPanOffset, setZoom, setTrimState, hoveredHandle, zoom, draw]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
+    if (!canEdit && e.pointerType === 'touch') {
+      activeTouchPoints.current.delete(e.pointerId);
+      if (pinchStart.current) {
+        pinchStart.current = null;
+        const remainingPoint = [...activeTouchPoints.current.values()][0];
+        if (remainingPoint) {
+          const currentPanOffset = useBoardStore.getState().panOffset;
+          panStart.current = {
+            x: remainingPoint.x - currentPanOffset.x,
+            y: remainingPoint.y - currentPanOffset.y,
+          };
+          setIsPanning(true);
+        } else {
+          setIsPanning(false);
+        }
+        if (canvas?.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+        return;
+      }
+    }
+
     if (isPanning) {
       setIsPanning(false);
       if (canvas) canvas.releasePointerCapture(e.pointerId);
@@ -619,7 +685,7 @@ export function useCanvasInteraction(
     }
 
     stopDrawing();
-  }, [isPanning, isDrawing, activeTool, transformMode, trimState, selectionMarquee, strokes, selectedStrokeIds, setSelectedStrokeIds, setTransformBox, setSelectionRotation, setSelectionMarquee, socket, roomId, stopDrawing, canvasRef]);
+  }, [canEdit, isPanning, isDrawing, activeTool, transformMode, trimState, selectionMarquee, strokes, selectedStrokeIds, setSelectedStrokeIds, setTransformBox, setSelectionRotation, setSelectionMarquee, socket, roomId, stopDrawing, canvasRef]);
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;

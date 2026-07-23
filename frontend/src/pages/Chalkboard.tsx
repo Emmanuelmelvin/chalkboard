@@ -665,23 +665,25 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
           initialTab={insertShapesTab} highlightedLinkId={highlightedLinkId} />
       )}
-      {canEdit && <button
-        onClick={() => setShowInsertShapes(prev => !prev)}
-        title="Insert Shape (Ctrl+1)"
-        className="insert-shapes-fab"
-      >
-        <Shapes size={18} />
-      </button>}
-      <ChatPanel
-        socket={socket}
-        roomId={roomId}
-        userId={userId}
-        messages={chatMessages}
-        members={displayedRoomMembers}
-        unreadMentions={chatUnreadMentions}
-        canEdit={canEdit}
-        onClearUnread={clearChatNotifications}
-      />
+      <div className="board-utility-actions">
+        {canEdit && <button
+          onClick={() => setShowInsertShapes(prev => !prev)}
+          title="Insert Shape (Ctrl+1)"
+          className="insert-shapes-fab"
+        >
+          <Shapes size={18} />
+        </button>}
+        <ChatPanel
+          socket={socket}
+          roomId={roomId}
+          userId={userId}
+          messages={chatMessages}
+          members={displayedRoomMembers}
+          unreadMentions={chatUnreadMentions}
+          canEdit={canEdit}
+          onClearUnread={clearChatNotifications}
+        />
+      </div>
       <div className="hud-layer">
         {trimState.active && trimState.cropBox && (() => {
           const cropBox = trimState.cropBox;

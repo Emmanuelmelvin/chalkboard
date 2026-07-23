@@ -135,8 +135,11 @@ function Guide() {
           </div>
           <div className="guide-snapshot-grid">
             <figure className="guide-snapshot-card guide-snapshot-card-wide">
-              <img src="/guide/home-dark-live.png" alt="Live snapshot of the Chalkboard homepage in dark mode, including its collaborative room preview" />
-              <figcaption><span>01</span> Homepage and shared-room preview</figcaption>
+              <div className="guide-snapshot-pair">
+                <img src="/guide/home-live.png" alt="Live snapshot of the Chalkboard homepage in light mode, including its collaborative room preview" />
+                <img src="/guide/home-dark-live.png" alt="Live snapshot of the Chalkboard homepage in dark mode, including its collaborative room preview" />
+              </div>
+              <figcaption><span>01</span> Homepage and shared-room preview in both themes</figcaption>
             </figure>
             <figure className="guide-snapshot-card">
               <img src="/guide/developer-docs-live.png" alt="Live snapshot of Chalkboard's developer and plugin documentation page" />

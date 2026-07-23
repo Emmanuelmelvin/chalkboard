@@ -168,6 +168,7 @@ function Docs() {
         </Link>
         <div className="docs-header-actions">
           <span className="docs-header-label"><BookOpen size={14} /> Plugin documentation</span>
+          <Link className="docs-back-link" href="/guide"><BookOpen size={14} /> User guide</Link>
           <Link className="docs-back-link" href="/dashboard"><ArrowLeft size={15} /> Open dashboard</Link>
         </div>
       </header>

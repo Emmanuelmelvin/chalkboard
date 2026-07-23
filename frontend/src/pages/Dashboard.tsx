@@ -673,7 +673,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
         <div className="dashboard-rail-bottom">
           <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
           {profile.platformRole !== 'user' && <button className="dashboard-help" type="button" onClick={() => { window.location.href = '/admin'; }}><ShieldCheck size={15} /> Open admin console</button>}
-          <button className="dashboard-help" type="button" onClick={() => selectTab('toolkit')}><CircleHelp size={15} /> Need a starting point?</button>
+          <button className="dashboard-help" type="button" onClick={() => setLocation('/guide')}><CircleHelp size={15} /> Read the user guide</button>
           <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
         </div>
       </aside>
@@ -746,7 +746,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
         <div className="dashboard-mobile-drawer-bottom">
           <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
           {profile.platformRole !== 'user' && <button className="dashboard-help" type="button" onClick={() => { window.location.href = '/admin'; }}><ShieldCheck size={15} /> Open admin console</button>}
-          <button className="dashboard-help" type="button" onClick={() => selectTab('toolkit')}><CircleHelp size={15} /> Need a starting point?</button>
+          <button className="dashboard-help" type="button" onClick={() => setLocation('/guide')}><CircleHelp size={15} /> Read the user guide</button>
           <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
         </div>
       </aside>

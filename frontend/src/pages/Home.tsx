@@ -108,6 +108,7 @@ function Home() {
         <nav className="home-nav-links" aria-label="Main navigation">
           <a href="#capabilities">Capabilities</a>
           <a href="#workflow">How it works</a>
+          <Link className="home-nav-route" href="/guide">Guide</Link>
           <Link className="home-nav-route" href="/dashboard">Dashboard</Link>
           <Link className="home-nav-route" href="/lobby">Lobby</Link>
           <button className="home-nav-cta" type="button" onClick={() => setLocation('/dashboard?tab=rooms')}>
@@ -152,6 +153,7 @@ function Home() {
         <nav className="home-mobile-drawer-nav" aria-label="Mobile navigation">
           <a href="#capabilities" onClick={closeMobileMenu}>Capabilities</a>
           <a href="#workflow" onClick={closeMobileMenu}>How it works</a>
+          <Link href="/guide" onClick={closeMobileMenu}>Guide</Link>
           <Link href="/dashboard" onClick={closeMobileMenu}>Dashboard</Link>
           <Link href="/lobby" onClick={closeMobileMenu}>Lobby</Link>
         </nav>

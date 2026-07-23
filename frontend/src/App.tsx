@@ -6,6 +6,7 @@ import Home from '@/pages/Home';
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import Docs from '@/pages/Docs';
+import Guide from '@/pages/Guide';
 import Lobby from '@/pages/Lobby';
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
@@ -134,6 +135,11 @@ function App() {
       {/* Public plugin documentation */}
       <Route path="/docs">
         <Docs />
+      </Route>
+
+      {/* Public end-user guide */}
+      <Route path="/guide">
+        <Guide />
       </Route>
 
       {/* Public landing page */}

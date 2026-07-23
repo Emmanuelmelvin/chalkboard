@@ -29,6 +29,8 @@ const envSchema = z.object({
   INVITE_JOIN_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   REACTION_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   REACTION_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(10000),
+  CHAT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(30),
+  CHAT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   HAND_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(6),
   HAND_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(10000),
   ROOM_INACTIVITY_MS: z.coerce.number().int().positive().default(86400000),

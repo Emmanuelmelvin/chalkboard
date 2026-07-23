@@ -28,14 +28,15 @@ export const notesManifest: PluginManifest = {
         label: 'Edit Note',
         description: 'Open the selected note in the rich-text editor.',
         command: 'notes.editSelection',
+        selectionTarget: { pluginId: 'chalkboard.notes', excludePluginIds: ['chalkboard.tag'] },
       },
       {
         id: 'notes.delete-selection',
         label: 'Delete Note',
         description: 'Delete the selected note.',
         command: 'notes.deleteSelection',
+        selectionTarget: { pluginId: 'chalkboard.notes', excludePluginIds: ['chalkboard.tag'] },
       },
     ],
   },
 };
-

@@ -16,6 +16,7 @@ export interface PublishedBoardInsertStrokesRequest {
     select?: boolean;
     closeInsertPanel?: boolean;
     group?: boolean;
+    objectType?: string;
   };
 }
 
@@ -80,6 +81,7 @@ function normalizeStroke(source: Record<string, unknown>, userId: string, plugin
     fillColor,
     points: points.map((point) => ({ x: point.x, y: point.y })),
     pluginId,
+    objectType: optionalBoundedString(source.objectType, 128),
     text,
     fontSize: isFiniteNumber(source.fontSize) && source.fontSize > 0 && source.fontSize <= 1_000 ? source.fontSize : undefined,
     textAlign: source.textAlign === 'left' || source.textAlign === 'center' || source.textAlign === 'right' ? source.textAlign : undefined,
@@ -109,6 +111,7 @@ export function normalizePublishedBoardInsertStrokes(
     closeInsertPanel: typeof rawOptions.closeInsertPanel === 'boolean' ? rawOptions.closeInsertPanel : true,
     group: typeof rawOptions.group === 'boolean' ? rawOptions.group : false,
     pluginId,
+    objectType: optionalBoundedString(rawOptions.objectType, 128),
   };
   return { strokes, options };
 }

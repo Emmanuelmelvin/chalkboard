@@ -27,6 +27,8 @@ export interface Stroke {
   groupPath?: string[];
   /** Plugin that created this stroke, if any */
   pluginId?: string;
+  /** Semantic object type used to expose only relevant plugin actions. */
+  objectType?: string;
   /** Optional text rendered by the canvas renderer */
   text?: string;
   /** Sanitized rich-text HTML for a Notes plugin object */
@@ -128,6 +130,17 @@ export interface RoomMember {
   online?: boolean;
 }
 
+export interface ChatMessage {
+  id: string;
+  roomId: string;
+  userId: string;
+  displayName: string;
+  avatarUrl?: string | null;
+  message: string;
+  mentionedUserIds: string[];
+  createdAt: string;
+}
+
 export interface ChalkboardProps {
   roomId: string;
   userId: string;
@@ -165,6 +178,7 @@ export interface ShapeStrokeOptions {
   size: number;
   intensity: number;
   fillColor?: string;
+  objectType?: string;
 }
 
 export interface CanvasCenter {

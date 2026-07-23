@@ -25,6 +25,7 @@ function insertStrokes(strokes: Stroke[], options: InsertStrokeOptions = {}): bo
   const preparedStrokes = strokes.map((stroke) => ({
     ...(groupId ? nestStrokeGroup(stroke, groupId) : stroke),
     pluginId: options.pluginId ?? stroke.pluginId,
+    objectType: options.objectType ?? stroke.objectType,
   }));
 
   const updated = [...existingStrokes, ...preparedStrokes];

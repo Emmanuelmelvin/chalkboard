@@ -38,6 +38,19 @@ export interface PluginSelectionToolContribution {
   description?: string;
   command: string;
   pluginId?: string;
+  /** Optional canvas object metadata required before this action is shown. */
+  selectionTarget?: PluginSelectionTarget;
+}
+
+export interface PluginSelectionTarget {
+  /** Match the selected object's creating plugin. */
+  pluginId?: string;
+  /** Match a semantic object type, such as `note` or `venn-diagram`. */
+  objectType?: string | string[];
+  /** Require every selected stroke or only one selected stroke to match. */
+  mode?: 'all' | 'any';
+  /** Ignore annotation strokes when evaluating the target. */
+  excludePluginIds?: string[];
 }
 
 export interface PluginCommandPayload {
@@ -75,6 +88,7 @@ export interface InsertStrokeOptions {
   closeInsertPanel?: boolean;
   group?: boolean;
   pluginId?: string;
+  objectType?: string;
 }
 
 export interface PluginViewport {

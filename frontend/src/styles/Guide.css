@@ -281,6 +281,27 @@ body.guide-active {
 .guide-final-button { margin-top: 30px; }
 .guide-final-section { border-bottom: 0; margin-bottom: 0; }
 
+html[data-theme='light'] .guide-page {
+  --guide-bg: #f3f0e8;
+  --guide-panel: #fffdf7;
+  --guide-panel-soft: #ebe6da;
+  --guide-ink: #2b2924;
+  --guide-muted: #6f6a61;
+  --guide-dim: #908a80;
+  --guide-line: rgba(43, 41, 36, 0.15);
+  --guide-line-strong: rgba(156, 120, 53, 0.38);
+  --guide-gold: #a77c31;
+  --guide-gold-bright: #805b20;
+  background:
+    radial-gradient(circle at 77% 0%, rgba(199, 162, 88, 0.13), transparent 32rem),
+    linear-gradient(rgba(156, 120, 53, 0.035) 1px, transparent 1px),
+    var(--guide-bg);
+}
+
+html[data-theme='light'] body.guide-active { background: #f3f0e8; }
+html[data-theme='light'] .guide-primary-button { color: #fffdf7 !important; }
+html[data-theme='light'] .guide-callout-dark { background: rgba(43, 41, 36, 0.05); }
+
 @media (max-width: 980px) {
   .guide-hero { grid-template-columns: 1fr; gap: 45px; }
   .guide-snapshot-strip { grid-template-columns: 1fr; gap: 30px; }

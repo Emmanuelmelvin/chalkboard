@@ -1883,7 +1883,7 @@ body {
   display: block;
   width: 12px;
   height: 12px;
-  border-radius: 0;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
@@ -1928,7 +1928,7 @@ body {
    Sub-panels (Color / Size)
    ════════════════════════════════ */
 .sel-subpanel {
-  width: 176px;
+  width: 164px;
   background: rgba(12, 17, 30, 0.96);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -1992,7 +1992,7 @@ body {
 .sel-swatch {
   width: 20px;
   height: 20px;
-  border-radius: 0;
+  border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;
   transition: transform 0.12s ease, border-color 0.12s ease;

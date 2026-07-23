@@ -23,6 +23,9 @@ export const SOCKET_LIMITS = {
   maxPluginEventNameLength: 192,
   maxPluginPayloadBytes: 64 * 1024,
   maxTextLength: 64 * 1024,
+  maxChatMessageLength: 2_000,
+  maxChatMentions: 32,
+  maxChatHistory: 200,
   maxReasonLength: 512,
   maxCanvasCoordinate: 10_000_000,
 } as const;
@@ -114,6 +117,7 @@ const strokeSchema = z.object({
   groupId: boundedText(SOCKET_LIMITS.maxStrokeIdLength).optional(),
   groupPath: z.array(boundedText(SOCKET_LIMITS.maxStrokeIdLength)).max(32).optional(),
   pluginId: boundedText(SOCKET_LIMITS.maxPluginIdLength).optional(),
+  objectType: boundedText(128).optional(),
   text: z.string().max(SOCKET_LIMITS.maxTextLength).optional(),
   noteHtml: z.string().max(SOCKET_LIMITS.maxTextLength).optional(),
   noteWidth: finiteNumber.min(0).max(SOCKET_LIMITS.maxCanvasCoordinate).optional(),
@@ -204,6 +208,12 @@ export const reactionSendSchema = z.object({
   emoji: boundedText(32),
 });
 
+export const chatMessageSchema = z.object({
+  roomId: roomIdSchema,
+  message: z.string().trim().min(1).max(SOCKET_LIMITS.maxChatMessageLength),
+  mentionedUserIds: z.array(boundedText(128)).max(SOCKET_LIMITS.maxChatMentions).default([]),
+});
+
 export const handRaiseSchema = z.object({
   roomId: roomIdSchema,
   raised: z.boolean(),
@@ -246,6 +256,7 @@ export type SocketPayload =
   | z.infer<typeof undoStrokeSchema>
   | z.infer<typeof linksUpdateSchema>
   | z.infer<typeof reactionSendSchema>
+  | z.infer<typeof chatMessageSchema>
   | z.infer<typeof handRaiseSchema>
   | z.infer<typeof memberKickSchema>
   | z.infer<typeof pluginEventSchema>;

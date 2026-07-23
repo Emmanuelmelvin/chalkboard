@@ -85,6 +85,7 @@ function makeNoteStroke(api: ChalkboardPluginAPI, values: NotesCommitPayload): S
     notePadding: 18,
     textAlign: values.textAlign || 'left',
     pluginId: NOTES_PLUGIN_ID,
+    objectType: 'note',
   };
 }
 

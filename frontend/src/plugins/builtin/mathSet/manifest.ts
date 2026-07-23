@@ -170,12 +170,26 @@ export const mathSetManifest: PluginManifest = {
       { id: 'mathSet.normalizeSelection', title: 'Mathematical Set: Normalize Selected Math Chalk' },
     ],
     selectionTools: [
-      { id: 'math-set.edit-selection', label: 'Edit Venn Diagram', description: 'Edit the selected Mathematical Set diagram.', command: 'mathSet.editSelection' },
+      {
+        id: 'math-set.edit-selection',
+        label: 'Edit Venn Diagram',
+        description: 'Edit the selected Mathematical Set diagram.',
+        command: 'mathSet.editSelection',
+        selectionTarget: {
+          pluginId: 'chalkboard.math-set',
+          objectType: 'venn-diagram',
+          excludePluginIds: ['chalkboard.tag'],
+        },
+      },
       {
         id: 'math-set.normalize-selection',
         label: 'Normalize Math Chalk',
         description: 'Set selected plugin math strokes to white chalk and medium thickness.',
         command: 'mathSet.normalizeSelection',
+        selectionTarget: {
+          pluginId: 'chalkboard.math-set',
+          excludePluginIds: ['chalkboard.tag'],
+        },
       },
     ],
   },

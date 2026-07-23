@@ -1,7 +1,9 @@
 import { redis } from '@/services/roomState';
+import { SOCKET_LIMITS } from '@/validators/socketValidators';
 
 const histories = new Map<string, any[]>();
 const links = new Map<string, any[]>();
+const chatMessages = new Map<string, any[]>();
 const usersByRoom = new Map<string, Map<string, any>>();
 const socketMeta = new Map<string, any>();
 const presenceByKey = new Map<string, { roomId: string; socketId: string; user: any; removalTimer?: ReturnType<typeof setTimeout> }>();
@@ -95,9 +97,11 @@ export function schedulePresenceRemoval(socketId: string, graceMs: number, onRem
 
 export const ROOM_STROKES_KEY_PREFIX = 'chalkboard:room:strokes:';
 export const ROOM_LINKS_KEY_PREFIX = 'chalkboard:room:links:';
+export const ROOM_CHAT_KEY_PREFIX = 'chalkboard:room:chat:';
 
 function strokesKey(roomId: string) { return `${ROOM_STROKES_KEY_PREFIX}${roomId}`; }
 function linksKey(roomId: string) { return `${ROOM_LINKS_KEY_PREFIX}${roomId}`; }
+function chatKey(roomId: string) { return `${ROOM_CHAT_KEY_PREFIX}${roomId}`; }
 
 function parseJson<T>(value: string | null, fallback: T): T {
   if (!value) return fallback;
@@ -164,15 +168,44 @@ export async function replaceLinks(roomId: string, next: any[]) {
   links.set(roomId, value);
 }
 
+export async function getRoomChat(roomId: string): Promise<any[]> {
+  if (redis) {
+    const values = await redis.lRange(chatKey(roomId), -SOCKET_LIMITS.maxChatHistory, -1);
+    return values.flatMap((value: string) => {
+      try {
+        return [JSON.parse(value)];
+      } catch {
+        return [];
+      }
+    });
+  }
+  return (chatMessages.get(roomId) || []).slice(-SOCKET_LIMITS.maxChatHistory);
+}
+
+export async function appendChatMessage(roomId: string, message: any) {
+  if (redis) {
+    const key = chatKey(roomId);
+    await redis.multi()
+      .rPush(key, JSON.stringify(message))
+      .lTrim(key, -SOCKET_LIMITS.maxChatHistory, -1)
+      .exec();
+    return;
+  }
+  const next = [...(chatMessages.get(roomId) || []), message].slice(-SOCKET_LIMITS.maxChatHistory);
+  chatMessages.set(roomId, next);
+}
+
 /** Delete every Redis-backed canvas/presence state for a permanently closed room. */
 export async function deleteRoomState(roomId: string) {
   if (redis) {
     await redis.del(
       strokesKey(roomId),
       linksKey(roomId),
+      chatKey(roomId),
       `room:${roomId}:hands`,
     );
   }
   histories.delete(roomId);
   links.delete(roomId);
+  chatMessages.delete(roomId);
 }

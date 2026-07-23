@@ -1,10 +1,13 @@
 import { Server } from 'socket.io';
+import { randomUUID } from 'node:crypto';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { redis, setRaisedHand, getRaisedHands } from '@/services/roomState';
 import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, closeRoomForOwner, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms';
 import {
   appendStroke,
+  appendChatMessage,
   clearHistory,
+  getRoomChat,
   getRoomHistory,
   getRoomLinks,
   getRoomUsers,
@@ -25,6 +28,7 @@ import { authenticateSocketSession } from '@/services/auth';
 import {
   SOCKET_LIMITS,
   clearBoardSchema,
+  chatMessageSchema,
   cursorMoveSchema,
   drawStrokeSchema,
   handRaiseSchema,
@@ -290,6 +294,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
 
   socket.emit('room-history', await getRoomHistory(data.roomId));
   socket.emit('links-update', { links: await getRoomLinks(data.roomId) });
+  socket.emit('chat:history', await getRoomChat(data.roomId));
   socket.emit('raised-hands:update', await getRaisedHands(data.roomId));
   io.to(data.roomId).emit('room:user-joined', {
     roomId: data.roomId,
@@ -320,6 +325,58 @@ async function handleRoomSync(socket: any, payload: unknown, ack?: SocketAck) {
     getRoomLinks(data.roomId),
   ]);
   socket.emit('room-state', { strokes, links });
+  sendAck(ack, { ok: true });
+}
+
+async function handleChatMessage(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
+  const data = parsePayload<{
+    roomId: string;
+    message: string;
+    mentionedUserIds: string[];
+  }>(socket, 'chat:send', chatMessageSchema, payload, ack);
+  if (!data || !isJoinedRoom(socket, data.roomId, 'chat:send', ack)) return;
+
+  const limit = checkRateLimit(
+    `socket:${socket.id}:chat:${data.roomId}`,
+    env.CHAT_RATE_LIMIT_MAX,
+    env.CHAT_RATE_LIMIT_WINDOW_MS,
+  );
+  if (!limit.allowed) {
+    sendAck(ack, { ok: false, error: 'rate_limited' });
+    return;
+  }
+
+  if (!await recordRoomActivity(data.roomId)) {
+    sendAck(ack, { ok: false, error: 'room_closed' });
+    return;
+  }
+
+  const actor = getSocketMeta(socket.id);
+  const roomDetails = await getRoomWithMembers(data.roomId);
+  const memberIds = new Set((roomDetails?.members ?? []).map((member: { userId: string }) => member.userId));
+  const mentionedUserIds = [...new Set(data.mentionedUserIds)]
+    .filter((mentionedUserId) => mentionedUserId !== actor?.userId && memberIds.has(mentionedUserId));
+  const user = socket.data.user;
+  const message = {
+    id: randomUUID(),
+    roomId: data.roomId,
+    userId: actor?.userId,
+    displayName: user?.displayName ?? 'Classmate',
+    avatarUrl: user?.avatarUrl ?? null,
+    message: data.message,
+    mentionedUserIds,
+    createdAt: new Date().toISOString(),
+  };
+
+  await appendChatMessage(data.roomId, message);
+  io.to(data.roomId).emit('chat:message', message);
+
+  if (mentionedUserIds.length > 0) {
+    const roomSockets = await io.in(data.roomId).fetchSockets();
+    roomSockets
+      .filter((roomSocket: any) => mentionedUserIds.includes(roomSocket.data?.user?.id))
+      .forEach((roomSocket: any) => roomSocket.emit('chat:mention', { messageId: message.id }));
+  }
   sendAck(ack, { ok: true });
 }
 
@@ -543,6 +600,9 @@ export async function attachSocket(server: any) {
     });
     socket.on('room:close', (payload, ack) => {
       runSafely(socket, 'room:close', ack, () => handleRoomClose(io, socket, payload, ack));
+    });
+    socket.on('chat:send', (payload, ack) => {
+      runSafely(socket, 'chat:send', ack, () => handleChatMessage(io, socket, payload, ack));
     });
 
     socket.on('stroke-start', (payload, ack) => {

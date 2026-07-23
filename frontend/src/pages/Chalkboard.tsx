@@ -46,9 +46,11 @@ import type {
   PluginSelectionToolContribution,
   PluginToolContribution
 } from '@/plugins/types';
+import { filterPluginSelectionTools } from '@/plugins/selection';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
+import ChatPanel from '@/components/ChatPanel';
 import PluginModal from '@/components/tools/PluginModal';
 import NotesLayer from '@/plugins/builtin/notes/NotesLayer';
 import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
@@ -215,6 +217,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const pluginTools = useMemo(() => [...pluginRegistry.getTools(), ...publishedTools], [publishedTools]);
   const publishedSelectionTools = useMemo<PluginSelectionToolContribution[]>(() => publishedManifests.flatMap((manifest) => manifest.contributes.selectionTools?.map((tool) => ({ ...tool, pluginId: manifest.id, description: tool.description ?? manifest.description })) ?? []), [publishedManifests]);
   const pluginSelectionTools = useMemo(() => [...pluginRegistry.getSelectionTools(), ...publishedSelectionTools], [publishedSelectionTools]);
+  const selectionToolsForCurrentSelection = useMemo(() => filterPluginSelectionTools(
+    pluginSelectionTools,
+    strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id)),
+  ), [pluginSelectionTools, selectedStrokeIds, strokes]);
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
   const [liveRoomMembers, setLiveRoomMembers] = useState<RoomMember[] | null>(null);
@@ -279,7 +285,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   }, [activateInstalledPlugin, publishedCataloguePlugins, setShowInsertShapes]);
 
   const runPluginSelectionTool = useCallback((commandId: string) => {
-    const tool = pluginSelectionTools.find((candidate) => candidate.command === commandId);
+    const tool = selectionToolsForCurrentSelection.find((candidate) => candidate.command === commandId);
     if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId);
     else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId);
     else if (tool?.pluginId && publishedCataloguePlugins.some((plugin) => plugin.pluginId === tool.pluginId)) {
@@ -290,7 +296,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     } else {
       void pluginRegistry.executeCommand(commandId);
     }
-  }, [activateInstalledPlugin, openPluginModal, pluginSelectionTools, publishedCataloguePlugins, selectedStrokeIds.length]);
+  }, [activateInstalledPlugin, openPluginModal, publishedCataloguePlugins, selectedStrokeIds.length, selectionToolsForCurrentSelection]);
 
   useCanvasRenderer(canvasRef);
 
@@ -309,7 +315,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     dustPuffs,
   } = useCanvasInteraction(canvasRef);
 
-  const { collaborators, userCursorColor, currentRole, onlineCount } = useBoardSocket(socket, roomId, userName, userId, roomPassword);
+  const {
+    collaborators,
+    userCursorColor,
+    currentRole,
+    onlineCount,
+    chatMessages,
+    chatUnreadMentions,
+    clearChatNotifications,
+  } = useBoardSocket(socket, roomId, userName, userId, roomPassword);
   const roomQuery = useRoomQuery(roomId);
   const room = roomQuery.data?.room;
   const roomTheme = room?.theme ?? 'classroom';
@@ -585,6 +599,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       >
         <Shapes size={18} />
       </button>}
+      <ChatPanel
+        socket={socket}
+        roomId={roomId}
+        userId={userId}
+        messages={chatMessages}
+        members={displayedRoomMembers}
+        unreadMentions={chatUnreadMentions}
+        canEdit={canEdit}
+        onClearUnread={clearChatNotifications}
+      />
       <div className="hud-layer">
         {trimState.active && trimState.cropBox && (() => {
           const cropBox = trimState.cropBox;
@@ -686,7 +710,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   onSetDimensions={(width, height) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const newBox = { minX: box.minX, minY: box.minY, maxX: box.minX + width, maxY: box.minY + height }; const transformed = transformStrokes(selected, box, newBox); const updated = strokes.map(s => { const t = transformed.find(ts => ts.id === s.id); return t ? t : s; }); setStrokes(updated); setTransformBox(newBox); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
                   currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
                   currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
-                  pluginSelectionTools={pluginSelectionTools}
+                  pluginSelectionTools={selectionToolsForCurrentSelection}
                   onRunPluginSelectionTool={runPluginSelectionTool}
                   selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
               )}

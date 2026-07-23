@@ -66,7 +66,7 @@ interface SelectionToolboxProps {
 
 type SubPanel = 'color' | 'size' | 'rotate' | 'dimensions' | 'trim' | 'plugins' | null;
 
-const PANEL_WIDTH = 188;
+const PANEL_WIDTH = 164;
 const PANEL_MARGIN = 16; // gap from selection box edge to panel
 const RIGHT_EXTRA_OFFSET = 60; // extra offset to the right so the panel doesn't block the selection
 

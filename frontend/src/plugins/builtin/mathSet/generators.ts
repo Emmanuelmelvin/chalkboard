@@ -49,6 +49,7 @@ function makeStroke(
     color: opts.color,
     size: opts.size,
     intensity: opts.intensity,
+    objectType: opts.objectType,
     ...pathOptions,
     points,
   };

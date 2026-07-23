@@ -24,6 +24,9 @@ function makeStrokeOptions(api: ChalkboardPluginAPI, commandId: string): ShapeSt
     color: '#ffffff',
     size: 4,
     intensity: 0.9,
+    objectType: commandId === 'mathSet.insertTwoSetVenn' || commandId === 'mathSet.insertThreeSetVenn'
+      ? 'venn-diagram'
+      : 'math-set',
   };
 }
 

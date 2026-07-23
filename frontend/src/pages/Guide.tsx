@@ -131,7 +131,7 @@ function Guide() {
           <div className="guide-snapshot-copy">
             <p className="guide-section-kicker">A visual orientation</p>
             <h2 id="guide-snapshot-title">The room is the medium.</h2>
-            <p>These references were captured from the current Chalkboard app while this guide was written. The homepage preview shows the product rhythm; the existing documentation page shows where plugin authoring lives.</p>
+            <p>The homepage preview gives you a quick feel for the product rhythm. The existing developer documentation is separate from this user walkthrough and is where plugin authoring lives.</p>
           </div>
           <div className="guide-snapshot-grid">
             <figure className="guide-snapshot-card guide-snapshot-card-wide">

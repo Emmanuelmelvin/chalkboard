@@ -73,7 +73,39 @@ function normalizeSelectionTools(value: unknown): PluginSelectionToolContributio
     if (!candidate || typeof candidate !== 'object') return [];
     const tool = candidate as Record<string, unknown>;
     if (typeof tool.id !== 'string' || typeof tool.label !== 'string' || typeof tool.command !== 'string') return [];
-    return [{ id: tool.id, label: tool.label, command: tool.command, description: typeof tool.description === 'string' ? tool.description : undefined }];
+    const rawTarget = tool.selectionTarget;
+    const selectionTarget = rawTarget && typeof rawTarget === 'object' && !Array.isArray(rawTarget)
+      ? rawTarget as Record<string, unknown>
+      : undefined;
+    const objectType = selectionTarget?.objectType;
+    const normalizedObjectType = typeof objectType === 'string'
+      ? objectType
+      : Array.isArray(objectType) && objectType.every((item) => typeof item === 'string')
+        ? objectType as string[]
+        : undefined;
+    const normalizedTarget = selectionTarget && (
+      typeof selectionTarget.pluginId === 'string'
+      || normalizedObjectType !== undefined
+      || selectionTarget.mode === 'all'
+      || selectionTarget.mode === 'any'
+      || Array.isArray(selectionTarget.excludePluginIds)
+    )
+      ? {
+        pluginId: typeof selectionTarget.pluginId === 'string' ? selectionTarget.pluginId : undefined,
+        objectType: normalizedObjectType,
+        mode: selectionTarget.mode === 'any' ? 'any' as const : 'all' as const,
+        excludePluginIds: Array.isArray(selectionTarget.excludePluginIds)
+          ? selectionTarget.excludePluginIds.filter((item): item is string => typeof item === 'string')
+          : undefined,
+      }
+      : undefined;
+    return [{
+      id: tool.id,
+      label: tool.label,
+      command: tool.command,
+      description: typeof tool.description === 'string' ? tool.description : undefined,
+      selectionTarget: normalizedTarget,
+    }];
   });
 }
 

@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBoardStore } from '@/stores/boardStore';
 import { useLinksStore, type SavedLink } from '@/stores/linksStore';
 import { useLoggerStore } from '@/stores/loggerStore';
 import { getRandomColor } from '@/utils/colors';
 import type { Socket } from 'socket.io-client';
-import type { Point, Stroke, Collaborator, RoomMember } from '@/types';
+import type { Point, Stroke, Collaborator, RoomMember, ChatMessage } from '@/types';
 
 type StrokeStartPayload = Partial<Stroke> & {
   /** Present on live stroke-start relays; full redo payloads also include `id`. */
@@ -86,6 +86,8 @@ export function useBoardSocket(
   const [collaborators, setCollaborators] = useState<Record<string, Collaborator>>({});
   const [currentRole, setCurrentRole] = useState<RoomMember['role']>('viewer');
   const [onlineCount, setOnlineCount] = useState(0);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatUnreadMentions, setChatUnreadMentions] = useState(0);
   const [userCursorColor] = useState<string>(() => getRandomColor());
   const previousUsersRef = useRef<Map<string, string> | null>(null);
   const [clientSessionId] = useState(() => getClientSessionId());
@@ -101,6 +103,19 @@ export function useBoardSocket(
     const handleRoomState = ({ strokes, links }: { strokes?: Stroke[]; links?: SavedLink[] }) => {
       if (Array.isArray(strokes)) setStrokes(strokes);
       if (Array.isArray(links)) setLinks(links);
+    };
+
+    const handleChatHistory = (messages: ChatMessage[]) => {
+      if (Array.isArray(messages)) setChatMessages(messages);
+    };
+
+    const handleChatMessage = (message: ChatMessage) => {
+      if (!message?.id) return;
+      setChatMessages((current) => current.some((entry) => entry.id === message.id) ? current : [...current, message]);
+    };
+
+    const handleChatMention = () => {
+      setChatUnreadMentions((current) => current + 1);
     };
 
     const handleUsersUpdate = (userList: Record<string, RoomUser>) => {
@@ -276,9 +291,14 @@ export function useBoardSocket(
 
     setStrokes([]);
     setLinks([]);
+    setChatMessages([]);
+    setChatUnreadMentions(0);
     previousUsersRef.current = null;
     socket.on('room-history', handleRoomHistory);
     socket.on('room-state', handleRoomState);
+    socket.on('chat:history', handleChatHistory);
+    socket.on('chat:message', handleChatMessage);
+    socket.on('chat:mention', handleChatMention);
     socket.on('update-users', handleUsersUpdate);
     socket.on('room:user-joined', handleRoomUserJoined);
     socket.on('presence:count', handlePresenceCount);
@@ -308,6 +328,9 @@ export function useBoardSocket(
       socket.off('connect', joinRoom);
       socket.off('room-history', handleRoomHistory);
       socket.off('room-state', handleRoomState);
+      socket.off('chat:history', handleChatHistory);
+      socket.off('chat:message', handleChatMessage);
+      socket.off('chat:mention', handleChatMention);
       socket.off('update-users', handleUsersUpdate);
       socket.off('room:user-joined', handleRoomUserJoined);
       socket.off('presence:count', handlePresenceCount);
@@ -321,11 +344,23 @@ export function useBoardSocket(
       socket.off('connect_error', handleConnectError);
       setCollaborators({});
       setOnlineCount(0);
+      setChatMessages([]);
+      setChatUnreadMentions(0);
       previousUsersRef.current = null;
     };
   }, [socket, roomId, userName, userId, password, userCursorColor, clientSessionId, setStrokes, setRedoStack, setLinks]);
 
-  return { collaborators, userCursorColor, currentRole, onlineCount };
+  const clearChatNotifications = useCallback(() => setChatUnreadMentions(0), []);
+
+  return {
+    collaborators,
+    userCursorColor,
+    currentRole,
+    onlineCount,
+    chatMessages,
+    chatUnreadMentions,
+    clearChatNotifications,
+  };
 }
 
 export default useBoardSocket;

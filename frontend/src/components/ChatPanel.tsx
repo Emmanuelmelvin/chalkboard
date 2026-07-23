@@ -15,15 +15,40 @@ interface ChatPanelProps {
   onClearUnread: () => void;
 }
 
+const ALL_MENTION_LABEL = 'all';
+const ALL_MENTION_USER_ID = '__all__';
+type AllMentionSuggestion = {
+  kind: 'all';
+  userId: typeof ALL_MENTION_USER_ID;
+  displayName: typeof ALL_MENTION_LABEL;
+  avatarUrl: null;
+};
+type MentionSuggestion = RoomMember | AllMentionSuggestion;
+const allMentionSuggestion: AllMentionSuggestion = {
+  kind: 'all',
+  userId: ALL_MENTION_USER_ID,
+  displayName: ALL_MENTION_LABEL,
+  avatarUrl: null,
+};
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function mentionedUserIds(message: string, members: RoomMember[], currentUserId: string) {
-  return members
-    .filter((member) => member.userId !== currentUserId && member.displayName.trim())
+  const mentionableMembers = members.filter((member) => member.userId !== currentUserId);
+  if (new RegExp(`(^|\\s)@${ALL_MENTION_LABEL}(?=\\s|$)`, 'i').test(message)) {
+    return mentionableMembers.map((member) => member.userId);
+  }
+
+  return mentionableMembers
+    .filter((member) => member.displayName.trim())
     .filter((member) => new RegExp(`(^|\\s)@${escapeRegExp(member.displayName.trim())}(?=\\s|$)`, 'i').test(message))
     .map((member) => member.userId);
+}
+
+function isAllMentionSuggestion(suggestion: MentionSuggestion): suggestion is AllMentionSuggestion {
+  return 'kind' in suggestion && suggestion.kind === 'all';
 }
 
 function formatMessageTime(value: string) {
@@ -52,10 +77,14 @@ export default function ChatPanel({
 
   const mentionMatch = draft.match(/(?:^|\s)@([^\s@]*)$/);
   const mentionQuery = mentionMatch?.[1]?.toLocaleLowerCase() ?? null;
-  const mentionSuggestions = mentionQuery === null ? [] : members
+  const mentionSuggestions: MentionSuggestion[] = mentionQuery === null ? [] : [
+    ...(ALL_MENTION_LABEL.includes(mentionQuery)
+      ? [allMentionSuggestion]
+      : []),
+    ...members
       .filter((member) => member.userId !== userId)
-      .filter((member) => member.displayName.toLocaleLowerCase().includes(mentionQuery))
-      .slice(0, 6);
+      .filter((member) => member.displayName.toLocaleLowerCase().includes(mentionQuery)),
+  ].slice(0, 6);
 
   useEffect(() => {
     if (!open) return;
@@ -68,10 +97,10 @@ export default function ChatPanel({
     setOpen((current) => !current);
   };
 
-  const selectMention = (member: RoomMember) => {
+  const selectMention = (member: MentionSuggestion) => {
     if (!mentionMatch || mentionMatch.index === undefined) return;
     const atIndex = mentionMatch.index + mentionMatch[0].lastIndexOf('@');
-    const nextDraft = `${draft.slice(0, atIndex)}@${member.displayName} `;
+    const nextDraft = `${draft.slice(0, atIndex)}@${isAllMentionSuggestion(member) ? ALL_MENTION_LABEL : member.displayName} `;
     setDraft(nextDraft);
     setHighlightedSuggestion(0);
     requestAnimationFrame(() => {
@@ -168,8 +197,8 @@ export default function ChatPanel({
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => selectMention(member)}
                   >
-                    <UserAvatar name={member.displayName} avatarUrl={member.avatarUrl} size="sm" />
-                    <span>{member.displayName}</span>
+                    <UserAvatar name={isAllMentionSuggestion(member) ? 'Everyone' : member.displayName} avatarUrl={member.avatarUrl} size="sm" />
+                    <span>{isAllMentionSuggestion(member) ? '@all' : member.displayName}</span>
                   </button>
                 ))}
               </div>
@@ -190,7 +219,7 @@ export default function ChatPanel({
                 <Send size={15} />
               </button>
             </div>
-            <span className="chat-panel-hint">Use @ to mention a room member</span>
+            <span className="chat-panel-hint">Use @ to mention someone or @all</span>
           </form>
         </section>
       )}

@@ -878,30 +878,32 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                             <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>
                             <span>{isOnline ? 'Online' : 'Offline'}</span>
                           </div>
-                          {canManageMembers && member.role !== 'owner' ? (
-                            <select
-                              className="room-member-role-select"
-                              value={member.role}
-                              onChange={(event) => updateMemberRole(member.userId, event.target.value as 'instructor' | 'viewer')}
-                              aria-label={`Role for ${member.displayName}`}
-                            >
-                              <option value="instructor">Editor</option>
-                              <option value="viewer">Viewer</option>
-                            </select>
-                          ) : (
-                            <span className="room-member-role">{roleLabel(member.role)}</span>
-                          )}
-                          {canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
-                            <button
-                              type="button"
-                              className="room-member-kick-button"
-                              onClick={() => requestKickMember(member, collaborator.id)}
-                              disabled={Boolean(kickingMemberId)}
-                              aria-label={`Kick ${member.displayName}`}
-                            >
-                              {kickingMemberId === member.userId ? '...' : 'Kick'}
-                            </button>
-                          )}
+                          <div className="room-member-actions">
+                            {canManageMembers && member.role !== 'owner' ? (
+                              <select
+                                className="room-member-role-select"
+                                value={member.role}
+                                onChange={(event) => updateMemberRole(member.userId, event.target.value as 'instructor' | 'viewer')}
+                                aria-label={`Role for ${member.displayName}`}
+                              >
+                                <option value="instructor">Editor</option>
+                                <option value="viewer">Viewer</option>
+                              </select>
+                            ) : (
+                              <span className="room-member-role">{roleLabel(member.role)}</span>
+                            )}
+                            {canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
+                              <button
+                                type="button"
+                                className="room-member-kick-button"
+                                onClick={() => requestKickMember(member, collaborator.id)}
+                                disabled={Boolean(kickingMemberId)}
+                                aria-label={`Kick ${member.displayName}`}
+                              >
+                                {kickingMemberId === member.userId ? '...' : 'Kick'}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })}

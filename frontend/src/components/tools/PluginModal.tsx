@@ -59,7 +59,7 @@ const MatrixGridField: React.FC<{ value: string; onChange: (value: string) => vo
           <button type="button" disabled={(matrix[0]?.length ?? 1) <= 1} onClick={() => update(matrix.map((row) => row.slice(0, -1)))}>− Column</button>
         </div>
       </div>
-      <div className="matrix-grid" style={{ gridTemplateColumns: `repeat(${matrix[0]?.length ?? 1}, minmax(0, 1fr))` }}>
+      <div className="matrix-grid" data-columns={matrix[0]?.length ?? 1}>
         {matrix.flatMap((row, rowIndex) => row.map((cell, columnIndex) => (
           <input
             key={`${rowIndex}-${columnIndex}`}
@@ -92,7 +92,7 @@ const StatisticsPreview: React.FC<{ values: Record<string, string>; summaryOnly:
           {rows.slice(0, 10).map((row, index) => {
             const value = Number(row.value);
             const height = Number.isFinite(value) ? Math.max(8, Math.abs(value) / max * 86) : 4;
-            return <div className="statistics-bar-item" key={`${row.label}-${index}`}><div className="statistics-bar" style={{ height }} /><small>{row.label || index + 1}</small></div>;
+            return <div className="statistics-bar-item" key={`${row.label}-${index}`}><div className="statistics-bar" data-height={height} /><small>{row.label || index + 1}</small></div>;
           })}
         </div>
       )}
@@ -309,7 +309,7 @@ const MatrixPreviewMatrix: React.FC<{ matrix: string[][]; label?: string; determ
   <div className="matrix-preview-matrix">
     {label && <span className="matrix-preview-label">{label} =</span>}
     <span className="matrix-preview-delimiter">{determinant ? '|' : '['}</span>
-    <div className="matrix-preview-grid" style={{ gridTemplateColumns: `repeat(${matrix[0]?.length ?? 1}, minmax(0, 1fr))` }}>
+    <div className="matrix-preview-grid" data-columns={matrix[0]?.length ?? 1}>
       {matrix.flatMap((row, rowIndex) => row.map((value, columnIndex) => <span key={`${rowIndex}-${columnIndex}`}>{value || '0'}</span>))}
     </div>
     <span className="matrix-preview-delimiter">{determinant ? '|' : ']'}</span>
@@ -537,7 +537,8 @@ const PluginModal: React.FC<PluginModalProps> = ({
   return (
     <div
       className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${isMathSetPlugin ? 'math-set-plugin-modal' : ''} ${isStatisticsPlugin ? 'statistics-plugin-modal' : ''}`}
-      style={{ left: position.x, top: position.y }}
+      data-left={position.x}
+      data-top={position.y}
       role="dialog"
       aria-modal="true"
       aria-label={`${plugin.name} plugin`}

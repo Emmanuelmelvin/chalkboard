@@ -46,7 +46,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }
           }}
           onMouseLeave={() => setShowChalkSettings(false)}
-          style={{ display: 'flex', alignItems: 'center', position: 'relative' }}
         >
           <button
             type="button"
@@ -98,7 +97,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }
           }}
           onMouseLeave={() => setShowEraserSettings(false)}
-          style={{ display: 'flex', alignItems: 'center', position: 'relative' }}
         >
           <button
             type="button"
@@ -128,10 +126,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               <div className="eraser-preview-area">
                 <div
                   className="eraser-preview-rect"
-                  style={{
-                    width: Math.min(eraserWidth, 200),
-                    height: Math.min(eraserHeight, 60),
-                  }}
+                  data-width={Math.min(eraserWidth, 200)}
+                  data-height={Math.min(eraserHeight, 60)}
                 />
               </div>
 

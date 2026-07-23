@@ -49,8 +49,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
           <button
             key={color.name}
             type="button"
-            className={`color-swatch ${activeTool === 'chalk' && activeColor.toLowerCase() === color.value.toLowerCase() ? 'active' : ''}`}
-            style={{ backgroundColor: color.value }}
+            className={`color-swatch color-swatch-${color.name} ${activeTool === 'chalk' && activeColor.toLowerCase() === color.value.toLowerCase() ? 'active' : ''}`}
             title={`Chalk: ${color.name}`}
             onClick={() => {
               onToolChange('chalk');

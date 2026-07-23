@@ -212,19 +212,7 @@ export const FloatingItems: React.FC = () => {
       {items.map(({ Component, id }, index) => {
         const pos = positions[index];
         return (
-          <div
-            key={id}
-            className="floating-item"
-            style={{
-              top: pos.top,
-              left: pos.left,
-              width: pos.size,
-              height: pos.size,
-              animationDelay: pos.delay,
-              animationDuration: pos.duration,
-              '--float-rotation': pos.rotation,
-            } as React.CSSProperties}
-          >
+          <div key={id} className={`floating-item floating-item-${index}`}>
             <Component />
           </div>
         );

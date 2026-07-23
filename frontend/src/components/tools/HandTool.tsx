@@ -10,10 +10,9 @@ const HandTool: React.FC<HandToolProps> = ({ activeTool, onToolChange }) => {
   return (
     <button
       type="button"
-      className={`felt-eraser ${activeTool === 'pan' ? 'active' : ''}`}
+      className={`felt-eraser tool-stick-button ${activeTool === 'pan' ? 'active' : ''}`}
       title="Pan / Move Board"
       onClick={() => onToolChange('pan')}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
     >
       <Hand size={16} />
       <span>PAN</span>

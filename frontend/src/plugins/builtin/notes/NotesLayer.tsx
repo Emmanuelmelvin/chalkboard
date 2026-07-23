@@ -29,20 +29,16 @@ const NotesLayer: React.FC = () => {
         return (
           <div
             key={note.id}
-            className={`canvas-note ${isTransparent ? 'canvas-note-transparent' : ''} ${isSelected ? 'canvas-note-selected' : ''}`}
-            style={{
-              left: center.x * zoom + panOffset.x,
-              top: center.y * zoom + panOffset.y,
-              width: width * zoom,
-              height: height * zoom,
-              padding: padding * zoom,
-              color: note.noteTextColor ?? note.color,
-              backgroundColor: isTransparent ? 'transparent' : note.noteBackgroundColor,
-              fontFamily: note.noteFontFamily ?? 'Arial',
-              fontSize: (note.fontSize ?? 24) * zoom,
-              textAlign: note.textAlign ?? 'left',
-              transform: `translate(-50%, -50%) rotate(${note.rotation ?? 0}deg)`,
-            }}
+            data-left={center.x * zoom + panOffset.x}
+            data-top={center.y * zoom + panOffset.y}
+            data-width={width * zoom}
+            data-height={height * zoom}
+            data-padding={padding * zoom}
+            data-text-color={note.noteTextColor ?? note.color}
+            data-background-color={isTransparent ? 'transparent' : note.noteBackgroundColor}
+            data-font-size={(note.fontSize ?? 24) * zoom}
+            data-rotation={note.rotation ?? 0}
+            className={`canvas-note ${isTransparent ? 'canvas-note-transparent' : ''} ${isSelected ? 'canvas-note-selected' : ''} notes-font-${(note.noteFontFamily ?? 'Arial').toLowerCase().replace(/[^a-z0-9]+/g, '-')} notes-align-${note.textAlign ?? 'left'}`}
             dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(note.noteHtml ?? '') }}
           />
         );

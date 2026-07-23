@@ -226,17 +226,9 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   return (
     <div
       ref={rootRef}
-      style={{
-        position: 'fixed',
-        left: panelX,
-        top: panelY,
-        zIndex: 2000,
-        pointerEvents: 'auto',
-        display: 'flex',
-        flexDirection: placeRight ? 'row' : 'row-reverse',
-        alignItems: 'flex-start',
-        gap: 0,
-      }}
+      className={`selection-toolbox selection-toolbox-${placeRight ? 'right' : 'left'}`}
+      data-panel-x={panelX}
+      data-panel-y={panelY}
     >
       {/* ── Main vertical panel ── */}
       <div className="sel-toolbox-panel" onMouseLeave={handlePanelLeave}>
@@ -245,7 +237,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             className="sel-scroll-control sel-scroll-control-top"
             onClick={() => scrollPanel(-1)}
             disabled={!canScrollUp}
-            style={{ visibility: canScrollUp ? 'visible' : 'hidden' }}
+            className={`sel-scroll-control sel-scroll-control-top ${canScrollUp ? '' : 'sel-scroll-control-hidden'}`}
             aria-label="Scroll selection tools up"
             title="Scroll up"
           >
@@ -265,7 +257,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           <span className="sel-row-icon">
             <span
               className="sel-color-dot"
-              style={{ background: activeColor, boxShadow: `0 0 0 2px rgba(255,255,255,0.3), 0 0 6px ${activeColor}66` }}
+              data-color={activeColor}
             />
           </span>
           <span className="sel-row-label">Color</span>
@@ -299,7 +291,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         >
           <span className="sel-row-icon"><RotateCw size={13} /></span>
           <span className="sel-row-label">Rotate</span>
-          <span style={{ fontSize: 10, color: '#64748b', marginLeft: 'auto' }}>
+          <span className="sel-rotation-value">
             {Math.round(currentRotation)}°
           </span>
           <ChevronRight size={11} className="sel-row-chevron" />
@@ -350,7 +342,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         >
           <span className="sel-row-icon"><Scissors size={13} /></span>
           <span className="sel-row-label">Crop</span>
-          <kbd className="sel-kbd" style={{ marginRight: 8 }}>Ctrl+Shift+T</kbd>
+          <kbd className="sel-kbd sel-kbd-crop">Ctrl+Shift+T</kbd>
           <ChevronRight size={11} className="sel-row-chevron" />
         </div>
 
@@ -363,7 +355,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onGroup(); }}
           disabled={selectedCount < 2 || isGrouped}
-          style={{ opacity: (selectedCount < 2 || isGrouped) ? 0.5 : 1, cursor: (selectedCount < 2 || isGrouped) ? 'not-allowed' : 'pointer' }}
+          className={`sel-toolbox-row sel-action-row ${selectedCount < 2 || isGrouped ? 'sel-action-disabled' : ''}`}
         >
           <span className="sel-row-icon"><Group size={13} /></span>
           <span className="sel-row-label">Group</span>
@@ -377,7 +369,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
           onMouseEnter={() => handleRowEnter(null)}
           onClick={() => { onUngroup(); }}
           disabled={!isGrouped || selectedCount < 1}
-          style={{ opacity: (!isGrouped || selectedCount < 1) ? 0.5 : 1, cursor: (!isGrouped || selectedCount < 1) ? 'not-allowed' : 'pointer' }}
+          className={`sel-toolbox-row sel-action-row ${!isGrouped || selectedCount < 1 ? 'sel-action-disabled' : ''}`}
         >
           <span className="sel-row-icon"><Ungroup size={13} /></span>
           <span className="sel-row-label">Ungroup</span>
@@ -423,7 +415,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             className="sel-scroll-control sel-scroll-control-bottom"
             onClick={() => scrollPanel(1)}
             disabled={!canScrollDown}
-            style={{ visibility: canScrollDown ? 'visible' : 'hidden' }}
+            className={`sel-scroll-control sel-scroll-control-bottom ${canScrollDown ? '' : 'sel-scroll-control-hidden'}`}
             aria-label="Scroll selection tools down"
             title="More selection tools"
           >
@@ -440,42 +432,18 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         >
           <p className="sel-subpanel-title">Color</p>
           {/* Stroke / Fill toggle */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 10, background: 'rgba(255,255,255,0.06)', borderRadius: 0, padding: 3 }}>
+          <div className="sel-color-mode-toggle">
             <button
               type="button"
               onClick={() => setColorMode('stroke')}
-              style={{
-                flex: 1,
-                padding: '4px 8px',
-                borderRadius: 0,
-                border: 'none',
-                background: colorMode === 'stroke' ? 'rgba(59,130,246,0.3)' : 'transparent',
-                color: colorMode === 'stroke' ? '#60a5fa' : '#94a3b8',
-                cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: 600,
-                fontFamily: 'var(--font-sans)',
-                transition: 'all 0.15s',
-              }}
+              className={`sel-color-mode-button ${colorMode === 'stroke' ? 'active' : ''}`}
             >
               Stroke
             </button>
             <button
               type="button"
               onClick={() => setColorMode('fill')}
-              style={{
-                flex: 1,
-                padding: '4px 8px',
-                borderRadius: 0,
-                border: 'none',
-                background: colorMode === 'fill' ? 'rgba(59,130,246,0.3)' : 'transparent',
-                color: colorMode === 'fill' ? '#60a5fa' : '#94a3b8',
-                cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: 600,
-                fontFamily: 'var(--font-sans)',
-                transition: 'all 0.15s',
-              }}
+              className={`sel-color-mode-button ${colorMode === 'fill' ? 'active' : ''}`}
             >
               Fill
             </button>
@@ -493,7 +461,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               }
             }}
             title="Custom Color"
-            style={{ height: 32, borderRadius: 0, marginBottom: 10 }}
+            className="native-color-picker sel-native-color-picker"
           />
           {/* Swatches */}
           <div className="sel-swatch-grid">
@@ -501,8 +469,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               <button
                 key={c.name}
                 type="button"
-                className={`sel-swatch ${(colorMode === 'stroke' ? activeColor : activeFillColor).toLowerCase() === c.value.toLowerCase() ? 'sel-swatch-active' : ''}`}
-                style={{ background: c.value }}
+                className={`sel-swatch sel-swatch-${c.name} ${(colorMode === 'stroke' ? activeColor : activeFillColor).toLowerCase() === c.value.toLowerCase() ? 'sel-swatch-active' : ''}`}
                 title={c.name}
                 onClick={() => {
                   if (colorMode === 'stroke') {
@@ -519,10 +486,10 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <button
               type="button"
               className="sel-toolbox-row sel-action-row"
-              style={{ justifyContent: 'center', marginTop: 8, padding: '6px 12px', borderRadius: 0 }}
+              className="sel-toolbox-row sel-action-row sel-transparent-fill-button"
               onClick={() => onFillColorChange?.('transparent')}
             >
-              <span style={{ fontSize: 11 }}>No Fill (Transparent)</span>
+              <span className="sel-small-label">No Fill (Transparent)</span>
             </button>
           )}
         </div>
@@ -548,10 +515,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
             <div className="sel-size-preview">
               <div
                 className="sel-size-dot"
-                style={{
-                  width: Math.min(brushSize * 3, 48),
-                  height: Math.min(brushSize * 3, 48),
-                }}
+                data-size={Math.min(brushSize * 3, 48)}
               />
             </div>
             <button
@@ -563,7 +527,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               <Plus size={14} />
             </button>
           </div>
-          <div className="slider-container" style={{ marginTop: 8, gap: 8 }}>
+          <div className="slider-container sel-size-slider">
             <input
               type="range"
               className="slider-input"
@@ -582,7 +546,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
               min={1}
               max={100}
               value={brushSize}
-              style={{ width: 44 }}
+              className="number-input sel-size-number"
               onChange={(e) => {
                 const v = Math.min(100, Math.max(1, Number(e.target.value)));
                 setBrushSize(v);

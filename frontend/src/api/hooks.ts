@@ -154,7 +154,7 @@ export function useReviewAdminPluginMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ pluginId, input }: { pluginId: string; input: AdminPluginReviewRequest }) => reviewAdminPlugin(pluginId, input),
-    onSuccess: (_payload, variables) => queryClient.invalidateQueries({ queryKey: apiKeys.admin.plugins() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'plugins'] }),
   });
 }
 

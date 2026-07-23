@@ -37,7 +37,6 @@ const ChalkSticks: React.FC<ChalkSticksProps> = ({
           className={`chalk-stick ${color.className} ${
             activeTool === 'chalk' && activeColor === color.value ? 'active' : ''
           }`}
-          style={{ color: color.value }}
           title={`Chalk: ${color.name}`}
           onClick={() => {
             onToolChange('chalk');

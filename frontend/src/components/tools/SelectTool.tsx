@@ -10,10 +10,9 @@ const SelectTool: React.FC<SelectToolProps> = ({ activeTool, onToolChange }) => 
   return (
     <button
       type="button"
-      className={`felt-eraser ${activeTool === 'select' ? 'active' : ''}`}
+      className={`felt-eraser tool-stick-button ${activeTool === 'select' ? 'active' : ''}`}
       title="Select Items"
       onClick={() => onToolChange('select')}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
     >
       <MousePointer2 size={16} />
       <span>SELECT</span>

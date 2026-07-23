@@ -27,7 +27,7 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
         title="Undo Action"
         onClick={onUndo}
         disabled={!canUndo}
-        style={{ opacity: canUndo ? 1 : 0.4, cursor: canUndo ? 'pointer' : 'not-allowed' }}
+        className={`action-stick ${canUndo ? '' : 'action-stick-disabled'}`}
       >
         <Undo2 size={14} />
         <span>Undo</span>
@@ -39,7 +39,7 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
         title="Redo Action"
         onClick={onRedo}
         disabled={!canRedo}
-        style={{ opacity: canRedo ? 1 : 0.4, cursor: canRedo ? 'pointer' : 'not-allowed' }}
+        className={`action-stick ${canRedo ? '' : 'action-stick-disabled'}`}
       >
         <Redo2 size={14} />
         <span>Redo</span>

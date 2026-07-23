@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Check, Clipboard, Code2, ExternalLink, FileCheck2, FlaskConical, KeyRound, LoaderCircle, LogOut, ShieldCheck, Sparkles, UsersRound, WalletCards, XCircle } from 'lucide-react';
 import { listAdminPlugins } from '@/api/admin';
 import { apiKeys } from '@/api/keys';
-import { useAddAdminMutation, useAdminPluginsQuery, useAdminLogoutMutation, useAdminSessionQuery, useAdminSetupMutation, useAdminVerifyMutation, useAdminsQuery, usePublishAdminPluginMutation, useRemoveAdminMutation, useRemoveAdminPluginMutation, useReviewAdminPluginMutation } from '@/api/hooks';
+import { useAddAdminMutation, useAdminLogoutMutation, useAdminSessionQuery, useAdminSetupMutation, useAdminVerifyMutation, useAdminsQuery, usePublishAdminPluginMutation, useRemoveAdminMutation, useRemoveAdminPluginMutation, useReviewAdminPluginMutation } from '@/api/hooks';
 import type { AdminPlugin, AdminSession, AdminUser } from '@/api/types';
 import AdminPluginSandbox from '@/admin/AdminPluginSandbox';
 import ConfirmModal from '@/components/ui/ConfirmModal';
@@ -47,7 +47,6 @@ function AdminAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | nu
 export default function AdminDashboard() {
   const queryClient = useQueryClient();
   const adminSessionQuery = useAdminSessionQuery(false);
-  const adminPluginsQuery = useAdminPluginsQuery('in_review', false);
   const adminsQuery = useAdminsQuery(false);
   const setupMutation = useAdminSetupMutation();
   const verifyMutation = useAdminVerifyMutation();

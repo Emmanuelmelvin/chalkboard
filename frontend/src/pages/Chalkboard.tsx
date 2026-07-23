@@ -30,7 +30,6 @@ import { NOTES_PLUGIN_ID } from '@/plugins/builtin/notes';
 import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
 import { useLoggerStore } from '@/stores/loggerStore';
-import { isRoomTheme, type RoomTheme } from '@/constants/roomThemes';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -70,8 +69,6 @@ import {
 } from '@/components/toolbox';
 
 const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
-type RoomAccessMode = 'open' | 'approval_required' | 'password_protected';
-
 type PendingJoinRequest = {
   id: string;
   userId: string;
@@ -164,11 +161,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const pluginSelectionTools = useMemo(() => [...pluginRegistry.getSelectionTools(), ...publishedSelectionTools], [publishedSelectionTools]);
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
-  const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
-  const [roomAccessMode, setRoomAccessMode] = useState<RoomAccessMode>('open');
-  const [roomTitle, setRoomTitle] = useState(() => `Room ${roomId}`);
-  const [roomDescription, setRoomDescription] = useState('');
-  const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
+  const [liveRoomMembers, setLiveRoomMembers] = useState<RoomMember[] | null>(null);
   const [joinRequestAction, setJoinRequestAction] = useState<string | null>(null);
   const [joinRequestError, setJoinRequestError] = useState('');
   const [roomDetailsOpen, setRoomDetailsOpen] = useState(false);
@@ -232,6 +225,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const { collaborators, userCursorColor, currentRole, onlineCount } = useBoardSocket(socket, roomId, userName, userId, roomPassword);
   const roomQuery = useRoomQuery(roomId);
+  const room = roomQuery.data?.room;
+  const roomTheme = room?.theme ?? 'classroom';
+  const roomAccessMode = room?.accessMode ?? 'open';
+  const roomTitle = room?.title?.trim() || `Room ${roomId}`;
+  const roomDescription = typeof room?.description === 'string' ? room.description : '';
+  const roomMembers = useMemo(() => liveRoomMembers ?? roomQuery.data?.members ?? [], [liveRoomMembers, roomQuery.data?.members]);
   const effectiveRole = roomMembers.find((member) => member.userId === userId)?.role ?? currentRole;
   const canEdit = effectiveRole !== 'viewer';
   const canManageMembers = effectiveRole === 'owner';
@@ -295,25 +294,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   }, [roomId, roomTitle]);
 
   useEffect(() => {
-    setRoomTitle(`Room ${roomId}`);
-    setRoomDescription('');
-    setRoomAccessMode('open');
-    if (!roomQuery.data) return;
-    const { room, members } = roomQuery.data;
-    if (isRoomTheme(room.theme)) setRoomTheme(room.theme);
-    setRoomAccessMode(room.accessMode);
-    if (room.title) setRoomTitle(room.title);
-    if (typeof room.description === 'string') setRoomDescription(room.description);
-    setRoomMembers(members);
-  }, [roomId, roomQuery.data]);
-
-  useEffect(() => {
     initSession({ roomId, socket, userId, canEdit });
   }, [roomId, socket, userId, canEdit, initSession]);
 
   useEffect(() => {
     const handleMembersUpdated = (payload: { members?: RoomMember[] }) => {
-      if (Array.isArray(payload.members)) setRoomMembers(payload.members);
+      if (Array.isArray(payload.members)) setLiveRoomMembers(payload.members);
     };
     socket.on('room-members-updated', handleMembersUpdated);
     return () => { socket.off('room-members-updated', handleMembersUpdated); };
@@ -324,7 +310,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       if (payload.roomId && payload.roomId !== roomId) return;
       const requesterName = payload.requester?.displayName?.trim() || 'A user';
       if (canManageMembers) {
-        setRoomAccessMode('approval_required');
         setRoomDetailsOpen(true);
       }
       useLoggerStore.getState().notify(

@@ -99,7 +99,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const createRoomMutation = useCreateRoomMutation();
   const deleteRoomMutation = useDeleteRoomMutation();
   const resetRoomPasswordMutation = useResetRoomPasswordMutation();
-  const rooms = roomsQuery.data?.rooms ?? [];
+  const rooms = useMemo(() => roomsQuery.data?.rooms ?? [], [roomsQuery.data?.rooms]);
   const [roomTitle, setRoomTitle] = useState('');
   const [roomDescription, setRoomDescription] = useState('');
   const [roomAccessMode, setRoomAccessMode] = useState<RoomAccessMode>('password_protected');

@@ -35,13 +35,17 @@ export const Lobby: React.FC<LobbyProps> = ({ initialRoomId, onJoinRoom }) => {
   useEffect(() => {
     const payload = approvalQuery.data;
     if (!approvalRoom || approvalState !== 'pending' || !payload) return;
-    if (payload.ok === true) {
-      setApprovalRoom(null);
-      setApprovalState(null);
-      onJoinRoom(approvalRoom.slug);
-    } else if (payload.error === 'join_denied' || payload.requestStatus === 'denied') {
-      setApprovalState('denied');
-    }
+    const currentRoom = approvalRoom;
+    const timer = window.setTimeout(() => {
+      if (payload.ok === true) {
+        setApprovalRoom(null);
+        setApprovalState(null);
+        onJoinRoom(currentRoom.slug);
+      } else if (payload.error === 'join_denied' || payload.requestStatus === 'denied') {
+        setApprovalState('denied');
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [approvalQuery.data, approvalRoom, approvalState, onJoinRoom]);
 
   const handleJoinRoom = useCallback(async (code = roomCode) => {

@@ -60,20 +60,24 @@ body.guide-active {
   align-items: center;
   gap: 10px;
   color: var(--guide-ink);
-  font-family: Georgia, serif;
-  font-size: 22px;
-  letter-spacing: -0.06em;
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
 .guide-brand-mark {
-  display: grid;
-  width: 27px;
-  height: 27px;
+  display: inline-grid;
+  width: 31px;
+  height: 31px;
   place-items: center;
-  background: var(--guide-gold);
-  color: #17140f;
+  border: 1px solid var(--guide-gold);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--guide-gold-bright);
   font-family: Georgia, serif;
   font-size: 17px;
+  font-style: italic;
 }
 
 .guide-header-actions {

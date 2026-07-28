@@ -203,6 +203,7 @@ export async function deleteRoomState(roomId: string) {
       linksKey(roomId),
       chatKey(roomId),
       `room:${roomId}:hands`,
+      `room:${roomId}:voice-publishers`,
     );
   }
   histories.delete(roomId);

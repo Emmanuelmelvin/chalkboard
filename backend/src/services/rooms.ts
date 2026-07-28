@@ -6,6 +6,7 @@ import { joinRequests, roomBans, roomMembers, rooms, users } from '@/db/schema';
 import { canPublishVoice } from '@/services/permissions';
 import { createVoiceToken } from '@/services/livekit';
 import { deleteRoomState, getLiveRoomUserIds } from '@/services/realtimeRooms';
+import { isVoicePublisher } from '@/services/roomState';
 import { decryptRoomPassword, encryptRoomPassword } from '@/services/roomPasswords';
 import { logger } from '@/utils/logger';
 
@@ -597,7 +598,7 @@ export async function createRoomVoiceToken(slug: string, user: any) {
     return { error: authorization.error };
   }
 
-  const canPublish = canPublishVoice(authorization.role);
+  const canPublish = canPublishVoice(authorization.role) || await isVoicePublisher(slug, user.id);
   logger.info('Issuing LiveKit voice token', { slug, userId: user.id, role: authorization.role, canPublish });
   return {
     url: process.env.LIVEKIT_URL,

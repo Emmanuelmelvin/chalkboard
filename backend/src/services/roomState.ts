@@ -14,8 +14,23 @@ export async function initRedis() {
 }
 
 function room(roomId) {
-  if (!memoryState.has(roomId)) memoryState.set(roomId, { hands: new Map(), reactions: [], members: new Map() });
+  if (!memoryState.has(roomId)) memoryState.set(roomId, { hands: new Map(), reactions: [], members: new Map(), voicePublishers: new Set() });
   return memoryState.get(roomId);
+}
+
+export async function setVoicePublisher(roomId, userId, allowed) {
+  if (redis) {
+    const key = `room:${roomId}:voice-publishers`;
+    if (allowed) await redis.sAdd(key, userId); else await redis.sRem(key, userId);
+    return;
+  }
+  const publishers = room(roomId).voicePublishers;
+  if (allowed) publishers.add(userId); else publishers.delete(userId);
+}
+
+export async function isVoicePublisher(roomId, userId) {
+  if (redis) return Boolean(await redis.sIsMember(`room:${roomId}:voice-publishers`, userId));
+  return room(roomId).voicePublishers.has(userId);
 }
 
 export async function setRaisedHand(roomId, userId, raised) {

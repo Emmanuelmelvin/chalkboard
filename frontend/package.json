@@ -10,8 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.9.23",
     "@tanstack/react-query": "^5.101.4",
     "axios": "^1.18.1",
+    "livekit-client": "^2.21.0",
     "lucide-react": "^1.23.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

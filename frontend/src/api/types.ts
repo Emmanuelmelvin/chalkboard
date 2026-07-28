@@ -289,3 +289,9 @@ export interface AddAdminResponse {
 export interface OkResponse {
   ok: true;
 }
+
+export interface VoiceTokenResponse {
+  url?: string;
+  token?: string;
+  error?: string;
+}

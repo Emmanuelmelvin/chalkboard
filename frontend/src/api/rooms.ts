@@ -37,3 +37,7 @@ export function listJoinRequests(slug: string) {
 export function resolveJoinRequest(slug: string, userId: string, decision: 'approve' | 'deny') {
   return apiRequest<ResolveJoinRequestResponse>({ url: `/rooms/${encodeURIComponent(slug)}/join-requests/${encodeURIComponent(userId)}/${decision}`, method: 'POST', data: {} });
 }
+
+export function getVoiceToken(slug: string) {
+  return apiRequest<import('./types').VoiceTokenResponse>({ url: `/rooms/${encodeURIComponent(slug)}/voice-token`, method: 'POST', data: {} });
+}

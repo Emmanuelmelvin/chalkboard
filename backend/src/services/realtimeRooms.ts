@@ -204,6 +204,7 @@ export async function deleteRoomState(roomId: string) {
       chatKey(roomId),
       `room:${roomId}:hands`,
       `room:${roomId}:voice-publishers`,
+      `room:${roomId}:voice-owner-connected`,
     );
   }
   histories.delete(roomId);

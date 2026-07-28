@@ -257,6 +257,11 @@ export const voiceRemoveSchema = z.object({
   targetUserId: boundedText(128),
 });
 
+export const voiceOwnerConnectionSchema = z.object({
+  roomId: roomIdSchema,
+  connected: z.boolean(),
+});
+
 export type SocketPayload =
   | z.infer<typeof joinRoomSchema>
   | z.infer<typeof strokeStartSchema>
@@ -271,4 +276,5 @@ export type SocketPayload =
   | z.infer<typeof memberKickSchema>
   | z.infer<typeof pluginEventSchema>
   | z.infer<typeof voiceInviteSchema>
-  | z.infer<typeof voiceRemoveSchema>;
+  | z.infer<typeof voiceRemoveSchema>
+  | z.infer<typeof voiceOwnerConnectionSchema>;

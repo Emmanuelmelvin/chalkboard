@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
 import { randomUUID } from 'node:crypto';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { redis, setRaisedHand, getRaisedHands, setVoicePublisher } from '@/services/roomState';
+import { redis, setRaisedHand, getRaisedHands, isVoiceOwnerConnected, setVoiceOwnerConnected, setVoicePublisher } from '@/services/roomState';
 import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, closeRoomForOwner, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms';
 import {
   appendStroke,
@@ -44,6 +44,7 @@ import {
   strokeStartSchema,
   undoStrokeSchema,
   voiceInviteSchema,
+  voiceOwnerConnectionSchema,
   voiceRemoveSchema,
 } from '@/validators/socketValidators';
 
@@ -51,6 +52,7 @@ type SocketAckResponse = {
   ok: boolean;
   error?: string;
   role?: string;
+  ownerVoiceConnected?: boolean;
 };
 
 type SocketAck = ((response: SocketAckResponse) => void) | undefined;
@@ -315,7 +317,13 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     role: join.role,
     reconnected: presence.reconnected,
   });
-  sendAck(ack, { ok: true, role: join.role });
+  sendAck(ack, {
+    ok: true,
+    role: join.role,
+    ownerVoiceConnected: roomDetails?.room.voiceEnabled
+      ? await isVoiceOwnerConnected(data.roomId)
+      : false,
+  });
 }
 
 async function handleRoomSync(socket: any, payload: unknown, ack?: SocketAck) {
@@ -627,6 +635,32 @@ async function handleVoiceRemove(io: Server, socket: any, payload: unknown, ack?
   return handleVoiceMembershipAction(io, socket, 'voice:remove', 'voice:removed', voiceRemoveSchema, payload, ack);
 }
 
+async function handleVoiceOwnerConnection(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
+  const data = parsePayload<{ roomId: string; connected: boolean }>(socket, 'voice:owner-connection', voiceOwnerConnectionSchema, payload, ack);
+  if (!data || !isJoinedRoom(socket, data.roomId, 'voice:owner-connection', ack)) return;
+
+  const actor = getSocketMeta(socket.id);
+  const authorization = await authorizeRoomAction({
+    roomSlug: data.roomId,
+    userId: actor?.userId,
+    minimumRole: 'owner',
+  });
+  if (!authorization.ok) {
+    rejectEvent(socket, 'voice:owner-connection', 'forbidden', ack, data.roomId);
+    return;
+  }
+
+  const roomDetails = await getRoomWithMembers(data.roomId);
+  if (!roomDetails?.room.voiceEnabled) {
+    rejectEvent(socket, 'voice:owner-connection', 'voice_disabled', ack, data.roomId);
+    return;
+  }
+
+  await setVoiceOwnerConnected(data.roomId, data.connected);
+  io.to(data.roomId).emit('voice:owner-connection-changed', data);
+  sendAck(ack, { ok: true });
+}
+
 type SocketCorsOrigin = (
   requestOrigin: string | undefined,
   callback: (error: Error | null, origin?: boolean | string | RegExp | Array<boolean | string | RegExp>) => void,
@@ -800,6 +834,9 @@ export async function attachSocket(server: any) {
     });
     socket.on('voice:remove', (payload, ack) => {
       runSafely(socket, 'voice:remove', ack, () => handleVoiceRemove(io, socket, payload, ack));
+    });
+    socket.on('voice:owner-connection', (payload, ack) => {
+      runSafely(socket, 'voice:owner-connection', ack, () => handleVoiceOwnerConnection(io, socket, payload, ack));
     });
 
 

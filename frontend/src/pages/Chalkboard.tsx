@@ -536,6 +536,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     userCursorColor,
     currentRole,
     onlineCount,
+    ownerVoiceConnected,
     chatMessages,
     chatUnreadMentions,
     clearChatNotifications,
@@ -568,6 +569,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const roomQueryMembers = roomQuery.data?.members;
   const roomMembers = useMemo(() => liveRoomMembers ?? roomQueryMembers ?? [], [liveRoomMembers, roomQueryMembers]);
   const effectiveRole = roomMembers.find((member) => member.userId === userId)?.role ?? currentRole;
+  const voiceConnected = effectiveRole === 'owner'
+    ? Boolean(voiceToken && voiceUrl)
+    : ownerVoiceConnected;
   const canEdit = effectiveRole !== 'viewer';
   const canManageMembers = effectiveRole === 'owner';
   const joinRequestsQuery = useJoinRequestsQuery(roomId, canManageMembers && roomDetailsOpen && roomAccessMode === 'approval_required');
@@ -1050,10 +1054,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                       setVoiceListening(true);
                     }
                   }}
-                  title={voiceToken && voiceUrl ? 'Disconnect Voice' : 'Connect Voice'}
-                  aria-label={voiceToken && voiceUrl ? 'Disconnect voice' : 'Connect voice'}
+                  title={voiceConnected ? 'Disconnect Voice' : 'Connect Voice'}
+                  aria-label={voiceConnected ? 'Disconnect voice' : 'Connect voice'}
                 >
-                  {voiceToken && voiceUrl ? <Phone size={14} /> : <PhoneOff size={14} />}
+                  {voiceConnected ? <Phone size={14} /> : <PhoneOff size={14} />}
                 </button>
               )}
               <div className="room-details-menu" ref={roomDetailsRef}>
@@ -1292,7 +1296,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         token={voiceToken}
         serverUrl={voiceUrl}
         connect={true}
-        onDisconnected={() => { setVoiceToken(''); setVoiceUrl(''); }}
+        onConnected={() => {
+          if (effectiveRole === 'owner') socket.emit('voice:owner-connection', { roomId, connected: true });
+        }}
+        onDisconnected={() => {
+          if (effectiveRole === 'owner') socket.emit('voice:owner-connection', { roomId, connected: false });
+          setVoiceToken('');
+          setVoiceUrl('');
+        }}
         onError={() => {
           setVoiceToast({ message: 'Voice connection error', type: 'error' });
         }}

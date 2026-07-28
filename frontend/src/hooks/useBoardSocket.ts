@@ -86,6 +86,7 @@ export function useBoardSocket(
   const [collaborators, setCollaborators] = useState<Record<string, Collaborator>>({});
   const [currentRole, setCurrentRole] = useState<RoomMember['role']>('viewer');
   const [onlineCount, setOnlineCount] = useState(0);
+  const [ownerVoiceConnected, setOwnerVoiceConnected] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatUnreadMentions, setChatUnreadMentions] = useState(0);
   const [userCursorColor] = useState<string>(() => getRandomColor());
@@ -165,6 +166,13 @@ export function useBoardSocket(
 
     const handlePresenceCount = ({ count }: { roomId?: string; count?: number }) => {
       if (typeof count === 'number') setOnlineCount(Math.max(0, count));
+    };
+
+    const handleOwnerVoiceConnectionChanged = ({
+      roomId: eventRoomId,
+      connected,
+    }: { roomId?: string; connected?: boolean }) => {
+      if (eventRoomId === roomId && typeof connected === 'boolean') setOwnerVoiceConnected(connected);
     };
 
     const handleConnectError = (error: Error) => {
@@ -277,7 +285,7 @@ export function useBoardSocket(
         color: userCursorColor,
         password,
         clientSessionId,
-      }, (response: { ok?: boolean; error?: string; role?: RoomMember['role'] }) => {
+      }, (response: { ok?: boolean; error?: string; role?: RoomMember['role']; ownerVoiceConnected?: boolean }) => {
         if (!response?.ok) {
           const errorMessage = response?.error === 'already_joined'
             ? 'You have already joined this room on another device.'
@@ -287,6 +295,7 @@ export function useBoardSocket(
           useLoggerStore.getState().notify(errorMessage, 'error', 5000);
           return;
         }
+        setOwnerVoiceConnected(response.ownerVoiceConnected === true);
         socket.emit('room:sync', { roomId });
       });
     };
@@ -302,6 +311,7 @@ export function useBoardSocket(
     socket.on('update-users', handleUsersUpdate);
     socket.on('room:user-joined', handleRoomUserJoined);
     socket.on('presence:count', handlePresenceCount);
+    socket.on('voice:owner-connection-changed', handleOwnerVoiceConnectionChanged);
     socket.on('stroke-start', handleStrokeStart);
     socket.on('stroke-draw', handleStrokeDraw);
     socket.on('undo-stroke', handleUndoStroke);
@@ -334,6 +344,7 @@ export function useBoardSocket(
       socket.off('update-users', handleUsersUpdate);
       socket.off('room:user-joined', handleRoomUserJoined);
       socket.off('presence:count', handlePresenceCount);
+      socket.off('voice:owner-connection-changed', handleOwnerVoiceConnectionChanged);
       socket.off('stroke-start', handleStrokeStart);
       socket.off('stroke-draw', handleStrokeDraw);
       socket.off('undo-stroke', handleUndoStroke);
@@ -355,6 +366,7 @@ export function useBoardSocket(
     userCursorColor,
     currentRole,
     onlineCount,
+    ownerVoiceConnected,
     chatMessages,
     chatUnreadMentions,
     clearChatNotifications,

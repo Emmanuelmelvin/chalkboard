@@ -14,7 +14,13 @@ export async function initRedis() {
 }
 
 function room(roomId) {
-  if (!memoryState.has(roomId)) memoryState.set(roomId, { hands: new Map(), reactions: [], members: new Map(), voicePublishers: new Set() });
+  if (!memoryState.has(roomId)) memoryState.set(roomId, {
+    hands: new Map(),
+    reactions: [],
+    members: new Map(),
+    voicePublishers: new Set(),
+    voiceOwnerConnected: false,
+  });
   return memoryState.get(roomId);
 }
 
@@ -31,6 +37,20 @@ export async function setVoicePublisher(roomId, userId, allowed) {
 export async function isVoicePublisher(roomId, userId) {
   if (redis) return Boolean(await redis.sIsMember(`room:${roomId}:voice-publishers`, userId));
   return room(roomId).voicePublishers.has(userId);
+}
+
+export async function setVoiceOwnerConnected(roomId, connected) {
+  if (redis) {
+    const key = `room:${roomId}:voice-owner-connected`;
+    if (connected) await redis.set(key, '1'); else await redis.del(key);
+    return;
+  }
+  room(roomId).voiceOwnerConnected = connected;
+}
+
+export async function isVoiceOwnerConnected(roomId) {
+  if (redis) return (await redis.get(`room:${roomId}:voice-owner-connected`)) === '1';
+  return room(roomId).voiceOwnerConnected;
 }
 
 export async function setRaisedHand(roomId, userId, raised) {

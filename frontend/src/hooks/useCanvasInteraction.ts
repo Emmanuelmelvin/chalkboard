@@ -213,7 +213,7 @@ export function useCanvasInteraction(
             updated.push(stroke);
             return;
           }
-          const sliced = eraseStrokePoints(stroke, eraserPoints, radius);
+          const sliced = eraseStrokePoints(stroke, eraserPoints, radius, eraserStroke.eraserWidth, eraserStroke.eraserHeight);
           updated.push(...sliced);
         });
 

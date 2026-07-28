@@ -203,16 +203,53 @@ export const pointToSegmentDistance = (p: Point, a: Point, b: Point): number => 
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 };
 
+export const pointInSweptRect = (pt: Point, a: Point, b: Point, w: number, h: number): boolean => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  
+  let txMin = 0;
+  let txMax = 1;
+  
+  if (dx === 0) {
+    if (Math.abs(pt.x - a.x) > w / 2) return false;
+  } else {
+    const t1 = (pt.x - a.x - w / 2) / dx;
+    const t2 = (pt.x - a.x + w / 2) / dx;
+    txMin = Math.max(txMin, Math.min(t1, t2));
+    txMax = Math.min(txMax, Math.max(t1, t2));
+  }
+  
+  let tyMin = 0;
+  let tyMax = 1;
+  
+  if (dy === 0) {
+    if (Math.abs(pt.y - a.y) > h / 2) return false;
+  } else {
+    const t1 = (pt.y - a.y - h / 2) / dy;
+    const t2 = (pt.y - a.y + h / 2) / dy;
+    tyMin = Math.max(tyMin, Math.min(t1, t2));
+    tyMax = Math.min(tyMax, Math.max(t1, t2));
+  }
+  
+  return Math.max(txMin, tyMin) <= Math.min(txMax, tyMax);
+};
+
 // Destructively erase points of a stroke that intersect the eraser path
-export const eraseStrokePoints = (stroke: Stroke, eraserPoints: Point[], radius: number): Stroke[] => {
+export const eraseStrokePoints = (stroke: Stroke, eraserPoints: Point[], radius: number, eraserWidth?: number, eraserHeight?: number): Stroke[] => {
   if (stroke.points.length === 0) return [];
   if (stroke.points.length === 1) {
     const pt = stroke.points[0];
     const isPointErased = eraserPoints.some((ep, idx) => {
       if (idx === eraserPoints.length - 1) {
+        if (eraserWidth && eraserHeight) {
+          return Math.abs(pt.x - ep.x) <= eraserWidth / 2 && Math.abs(pt.y - ep.y) <= eraserHeight / 2;
+        }
         return Math.hypot(pt.x - ep.x, pt.y - ep.y) <= radius;
       }
       const nextEp = eraserPoints[idx + 1];
+      if (eraserWidth && eraserHeight) {
+        return pointInSweptRect(pt, ep, nextEp, eraserWidth, eraserHeight);
+      }
       return pointToSegmentDistance(pt, ep, nextEp) <= radius;
     });
     return isPointErased ? [] : [stroke];
@@ -222,9 +259,15 @@ export const eraseStrokePoints = (stroke: Stroke, eraserPoints: Point[], radius:
   const pointsStatus = stroke.points.map(pt => {
     return eraserPoints.some((ep, idx) => {
       if (idx === eraserPoints.length - 1) {
+        if (eraserWidth && eraserHeight) {
+          return Math.abs(pt.x - ep.x) <= eraserWidth / 2 && Math.abs(pt.y - ep.y) <= eraserHeight / 2;
+        }
         return Math.hypot(pt.x - ep.x, pt.y - ep.y) <= radius;
       }
       const nextEp = eraserPoints[idx + 1];
+      if (eraserWidth && eraserHeight) {
+        return pointInSweptRect(pt, ep, nextEp, eraserWidth, eraserHeight);
+      }
       return pointToSegmentDistance(pt, ep, nextEp) <= radius;
     });
   });

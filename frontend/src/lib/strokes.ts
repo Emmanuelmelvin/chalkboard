@@ -237,26 +237,8 @@ export const pointInSweptRect = (pt: Point, a: Point, b: Point, w: number, h: nu
 // Destructively erase points of a stroke that intersect the eraser path
 export const eraseStrokePoints = (stroke: Stroke, eraserPoints: Point[], radius: number, eraserWidth?: number, eraserHeight?: number): Stroke[] => {
   if (stroke.points.length === 0) return [];
-  if (stroke.points.length === 1) {
-    const pt = stroke.points[0];
-    const isPointErased = eraserPoints.some((ep, idx) => {
-      if (idx === eraserPoints.length - 1) {
-        if (eraserWidth && eraserHeight) {
-          return Math.abs(pt.x - ep.x) <= eraserWidth / 2 && Math.abs(pt.y - ep.y) <= eraserHeight / 2;
-        }
-        return Math.hypot(pt.x - ep.x, pt.y - ep.y) <= radius;
-      }
-      const nextEp = eraserPoints[idx + 1];
-      if (eraserWidth && eraserHeight) {
-        return pointInSweptRect(pt, ep, nextEp, eraserWidth, eraserHeight);
-      }
-      return pointToSegmentDistance(pt, ep, nextEp) <= radius;
-    });
-    return isPointErased ? [] : [stroke];
-  }
-
-  // 1. Determine which points of the stroke are erased
-  const pointsStatus = stroke.points.map(pt => {
+  
+  const checkErased = (pt: Point) => {
     return eraserPoints.some((ep, idx) => {
       if (idx === eraserPoints.length - 1) {
         if (eraserWidth && eraserHeight) {
@@ -270,38 +252,67 @@ export const eraseStrokePoints = (stroke: Stroke, eraserPoints: Point[], radius:
       }
       return pointToSegmentDistance(pt, ep, nextEp) <= radius;
     });
-  });
+  };
 
-  // 2. Split kept points into new strokes
+  if (stroke.points.length === 1) {
+    return checkErased(stroke.points[0]) ? [] : [stroke];
+  }
+
   const newStrokes: Stroke[] = [];
   let currentPoints: Point[] = [];
+  let lastUnErasedPoint: Point | null = null;
+
+  const pushStroke = () => {
+    if (currentPoints.length > 0) {
+      if (lastUnErasedPoint && 
+          (currentPoints[currentPoints.length - 1].x !== lastUnErasedPoint.x || 
+           currentPoints[currentPoints.length - 1].y !== lastUnErasedPoint.y)) {
+         currentPoints.push(lastUnErasedPoint);
+      }
+      newStrokes.push({
+        ...stroke,
+        id: `${stroke.id}-split-${newStrokes.length}-${Date.now()}`,
+        points: currentPoints,
+        closed: false,
+      });
+      currentPoints = [];
+    }
+  };
 
   for (let i = 0; i < stroke.points.length; i++) {
-    const isPointErased = pointsStatus[i];
+    const p1 = stroke.points[i];
 
-    if (!isPointErased) {
-      currentPoints.push(stroke.points[i]);
-    } else {
-      if (currentPoints.length > 0) {
-        newStrokes.push({
-          ...stroke,
-          id: `${stroke.id}-split-${newStrokes.length}-${Date.now()}`,
-          points: currentPoints,
-          closed: false,
-        });
-        currentPoints = [];
+    if (i > 0) {
+      const p0 = stroke.points[i - 1];
+      const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+      const steps = Math.ceil(dist / 2); // 2px resolution for clipping
+      
+      for (let j = 1; j < steps; j++) {
+         const midPoint = {
+            x: p0.x + (p1.x - p0.x) * (j / steps),
+            y: p0.y + (p1.y - p0.y) * (j / steps)
+         };
+         if (!checkErased(midPoint)) {
+            if (currentPoints.length === 0) {
+               currentPoints.push(midPoint);
+            }
+            lastUnErasedPoint = midPoint;
+         } else {
+            pushStroke();
+            lastUnErasedPoint = null;
+         }
       }
     }
-  }
 
-  if (currentPoints.length > 0) {
-    newStrokes.push({
-      ...stroke,
-      id: `${stroke.id}-split-${newStrokes.length}-${Date.now()}`,
-      points: currentPoints,
-      closed: stroke.closed && newStrokes.length === 0 && currentPoints.length === stroke.points.length,
-    });
+    if (!checkErased(p1)) {
+       currentPoints.push(p1);
+       lastUnErasedPoint = p1;
+    } else {
+       pushStroke();
+       lastUnErasedPoint = null;
+    }
   }
-
+  pushStroke();
+  
   return newStrokes;
 };

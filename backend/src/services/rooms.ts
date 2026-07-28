@@ -3,7 +3,6 @@ import { randomBytes } from 'node:crypto';
 import { and, count, desc, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { joinRequests, roomBans, roomMembers, rooms, users } from '@/db/schema';
-import { canPublishVoice } from '@/services/permissions';
 import { createVoiceToken } from '@/services/livekit';
 import { deleteRoomState, getLiveRoomUserIds } from '@/services/realtimeRooms';
 import { isVoicePublisher } from '@/services/roomState';
@@ -598,7 +597,10 @@ export async function createRoomVoiceToken(slug: string, user: any) {
     return { error: authorization.error };
   }
 
-  const canPublish = canPublishVoice(authorization.role) || await isVoicePublisher(slug, user.id);
+  // Listening is granted to every accepted room member. Publishing is a
+  // separate permission: only the owner or an explicitly invited member may
+  // receive a token that can publish microphone audio.
+  const canPublish = authorization.role === 'owner' || await isVoicePublisher(slug, user.id);
   logger.info('Issuing LiveKit voice token', { slug, userId: user.id, role: authorization.role, canPublish });
   return {
     url: process.env.LIVEKIT_URL,

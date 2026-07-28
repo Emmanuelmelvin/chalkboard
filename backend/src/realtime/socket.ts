@@ -557,6 +557,75 @@ async function handleKick(io: Server, socket: any, payload: unknown, ack?: Socke
   sendAck(ack, { ok: true });
 }
 
+async function handleVoiceMembershipAction(
+  io: Server,
+  socket: any,
+  event: 'voice:invite' | 'voice:remove',
+  targetEvent: 'voice:invited' | 'voice:removed',
+  schema: typeof voiceInviteSchema | typeof voiceRemoveSchema,
+  payload: unknown,
+  ack?: SocketAck,
+) {
+  const data = parsePayload<{ roomId: string; targetUserId: string }>(socket, event, schema, payload, ack);
+  if (!data || !isJoinedRoom(socket, data.roomId, event, ack)) return;
+
+  const actor = getSocketMeta(socket.id);
+  const authorization = await authorizeRoomAction({
+    roomSlug: data.roomId,
+    userId: actor?.userId,
+    minimumRole: 'owner',
+  });
+  if (!authorization.ok) {
+    rejectEvent(socket, event, 'forbidden', ack, data.roomId);
+    return;
+  }
+
+  if (data.targetUserId === actor?.userId) {
+    rejectEvent(socket, event, 'invalid_target', ack, data.roomId);
+    return;
+  }
+
+  const roomDetails = await getRoomWithMembers(data.roomId);
+  if (!roomDetails?.room.voiceEnabled) {
+    rejectEvent(socket, event, 'voice_disabled', ack, data.roomId);
+    return;
+  }
+
+  const targetIsMember = roomDetails.members.some((member: { userId: string }) => member.userId === data.targetUserId);
+  if (!targetIsMember) {
+    rejectEvent(socket, event, 'target_not_found', ack, data.roomId);
+    return;
+  }
+
+  const roomSockets = await io.in(data.roomId).fetchSockets();
+  const targetSockets = roomSockets.filter((roomSocket: any) => roomSocket.data?.user?.id === data.targetUserId);
+  if (targetSockets.length === 0) {
+    rejectEvent(socket, event, 'target_not_found', ack, data.roomId);
+    return;
+  }
+
+  targetSockets.forEach((targetSocket: any) => targetSocket.emit(targetEvent, {
+    roomId: data.roomId,
+    actorUserId: actor!.userId,
+  }));
+  logger.info('Voice membership action delivered', {
+    event,
+    roomId: data.roomId,
+    actorUserId: actor!.userId,
+    targetUserId: data.targetUserId,
+    targetSocketCount: targetSockets.length,
+  });
+  sendAck(ack, { ok: true });
+}
+
+async function handleVoiceInvite(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
+  return handleVoiceMembershipAction(io, socket, 'voice:invite', 'voice:invited', voiceInviteSchema, payload, ack);
+}
+
+async function handleVoiceRemove(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
+  return handleVoiceMembershipAction(io, socket, 'voice:remove', 'voice:removed', voiceRemoveSchema, payload, ack);
+}
+
 type SocketCorsOrigin = (
   requestOrigin: string | undefined,
   callback: (error: Error | null, origin?: boolean | string | RegExp | Array<boolean | string | RegExp>) => void,

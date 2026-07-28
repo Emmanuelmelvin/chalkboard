@@ -1151,7 +1151,7 @@
   transition: background 0.2s;
 }
 
-e-action-btn {
+.voice-action-btn {
   background: transparent;
   border: none;
   cursor: pointer;

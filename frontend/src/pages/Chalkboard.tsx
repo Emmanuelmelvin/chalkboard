@@ -5,7 +5,9 @@ React,
   useEffect,
   useMemo,
   useState,
-  useCallback
+  useCallback,
+  createContext,
+  useContext,
 } from 'react';
 import {
   Copy,
@@ -23,7 +25,6 @@ import {
   MicOff,
   Phone,
   PhoneOff,
-  LogOut,
   UserPlus,
   UserX,
 } from 'lucide-react';
@@ -59,7 +60,15 @@ import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
 import ChatPanel from '@/components/ChatPanel';
 import PluginModal from '@/components/tools/PluginModal';
-import { LiveKitRoom, RoomAudioRenderer, useLocalParticipant, useParticipants, useMaybeRoomContext } from '@livekit/components-react';
+import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  useLocalParticipant,
+  useParticipants,
+  useSpeakingParticipants,
+  useMaybeRoomContext,
+  StartAudio,
+} from '@livekit/components-react';
 import { getVoiceToken } from '@/api/rooms';
 
 
@@ -119,6 +128,36 @@ import {
 } from '@/components/toolbox';
 
 const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
+
+const SpeakingParticipantsContext = createContext<ReadonlySet<string>>(new Set());
+
+function SpeakingParticipantsProvider({ children }: { children: React.ReactNode }) {
+  const speakingParticipants = useSpeakingParticipants();
+  const speakingIdentities = useMemo(
+    () => new Set(speakingParticipants.map((participant) => participant.identity)),
+    [speakingParticipants],
+  );
+
+  return (
+    <SpeakingParticipantsContext.Provider value={speakingIdentities}>
+      {children}
+    </SpeakingParticipantsContext.Provider>
+  );
+}
+
+function CollaboratorAvatar({ userId, name, avatarUrl }: { userId: string; name: string; avatarUrl?: string | null }) {
+  const speakingIdentities = useContext(SpeakingParticipantsContext);
+  const isSpeaking = speakingIdentities.has(userId);
+  return (
+    <UserAvatar
+      name={name}
+      avatarUrl={avatarUrl}
+      size="sm"
+      className={`collaborator-avatar${isSpeaking ? ' collaborator-avatar-speaking' : ''}`}
+    />
+  );
+}
+
 type PendingJoinRequest = {
   id: string;
   userId: string;
@@ -129,14 +168,14 @@ type PendingJoinRequest = {
 
 interface RoomMemberVoiceControlsProps {
   memberUserId: string;
+  memberDisplayName: string;
   effectiveRole: string;
   currentUserId: string;
   socket: unknown;
   roomId: string;
-  onLeaveVoice: () => void;
 }
 
-function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, currentUserId, socket, roomId, onLeaveVoice }: RoomMemberVoiceControlsProps) {
+function RoomMemberVoiceControlsConnected({ memberUserId, memberDisplayName, effectiveRole, currentUserId, socket, roomId }: RoomMemberVoiceControlsProps) {
   const participants = useParticipants();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
 
@@ -147,7 +186,9 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
 
   const toggleMute = () => {
     if (localParticipant) {
-      void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+      void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled).catch(() => {
+        useLoggerStore.getState().notify('Microphone access was blocked. Check your browser permissions and try again.', 'error', 6000);
+      });
     }
   };
 
@@ -155,6 +196,8 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
     (socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId, targetUserId: memberUserId }, (res: { ok?: boolean; error?: string }) => {
       if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
     });
+    // Broadcast to everyone that this user was invited
+    (socket as { emit: (event: string, payload: unknown) => void })?.emit('voice:invited-broadcast', { roomId, targetUserId: memberUserId, targetUserName: memberDisplayName });
   };
 
   const removeUser = () => {
@@ -167,8 +210,7 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
     if (localParticipant) {
       return (
         <div className="voice-actions-group">
-          <button type="button" className="voice-action-btn" onClick={toggleMute} title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>{isMicrophoneEnabled ? <MicOff size={14} /> : <Mic size={14} />}</button>
-          <button type="button" className="voice-action-btn" onClick={onLeaveVoice} title="Leave voice channel"><LogOut size={14} /></button>
+          <button type="button" className="voice-action-btn" onClick={toggleMute} title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>{isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />}</button>
         </div>
       );
     }
@@ -206,6 +248,7 @@ function RoomMemberVoiceControls(props: RoomMemberVoiceControlsProps) {
             (props.socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId: props.roomId, targetUserId: props.memberUserId }, (res: { ok?: boolean; error?: string }) => {
               if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
             });
+            (props.socket as { emit: (event: string, payload: unknown) => void })?.emit('voice:invited-broadcast', { roomId: props.roomId, targetUserId: props.memberUserId, targetUserName: props.memberDisplayName });
           }}><UserPlus size={14} /></button>
         </div>
       );
@@ -342,7 +385,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (!socket) return;
     const handleVoiceInvited = (data: { roomId: string }) => {
       if (data.roomId !== roomId) return;
-      setVoiceToast({ message: 'You have been added to voice', type: 'info' });
+      setVoiceToast({ message: 'You have been added to voice. Unmute to start talking.', type: 'info' });
       const connectVoice = async () => {
         try {
           const res = await getVoiceToken(roomId);
@@ -366,12 +409,21 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       setTimeout(() => setVoiceToast(null), 5000);
     };
 
+    const handleVoiceInvitedBroadcast = (data: { roomId: string; targetUserName: string }) => {
+      if (data.roomId !== roomId) return;
+      if (data.targetUserName) {
+        useLoggerStore.getState().notify(`${data.targetUserName} was invited to voice`, 'info', 5000);
+      }
+    };
+
     socket.on('voice:invited', handleVoiceInvited);
     socket.on('voice:removed', handleVoiceRemoved);
+    socket.on('voice:invited-broadcast', handleVoiceInvitedBroadcast);
 
     return () => {
       socket.off('voice:invited', handleVoiceInvited);
       socket.off('voice:removed', handleVoiceRemoved);
+      socket.off('voice:invited-broadcast', handleVoiceInvitedBroadcast);
     };
   }, [socket, roomId]);
   const [closingRoom, setClosingRoom] = useState(false);
@@ -790,7 +842,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               title={`${coll.name}'s cursor`}
               aria-label={`${coll.name}'s cursor`}
             >
-              <UserAvatar name={coll.name} avatarUrl={coll.avatarUrl} size="sm" className="collaborator-avatar" />
+              <CollaboratorAvatar userId={coll.userId} name={coll.name} avatarUrl={coll.avatarUrl} />
               <span
                 className="collaborator-cursor-dot"
                 data-color={coll.color}
@@ -967,7 +1019,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               )}
             </div>
             <div className="board-header-actions">
-              {roomQuery.data?.room.voiceEnabled && (
+              {roomQuery.data?.room.voiceEnabled && (canManageMembers || voiceToken) && (
                 <button
                   type="button"
                   className="voice-action-btn"
@@ -993,7 +1045,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   title={voiceToken && voiceUrl ? 'Disconnect Voice' : 'Connect Voice'}
                   aria-label={voiceToken && voiceUrl ? 'Disconnect voice' : 'Connect voice'}
                 >
-                  {voiceToken && voiceUrl ? <PhoneOff size={14} /> : <Phone size={14} />}
+                  {voiceToken && voiceUrl ? <Phone size={14} /> : <PhoneOff size={14} />}
                 </button>
               )}
               <div className="room-details-menu" ref={roomDetailsRef}>
@@ -1088,11 +1140,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                             <div className="room-member-actions">
                               <RoomMemberVoiceControls
                                 memberUserId={member.userId}
+                                memberDisplayName={member.displayName}
                                 effectiveRole={effectiveRole}
                                 currentUserId={userId}
                                 socket={socket}
                                 roomId={roomId}
-                                onLeaveVoice={() => { setVoiceToken(''); setVoiceUrl(''); }}
                               />
                               {canManageMembers && member.role !== 'owner' ? (
                                 <select className="room-member-role-select"
@@ -1225,7 +1277,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     return (
       <LiveKitRoom
         video={false}
-        audio={true}
+        // Join with playback enabled, but request the microphone only when the
+        // user explicitly presses Unmute. This also keeps viewer tokens
+        // (which intentionally cannot publish) from failing on join.
+        audio={false}
         token={voiceToken}
         serverUrl={voiceUrl}
         connect={true}
@@ -1234,7 +1289,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           setVoiceToast({ message: 'Voice connection error', type: 'error' });
         }}
       >
-        {mainContent}
+        <SpeakingParticipantsProvider>
+          {mainContent}
+          <StartAudio className="voice-start-audio" label="Enable voice audio" />
+        </SpeakingParticipantsProvider>
         <RoomAudioRenderer />
       </LiveKitRoom>
     );

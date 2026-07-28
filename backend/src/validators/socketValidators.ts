@@ -247,6 +247,16 @@ export const pluginEventSchema = z.object({
 
 export const clearBoardSchema = roomPayload;
 
+export const voiceInviteSchema = z.object({
+  roomId: roomIdSchema,
+  targetUserId: boundedText(128),
+});
+
+export const voiceRemoveSchema = z.object({
+  roomId: roomIdSchema,
+  targetUserId: boundedText(128),
+});
+
 export type SocketPayload =
   | z.infer<typeof joinRoomSchema>
   | z.infer<typeof strokeStartSchema>
@@ -259,4 +269,6 @@ export type SocketPayload =
   | z.infer<typeof chatMessageSchema>
   | z.infer<typeof handRaiseSchema>
   | z.infer<typeof memberKickSchema>
-  | z.infer<typeof pluginEventSchema>;
+  | z.infer<typeof pluginEventSchema>
+  | z.infer<typeof voiceInviteSchema>
+  | z.infer<typeof voiceRemoveSchema>;

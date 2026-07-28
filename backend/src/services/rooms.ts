@@ -601,7 +601,7 @@ export async function createRoomVoiceToken(slug: string, user: any) {
   logger.info('Issuing LiveKit voice token', { slug, userId: user.id, role: authorization.role, canPublish });
   return {
     url: process.env.LIVEKIT_URL,
-    token: createVoiceToken({
+    token: await createVoiceToken({
       roomName: slug,
       identity: user.id,
       name: user.displayName,

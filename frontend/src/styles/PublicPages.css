@@ -3308,3 +3308,34 @@ html[data-theme='light'] .dashboard-developer-form select { background: rgba(255
   .dashboard-developer-catalogue-grid { grid-template-columns: 1fr; }
   .dashboard-developer-catalogue-heading { align-items: start; flex-direction: column; gap: 8px; }
 }
+
+.dashboard-voice-fieldset {
+  margin-top: 1.5rem;
+  border: 1px solid var(--slate-200);
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.dashboard-voice-fieldset .dashboard-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  margin: 0;
+}
+
+.dashboard-voice-fieldset input[type="checkbox"] {
+  width: 1.2rem;
+  height: 1.2rem;
+  accent-color: var(--brand-600);
+}
+
+.dashboard-voice-fieldset .dashboard-checkbox-label > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-voice-fieldset small {
+  color: var(--slate-500);
+  font-weight: normal;
+}

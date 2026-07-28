@@ -543,6 +543,42 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
               </div>
             </fieldset>
             <fieldset className="dashboard-theme-fieldset">
+              <legend>Room theme</legend>
+              <div className="dashboard-theme-grid">
+                {roomThemes.map((theme) => (
+                  <label className={`dashboard-theme-option${roomTheme === theme.id ? ' is-selected' : ''}`} key={theme.id}>
+                    <input
+                      type="radio"
+                      name="room-theme"
+                      value={theme.id}
+                      checked={roomTheme === theme.id}
+                      onChange={() => setRoomTheme(theme.id)}
+                    />
+                    <span className={`dashboard-theme-swatch dashboard-theme-swatch-${theme.id}`} aria-hidden="true" />
+                    <span className="dashboard-theme-copy"><strong>{theme.label}</strong><small>{theme.description}</small></span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="dashboard-voice-fieldset">
+              <label className="dashboard-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={roomVoiceEnabled}
+                  onChange={(e) => setRoomVoiceEnabled(e.target.checked)}
+                />
+                <span>
+                  <strong>Enable voice chat</strong>
+                  <small>Add live audio to this room.</small>
+                </span>
+              </label>
+            </fieldset>
+            <button className="dashboard-button dashboard-button-dark" type="submit" disabled={loading}>
+              <Plus size={15} strokeWidth={2} /> {loading ? 'Creating room…' : 'Create a new room'}
+            </button>
+          </form>
+          <div className="dashboard-divider"><span>or join an existing room</span></div>
+          <form className="dashboard-form dashboard-join-form" onSubmit={handleJoinRoom}>
             <label htmlFor="dashboard-room-code">Room code</label>
             <div className="dashboard-join-row"><input id="dashboard-room-code" value={roomCode} onChange={(event) => setRoomCode(event.target.value)} placeholder="e.g. field-notes" autoComplete="off" /><button className="dashboard-button dashboard-button-outline" type="submit" disabled={loading}>Join <ArrowUpRight size={15} /></button></div>
           </form>

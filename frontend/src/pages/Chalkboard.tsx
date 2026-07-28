@@ -18,7 +18,14 @@ import {
   Plus,
   Shapes,
   Eye,
-  EyeOff
+  EyeOff,
+  Mic,
+  MicOff,
+  Phone,
+  PhoneOff,
+  LogOut,
+  UserPlus,
+  UserX,
 } from 'lucide-react';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
@@ -52,6 +59,10 @@ import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
 import ChatPanel from '@/components/ChatPanel';
 import PluginModal from '@/components/tools/PluginModal';
+import { LiveKitRoom, RoomAudioRenderer, useLocalParticipant, useParticipants, useMaybeRoomContext } from '@livekit/components-react';
+import { getVoiceToken } from '@/api/rooms';
+
+
 import NotesLayer from '@/plugins/builtin/notes/NotesLayer';
 import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
 import { NOTES_PLUGIN_ID } from '@/plugins/builtin/notes';
@@ -115,6 +126,95 @@ type PendingJoinRequest = {
   email: string;
   avatarUrl?: string | null;
 };
+
+interface RoomMemberVoiceControlsProps {
+  memberUserId: string;
+  effectiveRole: string;
+  currentUserId: string;
+  socket: unknown;
+  roomId: string;
+  onLeaveVoice: () => void;
+}
+
+function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, currentUserId, socket, roomId, onLeaveVoice }: RoomMemberVoiceControlsProps) {
+  const participants = useParticipants();
+  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
+
+  const inVoice = participants.some(p => p.identity === memberUserId) || (localParticipant?.identity === memberUserId);
+
+  const isMe = memberUserId === currentUserId;
+  const isOwner = effectiveRole === 'owner';
+
+  const toggleMute = () => {
+    if (localParticipant) {
+      void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+    }
+  };
+
+  const inviteUser = () => {
+    (socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId, targetUserId: memberUserId }, (res: { ok?: boolean; error?: string }) => {
+      if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
+    });
+  };
+
+  const removeUser = () => {
+    (socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:remove', { roomId, targetUserId: memberUserId }, (res: { ok?: boolean; error?: string }) => {
+      if (res && !res.ok) console.error('Failed to remove from voice:', res.error);
+    });
+  };
+
+  if (isMe) {
+    if (localParticipant) {
+      return (
+        <div className="voice-actions-group">
+          <button type="button" className="voice-action-btn" onClick={toggleMute} title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>{isMicrophoneEnabled ? <MicOff size={14} /> : <Mic size={14} />}</button>
+          <button type="button" className="voice-action-btn" onClick={onLeaveVoice} title="Leave voice channel"><LogOut size={14} /></button>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  if (isOwner) {
+    if (inVoice) {
+      return (
+        <div className="voice-actions-group">
+          <button type="button" className="voice-action-btn" onClick={removeUser} title="Remove from voice"><UserX size={14} /></button>
+        </div>
+      );
+    }
+    return (
+      <div className="voice-actions-group">
+        <button type="button" className="voice-action-btn" onClick={inviteUser} title="Invite to voice"><UserPlus size={14} /></button>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function RoomMemberVoiceControls(props: RoomMemberVoiceControlsProps) {
+  const room = useMaybeRoomContext();
+  if (!room) {
+    const isMe = props.memberUserId === props.currentUserId;
+    const isOwner = props.effectiveRole === 'owner';
+
+    if (isOwner && !isMe) {
+      return (
+        <div className="voice-actions-group">
+          <button type="button" className="voice-action-btn" title="Invite to voice" onClick={() => {
+            (props.socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId: props.roomId, targetUserId: props.memberUserId }, (res: { ok?: boolean; error?: string }) => {
+              if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
+            });
+          }}><UserPlus size={14} /></button>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  return <RoomMemberVoiceControlsConnected {...props} />;
+}
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
@@ -234,6 +334,46 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
   const [kickPending, setKickPending] = useState<{ member: RoomMember; targetSocketId: string } | null>(null);
   const [closeRoomPending, setCloseRoomPending] = useState(false);
+  const [voiceToken, setVoiceToken] = useState('');
+  const [voiceUrl, setVoiceUrl] = useState('');
+  const [voiceToast, setVoiceToast] = useState<{ message: string, type: 'info' | 'error' } | null>(null);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleVoiceInvited = (data: { roomId: string }) => {
+      if (data.roomId !== roomId) return;
+      setVoiceToast({ message: 'You have been added to voice', type: 'info' });
+      const connectVoice = async () => {
+        try {
+          const res = await getVoiceToken(roomId);
+          if (res.token && res.url) {
+            setVoiceToken(res.token);
+            setVoiceUrl(res.url);
+          }
+        } catch {
+          setVoiceToast({ message: 'Failed to join voice', type: 'error' });
+        }
+      };
+      void connectVoice();
+      setTimeout(() => setVoiceToast(null), 5000);
+    };
+
+    const handleVoiceRemoved = (data: { roomId: string }) => {
+      if (data.roomId !== roomId) return;
+      setVoiceToken('');
+      setVoiceUrl('');
+      setVoiceToast({ message: 'You were removed from voice', type: 'info' });
+      setTimeout(() => setVoiceToast(null), 5000);
+    };
+
+    socket.on('voice:invited', handleVoiceInvited);
+    socket.on('voice:removed', handleVoiceRemoved);
+
+    return () => {
+      socket.off('voice:invited', handleVoiceInvited);
+      socket.off('voice:removed', handleVoiceRemoved);
+    };
+  }, [socket, roomId]);
   const [closingRoom, setClosingRoom] = useState(false);
   const roomClosureHandledRef = useRef(false);
   const roomDetailsRef = useRef<HTMLDivElement | null>(null);
@@ -355,7 +495,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const roomAccessMode = room?.accessMode ?? 'open';
   const roomTitle = room?.title?.trim() || `Room ${roomId}`;
   const roomDescription = typeof room?.description === 'string' ? room.description : '';
-  const roomMembers = useMemo(() => liveRoomMembers ?? roomQuery.data?.members ?? [], [liveRoomMembers, roomQuery.data?.members]);
+  const roomQueryMembers = roomQuery.data?.members;
+  const roomMembers = useMemo(() => liveRoomMembers ?? roomQueryMembers ?? [], [liveRoomMembers, roomQueryMembers]);
   const effectiveRole = roomMembers.find((member) => member.userId === userId)?.role ?? currentRole;
   const canEdit = effectiveRole !== 'viewer';
   const canManageMembers = effectiveRole === 'owner';
@@ -616,425 +757,490 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (canvasRef.current) canvasRef.current.style.cursor = canEdit ? canvasCursor : isPanning ? 'grabbing' : 'grab';
   }, [canEdit, canvasCursor, isPanning]);
 
-  return (
-    <div className={`board-container room-theme-${roomTheme}`} ref={containerRef}>
-      {isMobilePortrait && (
-        <div className="mobile-landscape-hint" role="status" aria-live="polite">
-          <strong>Rotate your device</strong>
-          <span>Chalkboard works best in landscape.</span>
+  const mainContent = (
+    <>
+      {voiceToast && (
+        <div className={`voice-toast voice-toast-${voiceToast.type}`}>
+          {voiceToast.message}
+          <button onClick={() => setVoiceToast(null)} className="voice-toast-close">&times;</button>
         </div>
       )}
-      <div className="blackboard-slate" />
-      {dustPuffs.map((p) => (
-        <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" />
-      ))}
-      {Object.entries(collaborators).map(([id, coll]) => {
-        if (coll.role === 'viewer' || !coll.cursor) return null;
-        const x = coll.cursor.x * zoom + panOffset.x + 24;
-        const y = coll.cursor.y * zoom + panOffset.y + 24;
-        if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null;
-        return (
-          <div
-            key={id}
-            className="collaborator-cursor"
-            data-left={x - 24}
-            data-top={y - 24}
-            title={`${coll.name}'s cursor`}
-            aria-label={`${coll.name}'s cursor`}
-          >
-            <UserAvatar name={coll.name} avatarUrl={coll.avatarUrl} size="sm" className="collaborator-avatar" />
-            <span
-              className="collaborator-cursor-dot"
-              data-color={coll.color}
-              aria-hidden="true"
-            />
-          </div>
-        );
-      })}
-      <canvas ref={canvasRef} className={`chalk-canvas chalk-canvas-${activeTool}`}
-        onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp} onWheel={handleWheel} />
-      <NotesLayer />
-
-      {canEdit && showInsertShapes && (
-        <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
-          pluginManifests={pluginManifests}
-          onOpenPlugin={openPluginModal}
-          onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
-          links={links} hasSelection={selectedStrokeIds.length > 0} onNavigateToLink={handleNavigateToLink}
-          onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
-          initialTab={insertShapesTab} highlightedLinkId={highlightedLinkId} />
-      )}
-      <div className="board-utility-actions">
-        {canEdit && <button
-          onClick={() => setShowInsertShapes(prev => !prev)}
-          title="Insert Shape (Ctrl+1)"
-          className="insert-shapes-fab"
-        >
-          <Shapes size={18} />
-        </button>}
-        <ChatPanel
-          socket={socket}
-          roomId={roomId}
-          userId={userId}
-          messages={chatMessages}
-          members={displayedRoomMembers}
-          unreadMentions={chatUnreadMentions}
-          canEdit={canEdit}
-          onClearUnread={clearChatNotifications}
-        />
-      </div>
-      <div className="hud-layer">
-        {trimState.active && trimState.cropBox && (() => {
-          const cropBox = trimState.cropBox;
-          const initBox = trimState.initialBox;
-          if (!initBox) return null;
-          const screenLeft = cropBox.minX * zoom + panOffset.x;
-          const screenTop = cropBox.minY * zoom + panOffset.y;
-          const screenRight = cropBox.maxX * zoom + panOffset.x;
-          const screenBottom = cropBox.maxY * zoom + panOffset.y;
-          const fullLeft = initBox.minX * zoom + panOffset.x;
-          const fullTop = initBox.minY * zoom + panOffset.y;
-          const fullRight = initBox.maxX * zoom + panOffset.x;
-          const fullBottom = initBox.maxY * zoom + panOffset.y;
-          return (
-            <>
-              <div className="trim-overlay trim-overlay-top" data-left={fullLeft} data-top={fullTop} data-width={fullRight - fullLeft} data-height={Math.max(0, screenTop - fullTop)} />
-              <div className="trim-overlay trim-overlay-bottom" data-left={fullLeft} data-top={screenBottom} data-width={fullRight - fullLeft} data-height={Math.max(0, fullBottom - screenBottom)} />
-              <div className="trim-overlay trim-overlay-left" data-left={fullLeft} data-top={screenTop} data-width={Math.max(0, screenLeft - fullLeft)} data-height={screenBottom - screenTop} />
-              <div className="trim-overlay trim-overlay-right" data-left={screenRight} data-top={screenTop} data-width={Math.max(0, fullRight - screenRight)} data-height={screenBottom - screenTop} />
-              <div className="trim-selection-box" data-left={screenLeft} data-top={screenTop} data-width={screenRight - screenLeft} data-height={screenBottom - screenTop} />
-              {[{ left: screenLeft - 5, top: screenTop - 5 }, { left: screenRight - 5, top: screenTop - 5 }, { left: screenLeft - 5, top: screenBottom - 5 }, { left: screenRight - 5, top: screenBottom - 5 }].map((pos, i) => (
-                <div key={i} className="trim-handle" data-left={pos.left} data-top={pos.top} />
-              ))}
-              <div className="trim-toolbar" data-left={(screenLeft + screenRight) / 2} data-top={screenTop - 60}>
-                <div className="trim-toolbar-copy">
-                  <div className="trim-toolbar-title">CROP MODE</div>
-                  <div className="trim-toolbar-hint">Enter to apply · Esc to cancel</div>
-                </div>
-                <div className="trim-toolbar-actions">
-                  <button className="trim-apply-button" onClick={handleApplyTrim}>Apply</button>
-                  <button className="trim-cancel-button" onClick={handleCancelTrim}>Cancel</button>
-                </div>
-              </div>
-            </>
-          );
-        })()}
-        {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
-          const linkedLink = links.find(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
-          if (!linkedLink) return null;
-          const LINK_PADDING = 12;
-          const linkX = transformBox.minX * zoom + panOffset.x - LINK_PADDING - 24;
-          const linkY = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y - 12;
-
-          return (
-            <button onClick={() => { setHighlightedLinkId(linkedLink.id); setInsertShapesTab('links'); setShowInsertShapes(true); }}
-              className="selection-link-button"
-              data-left={linkX}
-              data-top={linkY}
-              title="Click to view linked location">
-              <LinkIcon />
-            </button>
-          );
-        })()}
-
-        {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
-          const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
-          const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
-          const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
-          const actualFillColor = selectedStrokes.length > 0 ? (selectedStrokes[0].fillColor ?? 'transparent') : activeFillColor;
-
-          // Compute panel position (mirrors SelectionToolbox logic)
-          const BOX_SCREEN_LEFT = transformBox.minX * zoom + panOffset.x;
-          const BOX_SCREEN_RIGHT = transformBox.maxX * zoom + panOffset.x;
-          const BOX_SCREEN_CENTER_Y = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y;
-
-          return (
-            <>
-              {showSelectionToolbox && (
-                <SelectionToolbox
-                  boxScreenLeft={BOX_SCREEN_LEFT}
-                  boxScreenRight={BOX_SCREEN_RIGHT}
-                  boxScreenCenterY={BOX_SCREEN_CENTER_Y}
-                  activeColor={actualColor}
-                  activeFillColor={actualFillColor}
-                  onColorChange={(color) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onFillColorChange={(fillColor) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, fillColor } : s); setStrokes(updated); setActiveFillColor(fillColor); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onTrim={handleStartTrim} onResetTrim={handleResetTrim} onCut={handleCut}
-                  onDelete={() => {
-                    // Remove any links that reference the deleted strokes
-                    const deletedIds = new Set(selectedStrokeIds);
-                    links.forEach(l => {
-                      if (l.strokeIds.some(id => deletedIds.has(id))) {
-                        removeLink(l.id);
-                      }
-                    });
-                    const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));
-                    setStrokes(updated);
-                    setSelectedStrokeIds([]);
-                    setTransformBox(null);
-                    setSelectionRotation(0);
-                    socket.emit('undo-stroke', { roomId, strokes: updated });
-                  }}
-                  onDeselect={() => { if (trimState.active) handleApplyTrim(); setSelectedStrokeIds([]); setTransformBox(null); setSelectionRotation(0); }}
-                  onIncreaseSize={handleIncreaseSize} onDecreaseSize={handleDecreaseSize}
-                  onSetSize={(size) => { if (selectedStrokeIds.length === 0) return; const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, size: Math.min(100, Math.max(1, size)) } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onCopy={handleCopy} onDuplicate={handleDuplicate} onGroup={handleGroup} onUngroup={handleUngroup}
-                  onRotate={(angleDeg) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const rotatable = selected.filter(s => s.pluginId !== 'chalkboard.tag'); const totalRotation = (rotatable[0]?.rotation ?? 0) + angleDeg; const rotated = rotateStrokesTo(rotatable, totalRotation); const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; }); setStrokes(updated); setSelectionRotation(totalRotation); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onResetRotation={() => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getSelectionBoundingBox(selected); if (!box) return; const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }; const rotated = selected.filter(s => s.pluginId !== 'chalkboard.tag').map(s => { const currentAngle = s.rotation ?? 0; return { ...s, points: s.points.map(p => rotatePoint(p, center, -currentAngle)), rotation: 0 }; }); const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; }); setStrokes(updated); setSelectionRotation(0); setTransformBox(getSelectionBoundingBox(selected)); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  onSetDimensions={(width, height) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const newBox = { minX: box.minX, minY: box.minY, maxX: box.minX + width, maxY: box.minY + height }; const transformed = transformStrokes(selected, box, newBox); const updated = strokes.map(s => { const t = transformed.find(ts => ts.id === s.id); return t ? t : s; }); setStrokes(updated); setTransformBox(newBox); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
-                  currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
-                  currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
-                  pluginSelectionTools={selectionToolsForCurrentSelection}
-                  onRunPluginSelectionTool={runPluginSelectionTool}
-                  selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
-              )}
-              {/* ── Selection toolbox toggle button ── */}
-              <button
-                onClick={() => setShowSelectionToolbox(prev => !prev)}
-                title={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
-                className={`selection-toolbox-toggle ${showSelectionToolbox ? 'active' : ''}`}
-                data-left={BOX_SCREEN_RIGHT + 12}
-                data-top={BOX_SCREEN_CENTER_Y - 11}
-              >
-                {showSelectionToolbox ? <EyeOff size={12} /> : <Eye size={12} />}
-              </button>
-            </>
-          );
-        })()}
-
-        {canEdit && (
-          <div className="board-actions-center">
-            <Card className="board-actions-card">
-              <ActionSticks onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
-                canUndo={strokes.some((s) => s.userId === socket.id || s.userId === 'local')} canRedo={redoStack.length > 0} />
-            </Card>
+      <div className={`board-container room-theme-${roomTheme}`} ref={containerRef}>
+        {isMobilePortrait && (
+          <div className="mobile-landscape-hint" role="status" aria-live="polite">
+            <strong>Rotate your device</strong>
+            <span>Chalkboard works best in landscape.</span>
           </div>
         )}
+        <div className="blackboard-slate" />
+        {dustPuffs.map((p) => (
+          <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" />
+        ))}
+        {Object.entries(collaborators).map(([id, coll]) => {
+          if (coll.role === 'viewer' || !coll.cursor) return null;
+          const x = coll.cursor.x * zoom + panOffset.x + 24;
+          const y = coll.cursor.y * zoom + panOffset.y + 24;
+          if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null;
+          return (
+            <div
+              key={id}
+              className="collaborator-cursor"
+              data-left={x - 24}
+              data-top={y - 24}
+              title={`${coll.name}'s cursor`}
+              aria-label={`${coll.name}'s cursor`}
+            >
+              <UserAvatar name={coll.name} avatarUrl={coll.avatarUrl} size="sm" className="collaborator-avatar" />
+              <span
+                className="collaborator-cursor-dot"
+                data-color={coll.color}
+                aria-hidden="true"
+              />
+            </div>
+          );
+        })}
+        <canvas ref={canvasRef} className={`chalk-canvas chalk-canvas-${activeTool}`}
+          onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp} onWheel={handleWheel} />
+        <NotesLayer />
 
-        <div className="board-header">
-          <div className="board-header-tools">
-            {!canEdit && (
-              <div className="board-readonly-badge">Viewer · read only</div>
-            )}
-          </div>
-          <div className="board-header-actions">
-            <div className="room-details-menu" ref={roomDetailsRef}>
-              <button
-                type="button"
-                className="room-details-trigger"
-                onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
-                aria-expanded={roomDetailsOpen}
-                aria-label="Open room details"
-              >
-                <UsersRound size={13} />
-                <span>{onlineCount}</span>
-                <ChevronDown size={11} className={roomDetailsOpen ? 'room-details-chevron open' : 'room-details-chevron'} />
-              </button>
-              {roomDetailsOpen && (
-                <div className="room-details-popover">
-                  <div className="room-details-heading">
-                    <div>
-                      <strong>{roomTitle}</strong>
-                      <span>Room code: {roomId.toUpperCase()}</span>
-                    </div>
-                    <span className={canEdit ? 'room-role-pill room-role-editor' : 'room-role-pill'}>{roleLabel(effectiveRole)}</span>
+        {canEdit && showInsertShapes && (
+          <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
+            pluginManifests={pluginManifests}
+            onOpenPlugin={openPluginModal}
+            onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
+            links={links} hasSelection={selectedStrokeIds.length > 0} onNavigateToLink={handleNavigateToLink}
+            onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
+            initialTab={insertShapesTab} highlightedLinkId={highlightedLinkId} />
+        )}
+        <div className="board-utility-actions">
+          {canEdit && <button
+            onClick={() => setShowInsertShapes(prev => !prev)}
+            title="Insert Shape (Ctrl+1)"
+            className="insert-shapes-fab"
+          >
+            <Shapes size={18} />
+          </button>}
+          <ChatPanel
+            socket={socket}
+            roomId={roomId}
+            userId={userId}
+            messages={chatMessages}
+            members={displayedRoomMembers}
+            unreadMentions={chatUnreadMentions}
+            canEdit={canEdit}
+            onClearUnread={clearChatNotifications}
+          />
+        </div>
+        <div className="hud-layer">
+          {trimState.active && trimState.cropBox && (() => {
+            const cropBox = trimState.cropBox;
+            const initBox = trimState.initialBox;
+            if (!initBox) return null;
+            const screenLeft = cropBox.minX * zoom + panOffset.x;
+            const screenTop = cropBox.minY * zoom + panOffset.y;
+            const screenRight = cropBox.maxX * zoom + panOffset.x;
+            const screenBottom = cropBox.maxY * zoom + panOffset.y;
+            const fullLeft = initBox.minX * zoom + panOffset.x;
+            const fullTop = initBox.minY * zoom + panOffset.y;
+            const fullRight = initBox.maxX * zoom + panOffset.x;
+            const fullBottom = initBox.maxY * zoom + panOffset.y;
+            return (
+              <>
+                <div className="trim-overlay trim-overlay-top" data-left={fullLeft} data-top={fullTop} data-width={fullRight - fullLeft} data-height={Math.max(0, screenTop - fullTop)} />
+                <div className="trim-overlay trim-overlay-bottom" data-left={fullLeft} data-top={screenBottom} data-width={fullRight - fullLeft} data-height={Math.max(0, fullBottom - screenBottom)} />
+                <div className="trim-overlay trim-overlay-left" data-left={fullLeft} data-top={screenTop} data-width={Math.max(0, screenLeft - fullLeft)} data-height={screenBottom - screenTop} />
+                <div className="trim-overlay trim-overlay-right" data-left={screenRight} data-top={screenTop} data-width={Math.max(0, fullRight - screenRight)} data-height={screenBottom - screenTop} />
+                <div className="trim-selection-box" data-left={screenLeft} data-top={screenTop} data-width={screenRight - screenLeft} data-height={screenBottom - screenTop} />
+                {[{ left: screenLeft - 5, top: screenTop - 5 }, { left: screenRight - 5, top: screenTop - 5 }, { left: screenLeft - 5, top: screenBottom - 5 }, { left: screenRight - 5, top: screenBottom - 5 }].map((pos, i) => (
+                  <div key={i} className="trim-handle" data-left={pos.left} data-top={pos.top} />
+                ))}
+                <div className="trim-toolbar" data-left={(screenLeft + screenRight) / 2} data-top={screenTop - 60}>
+                  <div className="trim-toolbar-copy">
+                    <div className="trim-toolbar-title">CROP MODE</div>
+                    <div className="trim-toolbar-hint">Enter to apply · Esc to cancel</div>
                   </div>
-                  {roomDescription && <p className="room-details-description">{roomDescription}</p>}
-                  {canManageMembers && roomAccessMode === 'approval_required' && (
-                    <section className="room-join-requests" aria-labelledby="room-join-requests-heading">
-                      <div className="room-details-section-title" id="room-join-requests-heading">
-                        Join requests <span>{joinRequests.length}</span>
-                      </div>
-                      {(joinRequestError || joinRequestsQuery.error) && <p className="room-details-error" role="alert">{joinRequestError || (joinRequestsQuery.error instanceof Error ? joinRequestsQuery.error.message : 'We could not load join requests.')}</p>}
-                      {joinRequestsLoading ? (
-                        <p className="room-join-requests-empty">Loading requests...</p>
-                      ) : joinRequests.length === 0 ? (
-                        <p className="room-join-requests-empty">No pending requests.</p>
-                      ) : (
-                        <div className="room-details-members">
-                          {joinRequests.map((request) => {
-                            const actionPending = Boolean(joinRequestAction);
-                            return (
-                              <div key={request.id} className="room-detail-member room-join-request-row">
-                                <UserAvatar name={request.displayName} avatarUrl={request.avatarUrl} size="sm" className="room-member-avatar" />
-                                <div className="room-member-name">
-                                  <strong>{request.displayName}</strong>
-                                  <span>{request.email || 'Waiting for approval'}</span>
-                                </div>
-                                <div className="room-join-request-controls">
-                                  <span className="room-member-role">Pending</span>
-                                  <button
-                                    type="button"
-                                    className="room-join-request-button room-join-request-approve"
-                                    onClick={() => { void resolveJoinRequest(request, 'approve'); }}
-                                    disabled={actionPending}
-                                    aria-label={`Approve ${request.displayName}`}
-                                  >
-                                    {joinRequestAction === `approve:${request.userId}` ? '...' : 'Approve'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="room-join-request-button room-join-request-deny"
-                                    onClick={() => { void resolveJoinRequest(request, 'deny'); }}
-                                    disabled={actionPending}
-                                    aria-label={`Decline ${request.displayName}`}
-                                  >
-                                    {joinRequestAction === `deny:${request.userId}` ? '...' : 'Decline'}
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </section>
-                  )}
-                  <div className="room-details-section-title">Members <span>{displayedRoomMembers.length} · {onlineCount} online</span></div>
-                  <div className="room-details-members">
-                    {displayedRoomMembers.map((member) => {
-                      const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);
-                      const isOnline = member.userId === userId || Boolean(collaborator);
-                      return (
-                        <div key={member.userId} className="room-detail-member">
-                          <UserAvatar
-                            name={member.displayName}
-                            avatarUrl={member.avatarUrl || collaborator?.avatarUrl}
-                            size="sm"
-                            className="room-member-avatar"
-                          />
-                          <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} />
-                          <div className="room-member-name">
-                            <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>
-                            <span>{isOnline ? 'Online' : 'Offline'}</span>
-                          </div>
-                          <div className="room-member-actions">
-                            {canManageMembers && member.role !== 'owner' ? (
-                              <select
-                                className="room-member-role-select"
-                                value={member.role}
-                                onChange={(event) => updateMemberRole(member.userId, event.target.value as 'instructor' | 'viewer')}
-                                aria-label={`Role for ${member.displayName}`}
-                              >
-                                <option value="instructor">Editor</option>
-                                <option value="viewer">Viewer</option>
-                              </select>
-                            ) : (
-                              <span className="room-member-role">{roleLabel(member.role)}</span>
-                            )}
-                            {canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
-                              <button
-                                type="button"
-                                className="room-member-kick-button"
-                                onClick={() => requestKickMember(member, collaborator.id)}
-                                disabled={Boolean(kickingMemberId)}
-                                aria-label={`Kick ${member.displayName}`}
-                              >
-                                {kickingMemberId === member.userId ? '...' : 'Kick'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="trim-toolbar-actions">
+                    <button className="trim-apply-button" onClick={handleApplyTrim}>Apply</button>
+                    <button className="trim-cancel-button" onClick={handleCancelTrim}>Cancel</button>
                   </div>
-                  {(roleUpdateError || kickMemberError) && <p className="room-details-error">{roleUpdateError || kickMemberError}</p>}
-                  {canManageMembers && (
-                    <button className="room-close-button" type="button" onClick={requestCloseRoom}>
-                      Close room
-                    </button>
-                  )}
                 </div>
+              </>
+            );
+          })()}
+          {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
+            const linkedLink = links.find(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
+            if (!linkedLink) return null;
+            const LINK_PADDING = 12;
+            const linkX = transformBox.minX * zoom + panOffset.x - LINK_PADDING - 24;
+            const linkY = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y - 12;
+
+            return (
+              <button onClick={() => { setHighlightedLinkId(linkedLink.id); setInsertShapesTab('links'); setShowInsertShapes(true); }}
+                className="selection-link-button"
+                data-left={linkX}
+                data-top={linkY}
+                title="Click to view linked location">
+                <LinkIcon />
+              </button>
+            );
+          })()}
+
+          {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
+            const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
+            const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
+            const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
+            const actualFillColor = selectedStrokes.length > 0 ? (selectedStrokes[0].fillColor ?? 'transparent') : activeFillColor;
+
+            // Compute panel position (mirrors SelectionToolbox logic)
+            const BOX_SCREEN_LEFT = transformBox.minX * zoom + panOffset.x;
+            const BOX_SCREEN_RIGHT = transformBox.maxX * zoom + panOffset.x;
+            const BOX_SCREEN_CENTER_Y = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y;
+
+            return (
+              <>
+                {showSelectionToolbox && (
+                  <SelectionToolbox
+                    boxScreenLeft={BOX_SCREEN_LEFT}
+                    boxScreenRight={BOX_SCREEN_RIGHT}
+                    boxScreenCenterY={BOX_SCREEN_CENTER_Y}
+                    activeColor={actualColor}
+                    activeFillColor={actualFillColor}
+                    onColorChange={(color) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                    onFillColorChange={(fillColor) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, fillColor } : s); setStrokes(updated); setActiveFillColor(fillColor); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                    onTrim={handleStartTrim} onResetTrim={handleResetTrim} onCut={handleCut}
+                    onDelete={() => {
+                      // Remove any links that reference the deleted strokes
+                      const deletedIds = new Set(selectedStrokeIds);
+                      links.forEach(l => {
+                        if (l.strokeIds.some(id => deletedIds.has(id))) {
+                          removeLink(l.id);
+                        }
+                      });
+                      const updated = strokes.filter(s => !selectedStrokeIds.includes(s.id));
+                      setStrokes(updated);
+                      setSelectedStrokeIds([]);
+                      setTransformBox(null);
+                      setSelectionRotation(0);
+                      socket.emit('undo-stroke', { roomId, strokes: updated });
+                    }}
+                    onDeselect={() => { if (trimState.active) handleApplyTrim(); setSelectedStrokeIds([]); setTransformBox(null); setSelectionRotation(0); }}
+                    onIncreaseSize={handleIncreaseSize} onDecreaseSize={handleDecreaseSize}
+                    onSetSize={(size) => { if (selectedStrokeIds.length === 0) return; const updated = strokes.map(s => selectedStrokeIds.includes(s.id) ? { ...s, size: Math.min(100, Math.max(1, size)) } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                    onCopy={handleCopy} onDuplicate={handleDuplicate} onGroup={handleGroup} onUngroup={handleUngroup}
+                    onRotate={(angleDeg) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const rotatable = selected.filter(s => s.pluginId !== 'chalkboard.tag'); const totalRotation = (rotatable[0]?.rotation ?? 0) + angleDeg; const rotated = rotateStrokesTo(rotatable, totalRotation); const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; }); setStrokes(updated); setSelectionRotation(totalRotation); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                    onResetRotation={() => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getSelectionBoundingBox(selected); if (!box) return; const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }; const rotated = selected.filter(s => s.pluginId !== 'chalkboard.tag').map(s => { const currentAngle = s.rotation ?? 0; return { ...s, points: s.points.map(p => rotatePoint(p, center, -currentAngle)), rotation: 0 }; }); const updated = strokes.map(s => { const r = rotated.find(rs => rs.id === s.id); return r ? r : s; }); setStrokes(updated); setSelectionRotation(0); setTransformBox(getSelectionBoundingBox(selected)); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                    onSetDimensions={(width, height) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const newBox = { minX: box.minX, minY: box.minY, maxX: box.minX + width, maxY: box.minY + height }; const transformed = transformStrokes(selected, box, newBox); const updated = strokes.map(s => { const t = transformed.find(ts => ts.id === s.id); return t ? t : s; }); setStrokes(updated); setTransformBox(newBox); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
+                    currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
+                    currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
+                    pluginSelectionTools={selectionToolsForCurrentSelection}
+                    onRunPluginSelectionTool={runPluginSelectionTool}
+                    selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
+                )}
+                {/* ── Selection toolbox toggle button ── */}
+                <button
+                  onClick={() => setShowSelectionToolbox(prev => !prev)}
+                  title={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
+                  className={`selection-toolbox-toggle ${showSelectionToolbox ? 'active' : ''}`}
+                  data-left={BOX_SCREEN_RIGHT + 12}
+                  data-top={BOX_SCREEN_CENTER_Y - 11}
+                >
+                  {showSelectionToolbox ? <EyeOff size={12} /> : <Eye size={12} />}
+                </button>
+              </>
+            );
+          })()}
+
+          {canEdit && (
+            <div className="board-actions-center">
+              <Card className="board-actions-card">
+                <ActionSticks onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
+                  canUndo={strokes.some((s) => s.userId === socket.id || s.userId === 'local')} canRedo={redoStack.length > 0} />
+              </Card>
+            </div>
+          )}
+
+          <div className="board-header">
+            <div className="board-header-tools">
+              {!canEdit && (
+                <div className="board-readonly-badge">Viewer · read only</div>
               )}
             </div>
-            <Card className="share-panel">
-              <span className="room-code-badge">{roomId.toUpperCase()}</span>
-              <Button variant="icon" onClick={handleCopyLink} title="Copy Invite Link">
-                {isCopied ? <Check size={14} className="copy-success-icon" /> : <Copy size={14} />}
+            <div className="board-header-actions">
+              {roomQuery.data?.room.voiceEnabled && (
+                <button
+                  type="button"
+                  className="voice-action-btn"
+                  onClick={() => {
+                    if (voiceToken && voiceUrl) {
+                      setVoiceToken('');
+                      setVoiceUrl('');
+                    } else {
+                      const connectVoice = async () => {
+                        try {
+                          const res = await getVoiceToken(roomId);
+                          if (res.token && res.url) {
+                            setVoiceToken(res.token);
+                            setVoiceUrl(res.url);
+                          }
+                        } catch {
+                          setVoiceToast({ message: 'Failed to connect voice', type: 'error' });
+                        }
+                      };
+                      void connectVoice();
+                    }
+                  }}
+                  title={voiceToken && voiceUrl ? 'Disconnect Voice' : 'Connect Voice'}
+                  aria-label={voiceToken && voiceUrl ? 'Disconnect voice' : 'Connect voice'}
+                >
+                  {voiceToken && voiceUrl ? <PhoneOff size={14} /> : <Phone size={14} />}
+                </button>
+              )}
+              <div className="room-details-menu" ref={roomDetailsRef}>
+                <button
+                  type="button"
+                  className="room-details-trigger"
+                  onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
+                  aria-expanded={roomDetailsOpen}
+                  aria-label="Open room details"
+                >
+                  <UsersRound size={13} />
+                  <span>{onlineCount}</span>
+                  <ChevronDown size={11} className={roomDetailsOpen ? 'room-details-chevron open' : 'room-details-chevron'} />
+                </button>
+                {roomDetailsOpen && (
+                  <div className="room-details-popover">
+                    <div className="room-details-heading">
+                      <div>
+                        <strong>{roomTitle}</strong>
+                        <span>Room code: {roomId.toUpperCase()}</span>
+                      </div>
+                      <span className={canEdit ? 'room-role-pill room-role-editor' : 'room-role-pill'}>{roleLabel(effectiveRole)}</span>
+                    </div>
+                    {roomDescription && <p className="room-details-description">{roomDescription}</p>}
+                    {canManageMembers && roomAccessMode === 'approval_required' && (
+                      <section className="room-join-requests" aria-labelledby="room-join-requests-heading">
+                        <div className="room-details-section-title" id="room-join-requests-heading">
+                          Join requests <span>{joinRequests.length}</span>
+                        </div>
+                        {(joinRequestError || joinRequestsQuery.error) && <p className="room-details-error" role="alert">{joinRequestError || (joinRequestsQuery.error instanceof Error ? joinRequestsQuery.error.message : 'We could not load join requests.')}</p>}
+                        {joinRequestsLoading ? (
+                          <p className="room-join-requests-empty">Loading requests...</p>
+                        ) : joinRequests.length === 0 ? (
+                          <p className="room-join-requests-empty">No pending requests.</p>
+                        ) : (
+                          <div className="room-details-members">
+                            {joinRequests.map((request) => {
+                              const actionPending = Boolean(joinRequestAction);
+                              return (
+                                <div key={request.id} className="room-detail-member room-join-request-row">
+                                  <UserAvatar name={request.displayName} avatarUrl={request.avatarUrl} size="sm" className="room-member-avatar" />
+                                  <div className="room-member-name">
+                                    <strong>{request.displayName}</strong>
+                                    <span>{request.email || 'Waiting for approval'}</span>
+                                  </div>
+                                  <div className="room-join-request-controls">
+                                    <span className="room-member-role">Pending</span>
+                                    <button
+                                      type="button"
+                                      className="room-join-request-button room-join-request-approve"
+                                      onClick={() => { void resolveJoinRequest(request, 'approve'); }}
+                                      disabled={actionPending}
+                                      aria-label={`Approve ${request.displayName}`}
+                                    >
+                                      {joinRequestAction === `approve:${request.userId}` ? '...' : 'Approve'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="room-join-request-button room-join-request-deny"
+                                      onClick={() => { void resolveJoinRequest(request, 'deny'); }}
+                                      disabled={actionPending}
+                                      aria-label={`Decline ${request.displayName}`}
+                                    >
+                                      {joinRequestAction === `deny:${request.userId}` ? '...' : 'Decline'}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </section>
+                    )}
+                    <div className="room-details-section-title">Members <span>{displayedRoomMembers.length} · {onlineCount} online</span></div>
+                    <div className="room-details-members">
+                      {displayedRoomMembers.map((member) => {
+                        const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);
+                        const isOnline = member.userId === userId || Boolean(collaborator);
+                        return (
+                          <div key={member.userId} className="room-detail-member">
+                            <UserAvatar
+                              name={member.displayName}
+                              avatarUrl={member.avatarUrl || collaborator?.avatarUrl}
+                              size="sm"
+                              className="room-member-avatar"
+                            />
+                            <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} />
+                            <div className="room-member-name">
+                              <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>
+                              <span>{isOnline ? 'Online' : 'Offline'}</span>
+                            </div>
+                            <div className="room-member-actions">
+                              <RoomMemberVoiceControls
+                                memberUserId={member.userId}
+                                effectiveRole={effectiveRole}
+                                currentUserId={userId}
+                                socket={socket}
+                                roomId={roomId}
+                                onLeaveVoice={() => { setVoiceToken(''); setVoiceUrl(''); }}
+                              />
+                              {canManageMembers && member.role !== 'owner' ? (
+                                <select className="room-member-role-select"
+                                  value={member.role}
+                                  onChange={(event) => updateMemberRole(member.userId, event.target.value as 'instructor' | 'viewer')}
+                                  aria-label={`Role for ${member.displayName}`}
+                                >
+                                  <option value="instructor">Editor</option>
+                                  <option value="viewer">Viewer</option>
+                                </select>
+                              ) : (
+                                <span className="room-member-role">{roleLabel(member.role)}</span>
+                              )}
+                              {canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
+                                <button
+                                  type="button"
+                                  className="room-member-kick-button"
+                                  onClick={() => requestKickMember(member, collaborator.id)}
+                                  disabled={Boolean(kickingMemberId)}
+                                  aria-label={`Kick ${member.displayName}`}
+                                >
+                                  {kickingMemberId === member.userId ? '...' : 'Kick'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {(roleUpdateError || kickMemberError) && <p className="room-details-error">{roleUpdateError || kickMemberError}</p>}
+                    {canManageMembers && (
+                      <button className="room-close-button" type="button" onClick={requestCloseRoom}>
+                        Close room
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <Card className="share-panel">
+                <span className="room-code-badge">{roomId.toUpperCase()}</span>
+                <Button variant="icon" onClick={handleCopyLink} title="Copy Invite Link">
+                  {isCopied ? <Check size={14} className="copy-success-icon" /> : <Copy size={14} />}
+                </Button>
+              </Card>
+              <Button
+                variant="icon"
+                className="hud-panel fullscreen-toggle"
+                onClick={() => { void toggleFullscreen(); }}
+                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              >
+                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               </Button>
-            </Card>
-            <Button
-              variant="icon"
-              className="hud-panel fullscreen-toggle"
-              onClick={() => { void toggleFullscreen(); }}
-              title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-            >
-              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            </Button>
-            <Button variant="primary" className="hud-panel board-exit-button" onClick={onLeaveRoom}>Exit</Button>
+              <Button variant="primary" className="hud-panel board-exit-button" onClick={onLeaveRoom}>Exit</Button>
+            </div>
           </div>
-        </div>
 
-        <div className="zoom-indicator">
-          <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.1))}><Minus size={12} /></Button>
-          <span className="zoom-value">{Math.round(zoom * 100)}%</span>
-          <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.1))}><Plus size={12} /></Button>
-          <Button variant="icon" className="zoom-control-button zoom-reset-button" onClick={resetPanZoom} title="Reset Pan/Zoom"><Maximize2 size={12} /></Button>
-        </div>
+          <div className="zoom-indicator">
+            <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.1))}><Minus size={12} /></Button>
+            <span className="zoom-value">{Math.round(zoom * 100)}%</span>
+            <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.1))}><Plus size={12} /></Button>
+            <Button variant="icon" className="zoom-control-button zoom-reset-button" onClick={resetPanZoom} title="Reset Pan/Zoom"><Maximize2 size={12} /></Button>
+          </div>
 
-        {canEdit && <Toolbar
-          activeTool={activeTool}
-          activeColor={activeColor}
-          brushSize={brushSize}
-          brushIntensity={brushIntensity}
-          eraserWidth={eraserWidth}
-          eraserHeight={eraserHeight}
-          onToolChange={setActiveTool}
-          onColorChange={setActiveColor}
-          onBrushSizeChange={setBrushSize}
-          onIntensityChange={setBrushIntensity}
-          onEraserWidthChange={setEraserWidth}
-          onEraserHeightChange={setEraserHeight} />}
+          {canEdit && <Toolbar
+            activeTool={activeTool}
+            activeColor={activeColor}
+            brushSize={brushSize}
+            brushIntensity={brushIntensity}
+            eraserWidth={eraserWidth}
+            eraserHeight={eraserHeight}
+            onToolChange={setActiveTool}
+            onColorChange={setActiveColor}
+            onBrushSizeChange={setBrushSize}
+            onIntensityChange={setBrushIntensity}
+            onEraserWidthChange={setEraserWidth}
+            onEraserHeightChange={setEraserHeight} />}
+        </div>
+        {activePluginModals.map((modal) => {
+          const plugin = pluginManifests.find((item) => item.id === modal.pluginId);
+          if (!plugin) return null;
+          const tools = pluginTools.filter((tool) => (tool.pluginId ?? plugin.id) === plugin.id);
+          return <PluginModal key={modal.pluginId} plugin={plugin} tools={tools}
+            selectedStrokes={strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id))}
+            selectionStrokeIds={selectedStrokeIds}
+            sharedOutput={sharedPluginOutput}
+            onPublishOutput={setSharedPluginOutput}
+            pluginReady={!publishedCataloguePlugins.some((candidate) => candidate.pluginId === plugin.id)
+              || publishedPluginDefinitions.some((definition) => definition.pluginId === plugin.id)}
+            onClose={() => {
+              setActivePluginModals((current) => current.filter((item) => item.pluginId !== modal.pluginId));
+              if (activePublishedPluginId === modal.pluginId) setActivePublishedPluginId(null);
+            }}
+            onRunPluginTool={async (commandId, formValues, selectionIds) => {
+              if (publishedCataloguePlugins.some((candidate) => candidate.pluginId === plugin.id)) {
+                return publishedRuntime.execute(plugin.id, commandId, { formValues, selectionStrokeIds: selectionIds });
+              }
+              await activateInstalledPlugin(plugin.id);
+              return pluginRegistry.executeCommand(commandId, { formValues, selectionStrokeIds: selectionIds });
+            }} />;
+        })}
+        {noteEditorRequest && <NotesEditor />}
+        {closeRoomPending && (
+          <ConfirmModal
+            title="Close this room?"
+            message="Everyone will be taken out of the room and returned to their dashboard. The room will remain archived and cannot be reopened."
+            confirmLabel={closingRoom ? 'Closing…' : 'Close room'}
+            danger
+            confirmDisabled={closingRoom}
+            onCancel={() => setCloseRoomPending(false)}
+            onConfirm={closeRoom}
+          />
+        )}
+        {kickPending && (
+          <ConfirmModal
+            title={`Kick ${kickPending.member.displayName}?`}
+            message="This member will be removed from the room and blocked from rejoining it."
+            confirmLabel={kickingMemberId ? 'Kicking...' : 'Kick member'}
+            confirmDisabled={Boolean(kickingMemberId)}
+            danger
+            onCancel={() => setKickPending(null)}
+            onConfirm={kickMember}
+          />
+        )}
       </div>
-      {activePluginModals.map((modal) => {
-        const plugin = pluginManifests.find((item) => item.id === modal.pluginId);
-        if (!plugin) return null;
-        const tools = pluginTools.filter((tool) => (tool.pluginId ?? plugin.id) === plugin.id);
-        return <PluginModal key={modal.pluginId} plugin={plugin} tools={tools}
-          selectedStrokes={strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id))}
-          selectionStrokeIds={selectedStrokeIds}
-          sharedOutput={sharedPluginOutput}
-          onPublishOutput={setSharedPluginOutput}
-          pluginReady={!publishedCataloguePlugins.some((candidate) => candidate.pluginId === plugin.id)
-            || publishedPluginDefinitions.some((definition) => definition.pluginId === plugin.id)}
-          onClose={() => {
-            setActivePluginModals((current) => current.filter((item) => item.pluginId !== modal.pluginId));
-            if (activePublishedPluginId === modal.pluginId) setActivePublishedPluginId(null);
-          }}
-          onRunPluginTool={async (commandId, formValues, selectionIds) => {
-            if (publishedCataloguePlugins.some((candidate) => candidate.pluginId === plugin.id)) {
-              return publishedRuntime.execute(plugin.id, commandId, { formValues, selectionStrokeIds: selectionIds });
-            }
-            await activateInstalledPlugin(plugin.id);
-            return pluginRegistry.executeCommand(commandId, { formValues, selectionStrokeIds: selectionIds });
-          }} />;
-      })}
-      {noteEditorRequest && <NotesEditor />}
-      {closeRoomPending && (
-        <ConfirmModal
-          title="Close this room?"
-          message="Everyone will be taken out of the room and returned to their dashboard. The room will remain archived and cannot be reopened."
-          confirmLabel={closingRoom ? 'Closing…' : 'Close room'}
-          danger
-          confirmDisabled={closingRoom}
-          onCancel={() => setCloseRoomPending(false)}
-          onConfirm={closeRoom}
-        />
-      )}
-      {kickPending && (
-        <ConfirmModal
-          title={`Kick ${kickPending.member.displayName}?`}
-          message="This member will be removed from the room and blocked from rejoining it."
-          confirmLabel={kickingMemberId ? 'Kicking...' : 'Kick member'}
-          confirmDisabled={Boolean(kickingMemberId)}
-          danger
-          onCancel={() => setKickPending(null)}
-          onConfirm={kickMember}
-        />
-      )}
-    </div>
+    </>
   );
+
+  if (voiceToken && voiceUrl) {
+    return (
+      <LiveKitRoom
+        video={false}
+        audio={true}
+        token={voiceToken}
+        serverUrl={voiceUrl}
+        connect={true}
+        onDisconnected={() => { setVoiceToken(''); setVoiceUrl(''); }}
+        onError={() => {
+          setVoiceToast({ message: 'Voice connection error', type: 'error' });
+        }}
+      >
+        {mainContent}
+        <RoomAudioRenderer />
+      </LiveKitRoom>
+    );
+  }
+
+  return mainContent;
 };
 
 export default Chalkboard;

@@ -55,7 +55,7 @@ export function handleInsertShape(
   if (cx === undefined || cy === undefined) {
     if (!canvas) return false;
     const rect = canvas.getBoundingClientRect();
-    const center = viewportToCanvas({ x: rect.width / 2, y: rect.height / 2 }, panOffset, zoom);
+    const center = viewportToCanvas({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, panOffset, zoom);
     cx = center.x;
     cy = center.y;
   }

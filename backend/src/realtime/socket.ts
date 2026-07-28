@@ -43,6 +43,8 @@ import {
   strokeDrawSchema,
   strokeStartSchema,
   undoStrokeSchema,
+  voiceInviteSchema,
+  voiceRemoveSchema,
 } from '@/validators/socketValidators';
 
 type SocketAckResponse = {
@@ -723,6 +725,13 @@ export async function attachSocket(server: any) {
     socket.on('member:kick', (payload, ack) => {
       runSafely(socket, 'member:kick', ack, () => handleKick(io, socket, payload, ack));
     });
+    socket.on('voice:invite', (payload, ack) => {
+      runSafely(socket, 'voice:invite', ack, () => handleVoiceInvite(io, socket, payload, ack));
+    });
+    socket.on('voice:remove', (payload, ack) => {
+      runSafely(socket, 'voice:remove', ack, () => handleVoiceRemove(io, socket, payload, ack));
+    });
+
 
     socket.on('member:update-role', (payload, ack) => {
       runSafely(socket, 'member:update-role', ack, () => handleMemberRoleUpdate(io, socket, payload, ack));

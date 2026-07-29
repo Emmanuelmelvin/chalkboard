@@ -89,6 +89,8 @@ export interface InsertStrokeOptions {
   group?: boolean;
   pluginId?: string;
   objectType?: string;
+  /** Translate inserted strokes so their bounding box is centered in the current viewport. */
+  centerInViewport?: boolean;
 }
 
 export interface PluginViewport {

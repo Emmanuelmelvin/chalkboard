@@ -578,17 +578,18 @@ async function handleVoiceMembershipAction(
   if (!data || !isJoinedRoom(socket, data.roomId, event, ack)) return;
 
   const actor = getSocketMeta(socket.id);
+  const isSelfLeave = event === 'voice:remove' && data.targetUserId === actor?.userId;
   const authorization = await authorizeRoomAction({
     roomSlug: data.roomId,
     userId: actor?.userId,
-    minimumRole: 'owner',
+    minimumRole: isSelfLeave ? 'viewer' : 'owner',
   });
   if (!authorization.ok) {
     rejectEvent(socket, event, 'forbidden', ack, data.roomId);
     return;
   }
 
-  if (data.targetUserId === actor?.userId) {
+  if (data.targetUserId === actor?.userId && event === 'voice:invite') {
     rejectEvent(socket, event, 'invalid_target', ack, data.roomId);
     return;
   }
@@ -599,8 +600,8 @@ async function handleVoiceMembershipAction(
     return;
   }
 
-  const targetIsMember = roomDetails.members.some((member: { userId: string }) => member.userId === data.targetUserId);
-  if (!targetIsMember) {
+  const targetMember = roomDetails.members.find((member: { userId: string; displayName?: string }) => member.userId === data.targetUserId);
+  if (!targetMember) {
     rejectEvent(socket, event, 'target_not_found', ack, data.roomId);
     return;
   }
@@ -617,6 +618,14 @@ async function handleVoiceMembershipAction(
     roomId: data.roomId,
     actorUserId: actor!.userId,
   }));
+  if (event === 'voice:invite') {
+    io.to(data.roomId).emit('voice:speaker-added', {
+      roomId: data.roomId,
+      targetUserId: data.targetUserId,
+      displayName: targetMember.displayName,
+      actorUserId: actor!.userId,
+    });
+  }
   logger.info('Voice membership action delivered', {
     event,
     roomId: data.roomId,
@@ -806,7 +815,7 @@ export async function attachSocket(server: any) {
           sendAck(ack, { ok: false, error: 'rate_limited' });
           return;
         }
-        io.to(data.roomId).emit('reaction:received', { userId: socket.id, emoji: data.emoji, at: Date.now() });
+        io.to(data.roomId).emit('reaction:received', { userId: getSocketMeta(socket.id)?.userId ?? socket.id, emoji: data.emoji, at: Date.now() });
         sendAck(ack, { ok: true });
       });
     });
@@ -821,7 +830,7 @@ export async function attachSocket(server: any) {
           sendAck(ack, { ok: false, error: 'rate_limited' });
           return;
         }
-        io.to(data.roomId).emit('raised-hands:update', await setRaisedHand(data.roomId, socket.id, data.raised));
+        io.to(data.roomId).emit('raised-hands:update', await setRaisedHand(data.roomId, getSocketMeta(socket.id)?.userId ?? socket.id, data.raised));
         sendAck(ack, { ok: true });
       });
     });

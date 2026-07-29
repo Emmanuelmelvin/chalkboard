@@ -17,6 +17,7 @@ export interface PublishedBoardInsertStrokesRequest {
     closeInsertPanel?: boolean;
     group?: boolean;
     objectType?: string;
+    centerInViewport?: boolean;
   };
 }
 
@@ -112,6 +113,7 @@ export function normalizePublishedBoardInsertStrokes(
     group: typeof rawOptions.group === 'boolean' ? rawOptions.group : false,
     pluginId,
     objectType: optionalBoundedString(rawOptions.objectType, 128),
+    centerInViewport: typeof rawOptions.centerInViewport === 'boolean' ? rawOptions.centerInViewport : true,
   };
   return { strokes, options };
 }

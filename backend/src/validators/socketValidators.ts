@@ -203,9 +203,11 @@ export const linksUpdateSchema = z.object({
   addByteLimitIssue(value, SOCKET_LIMITS.maxLinksBytes, ctx, 'links are too large');
 });
 
+const allowedReactionEmojis = new Set(['👍', '👏', '😂', '😮', '❤️', '🎉']);
+
 export const reactionSendSchema = z.object({
   roomId: roomIdSchema,
-  emoji: boundedText(32),
+  emoji: boundedText(32).refine((emoji) => allowedReactionEmojis.has(emoji), 'unsupported reaction'),
 });
 
 export const chatMessageSchema = z.object({

@@ -3999,3 +3999,114 @@ html[data-theme='light'] .theme-toggle:focus-visible {
     align-items: stretch;
   }
 }
+
+.participation-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.participation-action-btn.active,
+.raised-hand-count {
+  color: #f4c95d;
+}
+
+.raised-hand-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(244, 201, 93, 0.34);
+  border-radius: 999px;
+  background: rgba(17, 20, 17, 0.72);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.reaction-picker-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.reaction-picker {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(17, 20, 17, 0.94);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
+}
+
+.reaction-picker button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 17px;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.reaction-picker button:hover,
+.reaction-picker button:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.reaction-overlay {
+  position: absolute;
+  right: 0;
+  bottom: 84px;
+  z-index: 8;
+  pointer-events: none;
+}
+
+.reaction-bubble {
+  position: absolute;
+  bottom: 0;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(17, 20, 17, 0.78);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  font-size: 25px;
+  animation: reactionFloat 2600ms ease-out forwards;
+}
+
+.room-member-hand-badge {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(244, 201, 93, 0.16);
+  font-size: 12px;
+}
+
+@keyframes reactionFloat {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.82);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-145px) scale(1.12);
+  }
+}

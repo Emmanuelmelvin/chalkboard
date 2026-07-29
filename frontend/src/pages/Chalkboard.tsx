@@ -21,10 +21,13 @@ import {
   Shapes,
   Eye,
   EyeOff,
+  Hand,
+  Smile,
   Mic,
   MicOff,
   Phone,
   PhoneOff,
+  LogOut,
   UserPlus,
   UserX,
 } from 'lucide-react';
@@ -158,6 +161,24 @@ function CollaboratorAvatar({ userId, name, avatarUrl }: { userId: string; name:
   );
 }
 
+function RoomMemberAvatar({ userId, name, avatarUrl }: { userId: string; name: string; avatarUrl?: string | null }) {
+  const speakingIdentities = useContext(SpeakingParticipantsContext);
+  const isSpeaking = speakingIdentities.has(userId);
+  return (
+    <UserAvatar
+      name={name}
+      avatarUrl={avatarUrl}
+      size="sm"
+      className={`room-member-avatar${isSpeaking ? ' collaborator-avatar-speaking' : ''}`}
+    />
+  );
+}
+
+const REACTION_EMOJIS = ['👍', '👏', '😂', '😮', '❤️', '🎉'];
+
+type RaisedHand = { userId: string; raisedAt: number };
+type ActiveReaction = { id: string; userId: string; emoji: string; at: number; lane: number };
+
 type PendingJoinRequest = {
   id: string;
   userId: string;
@@ -205,10 +226,11 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
   };
 
   if (isMe) {
-    if (localParticipant) {
+    if (localParticipant && (isOwner || canSpeak)) {
       return (
         <div className="voice-actions-group">
           <button type="button" className="voice-action-btn" onClick={toggleMute} title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>{isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />}</button>
+          {!isOwner && <button type="button" className="voice-action-btn" onClick={removeUser} title="Leave voice"><LogOut size={14} /></button>}
         </div>
       );
     }
@@ -378,12 +400,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [voiceUrl, setVoiceUrl] = useState('');
   const [voiceListening, setVoiceListening] = useState(true);
   const [voiceToast, setVoiceToast] = useState<{ message: string, type: 'info' | 'error' } | null>(null);
+  const [raisedHands, setRaisedHands] = useState<RaisedHand[]>([]);
+  const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const [activeReactions, setActiveReactions] = useState<ActiveReaction[]>([]);
 
   useEffect(() => {
     if (!socket) return;
     const handleVoiceInvited = (data: { roomId: string }) => {
       if (data.roomId !== roomId) return;
-      setVoiceToast({ message: 'You can now speak in this room. Unmute your microphone when you are ready.', type: 'info' });
+      useLoggerStore.getState().notify('You have been added to voice. Unmute your microphone when you are ready.', 'success');
+      setVoiceToast({ message: 'You have been added to voice. Unmute your microphone when you are ready.', type: 'info' });
       const connectVoice = async () => {
         try {
           const res = await getVoiceToken(roomId);
@@ -417,14 +443,57 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       setTimeout(() => setVoiceToast(null), 5000);
     };
 
+    const handleVoiceSpeakerAdded = (data: { roomId: string; targetUserId: string; displayName?: string }) => {
+      if (data.roomId !== roomId || data.targetUserId === userId) return;
+      const displayName = data.displayName?.trim() || 'A room member';
+      useLoggerStore.getState().notify(`${displayName} can now speak in voice`, 'success');
+    };
+
     socket.on('voice:invited', handleVoiceInvited);
     socket.on('voice:removed', handleVoiceRemoved);
+    socket.on('voice:speaker-added', handleVoiceSpeakerAdded);
 
     return () => {
       socket.off('voice:invited', handleVoiceInvited);
       socket.off('voice:removed', handleVoiceRemoved);
+      socket.off('voice:speaker-added', handleVoiceSpeakerAdded);
     };
-  }, [socket, roomId]);
+  }, [socket, roomId, userId]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRaisedHandsUpdate = (hands: RaisedHand[]) => {
+      if (!Array.isArray(hands)) return;
+      setRaisedHands([...hands].sort((a, b) => a.raisedAt - b.raisedAt));
+    };
+
+    const handleReactionReceived = (reaction: { userId?: string; emoji?: string; at?: number }) => {
+      if (!reaction.userId || !reaction.emoji) return;
+      const id = `${reaction.userId}-${reaction.at ?? Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setActiveReactions((current) => [
+        ...current.slice(-11),
+        {
+          id,
+          userId: reaction.userId!,
+          emoji: reaction.emoji!,
+          at: reaction.at ?? Date.now(),
+          lane: Math.floor(Math.random() * 5),
+        },
+      ]);
+      window.setTimeout(() => {
+        setActiveReactions((current) => current.filter((item) => item.id !== id));
+      }, 2600);
+    };
+
+    socket.on('raised-hands:update', handleRaisedHandsUpdate);
+    socket.on('reaction:received', handleReactionReceived);
+    return () => {
+      socket.off('raised-hands:update', handleRaisedHandsUpdate);
+      socket.off('reaction:received', handleReactionReceived);
+    };
+  }, [socket]);
+
   const [closingRoom, setClosingRoom] = useState(false);
   const roomClosureHandledRef = useRef(false);
   const roomDetailsRef = useRef<HTMLDivElement | null>(null);
@@ -621,6 +690,44 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
     return [...members.values()];
   }, [roomMembers, collaborators, userId, userName, effectiveRole]);
+
+  const raisedHandUserIds = useMemo(() => new Set(raisedHands.map((hand) => hand.userId)), [raisedHands]);
+  const raisedHandCount = raisedHands.length;
+  const isHandRaised = raisedHandUserIds.has(userId);
+
+  const memberDisplayNames = useMemo(() => {
+    const names = new Map<string, string>();
+    displayedRoomMembers.forEach((member) => names.set(member.userId, member.displayName));
+    return names;
+  }, [displayedRoomMembers]);
+
+  const sortedDisplayedRoomMembers = useMemo(() => {
+    const order = new Map(raisedHands.map((hand, index) => [hand.userId, index]));
+    return [...displayedRoomMembers].sort((a, b) => {
+      const aOrder = order.get(a.userId);
+      const bOrder = order.get(b.userId);
+      if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder;
+      if (aOrder !== undefined) return -1;
+      if (bOrder !== undefined) return 1;
+      return a.displayName.localeCompare(b.displayName);
+    });
+  }, [displayedRoomMembers, raisedHands]);
+
+  const toggleRaisedHand = useCallback(() => {
+    socket.emit('hand:raise', { roomId, raised: !isHandRaised }, (response: { ok?: boolean; error?: string }) => {
+      if (response && !response.ok) useLoggerStore.getState().notify('Could not update your raised hand. Try again.', 'error');
+    });
+  }, [isHandRaised, roomId, socket]);
+
+  const sendReaction = useCallback((emoji: string) => {
+    setReactionPickerOpen(false);
+    socket.emit('reaction:send', { roomId, emoji }, (response: { ok?: boolean; error?: string }) => {
+      if (response && !response.ok) {
+        const message = response.error === 'rate_limited' ? 'Slow down before sending another reaction.' : 'Could not send reaction.';
+        useLoggerStore.getState().notify(message, 'warning');
+      }
+    });
+  }, [roomId, socket]);
 
   useKeyboardShortcuts(canEdit);
 
@@ -847,6 +954,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           </div>
         )}
         <div className="blackboard-slate" />
+        <div className="reaction-overlay" aria-hidden="true">
+          {activeReactions.map((reaction) => (
+            <div
+              key={reaction.id}
+              className="reaction-bubble"
+              style={{ right: `${18 + reaction.lane * 58}px` }}
+              title={`${memberDisplayNames.get(reaction.userId) ?? 'Someone'} reacted ${reaction.emoji}`}
+            >
+              {reaction.emoji}
+            </div>
+          ))}
+        </div>
         {dustPuffs.map((p) => (
           <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" />
         ))}
@@ -1041,7 +1160,37 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               )}
             </div>
             <div className="board-header-actions">
-              {roomQuery.data?.room.voiceEnabled && (
+              <div className="participation-actions">
+                {raisedHandCount > 0 && <span className="raised-hand-count" title="Raised hands">✋ {raisedHandCount}</span>}
+                <button
+                  type="button"
+                  className={`voice-action-btn participation-action-btn${isHandRaised ? ' active' : ''}`}
+                  onClick={toggleRaisedHand}
+                  title={isHandRaised ? 'Lower hand' : 'Raise hand'}
+                  aria-label={isHandRaised ? 'Lower hand' : 'Raise hand'}
+                >
+                  <Hand size={14} />
+                </button>
+                <div className="reaction-picker-wrap">
+                  <button
+                    type="button"
+                    className="voice-action-btn participation-action-btn"
+                    onClick={() => setReactionPickerOpen((open) => !open)}
+                    title="Send reaction"
+                    aria-label="Send reaction"
+                  >
+                    <Smile size={14} />
+                  </button>
+                  {reactionPickerOpen && (
+                    <div className="reaction-picker" role="menu" aria-label="Send a reaction">
+                      {REACTION_EMOJIS.map((emoji) => (
+                        <button key={emoji} type="button" onClick={() => sendReaction(emoji)} aria-label={`React ${emoji}`}>{emoji}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {effectiveRole === 'owner' && roomQuery.data?.room.voiceEnabled && (
                 <button
                   type="button"
                   className="voice-action-btn"
@@ -1131,19 +1280,19 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                         )}
                       </section>
                     )}
-                    <div className="room-details-section-title">Members <span>{displayedRoomMembers.length} · {onlineCount} online</span></div>
+                    <div className="room-details-section-title">Members <span>{displayedRoomMembers.length} · {onlineCount} online{raisedHandCount > 0 ? ` · ${raisedHandCount} raised` : ''}</span></div>
                     <div className="room-details-members">
-                      {displayedRoomMembers.map((member) => {
+                      {sortedDisplayedRoomMembers.map((member) => {
                         const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);
                         const isOnline = member.userId === userId || Boolean(collaborator);
                         return (
                           <div key={member.userId} className="room-detail-member">
-                            <UserAvatar
+                            <RoomMemberAvatar
+                              userId={member.userId}
                               name={member.displayName}
                               avatarUrl={member.avatarUrl || collaborator?.avatarUrl}
-                              size="sm"
-                              className="room-member-avatar"
                             />
+                            {raisedHandUserIds.has(member.userId) && <span className="room-member-hand-badge" title="Hand raised">✋</span>}
                             <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} />
                             <div className="room-member-name">
                               <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>

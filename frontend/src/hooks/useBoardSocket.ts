@@ -79,6 +79,9 @@ export function useBoardSocket(
   const {
     setStrokes,
     setRedoStack,
+    setSelectedStrokeIds,
+    setTransformBox,
+    setSelectionRotation,
   } = useBoardStore();
 
   const { setLinks } = useLinksStore();
@@ -245,6 +248,11 @@ export function useBoardSocket(
 
     const handleUndoStroke = ({ strokes: newStrokes }: { strokes: Stroke[] }) => {
       setStrokes(newStrokes);
+      // Clear selection when another user modifies strokes, since the
+      // previously selected strokes may have moved, been deleted, or changed.
+      setSelectedStrokeIds([]);
+      setTransformBox(null);
+      setSelectionRotation(0);
     };
 
     const handleClearBoard = () => {

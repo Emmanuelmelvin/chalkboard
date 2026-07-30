@@ -399,7 +399,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [voiceToken, setVoiceToken] = useState('');
   const [voiceUrl, setVoiceUrl] = useState('');
   const [voiceListening, setVoiceListening] = useState(true);
-  const [voiceToast, setVoiceToast] = useState<{ message: string, type: 'info' | 'error' } | null>(null);
   const [raisedHands, setRaisedHands] = useState<RaisedHand[]>([]);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [activeReactions, setActiveReactions] = useState<ActiveReaction[]>([]);
@@ -409,7 +408,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const handleVoiceInvited = (data: { roomId: string }) => {
       if (data.roomId !== roomId) return;
       useLoggerStore.getState().notify('You have been added to voice. Unmute your microphone when you are ready.', 'success');
-      setVoiceToast({ message: 'You have been added to voice. Unmute your microphone when you are ready.', type: 'info' });
       const connectVoice = async () => {
         try {
           const res = await getVoiceToken(roomId);
@@ -418,16 +416,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             setVoiceUrl(res.url);
           }
         } catch {
-          setVoiceToast({ message: 'Failed to join voice', type: 'error' });
+          useLoggerStore.getState().notify('Failed to join voice', 'error');
         }
       };
       void connectVoice();
-      setTimeout(() => setVoiceToast(null), 5000);
     };
 
     const handleVoiceRemoved = (data: { roomId: string }) => {
       if (data.roomId !== roomId) return;
-      setVoiceToast({ message: 'Speaking access was removed. You can still hear the room.', type: 'info' });
+      useLoggerStore.getState().notify('Speaking access was removed. You can still hear the room.', 'info');
       const refreshVoice = async () => {
         try {
           const res = await getVoiceToken(roomId);
@@ -436,11 +433,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             setVoiceUrl(res.url);
           }
         } catch {
-          setVoiceToast({ message: 'Voice access could not be refreshed', type: 'error' });
+          useLoggerStore.getState().notify('Voice access could not be refreshed', 'error');
         }
       };
       void refreshVoice();
-      setTimeout(() => setVoiceToast(null), 5000);
     };
 
     const handleVoiceSpeakerAdded = (data: { roomId: string; targetUserId: string; displayName?: string }) => {
@@ -624,7 +620,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           setVoiceUrl(res.url);
         }
       } catch {
-        if (!cancelled) setVoiceToast({ message: 'Failed to connect room audio', type: 'error' });
+        if (!cancelled) useLoggerStore.getState().notify('Failed to connect room audio', 'error');
       }
     };
     void connectVoiceForListening();
@@ -940,12 +936,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const mainContent = (
     <>
-      {voiceToast && (
-        <div className={`voice-toast voice-toast-${voiceToast.type}`}>
-          {voiceToast.message}
-          <button onClick={() => setVoiceToast(null)} className="voice-toast-close">&times;</button>
-        </div>
-      )}
       <div className={`board-container room-theme-${roomTheme}`} ref={containerRef}>
         {isMobilePortrait && (
           <div className="mobile-landscape-hint" role="status" aria-live="polite">
@@ -970,25 +960,38 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" />
         ))}
         {Object.entries(collaborators).map(([id, coll]) => {
-          if (coll.role === 'viewer' || !coll.cursor) return null;
-          const x = coll.cursor.x * zoom + panOffset.x + 24;
-          const y = coll.cursor.y * zoom + panOffset.y + 24;
-          if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null;
+          if (coll.role === 'viewer') return null;
+          if (coll.cursor) {
+            const x = coll.cursor.x * zoom + panOffset.x + 24;
+            const y = coll.cursor.y * zoom + panOffset.y + 24;
+            if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null;
+            return (
+              <div
+                key={id}
+                className="collaborator-cursor"
+                data-left={x - 24}
+                data-top={y - 24}
+                title={`${coll.name}'s cursor`}
+                aria-label={`${coll.name}'s cursor`}
+              >
+                <CollaboratorAvatar userId={coll.userId} name={coll.name} avatarUrl={coll.avatarUrl} />
+                <span
+                  className="collaborator-cursor-dot"
+                  data-color={coll.color}
+                  aria-hidden="true"
+                />
+              </div>
+            );
+          }
+          // Show avatar at a default position for users who can draw but haven't moved their cursor yet
           return (
             <div
               key={id}
-              className="collaborator-cursor"
-              data-left={x - 24}
-              data-top={y - 24}
-              title={`${coll.name}'s cursor`}
-              aria-label={`${coll.name}'s cursor`}
+              className="collaborator-cursor collaborator-cursor-default"
+              title={`${coll.name}`}
+              aria-label={`${coll.name}`}
             >
               <CollaboratorAvatar userId={coll.userId} name={coll.name} avatarUrl={coll.avatarUrl} />
-              <span
-                className="collaborator-cursor-dot"
-                data-color={coll.color}
-                aria-hidden="true"
-              />
             </div>
           );
         })}
@@ -1454,7 +1457,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           setVoiceUrl('');
         }}
         onError={() => {
-          setVoiceToast({ message: 'Voice connection error', type: 'error' });
+          useLoggerStore.getState().notify('Voice connection error', 'error');
         }}
       >
         <SpeakingParticipantsProvider>

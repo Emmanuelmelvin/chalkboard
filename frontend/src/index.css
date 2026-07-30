@@ -1350,6 +1350,22 @@ body {
   transition: left 0.1s linear, top 0.1s linear;
 }
 
+.collaborator-cursor-default {
+  position: absolute;
+  bottom: 80px;
+  right: 60px;
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.7;
+}
+
+.collaborator-cursor-default .collaborator-avatar {
+  border-width: 1.5px;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
 .board-header-actions .btn-icon {
   padding: 5px;
 }
@@ -1397,6 +1413,7 @@ body {
 }
 
 @keyframes collaboratorSpeaking {
+
   0%,
   100% {
     box-shadow: 0 3px 9px rgba(0, 0, 0, 0.42), 0 0 0 2px rgba(139, 233, 253, 0.9), 0 0 0 4px rgba(139, 233, 253, 0.18);
@@ -4101,10 +4118,12 @@ html[data-theme='light'] .theme-toggle:focus-visible {
     opacity: 0;
     transform: translateY(24px) scale(0.82);
   }
+
   12% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+
   100% {
     opacity: 0;
     transform: translateY(-145px) scale(1.12);

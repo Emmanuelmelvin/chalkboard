@@ -1439,7 +1439,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   if (voiceToken && voiceUrl) {
     return (
       <LiveKitRoom
-        key={voiceToken}
         video={false}
         // Join with playback enabled, but request the microphone only when the
         // user explicitly presses Unmute. This also keeps viewer tokens

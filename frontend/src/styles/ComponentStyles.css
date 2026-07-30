@@ -838,6 +838,16 @@
     right: 14px;
     bottom: 14px;
     justify-content: flex-end;
+    /* Don't let the tall container swallow touch events in its empty space */
+    pointer-events: none;
+  }
+
+  /* Restore interactivity for every direct interactive child */
+  .board-utility-actions > *,
+  .board-utility-actions .insert-shapes-fab,
+  .board-utility-actions .chat-widget,
+  .board-utility-actions .chat-fab {
+    pointer-events: auto;
   }
 
   .board-utility-actions .chat-widget {

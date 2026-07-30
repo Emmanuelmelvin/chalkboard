@@ -1390,27 +1390,7 @@ body {
   animation: collaboratorSpeaking 900ms ease-in-out infinite;
 }
 
-.voice-start-audio {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 10000;
-  padding: 9px 13px;
-  border: 1px solid rgba(139, 233, 253, 0.75);
-  border-radius: 999px;
-  background: rgba(8, 25, 28, 0.94);
-  color: #d9fbff;
-  cursor: pointer;
-  font: 700 11px/1 var(--font-sans);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-}
 
-.voice-start-audio:hover,
-.voice-start-audio:focus-visible {
-  background: rgba(14, 55, 61, 0.98);
-  outline: 2px solid rgba(139, 233, 253, 0.32);
-  outline-offset: 2px;
-}
 
 @keyframes collaboratorSpeaking {
 

@@ -70,7 +70,6 @@ import {
   useParticipants,
   useSpeakingParticipants,
   useMaybeRoomContext,
-  StartAudio,
 } from '@livekit/components-react';
 import { getVoiceToken } from '@/api/rooms';
 
@@ -134,6 +133,31 @@ const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
 
 const SpeakingParticipantsContext = createContext<ReadonlySet<string>>(new Set());
 
+function VoiceAudioStarter() {
+  const room = useMaybeRoomContext();
+
+  useEffect(() => {
+    if (!room) return;
+    const unlockAudio = () => {
+      if (room && !room.canPlaybackAudio) {
+        void room.startAudio().catch(() => {});
+      }
+    };
+
+    window.addEventListener('click', unlockAudio, { capture: true, passive: true });
+    window.addEventListener('touchstart', unlockAudio, { capture: true, passive: true });
+    window.addEventListener('pointerdown', unlockAudio, { capture: true, passive: true });
+
+    return () => {
+      window.removeEventListener('click', unlockAudio, { capture: true });
+      window.removeEventListener('touchstart', unlockAudio, { capture: true });
+      window.removeEventListener('pointerdown', unlockAudio, { capture: true });
+    };
+  }, [room]);
+
+  return null;
+}
+
 function SpeakingParticipantsProvider({ children }: { children: React.ReactNode }) {
   const speakingParticipants = useSpeakingParticipants();
   const speakingIdentities = useMemo(
@@ -196,6 +220,7 @@ interface RoomMemberVoiceControlsProps {
 }
 
 function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, currentUserId, socket, roomId }: RoomMemberVoiceControlsProps) {
+  const room = useMaybeRoomContext();
   const participants = useParticipants();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
 
@@ -206,6 +231,9 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
   const isOwner = effectiveRole === 'owner';
 
   const toggleMute = () => {
+    if (room && !room.canPlaybackAudio) {
+      void room.startAudio().catch(() => {});
+    }
     if (localParticipant) {
       void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled).catch(() => {
         useLoggerStore.getState().notify('Microphone access was blocked. Check your browser permissions and try again.', 'error', 6000);
@@ -1479,9 +1507,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         useLoggerStore.getState().notify('Voice connection error', 'error');
       }}
     >
+      <VoiceAudioStarter />
       <SpeakingParticipantsProvider>
         {mainContent}
-        {hasVoiceCredentials && <StartAudio className="voice-start-audio" label="Enable voice audio" />}
       </SpeakingParticipantsProvider>
       {hasVoiceCredentials && <RoomAudioRenderer />}
     </LiveKitRoom>

@@ -48,43 +48,59 @@ export function handleInsertShape(
     setTransformBox,
     setSelectionRotation,
   } = getBoard();
-  if (!socket) return false;
 
   let cx = centerX;
   let cy = centerY;
   if (cx === undefined || cy === undefined) {
-    if (!canvas) return false;
-    const rect = canvas.getBoundingClientRect();
-    // viewportToCanvas expects coordinates local to the canvas element. Using
-    // the page-level rect offsets here double-counts the board's position and
-    // places inserted shapes toward the top-right of the canvas.
-    const center = viewportToCanvas({ x: rect.width / 2, y: rect.height / 2 }, panOffset, zoom);
+    const width = canvas?.getBoundingClientRect().width || window.innerWidth;
+    const height = canvas?.getBoundingClientRect().height || window.innerHeight;
+    const center = viewportToCanvas({ x: width / 2, y: height / 2 }, panOffset, zoom);
     cx = center.x;
     cy = center.y;
   }
 
+  const userId = socket?.id || 'local';
   const newStrokes = generateShapeStrokes(
     shape,
     { x: cx, y: cy },
     {
-      id: `${socket.id}-${Date.now()}`,
-      userId: socket.id || 'local',
+      id: `${userId}-${Date.now()}`,
+      userId,
       color: activeColor,
       size: brushSize,
       intensity: brushIntensity,
     }
   );
 
-  const updated = [...strokes, ...newStrokes];
+  if (newStrokes.length === 0) return false;
+
+  // Center the bounding box of newStrokes at the target (cx, cy)
+  const box = getCombinedBoundingBox(newStrokes);
+  let finalStrokes = newStrokes;
+  if (box) {
+    const boxCenter = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
+    const dx = cx - boxCenter.x;
+    const dy = cy - boxCenter.y;
+    if (dx !== 0 || dy !== 0) {
+      finalStrokes = newStrokes.map((s) => ({
+        ...s,
+        points: s.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+      }));
+    }
+  }
+
+  const updated = [...strokes, ...finalStrokes];
   setStrokes(updated);
   setShowInsertShapes(false);
 
-  const newIds = newStrokes.map((s) => s.id);
+  const newIds = finalStrokes.map((s) => s.id);
   setSelectedStrokeIds(newIds);
-  setTransformBox(getCombinedBoundingBox(newStrokes));
+  setTransformBox(getCombinedBoundingBox(finalStrokes));
   setSelectionRotation(0);
 
-  socket.emit('undo-stroke', { roomId, strokes: updated });
+  if (socket) {
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }
   return true;
 }
 

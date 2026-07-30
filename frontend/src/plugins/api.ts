@@ -9,9 +9,9 @@ import type { Stroke } from '@/types';
 
 function getViewportCenter() {
   const { canvas, panOffset, zoom } = getBoard();
-  if (!canvas) return null;
-  const rect = canvas.getBoundingClientRect();
-  return viewportToCanvas({ x: rect.width / 2, y: rect.height / 2 }, panOffset, zoom);
+  const width = canvas?.getBoundingClientRect().width || window.innerWidth;
+  const height = canvas?.getBoundingClientRect().height || window.innerHeight;
+  return viewportToCanvas({ x: width / 2, y: height / 2 }, panOffset, zoom);
 }
 
 function centerStrokesInViewport(strokes: Stroke[]): Stroke[] {
@@ -47,10 +47,12 @@ function insertStrokes(strokes: Stroke[], options: InsertStrokeOptions = {}): bo
     setShowInsertShapes,
   } = getBoard();
 
-  if (!socket || strokes.length === 0) return false;
+  if (strokes.length === 0) return false;
 
-  const positionedStrokes = options.centerInViewport ? centerStrokesInViewport(strokes) : strokes;
-  const groupId = options.group ? `${socket.id ?? 'local'}-plugin-${Date.now()}` : undefined;
+  const shouldCenter = options.centerInViewport ?? true;
+  const positionedStrokes = shouldCenter ? centerStrokesInViewport(strokes) : strokes;
+  const userId = socket?.id ?? 'local';
+  const groupId = options.group ? `${userId}-plugin-${Date.now()}` : undefined;
   const preparedStrokes = positionedStrokes.map((stroke) => ({
     ...(groupId ? nestStrokeGroup(stroke, groupId) : stroke),
     pluginId: options.pluginId ?? stroke.pluginId,
@@ -70,7 +72,9 @@ function insertStrokes(strokes: Stroke[], options: InsertStrokeOptions = {}): bo
     setShowInsertShapes(false);
   }
 
-  socket.emit('undo-stroke', { roomId, strokes: updated });
+  if (socket) {
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }
   return true;
 }
 

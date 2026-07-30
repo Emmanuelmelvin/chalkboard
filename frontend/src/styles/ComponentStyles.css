@@ -1023,6 +1023,20 @@
 
 .board-exit-button {
   height: fit-content;
+  touch-action: manipulation;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 768px) {
+  .board-exit-button {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    position: relative;
+  }
 }
 
 .zoom-control-button {

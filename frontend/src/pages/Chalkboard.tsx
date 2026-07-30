@@ -1161,6 +1161,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               {!canEdit && (
                 <div className="board-readonly-badge">Viewer · read only</div>
               )}
+              <Card className="share-panel">
+                <span className="room-code-badge">{roomId.toUpperCase()}</span>
+                <Button variant="icon" onClick={handleCopyLink} title="Copy Invite Link">
+                  {isCopied ? <Check size={14} className="copy-success-icon" /> : <Copy size={14} />}
+                </Button>
+              </Card>
             </div>
             <div className="board-header-actions">
               <div className="participation-actions">
@@ -1212,6 +1218,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   {voiceConnected ? <Phone size={14} /> : <PhoneOff size={14} />}
                 </button>
               )}
+              <Button
+                variant="icon"
+                className="hud-panel fullscreen-toggle"
+                onClick={() => { void toggleFullscreen(); }}
+                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              >
+                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </Button>
               <div className="room-details-menu" ref={roomDetailsRef}>
                 <button
                   type="button"
@@ -1346,21 +1361,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   </div>
                 )}
               </div>
-              <Card className="share-panel">
-                <span className="room-code-badge">{roomId.toUpperCase()}</span>
-                <Button variant="icon" onClick={handleCopyLink} title="Copy Invite Link">
-                  {isCopied ? <Check size={14} className="copy-success-icon" /> : <Copy size={14} />}
-                </Button>
-              </Card>
-              <Button
-                variant="icon"
-                className="hud-panel fullscreen-toggle"
-                onClick={() => { void toggleFullscreen(); }}
-                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              >
-                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              </Button>
               <Button variant="primary" className="hud-panel board-exit-button" onClick={onLeaveRoom}>Exit</Button>
             </div>
           </div>

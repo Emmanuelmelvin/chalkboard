@@ -72,8 +72,6 @@ import {
   useMaybeRoomContext,
 } from '@livekit/components-react';
 import { getVoiceToken } from '@/api/rooms';
-
-
 import NotesLayer from '@/plugins/builtin/notes/NotesLayer';
 import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
 import { NOTES_PLUGIN_ID } from '@/plugins/builtin/notes';
@@ -140,7 +138,7 @@ function VoiceAudioStarter() {
     if (!room) return;
     const unlockAudio = () => {
       if (room && !room.canPlaybackAudio) {
-        void room.startAudio().catch(() => {});
+        void room.startAudio().catch(() => { });
       }
     };
 
@@ -232,7 +230,7 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
 
   const toggleMute = () => {
     if (room && !room.canPlaybackAudio) {
-      void room.startAudio().catch(() => {});
+      void room.startAudio().catch(() => { });
     }
     if (localParticipant) {
       void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled).catch(() => {

@@ -402,20 +402,29 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [raisedHands, setRaisedHands] = useState<RaisedHand[]>([]);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [activeReactions, setActiveReactions] = useState<ActiveReaction[]>([]);
+  const voiceSwappingRef = useRef(false);
 
   useEffect(() => {
     if (!socket) return;
     const handleVoiceInvited = (data: { roomId: string }) => {
       if (data.roomId !== roomId) return;
       useLoggerStore.getState().notify('You have been added to voice. Unmute your microphone when you are ready.', 'success');
+      // Clear existing token to force LiveKit to disconnect before
+      // reconnecting with the new (speaker-enabled) token.
+      voiceSwappingRef.current = true;
+      setVoiceToken('');
+      setVoiceUrl('');
       const connectVoice = async () => {
         try {
           const res = await getVoiceToken(roomId);
           if (res.token && res.url) {
             setVoiceToken(res.token);
             setVoiceUrl(res.url);
+          } else {
+            voiceSwappingRef.current = false;
           }
         } catch {
+          voiceSwappingRef.current = false;
           useLoggerStore.getState().notify('Failed to join voice', 'error');
         }
       };
@@ -425,14 +434,22 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const handleVoiceRemoved = (data: { roomId: string }) => {
       if (data.roomId !== roomId) return;
       useLoggerStore.getState().notify('Speaking access was removed. You can still hear the room.', 'info');
+      // Clear existing token to force LiveKit to disconnect before
+      // reconnecting with the new (listener-only) token.
+      voiceSwappingRef.current = true;
+      setVoiceToken('');
+      setVoiceUrl('');
       const refreshVoice = async () => {
         try {
           const res = await getVoiceToken(roomId);
           if (res.token && res.url) {
             setVoiceToken(res.token);
             setVoiceUrl(res.url);
+          } else {
+            voiceSwappingRef.current = false;
           }
         } catch {
+          voiceSwappingRef.current = false;
           useLoggerStore.getState().notify('Voice access could not be refreshed', 'error');
         }
       };
@@ -610,7 +627,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const room = roomQuery.data?.room;
 
   useEffect(() => {
-    if (!room?.voiceEnabled || !voiceListening || voiceToken) return;
+    if (!room?.voiceEnabled || !voiceListening || voiceToken || voiceSwappingRef.current) return;
     let cancelled = false;
     const connectVoiceForListening = async () => {
       try {
@@ -1436,39 +1453,39 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     </>
   );
 
-  if (voiceToken && voiceUrl) {
-    return (
-      <LiveKitRoom
-        video={false}
-        // Join with playback enabled, but request the microphone only when the
-        // user explicitly presses Unmute. This also keeps viewer tokens
-        // (which intentionally cannot publish) from failing on join.
-        audio={false}
-        token={voiceToken}
-        serverUrl={voiceUrl}
-        connect={true}
-        onConnected={() => {
-          if (effectiveRole === 'owner') socket.emit('voice:owner-connection', { roomId, connected: true });
-        }}
-        onDisconnected={() => {
-          if (effectiveRole === 'owner') socket.emit('voice:owner-connection', { roomId, connected: false });
-          setVoiceToken('');
-          setVoiceUrl('');
-        }}
-        onError={() => {
-          useLoggerStore.getState().notify('Voice connection error', 'error');
-        }}
-      >
-        <SpeakingParticipantsProvider>
-          {mainContent}
-          <StartAudio className="voice-start-audio" label="Enable voice audio" />
-        </SpeakingParticipantsProvider>
-        <RoomAudioRenderer />
-      </LiveKitRoom>
-    );
-  }
+  const hasVoiceCredentials = Boolean(voiceToken && voiceUrl);
 
-  return mainContent;
+  return (
+    <LiveKitRoom
+      video={false}
+      // Join with playback enabled, but request the microphone only when the
+      // user explicitly presses Unmute. This also keeps viewer tokens
+      // (which intentionally cannot publish) from failing on join.
+      audio={false}
+      token={voiceToken || undefined}
+      serverUrl={voiceUrl || undefined}
+      connect={hasVoiceCredentials}
+      onConnected={() => {
+        voiceSwappingRef.current = false;
+        if (effectiveRole === 'owner') socket.emit('voice:owner-connection', { roomId, connected: true });
+      }}
+      onDisconnected={() => {
+        if (voiceSwappingRef.current) return;
+        if (effectiveRole === 'owner') socket.emit('voice:owner-connection', { roomId, connected: false });
+        setVoiceToken('');
+        setVoiceUrl('');
+      }}
+      onError={() => {
+        useLoggerStore.getState().notify('Voice connection error', 'error');
+      }}
+    >
+      <SpeakingParticipantsProvider>
+        {mainContent}
+        {hasVoiceCredentials && <StartAudio className="voice-start-audio" label="Enable voice audio" />}
+      </SpeakingParticipantsProvider>
+      {hasVoiceCredentials && <RoomAudioRenderer />}
+    </LiveKitRoom>
+  );
 };
 
 export default Chalkboard;

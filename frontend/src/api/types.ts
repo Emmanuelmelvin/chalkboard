@@ -1,5 +1,6 @@
-import type { PlanId } from '@/constants/plans';
+import type { PlanId, PlanLimits } from '@/constants/plans';
 import type { RoomTheme } from '@/constants/roomThemes';
+
 
 export interface ApiErrorResponse {
   error?: string;
@@ -39,7 +40,36 @@ export interface LogoutResponse {
   ok: true;
 }
 
+export type SubscriptionStatus =
+  | 'none'
+  | 'trialing'
+  | 'active'
+  | 'past_due'
+  | 'unpaid'
+  | 'canceled'
+  | 'paused';
+
+/**
+ * The authoritative view of what the signed-in user may do. Prefer this over
+ * `constants/plans.ts` anywhere that gates UI: the constants render the pricing
+ * page, this reflects the subscription the backend actually resolved.
+ */
+export interface BillingSummary {
+  plan: PlanId;
+  status: SubscriptionStatus;
+  limits: PlanLimits;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  usage: {
+    activeRooms: number;
+    voiceMinutesUsed: number;
+  };
+  /** False when no Bachs credentials are configured; hide the upgrade path. */
+  billingEnabled: boolean;
+}
+
 export type RoomAccessMode = 'open' | 'approval_required' | 'password_protected';
+
 export type RoomRole = 'owner' | 'instructor' | 'viewer';
 
 export interface RoomMember {

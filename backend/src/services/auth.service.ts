@@ -4,9 +4,11 @@ import { eq } from 'drizzle-orm';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { db } from '@/db/client';
 import { users } from '@/db/schema';
+import { getEntitlements, type PlanId } from '@/services/entitlements.service';
 import { logger } from '@/utils/logger';
 import { env } from '@/config/env';
 import { APIError } from '@/utils/error';
+
 
 const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 export const AUTH_SESSION_COOKIE = 'chalkboard_session';
@@ -19,17 +21,30 @@ export type PublicUser = {
   displayName: string;
   avatarUrl: string | null;
   platformRole: 'user' | 'admin' | 'super_admin';
+  /**
+   * Effective subscription tier. Display-only on the client: every gated
+   * request re-resolves entitlements server-side rather than trusting this.
+   */
+  plan: PlanId;
 };
 
-export function toPublicUser(user): PublicUser {
+/**
+ * Shape a user row for the client. Async because the plan is resolved from the
+ * subscription rather than stored on the user, so a status change takes effect
+ * without touching the users table.
+ */
+export async function toPublicUser(user): Promise<PublicUser> {
+  const { plan } = await getEntitlements(user.id);
   return {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl ?? null,
     platformRole: user.platformRole,
+    plan,
   };
 }
+
 
 export async function verifyGoogleIdToken(idToken) {
   const ticket = await googleClient.verifyIdToken({ idToken, audience: env.GOOGLE_CLIENT_ID });

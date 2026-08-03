@@ -1,8 +1,8 @@
 import { Queue, Worker } from 'bullmq';
 import { env, logBootMode } from '@/config/env';
-import { closeInactiveRooms } from '@/services/cleanup';
+import { closeInactiveRooms } from '@/services/cleanup.service';
 import { sql } from '@/db/client';
-import { closeRedis, initRedis } from '@/services/roomState';
+import { closeRedis, initRedis } from '@/services/roomState.service';
 import { logger } from '@/utils/logger';
 import { captureException, initMonitoring } from '@/utils/monitoring';
 

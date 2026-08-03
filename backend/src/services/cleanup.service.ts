@@ -2,7 +2,7 @@ import { and, eq, lt } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { rooms } from '@/db/schema';
 import { env } from '@/config/env';
-import { deleteRoomState } from '@/services/realtimeRooms';
+import { deleteRoomState } from '@/services/realtimeRooms.service';
 import { logger } from '@/utils/logger';
 
 /**

@@ -1,5 +1,5 @@
-import { createPluginForUser, createPluginVersionForUser, getPluginDetail, getPublishedPluginDetail, listPluginsForAdmin, listPluginsForAuthor, listPublishedPlugins, publishPlugin, removePluginFromRegistry, reviewPlugin, submitPluginForReview } from '@/services/plugins';
-import { createPluginSchema, createPluginVersionSchema, pluginReviewSchema } from '@/validators/pluginValidators';
+import { createPluginForUser, createPluginVersionForUser, getPluginDetail, getPublishedPluginDetail, listPluginsForAdmin, listPluginsForAuthor, listPublishedPlugins, publishPlugin, removePluginFromRegistry, reviewPlugin, submitPluginForReview } from '@/services/plugins.service';
+import { createPluginSchema, createPluginVersionSchema, pluginReviewSchema } from '@/validators/plugin.validator';
 import { APIError } from '@/utils/error';
 import type { Context } from 'hono';
 import type { users } from '@/db/schema';

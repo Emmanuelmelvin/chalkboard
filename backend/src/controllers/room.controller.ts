@@ -1,6 +1,6 @@
-import { approveJoinRequest, assertRoomJoinAllowed, createRoom, createRoomVoiceToken, deleteRoomForUser, denyJoinRequest, getRoomWithMembers, listJoinRequests, listRoomsForUser, resetRoomPasswordForOwner, updateRoomMemberRole } from '@/services/rooms';
-import { notifyRoomManagers } from '@/services/realtimeRooms';
-import { createRoomSchema, joinRoomSchema, memberRoleSchema, roomPasswordSchema } from '@/validators/roomValidators';
+import { approveJoinRequest, assertRoomJoinAllowed, createRoom, createRoomVoiceToken, deleteRoomForUser, denyJoinRequest, getRoomWithMembers, listJoinRequests, listRoomsForUser, resetRoomPasswordForOwner, updateRoomMemberRole } from '@/services/rooms.service';
+import { notifyRoomManagers } from '@/services/realtimeRooms.service';
+import { createRoomSchema, joinRoomSchema, memberRoleSchema, roomPasswordSchema } from '@/validators/room.validator';
 import { APIError } from '@/utils/error';
 
 export async function createRoomHandler(c: any) {

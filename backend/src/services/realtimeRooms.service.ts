@@ -1,5 +1,5 @@
-import { redis } from '@/services/roomState';
-import { SOCKET_LIMITS } from '@/validators/socketValidators';
+import { redis } from '@/services/roomState.service';
+import { SOCKET_LIMITS } from '@/validators/socket.validator';
 
 const histories = new Map<string, any[]>();
 const links = new Map<string, any[]>();

@@ -1,4 +1,4 @@
-import { authenticateRequest } from '@/services/auth';
+import { authenticateRequest } from '@/services/auth.service';
 import { logger } from '@/utils/logger';
 import { APIError } from '@/utils/error';
 import type { Context } from 'hono';

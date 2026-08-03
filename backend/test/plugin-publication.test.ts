@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, sql } from '@/db/client';
 import { pluginVersions, plugins, users } from '@/db/schema';
-import { getPluginDetail, publishPlugin } from '@/services/plugins';
+import { getPluginDetail, publishPlugin } from '@/services/plugins.service';
 
 type Fixture = {
   userIds: string[];

@@ -1,5 +1,5 @@
 import { env } from '@/config/env';
-import { checkRateLimit, getRateLimitRetryAfterMs } from '@/services/rateLimiter';
+import { checkRateLimit, getRateLimitRetryAfterMs } from '@/services/rateLimiter.service';
 import { logger } from '@/utils/logger';
 import type { Context } from 'hono';
 

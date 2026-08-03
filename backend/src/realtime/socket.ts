@@ -1,8 +1,8 @@
 import { Server } from 'socket.io';
 import { randomUUID } from 'node:crypto';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { redis, setRaisedHand, getRaisedHands, isVoiceOwnerConnected, setVoiceOwnerConnected, setVoicePublisher } from '@/services/roomState';
-import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, closeRoomForOwner, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms';
+import { redis, setRaisedHand, getRaisedHands, isVoiceOwnerConnected, setVoiceOwnerConnected, setVoicePublisher } from '@/services/roomState.service';
+import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, closeRoomForOwner, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms.service';
 import {
   appendStroke,
   appendChatMessage,
@@ -20,11 +20,11 @@ import {
   removePresenceNow,
   setPresenceServer,
   notifyRoomManagers,
-} from '@/services/realtimeRooms';
+} from '@/services/realtimeRooms.service';
 import { logger } from '@/utils/logger';
 import { env, isAllowedCorsOrigin } from '@/config/env';
-import { checkRateLimit } from '@/services/rateLimiter';
-import { authenticateSocketSession } from '@/services/auth';
+import { checkRateLimit } from '@/services/rateLimiter.service';
+import { authenticateSocketSession } from '@/services/auth.service';
 import {
   SOCKET_LIMITS,
   clearBoardSchema,
@@ -46,7 +46,7 @@ import {
   voiceInviteSchema,
   voiceOwnerConnectionSchema,
   voiceRemoveSchema,
-} from '@/validators/socketValidators';
+} from '@/validators/socket.validator';
 
 type SocketAckResponse = {
   ok: boolean;

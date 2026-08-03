@@ -13,8 +13,13 @@ export const apiKeys = {
     catalogue: ['plugins', 'catalogue'] as const,
     catalogueDetail: (pluginId: string) => ['plugins', 'catalogue', pluginId] as const,
   },
+  billing: {
+    summary: ['billing', 'summary'] as const,
+    checkout: (checkoutId: string) => ['billing', 'checkout', checkoutId] as const,
+  },
   admin: {
     session: ['admin', 'session'] as const,
+
     plugins: (status?: string) => ['admin', 'plugins', status || 'all'] as const,
     admins: ['admin', 'admins'] as const,
   },

@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
 import { db, sql } from '@/db/client';
 import { joinRequests, roomMembers, rooms, users } from '@/db/schema';
-import { approveJoinRequest, assertRoomJoinAllowed, denyJoinRequest } from '@/services/rooms';
-import { createRoomSchema } from '@/validators/roomValidators';
+import { approveJoinRequest, assertRoomJoinAllowed, denyJoinRequest } from '@/services/rooms.service';
+import { createRoomSchema } from '@/validators/room.validator';
 
 type Fixture = {
   userIds: string[];

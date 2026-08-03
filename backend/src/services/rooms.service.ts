@@ -3,10 +3,10 @@ import { randomBytes } from 'node:crypto';
 import { and, count, desc, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { joinRequests, roomBans, roomMembers, rooms, users } from '@/db/schema';
-import { createVoiceToken } from '@/services/livekit';
-import { deleteRoomState, getLiveRoomUserIds } from '@/services/realtimeRooms';
-import { isVoicePublisher } from '@/services/roomState';
-import { decryptRoomPassword, encryptRoomPassword } from '@/services/roomPasswords';
+import { createVoiceToken } from '@/services/livekit.service';
+import { deleteRoomState, getLiveRoomUserIds } from '@/services/realtimeRooms.service';
+import { isVoicePublisher } from '@/services/roomState.service';
+import { decryptRoomPassword, encryptRoomPassword } from '@/services/roomPasswords.service';
 import { logger } from '@/utils/logger';
 
 export type RoomRole = 'owner' | 'instructor' | 'viewer';

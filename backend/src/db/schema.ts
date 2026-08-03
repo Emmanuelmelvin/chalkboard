@@ -1,4 +1,17 @@
-import { boolean, date, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  date,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid
+} from 'drizzle-orm/pg-core';
 
 
 export const roomAccessMode = pgEnum('room_access_mode', ['open', 'approval_required', 'password_protected']);
@@ -35,7 +48,6 @@ export const users = pgTable('users', {
 });
 
 export const rooms = pgTable('rooms', {
-
   id: uuid('id').defaultRandom().primaryKey(),
   slug: text('slug').notNull().unique(),
   title: text('title').notNull(),

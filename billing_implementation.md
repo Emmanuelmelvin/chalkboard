@@ -3,10 +3,18 @@
 Wiring the three subscription tiers (Free, Pro, Team) to real money using
 [Bachs](https://docs.bachs.io) for checkout, subscriptions, and the customer portal.
 
-Nothing in this document is implemented yet. What exists today is the presentation
-layer: `frontend/src/constants/plans.ts`, `frontend/src/pages/Plans.tsx`, the
-`/plans` route, and a `plan` field already declared on `UserProfile` in
-`frontend/src/api/types.ts` that the backend does not yet return.
+Progress is tracked in §15, where each of the five tasks is broken into five
+sub-tasks. **Task 1 is complete.** The billing environment block, the plan
+enums, the six billing tables, migration `0012_billing.sql`,
+`backend/src/services/entitlements.ts`, `plan` on the public user, and
+`GET /api/billing/summary` all exist. Nothing is gated and no money moves yet:
+every user resolves to Free and the app behaves exactly as it did before.
+
+The presentation layer that predates all of it is
+`frontend/src/constants/plans.ts`, `frontend/src/pages/Plans.tsx`, the `/plans`
+route, and the `plan` field on `UserProfile` in `frontend/src/api/types.ts`,
+which the backend now actually returns.
+
 
 ---
 
@@ -113,9 +121,14 @@ Append to `envSchema`:
   BACHS_PRODUCT_TEAM_ANNUAL: z.string().default(''),
   // Absolute, public origin used to build checkout success and cancel URLs.
   APP_PUBLIC_URL: z.string().url().default('http://localhost:5173'),
+  CHECKOUT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  CHECKOUT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+  // Cap applied when the reconciliation pass closes an abandoned voice session.
+  VOICE_SESSION_MAX_SECONDS: z.coerce.number().int().positive().default(14400),
 ```
 
 Derive a single flag so callers do not each re-check three variables:
+
 
 ```ts
 export const billingEnabled = Boolean(env.BACHS_API_KEY && env.BACHS_WEBHOOK_SECRET);
@@ -182,8 +195,11 @@ export const checkoutSessions = pgTable('checkout_sessions', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   planId: planId('plan_id').notNull(),
   interval: billingInterval('interval').notNull(),
-  bachsCheckoutId: text('bachs_checkout_id').notNull().unique(),
+  // Nullable: the row is inserted before Bachs is called, so the checkout ID
+  // only arrives on the follow-up update. `reference` is the stable key.
+  bachsCheckoutId: text('bachs_checkout_id').unique(),
   reference: text('reference').notNull().unique(),
+
   status: checkoutStatus('status').default('open').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
@@ -737,22 +753,111 @@ portal cancellation, and a replayed webhook from the developer portal.
 
 ---
 
-## 15. Suggested order of work
+## 15. Order of work
 
-1. **Schema and entitlements.** Migration, `entitlements.ts`, `plan` on
-   `toPublicUser`, `GET /billing/summary`. Nothing is gated yet and no money
-   moves. Everyone is Free and the app behaves exactly as it does today.
-2. **Enforcement.** Room count, attendee cap, plan-aware retention, the 402
-   codes, and the frontend upgrade prompts. Free limits become real. Ship this
-   before charging anyone, so the paid tier has something to unlock.
-3. **Checkout.** Bachs client, `startCheckout`, webhooks, the billing tab, and
-   `/billing/return`. Sandbox first, then the key swap.
-4. **Portal and voice metering.** Self-serve plan changes and cancellation, plus
-   the voice allowance.
-5. **Developer pool.** `plugin_usage_daily` accrual, the monthly distribution job,
-   balances, and payouts. Until this ships, keep the revenue-share copy on
-   `/plans` written as an intention rather than a live program.
+Five tasks, each split into five sub-tasks. Every sub-task is meant to be
+independently reviewable and to leave the app in a shippable state. Tasks 1 and 2
+are worth landing on their own even if checkout slips: they are what makes the
+Free tier a defined product rather than an unmetered one, and they carry no
+payment risk.
 
-Steps 1 and 2 are worth landing on their own even if checkout slips. They are
-what makes the Free tier a defined product rather than an unmetered one, and they
-carry no payment risk.
+### Task 1 — Schema and entitlements ✅ Done
+
+No money moves and nothing is gated. Everyone resolves to Free and the app
+behaves exactly as it did before.
+
+- [x] **1.1 Environment.** The billing block in `envSchema`, the derived
+  `billingEnabled` flag, and `billing: 'bachs' | 'disabled'` in the `logBootMode`
+  payload. Neither secret is ever logged or returned.
+- [x] **1.2 Schema and migration.** The four enums, `users.bachsCustomerId`, the
+  six billing tables, and `0012_billing.sql` generated with `npm run db:generate`.
+  Additive and safe against live data; no backfill.
+- [x] **1.3 `entitlements.ts`.** The authoritative limit table, `getEntitlements`
+  with the `past_due`/`trialing` keep-access rule, the 60s Redis-cached variant
+  for socket paths, and `invalidateEntitlements`.
+- [x] **1.4 `plan` on the public user.** `toPublicUser` resolves the effective
+  plan, so `GET /auth/me` and the Google sign-in response satisfy the `plan` field
+  `UserProfile` already declares.
+- [x] **1.5 `GET /api/billing/summary`.** The billing controller and router mount
+  behind `requireAuth`, returning plan, status, limits, period end, live usage,
+  and `billingEnabled`. Plus the constants-parity test.
+
+### Task 2 — Enforcement
+
+Free limits become real. Ship this before charging anyone, so the paid tier has
+something to unlock.
+
+- [ ] **2.1 Room count.** Enforce `activeRooms` inside the `createRoom`
+  transaction and return `room_limit_reached` (402). Counting inside the
+  transaction is what stops two parallel creates from both passing.
+- [ ] **2.2 Attendee cap.** In `joinRoomInTransaction`, resolve the *owner's*
+  plan against the already-locked room row and cap at
+  `min(room.maxAttendees ?? Infinity, limits.attendeesPerRoom)`, reusing
+  `room_full`.
+- [ ] **2.3 Plan-aware retention.** Replace the single `ROOM_INACTIVITY_MS` cutoff
+  in `closeInactiveRooms` with the owner-plan join, skipping rooms whose plan has
+  `retentionDays === UNLIMITED`.
+- [ ] **2.4 Capability gates.** `publishPlugins` on `submitMyPluginHandler`,
+  `proPlugins` on plugin install/enable, and `boardExport` / `customBranding` on
+  their handlers, all returning `plan_required` (402).
+- [ ] **2.5 Frontend prompts.** The `useEntitlements` hook, the single 402
+  interceptor in `api/client.ts`, and disabled-with-a-reason controls on the gated
+  surfaces. Plus the enforcement and retention tests from §14.
+
+### Task 3 — Checkout
+
+Sandbox first, then the key swap.
+
+- [ ] **3.1 Bachs client.** `services/bachs.ts`: bearer auth, `Idempotency-Key`
+  on every POST, flat error body mapped to `APIError` carrying `error_code`, one
+  retry on 429/500/503, and a 10s `AbortSignal.timeout`.
+- [ ] **3.2 `startCheckout`.** The plan/interval guards, lazy Bachs customer
+  creation persisted before the checkout call, product resolution from env, the
+  pre-inserted `checkout_sessions` row, and the bare `success_url`.
+- [ ] **3.3 Webhook intake.** Raw-body HMAC verification with `timingSafeEqual`
+  and the tolerance window, then the `billing_events` dedupe gate. This is the
+  security boundary, so it lands with the §14 signature tests.
+- [ ] **3.4 Webhook dispatch.** The subscription upsert (created/updated/deleted),
+  the checkout status transitions, cache invalidation, and the deliberate
+  200-on-unresolvable rule. Plus `GET /billing/checkout/:checkoutId` with
+  `provisioned`.
+- [ ] **3.5 Billing tab and return route.** `checkoutRateLimit`, the
+  `frontend/src/api/billing.ts` module, the Dashboard `BillingPanel` pre-checkout
+  screen, and `/billing/return` polling until `provisioned`.
+
+### Task 4 — Portal and voice metering
+
+- [ ] **4.1 Portal session.** `createPortalUrl` plus `POST /billing/portal`,
+  minting a fresh URL per request, never logged, owner only.
+- [ ] **4.2 Cancellation.** `cancelSubscription(userId, atPeriodEnd)` and
+  `POST /billing/cancel`, with `cancel_at_period_end` reflected in the summary so
+  the UI can say when access actually ends.
+- [ ] **4.3 Session capture.** Quota check then a `voice_sessions` insert in
+  `createRoomVoiceToken`, refusing a new token with `voice_quota_exhausted` (402)
+  without cutting off live calls.
+- [ ] **4.4 Usage accrual.** On disconnect or voice-leave, close the session and
+  upsert `voice_usage` for the owner's billing month, which comes from
+  `currentPeriodStart` for paid users and the calendar month for Free.
+- [ ] **4.5 Reconciliation.** A BullMQ pass that closes sessions left open past a
+  few hours, capped at `VOICE_SESSION_MAX_SECONDS`, so a closed laptop lid cannot
+  leak an open row forever.
+
+### Task 5 — Developer pool
+
+Until this ships, the revenue-share copy on `/plans` stays worded as an intention
+rather than a live program.
+
+- [ ] **5.1 Accrual.** Record `plugin_usage_daily` from the plugin host, one row
+  per plugin per paying user per UTC day, relying on the unique index to make the
+  count un-inflatable.
+- [ ] **5.2 Revenue ledger.** Persist `invoice.paid` amounts as the pool base,
+  decimal strings throughout, so a month's distributable total is derived from
+  money actually collected.
+- [ ] **5.3 Distribution job.** The monthly split of `developerPoolRate` across
+  measured usage, written idempotently so a re-run cannot pay twice.
+- [ ] **5.4 Balances.** Developer-facing accrued and paid balances, plus the
+  `developerPayoutThreshold` gate before anything is released.
+- [ ] **5.5 Payouts and copy.** The payout path itself, then rewrite the `/plans`
+  revenue-share copy from intention to live program.
+
+

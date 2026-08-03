@@ -12,6 +12,7 @@ import { attachSocket } from '@/realtime/socket';
 import { errorHandler } from '@/middlewares/errorHandler';
 import { requestLogger } from '@/middlewares/requestLogger';
 import { logger } from '@/utils/logger';
+import { initMonitoring } from '@/utils/monitoring';
 import { env, isAllowedCorsOrigin, logBootMode } from '@/config/env';
 
 type DependencyStatus = 'up' | 'down';
@@ -59,6 +60,7 @@ function getFrontendRoot() {
 }
 
 export async function startServer() {
+  initMonitoring();
   logBootMode();
   const app = new Hono();
   app.use('*', requestLogger);

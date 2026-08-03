@@ -1,5 +1,6 @@
 import { HTTPException } from 'hono/http-exception';
 import { logger } from '@/utils/logger';
+import { captureException } from '@/utils/monitoring';
 import { APIError } from '@/utils/error';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
@@ -23,5 +24,6 @@ export function errorHandler(error: Error, c: Context) {
   }
 
   logger.error(`Unhandled request error: ${error.message}`, { stack: error.stack, path: c.req.path });
+  captureException(error, { path: c.req.path, method: c.req.method });
   return c.json({ error: 'internal_server_error' }, 500);
 }

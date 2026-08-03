@@ -4,12 +4,14 @@ import { closeInactiveRooms } from '@/services/cleanup';
 import { sql } from '@/db/client';
 import { closeRedis, initRedis } from '@/services/roomState';
 import { logger } from '@/utils/logger';
+import { captureException, initMonitoring } from '@/utils/monitoring';
 
 const connection = { url: env.REDIS_URL };
 const queueName = 'chalkboard-background';
 const cleanupJobName = 'room-inactivity-cleanup';
 
 export async function startWorker() {
+  initMonitoring();
   logBootMode();
   await initRedis();
   const queue = new Queue(queueName, { connection });
@@ -29,7 +31,10 @@ export async function startWorker() {
     }, { connection });
 
     worker.on('completed', (job, result) => logger.info('Background job completed', { jobId: job.id, name: job.name, result }));
-    worker.on('failed', (job, error) => logger.error('Background job failed', { jobId: job?.id, name: job?.name, error }));
+    worker.on('failed', (job, error) => {
+      logger.error('Background job failed', { jobId: job?.id, name: job?.name, error });
+      captureException(error, { jobId: job?.id, jobName: job?.name });
+    });
     logger.info('BullMQ worker started', { queueName, cleanupJobName });
 
     let shutdownPromise: Promise<void> | undefined;

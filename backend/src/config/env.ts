@@ -35,6 +35,10 @@ const envSchema = z.object({
   HAND_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(10000),
   ROOM_INACTIVITY_MS: z.coerce.number().int().positive().default(86400000),
   ROOM_CLEANUP_REPEAT_MS: z.coerce.number().int().positive().default(3600000),
+  // Error monitoring. Leave SENTRY_DSN empty to disable reporting entirely.
+  SENTRY_DSN: z.string().url().optional().or(z.literal('')).default(''),
+  SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
+  SENTRY_RELEASE: z.string().default(''),
 });
 
 export const env = envSchema.parse(process.env);
@@ -67,5 +71,10 @@ export function isAllowedCorsOrigin(origin: string) {
 }
 
 export function logBootMode() {
-  logger.info('Backend environment validated', { host: env.HOST, processType: env.PROCESS_TYPE, nodeEnv: env.NODE_ENV });
+  logger.info('Backend environment validated', {
+    host: env.HOST,
+    processType: env.PROCESS_TYPE,
+    nodeEnv: env.NODE_ENV,
+    errorMonitoring: env.SENTRY_DSN ? 'sentry' : 'disabled',
+  });
 }

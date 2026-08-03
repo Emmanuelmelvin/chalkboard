@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.23",
+    "@sentry/react": "^10.24.0",
     "@tanstack/react-query": "^5.101.4",
     "axios": "^1.18.1",
     "livekit-client": "^2.21.0",

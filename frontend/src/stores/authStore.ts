@@ -43,7 +43,9 @@ export const useAuthStore = create<AuthState>((set) => {
         set({ profile: payload.user, status: 'authenticated', error: null });
       } catch {
         if (isCurrentRequest(requestId)) {
-          set({ profile: null, status: 'unauthenticated', error: 'The authentication service is unavailable.' });
+          // A failed /auth/me simply means there is no active session yet, which
+          // is the expected state for a visitor arriving at the sign-in page.
+          set({ profile: null, status: 'unauthenticated', error: null });
         }
       }
     },

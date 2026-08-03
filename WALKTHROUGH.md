@@ -9,58 +9,92 @@
 Chalkboard is a real-time collaborative canvas — think of a physical classroom blackboard, but shared over the internet. Multiple people can draw, annotate, and think together on the same surface at the same time, with live cursors, presence indicators, and synchronized strokes.
 
 The demo GIF in the repository shows the core experience: a shared canvas where strokes appear instantly, tools switch fluidly, and the board feels alive.
+g
+---
+
+## Who It Is For
+
+Chalkboard started as a classroom idea, but the shared-canvas model is not limited to teaching. The room themes (Classroom, Workshop, Brainstorm, Meeting, Planning, Studio) exist precisely because the same board fits very different rooms:
+
+- **Classrooms and tutoring** — a teacher works through a problem while students annotate and raise hands. The Mathematical Set plugin makes maths lessons genuinely practical: Venn diagrams, number lines, coordinate grids, and set symbols in a couple of clicks.
+- **Board and executive meetings** — sketch org structures, decision trees, and quarterly plans live while everyone watches the same surface. Role controls mean the chair can present with viewers in read-only mode, then promote a colleague to instructor when it is their turn to contribute.
+- **Product and design workshops** — user flows, wireframe sketches, and affinity mapping. Saved links let a large board stay navigable by naming and jumping to sections.
+- **Engineering and architecture reviews** — system diagrams, sequence sketches, and incident timelines drawn together instead of one person screen-sharing a static diagram.
+- **Study groups and peer tutoring** — students work problems side by side without needing to be in the same building.
+- **Interviews and technical assessments** — a candidate sketches their thinking on a shared board while the interviewer observes, and the whole session stays visible in one place.
+- **Research and thesis planning** — mind maps, literature relationships, and argument structures built up across sessions since the room persists.
+- **Community and non-profit planning** — event layouts, budgets sketched visually, volunteer assignments.
+
+The pattern that ties these together: any conversation where people need to *point at the same thing* while talking. Chalkboard gives that to a group, with authenticated rooms and permissions so it can be used for real work rather than only casual doodling.
 
 ---
 
+
 ## Running It for Real Collaboration
 
-Because Chalkboard uses **Google Sign-In**, Google's OAuth policy requires a proper domain or a tunneled HTTPS URL — a raw local-network IP address like `192.168.x.x` will be rejected. To share the app with another person (even on the same Wi-Fi), you need a tunneling tool.
+Because Chalkboard uses **Google Sign-In**, Google's OAuth policy requires a proper domain or a tunneled HTTPS URL — a raw local-network IP address like `192.168.x.x` will be rejected, even if the other person is on the same Wi-Fi. So to collaborate with someone, you need a tunnelling tool.
 
-### Option A — ngrok (widely used)
+The good news: you only need to tunnel **one port**. Build the frontend, then run the compiled backend — it serves the app, the API, and the realtime socket all from port `3001`. There is no need to run the Vite dev server or tunnel two ports.
+
+### Step 1 — Build the frontend
 
 ```bash
-# 1. Install ngrok from https://ngrok.com and authenticate once
-ngrok config add-authtoken <your-token>
-
-# 2. Start the backend and frontend normally
-#    (backend on :3001, frontend on :5173)
-
-# 3. Expose the frontend through ngrok
-ngrok http 5173
+cd frontend
+npm run build
 ```
 
-ngrok prints a public HTTPS URL like `https://abc123.ngrok-free.app`. Use that URL as:
-- The address you share with collaborators.
-- An **Authorized JavaScript Origin** in your Google Cloud OAuth client (Google Cloud Console → APIs & Services → Credentials → your Web client → Authorized JavaScript origins).
-- The value of `CORS_ORIGIN` in `backend/.env`.
+This produces `frontend/dist`, which the backend will serve automatically.
 
-Restart the backend after updating `.env`.
+### Step 2 — Build and start the backend
 
-### Option B — Outray (outray.dev, no account needed for quick tests)
+```bash
+cd ../backend
+npm run build
+npm run start
+```
+
+Everything is now available on a single origin:
+
+- `http://localhost:3001/` — the app
+- `http://localhost:3001/admin` — the admin console
+- `http://localhost:3001/api/*` — the API
+- `http://localhost:3001/socket.io` — realtime collaboration
+
+Make sure PostgreSQL and Redis are running before this step, and that migrations have been applied (`npm run db:migrate`).
+
+### Step 3 — Tunnel port 3001
+
+**Option A — ngrok**
+
+```bash
+# Install ngrok from https://ngrok.com and authenticate once
+ngrok config add-authtoken <your-token>
+
+# Expose the backend
+ngrok http 3001
+```
+
+**Option B — Outray (outray.dev)**
 
 ```bash
 # Install the Outray CLI, then:
-outray tunnel --port 5173
+outray tunnel --port 3001
 ```
 
-Outray gives you a public HTTPS URL the same way. Add it to your Google OAuth origins and `CORS_ORIGIN` just like with ngrok.
+Either tool prints a public HTTPS URL such as `https://abc123.ngrok-free.app`.
 
-### Quick-start recap (full local setup assumed complete per README)
+### Step 4 — Tell Google and the backend about the tunnel URL
 
-```bash
-# Terminal 1 — backend
-cd backend && npm run dev
+1. In **Google Cloud Console → APIs & Services → Credentials**, open your OAuth Web client and add the tunnel URL to **Authorized JavaScript origins** (exact origin, no trailing slash).
+2. In `backend/.env`, set `CORS_ORIGIN` to that same tunnel URL.
+3. Set `NODE_ENV=production` for a realistic run.
+4. Restart the backend (`npm run start`) so the new environment values load.
 
-# Terminal 2 — frontend
-cd frontend && npm run dev
+Now share the tunnel URL. Everyone opens it, signs in with Google, and lands on the same dashboard.
 
-# Terminal 3 — tunnel (pick one)
-ngrok http 5173
-# or
-outray tunnel --port 5173
-```
+> Tip: tunnel URLs change every time you restart the tunnel (unless you have a reserved domain). Each time you get a new URL, update both the Google origins and `CORS_ORIGIN`.
 
-Share the tunnel URL. Everyone signs in with Google and lands on the same dashboard.
+
 
 ---
 
@@ -190,7 +224,8 @@ The full and up-to-date list lives in the in-app tooltips and in `frontend/src/h
 
 ## Typical Collaborative Session (Step by Step)
 
-1. **Host** starts the backend and frontend, opens a tunnel, and adds the tunnel URL to Google OAuth origins.
+1. **Host** builds the frontend, starts the compiled backend on port `3001`, opens a tunnel to that port, and adds the tunnel URL to the Google OAuth origins and `CORS_ORIGIN`.
+
 2. **Host** signs in, creates a room (e.g., Classroom theme, Approval-required access), and copies the room link.
 3. **Host** shares the link with participants.
 4. **Participants** open the link, sign in with Google, and request to join. The host approves each request from the room members panel.

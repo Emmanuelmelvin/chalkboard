@@ -614,7 +614,15 @@ Change `PORT` for the backend and update the Vite proxy in `frontend/vite.config
 - [`frontend/README.md`](frontend/README.md) — frontend architecture and board-state design.
 - [`plugin_implementation.md`](plugin_implementation.md) — plugin architecture and implementation history.
 - [`frontend/src/pages/Docs.tsx`](frontend/src/pages/Docs.tsx) — source for the in-app plugin documentation at `/docs`.
+- [`WALKTHROUGH.md`](WALKTHROUGH.md) — narrated feature walkthrough, tunnelling setup for collaborative testing, and a step-by-step product review.
 
 ## License
 
 No license file is currently included in this repository. Treat the project as all rights reserved unless the project owner adds a license or gives separate permission to use, modify, or redistribute it.
+
+---
+
+## A note on the demo video
+
+I apologise that the demo video does not include a voiceover. I was not able to record narration in time for submission. To make up for it, I have written [`WALKTHROUGH.md`](WALKTHROUGH.md), which walks through the same features the video shows, explains how to run the project for real multi-user collaboration, and reviews how to use the product end to end. Thank you for your understanding.
+

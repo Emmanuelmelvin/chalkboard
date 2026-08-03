@@ -1,4 +1,5 @@
-import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, date, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+
 
 export const roomAccessMode = pgEnum('room_access_mode', ['open', 'approval_required', 'password_protected']);
 export const roomTheme = pgEnum('room_theme', ['classroom', 'workshop', 'brainstorm', 'meeting', 'planning', 'studio']);
@@ -10,6 +11,14 @@ export const pluginStatus = pgEnum('plugin_status', ['draft', 'in_review', 'appr
 export const pluginPlan = pgEnum('plugin_plan', ['free', 'pro']);
 export const pluginVersionStatus = pgEnum('plugin_version_status', ['draft', 'in_review', 'approved', 'published', 'rejected']);
 export const pluginReviewDecision = pgEnum('plugin_review_decision', ['approved', 'rejected', 'suspended']);
+export const planId = pgEnum('plan_id', ['free', 'pro', 'team']);
+export const billingInterval = pgEnum('billing_interval', ['month', 'year']);
+// Mirrors Bachs subscription statuses exactly so webhook payloads map 1:1.
+export const subscriptionStatus = pgEnum('subscription_status', [
+  'trialing', 'active', 'past_due', 'unpaid', 'canceled', 'paused',
+]);
+export const checkoutStatus = pgEnum('checkout_status', ['open', 'completed', 'expired', 'cancelled']);
+
 
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -18,11 +27,15 @@ export const users = pgTable('users', {
   displayName: text('display_name').notNull(),
   avatarUrl: text('avatar_url'),
   platformRole: platformRole('platform_role').default('user').notNull(),
+  // Bachs customer ID (cust_...). Created lazily on first checkout and reused
+  // for every later checkout and portal session.
+  bachsCustomerId: text('bachs_customer_id').unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const rooms = pgTable('rooms', {
+
   id: uuid('id').defaultRandom().primaryKey(),
   slug: text('slug').notNull().unique(),
   title: text('title').notNull(),
@@ -143,3 +156,80 @@ export const adminTwoFactor = pgTable('admin_two_factor', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+/** One row per user who has ever had a paid subscription. Written only by webhooks. */
+export const subscriptions = pgTable('subscriptions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  planId: planId('plan_id').notNull(),
+  status: subscriptionStatus('status').notNull(),
+  bachsSubscriptionId: text('bachs_subscription_id').notNull().unique(),
+  bachsProductId: text('bachs_product_id').notNull(),
+  interval: billingInterval('interval').notNull(),
+  // Money is a decimal string end to end and never touches a JS number.
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  currency: text('currency').notNull(),
+  currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false).notNull(),
+  canceledAt: timestamp('canceled_at', { withTimezone: true }),
+  trialEnd: timestamp('trial_end', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({ statusIdx: index('subscriptions_status_idx').on(table.status) }));
+
+/**
+ * Our own record of a checkout we started. Correlates a Bachs checkout back to
+ * the user who began it, and lets the return page report progress without
+ * trusting anything the browser sends.
+ */
+export const checkoutSessions = pgTable('checkout_sessions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  planId: planId('plan_id').notNull(),
+  interval: billingInterval('interval').notNull(),
+  bachsCheckoutId: text('bachs_checkout_id').unique(),
+  reference: text('reference').notNull().unique(),
+  status: checkoutStatus('status').default('open').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (table) => ({ userIdx: index('checkout_sessions_user_idx').on(table.userId) }));
+
+/** Webhook de-duplication. Bachs guarantees at-least-once delivery. */
+export const billingEvents = pgTable('billing_events', {
+  bachsEventId: text('bachs_event_id').primaryKey(),
+  type: text('type').notNull(),
+  payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+  receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Voice minutes consumed per user per billing month. */
+export const voiceUsage = pgTable('voice_usage', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+  seconds: integer('seconds').default(0).notNull(),
+}, (table) => ({ uniq: uniqueIndex('voice_usage_user_period_idx').on(table.userId, table.periodStart) }));
+
+/** Open voice sessions, reconciled into voice_usage when the participant leaves. */
+export const voiceSessions = pgTable('voice_sessions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  roomId: uuid('room_id').notNull().references(() => rooms.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
+  seconds: integer('seconds'),
+}, (table) => ({ openIdx: index('voice_sessions_open_idx').on(table.userId, table.endedAt) }));
+
+/**
+ * Developer pool measure: one row per plugin, per paying user, per UTC day.
+ * The unique index is what makes the count un-inflatable by a plugin that calls
+ * the host in a loop.
+ */
+export const pluginUsageDaily = pgTable('plugin_usage_daily', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  pluginId: uuid('plugin_id').notNull().references(() => plugins.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  day: date('day').notNull(),
+}, (table) => ({ uniq: uniqueIndex('plugin_usage_daily_idx').on(table.pluginId, table.userId, table.day) }));
+

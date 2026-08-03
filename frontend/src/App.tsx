@@ -8,6 +8,7 @@ import Dashboard from '@/pages/Dashboard';
 import Docs from '@/pages/Docs';
 import Guide from '@/pages/Guide';
 import Lobby from '@/pages/Lobby';
+import Plans from '@/pages/Plans';
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
 import { useAuthStore } from '@/stores/authStore';
@@ -99,72 +100,77 @@ function App() {
     <>
       {!isRoomRoute && <ThemeToggle theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />}
       <Switch>
-      {/* Dynamic room route */}
-      <Route path="/room/:roomId">
-        {(params: { roomId: string }) => {
-          const roomId = params.roomId.toLowerCase();
-          return (
-            <RequireAuth>
-              {(user) => (
-                <Chalkboard
-                  roomId={roomId}
-                  userId={user.id}
-                  userName={user.displayName}
-                  socket={socket}
-                  roomPassword={roomPassword}
-                  onLeaveRoom={handleLeaveRoom}
-                />
-              )}
-            </RequireAuth>
-          );
-        }}
-      </Route>
+        {/* Dynamic room route */}
+        <Route path="/room/:roomId">
+          {(params: { roomId: string }) => {
+            const roomId = params.roomId.toLowerCase();
+            return (
+              <RequireAuth>
+                {(user) => (
+                  <Chalkboard
+                    roomId={roomId}
+                    userId={user.id}
+                    userName={user.displayName}
+                    socket={socket}
+                    roomPassword={roomPassword}
+                    onLeaveRoom={handleLeaveRoom}
+                  />
+                )}
+              </RequireAuth>
+            );
+          }}
+        </Route>
 
-      {/* Public authentication route */}
-      <Route path="/login">
-        <Login />
-      </Route>
+        {/* Public authentication route */}
+        <Route path="/login">
+          <Login />
+        </Route>
 
-      {/* Signed-in workspace dashboard */}
-      <Route path="/dashboard">
-        <RequireAuth>
-          {(user) => <Dashboard profile={user} onJoinRoom={handleJoinRoom} />}
-        </RequireAuth>
-      </Route>
-
-      {/* Public plugin documentation */}
-      <Route path="/docs">
-        <Docs />
-      </Route>
-
-      {/* Public end-user guide */}
-      <Route path="/guide">
-        <Guide />
-      </Route>
-
-      {/* Public landing page */}
-      <Route path="/">
-        <Home />
-      </Route>
-
-      {/* Room entry route */}
-      <Route path="/lobby/:roomId">
-        {(params: { roomId: string }) => (
+        {/* Signed-in workspace dashboard */}
+        <Route path="/dashboard">
           <RequireAuth>
-            {(user) => <Lobby initialRoomId={params.roomId} profile={user} onJoinRoom={handleJoinRoom} />}
+            {(user) => <Dashboard profile={user} onJoinRoom={handleJoinRoom} />}
           </RequireAuth>
-        )}
-      </Route>
-      <Route path="/lobby">
-        <RequireAuth>
-          {(user) => <Lobby initialRoomId={getLobbyRoomCode()} profile={user} onJoinRoom={handleJoinRoom} />}
-        </RequireAuth>
-      </Route>
+        </Route>
 
-      {/* Catch-all fallback */}
-      <Route>
-        <Home />
-      </Route>
+        {/* Public plugin documentation */}
+        <Route path="/docs">
+          <Docs />
+        </Route>
+
+        {/* Public end-user guide */}
+        <Route path="/guide">
+          <Guide />
+        </Route>
+
+        {/* Public pricing and developer revenue explainer */}
+        <Route path="/plans">
+          <Plans />
+        </Route>
+
+        {/* Public landing page */}
+        <Route path="/">
+          <Home />
+        </Route>
+
+        {/* Room entry route */}
+        <Route path="/lobby/:roomId">
+          {(params: { roomId: string }) => (
+            <RequireAuth>
+              {(user) => <Lobby initialRoomId={params.roomId} profile={user} onJoinRoom={handleJoinRoom} />}
+            </RequireAuth>
+          )}
+        </Route>
+        <Route path="/lobby">
+          <RequireAuth>
+            {(user) => <Lobby initialRoomId={getLobbyRoomCode()} profile={user} onJoinRoom={handleJoinRoom} />}
+          </RequireAuth>
+        </Route>
+
+        {/* Catch-all fallback */}
+        <Route>
+          <Home />
+        </Route>
       </Switch>
       <LoggerOutlet />
     </>

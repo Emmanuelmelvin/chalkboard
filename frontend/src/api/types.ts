@@ -1,3 +1,4 @@
+import type { PlanId } from '@/constants/plans';
 import type { RoomTheme } from '@/constants/roomThemes';
 
 export interface ApiErrorResponse {
@@ -11,6 +12,11 @@ export interface UserProfile {
   displayName: string;
   avatarUrl: string | null;
   platformRole: 'user' | 'admin' | 'super_admin';
+  /**
+   * Subscription tier. Treated as display-only on the client; the backend
+   * re-checks entitlements on every gated request.
+   */
+  plan: PlanId;
 }
 
 export interface AuthMeResponse {

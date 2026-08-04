@@ -4,7 +4,8 @@ import { getCurrentUser, getGoogleConfig, signInWithGoogle, signOut } from '@/ap
 import { createRoom, deleteRoom, getRoom, joinRoom, listJoinRequests, listRooms, resetRoomPassword, resolveJoinRequest } from '@/api/rooms';
 import { createPlugin, createPluginVersion, getPluginCataloguePlugin, listMyPlugins, listPluginCatalogue, submitPlugin } from '@/api/plugins';
 import { addAdmin, beginAdminTwoFactorSetup, getAdminSession, listAdminPlugins, listAdmins, logoutAdminTwoFactor, publishAdminPlugin, removeAdmin, removeAdminPluginFromRegistry, reviewAdminPlugin, verifyAdminTwoFactor } from '@/api/admin';
-import type { AddAdminRequest, AdminPluginReviewRequest, CreatePluginRequest, CreatePluginVersionRequest, CreateRoomRequest, GoogleSignInRequest, JoinRoomRequest } from '@/api/types';
+import { cancelSubscription, createPortalSession, getCheckoutStatus, startCheckout } from '@/api/billing';
+import type { AddAdminRequest, AdminPluginReviewRequest, CreatePluginRequest, CreatePluginVersionRequest, CreateRoomRequest, GoogleSignInRequest, JoinRoomRequest, StartCheckoutRequest } from '@/api/types';
 
 export function useCurrentUserQuery(enabled = true) {
   return useQuery({ queryKey: apiKeys.auth.me, queryFn: getCurrentUser, enabled });
@@ -139,6 +140,61 @@ export function useSubmitPluginMutation() {
   return useMutation({
     mutationFn: (pluginId: string) => submitPlugin(pluginId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: apiKeys.plugins.mine }),
+  });
+}
+
+/**
+ * Start a checkout. Nothing is invalidated on success: payment has not happened
+ * yet, and the plan only changes once the webhook lands.
+ */
+export function useStartCheckoutMutation() {
+  return useMutation({ mutationFn: (input: StartCheckoutRequest) => startCheckout(input) });
+}
+
+/**
+ * Poll a checkout until the webhook has provisioned it.
+ *
+ * The redirect and the webhook race, and either can arrive first, so the return
+ * page waits on `provisioned` rather than trusting the redirect. Polling stops
+ * as soon as the plan is live or the checkout can no longer complete, and the
+ * billing summary is invalidated so the rest of the app sees the new plan.
+ */
+export function useCheckoutStatusQuery(checkoutId: string | null) {
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: apiKeys.billing.checkout(checkoutId ?? ''),
+    queryFn: async () => {
+      const status = await getCheckoutStatus(checkoutId as string);
+      if (status.provisioned) {
+        queryClient.invalidateQueries({ queryKey: apiKeys.billing.summary });
+        queryClient.invalidateQueries({ queryKey: apiKeys.auth.me });
+      }
+      return status;
+    },
+    enabled: Boolean(checkoutId),
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 2000;
+      // Nothing further will change once the plan is live or the session died.
+      if (data.provisioned || data.status === 'expired' || data.status === 'cancelled') return false;
+      return 2000;
+    },
+    // A 404 here means the checkout is not ours, which a retry cannot fix.
+    retry: 1,
+  });
+}
+
+export function useCreatePortalSessionMutation() {
+  return useMutation({ mutationFn: createPortalSession });
+}
+
+export function useCancelSubscriptionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (atPeriodEnd: boolean) => cancelSubscription(atPeriodEnd),
+    // The cancellation flag is reflected immediately; the authoritative state
+    // still arrives by webhook.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: apiKeys.billing.summary }),
   });
 }
 

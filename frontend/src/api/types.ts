@@ -68,6 +68,35 @@ export interface BillingSummary {
   billingEnabled: boolean;
 }
 
+export type BillingInterval = 'month' | 'year';
+
+export interface StartCheckoutRequest {
+  planId: Exclude<PlanId, 'free'>;
+  interval: BillingInterval;
+}
+
+export interface StartCheckoutResponse {
+  /** Always navigated to directly; the client never builds a Bachs URL itself. */
+  checkoutUrl: string;
+  reference: string;
+}
+
+/**
+ * Polled by the return page. `status` is the payment, `provisioned` is the
+ * entitlement, and they are not the same event: the redirect can arrive before
+ * the webhook that actually grants the plan.
+ */
+export interface CheckoutStatusResponse {
+  status: 'open' | 'completed' | 'expired' | 'cancelled';
+  plan: PlanId;
+  provisioned: boolean;
+}
+
+export interface PortalSessionResponse {
+  /** A credential with a short life. Never persisted or logged. */
+  portalUrl: string;
+}
+
 export type RoomAccessMode = 'open' | 'approval_required' | 'password_protected';
 
 export type RoomRole = 'owner' | 'instructor' | 'viewer';

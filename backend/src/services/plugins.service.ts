@@ -1,6 +1,11 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { pluginReviews, pluginVersions, plugins, users } from '@/db/schema';
+import { 
+  pluginReviews, 
+  pluginVersions, 
+  plugins, 
+  users
+ } from '@/db/schema';
 import { 
   decodeBase64DataUrl, 
   deletePluginAsset, 

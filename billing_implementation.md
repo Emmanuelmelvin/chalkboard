@@ -377,7 +377,7 @@ export async function startCheckout({ user, planId, interval }): Promise<{ check
   product_cart: [{ product_id: productId, quantity: 1 }],
   customer: { customer_id: user.bachsCustomerId },
   reference,
-  success_url: `${env.APP_PUBLIC_URL}/billing/return`,
+  success_url: `${env.APP_PUBLIC_URL}/billing/return/${encodeURIComponent(reference)}`,
   cancel_url: `${env.APP_PUBLIC_URL}/plans?checkout=cancelled`,
   metadata: { chalkboard_user_id: user.id, plan_id: planId, interval },
   expires_in_minutes: 60,
@@ -388,10 +388,13 @@ export async function startCheckout({ user, planId, interval }): Promise<{ check
 
 Two details worth being deliberate about:
 
-- **`success_url` carries no query string.** Bachs appends `?checkout_id=<id>`
-  itself, and a URL that already has a `?` would come back malformed. This is why
-  the return target is a dedicated bare path, `/billing/return`, rather than
-  `/dashboard?tab=billing`.
+- **`success_url` carries our own reference in the path.** Bachs returns the
+  browser to `success_url` verbatim: it appends no `checkout_id`, and no query
+  string of any kind. An identifier we did not put there ourselves simply does
+  not exist on return, so the reference goes in the path and the return target is
+  `/billing/return/:reference` rather than `/dashboard?tab=billing`. The status
+  endpoint accepts either the reference or a Bachs `checkout_id`, since both are
+  unique and both are scoped to the signed-in owner.
 - **`metadata` is a convenience, not a trust boundary.** The authoritative link
   from a Bachs subscription back to a Chalkboard user is the `customer_id` we
   stored on the user, with `reference` as a secondary lookup. Metadata is read
@@ -634,18 +637,24 @@ the `Plans.tsx` links already route unauthenticated visitors through
 
 ### 11.3 The return route
 
-New route in `App.tsx`, matching the bare `success_url`:
+New route in `App.tsx`, matching the `success_url` we handed Bachs:
 
 ```tsx
-{/* Bachs appends ?checkout_id= to this path after a completed checkout. */}
+{/* Bachs returns here verbatim and appends nothing, so the reference we minted
+    at checkout is carried in the path. */}
+<Route path="/billing/return/:reference">
+  {({ reference }) => (
+    <RequireAuth>{() => <BillingReturn reference={decodeURIComponent(reference)} />}</RequireAuth>
+  )}
+</Route>
 <Route path="/billing/return">
-  <RequireAuth>{() => <BillingReturn />}</RequireAuth>
+  <Redirect to="/dashboard?tab=billing" />
 </Route>
 ```
 
 `frontend/src/pages/BillingReturn.tsx`:
 
-1. Read `checkout_id` from `window.location.search`.
+1. Take the checkout `reference` from the route parameter.
 2. Poll `GET /api/billing/checkout/:checkoutId` roughly every 1.5s, up to about
    20 attempts, until `provisioned` is true.
 3. While polling, show a plain "Confirming your payment" state. Say that the
@@ -658,7 +667,7 @@ New route in `App.tsx`, matching the bare `success_url`:
 5. On timeout: do not claim failure. The webhook may simply be late. Show "This
    is taking longer than usual, your payment is safe and the plan will appear
    shortly", with a manual retry and a support pointer.
-6. Missing or unknown `checkout_id`: send them to `/dashboard?tab=billing`.
+6. Missing or unknown reference: send them to `/dashboard?tab=billing`.
 
 The cancel path needs nothing new. `cancel_url` is
 `/plans?checkout=cancelled`, and `Plans.tsx` reads that param to show a low-key
@@ -700,7 +709,7 @@ Plans page (public)
         ┌─────────────────┴──────────────────┐
         ▼                                    ▼
   success_url                          cancel_url
-  /billing/return?checkout_id=chk_…    /plans?checkout=cancelled
+  /billing/return/sub_…                /plans?checkout=cancelled
         │                                    └─ "No charge was made"
         │  poll GET /api/billing/checkout/:id
         │
@@ -824,7 +833,8 @@ Sandbox first, then the key swap.
   a 10s timeout.
 - [x] **3.2 `startCheckout`.** The plan/interval guards, lazy Bachs customer
   creation persisted before the checkout call, product resolution from env, the
-  pre-inserted `checkout_sessions` row, and the bare `success_url`.
+  pre-inserted `checkout_sessions` row, and the `success_url` carrying that
+  row's reference in its path.
 - [x] **3.3 Webhook intake.** Raw-body HMAC verification with `timingSafeEqual`
   and the tolerance window, then the `billing_events` dedupe gate. This is the
   security boundary, so it lands with the §14 signature tests.
@@ -834,7 +844,7 @@ Sandbox first, then the key swap.
   `provisioned`.
 - [x] **3.5 Billing tab and return route.** `checkoutRateLimit`, the
   `frontend/src/api/billing.ts` module, the Dashboard `BillingPanel` pre-checkout
-  screen, and `/billing/return` polling until `provisioned`.
+  screen, and `/billing/return/:reference` polling until `provisioned`.
 
 ### Task 4 — Portal and voice metering
 

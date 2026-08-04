@@ -200,7 +200,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     setError('');
     try {
       await signOutMutation.mutateAsync();
-      setLocation('/login');
+      window.location.href = '/login';
     } catch {
       setSigningOut(false);
       setError('We could not log you out. Please try again.');

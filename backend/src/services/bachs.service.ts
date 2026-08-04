@@ -21,29 +21,52 @@ export interface BachsAmount {
   currency: string;
 }
 
+/**
+ * Bachs keys this resource as `customer_id` everywhere it appears, both as a
+ * top-level response and nested inside subscription and checkout payloads.
+ * There is no `id` field on a customer.
+ */
 export interface BachsCustomer {
-  id: string;
-  email?: string;
-  name?: string;
-}
-
-export interface BachsCheckoutSession {
-  id: string;
-  checkout_url: string;
-  status?: string;
-  reference?: string;
-  customer?: { customer_id?: string; id?: string } | null;
-  subscription_id?: string | null;
+  customer_id: string;
+  email?: string | null;
+  name?: string | null;
+  phone_number?: string | null;
   metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
+/**
+ * `POST /v1/checkout-sessions`. The identifier is `checkout_id`; this resource
+ * carries no `id`. Status is uppercase on the wire.
+ */
+export interface BachsCheckoutSession {
+  checkout_id: string;
+  checkout_url: string;
+  status?: 'OPEN' | 'COMPLETED' | 'EXPIRED' | 'CANCELLED';
+  expires_at?: string;
+  created_at?: string;
+  reference?: string;
+}
+
+/**
+ * `GET /v1/subscriptions/{id}` and the cancel endpoint, which key the resource
+ * as `id` and nest the product. The webhook payload for the same resource keys
+ * it as `subscription_id` and flattens the product to `product_id`, so both
+ * spellings are declared here and `subscriptionIdOf`/`productIdOf` in
+ * `billing.service.ts` read whichever is present.
+ */
 export interface BachsSubscription {
-  id: string;
+  id?: string;
+  subscription_id?: string;
   status: string;
+  customer?: BachsCustomer | null;
+  /** Nested on the API response. */
+  product?: { id?: string } | null;
+  /** Flat on the webhook payload. */
   product_id?: string;
-  customer?: { customer_id?: string; id?: string } | null;
   billing_cycle?: { interval?: string; frequency?: number } | null;
-  price?: BachsAmount | null;
+  /** Money is a decimal string paired with `currency`. Never minor units. */
   amount?: string;
   currency?: string;
   current_period_start?: string | null;
@@ -51,13 +74,13 @@ export interface BachsSubscription {
   cancel_at_period_end?: boolean;
   canceled_at?: string | null;
   trial_end?: string | null;
-  reference?: string | null;
   metadata?: Record<string, unknown> | null;
 }
 
+/** `POST /v1/customers/{id}/portal-sessions`. `id` is prefixed `psn_`. */
 export interface BachsPortalSession {
+  id: string;
   url: string;
-  expires_at?: string;
 }
 
 /**
@@ -263,7 +286,6 @@ export interface CreateCheckoutSessionInput {
 }
 
 export function createCheckoutSession(input: CreateCheckoutSessionInput): Promise<BachsCheckoutSession> {
-  logger.info(input);
   return bachsRequest<BachsCheckoutSession>('/v1/checkout-sessions', {
     method: 'POST',
     body: input,
@@ -288,7 +310,10 @@ export function cancelSubscription(
 ): Promise<BachsSubscription> {
   return bachsRequest<BachsSubscription>(`/v1/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, {
     method: 'POST',
-    body: { at_period_end: atPeriodEnd },
+    // The field is `cancel_at_period_end`. Bachs ignores anything else and
+    // defaults to false, which cancels *immediately* — so a misspelling here
+    // cuts off a user who has already paid for the rest of the period.
+    body: { cancel_at_period_end: atPeriodEnd },
     idempotencyKey,
   });
 }

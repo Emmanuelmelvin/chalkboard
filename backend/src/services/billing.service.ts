@@ -82,6 +82,18 @@ export interface StartCheckoutResult {
   reference: string;
 }
 
+interface BachsWebhookEvent {
+  id?: string;
+  type?: string;
+  data?: Record<string, any>;
+}
+export interface CheckoutStatusResult {
+  status: 'open' | 'completed' | 'expired' | 'cancelled';
+  plan: PlanId;
+  /** True only once the subscription row exists and entitles. */
+  provisioned: boolean;
+}
+
 /** `sub_` + 96 bits of randomness: unguessable, and short enough to log safely. */
 function newReference() {
   return `sub_${randomBytes(12).toString('base64url')}`;
@@ -103,9 +115,9 @@ async function ensureBachsCustomer(user: typeof users.$inferSelect) {
   
   await db
   .update(users)
-  .set({ bachsCustomerId: customer.id, updatedAt: new Date() })
+  .set({ bachsCustomerId: customer.customer_id, updatedAt: new Date() })
   .where(eq(users.id, user.id));
-  return customer.id;
+  return customer.customer_id;
 }
 
 async function getActiveSubscription(userId: string) {
@@ -169,18 +181,11 @@ export async function startCheckout({ user, planId, interval }: StartCheckoutInp
 
   await db
     .update(checkoutSessions)
-    .set({ bachsCheckoutId: session.id })
+    .set({ bachsCheckoutId: session.checkout_id })
     .where(eq(checkoutSessions.reference, reference));
 
   logger.info('Checkout session created', { userId: user.id, planId, interval, reference });
   return { checkoutUrl: session.checkout_url, reference };
-}
-
-export interface CheckoutStatusResult {
-  status: 'open' | 'completed' | 'expired' | 'cancelled';
-  plan: PlanId;
-  /** True only once the subscription row exists and entitles. */
-  provisioned: boolean;
 }
 
 /**
@@ -205,7 +210,6 @@ export async function getCheckoutStatus(userId: string, checkoutId: string): Pro
   };
 }
 
-// --- Webhooks ---------------------------------------------------------------
 
 /**
  * Verify the HMAC over the raw request body.
@@ -242,12 +246,6 @@ export function verifyWebhookSignature(
   return timingSafeEqual(provided, expectedBuffer);
 }
 
-interface BachsWebhookEvent {
-  id?: string;
-  type?: string;
-  data?: Record<string, any>;
-}
-
 /** Bachs statuses map 1:1 onto our enum; anything else is not trusted. */
 const KNOWN_STATUSES: readonly SubscriptionStatus[] = [
   'trialing', 'active', 'past_due', 'unpaid', 'canceled', 'paused',
@@ -266,7 +264,27 @@ function toDate(value: unknown): Date | null {
 }
 
 function customerIdOf(data: Record<string, any> | undefined): string | null {
-  return data?.customer?.customer_id ?? data?.customer?.id ?? data?.customer_id ?? null;
+  // Subscription and checkout events nest the customer; some payloads carry it
+  // flat instead.
+  return data?.customer?.customer_id ?? data?.customer_id ?? null;
+}
+
+/**
+ * The subscription identifier, which Bachs spells differently depending on how
+ * it reached us: `subscription_id` on the webhook payload, `id` on the REST
+ * response. Reading only one of the two silently drops half the events.
+ */
+function subscriptionIdOf(data: Record<string, any>): string | null {
+  if (typeof data.subscription_id === 'string' && data.subscription_id) return data.subscription_id;
+  if (typeof data.id === 'string' && data.id) return data.id;
+  return null;
+}
+
+/** Likewise flat on the webhook, nested under `product` on the REST response. */
+function productIdOf(data: Record<string, any>): string {
+  if (typeof data.product_id === 'string' && data.product_id) return data.product_id;
+  if (typeof data.product?.id === 'string' && data.product.id) return data.product.id;
+  return '';
 }
 
 /**
@@ -311,13 +329,13 @@ async function resolveUserId(data: Record<string, any> | undefined): Promise<str
 class UnresolvableEventError extends Error {}
 
 async function upsertSubscription(data: Record<string, any>, userId: string) {
-  const bachsSubscriptionId = typeof data.id === 'string' ? data.id : null;
+  const bachsSubscriptionId = subscriptionIdOf(data);
   if (!bachsSubscriptionId) throw new UnresolvableEventError('subscription payload carries no id');
 
   const status = toSubscriptionStatus(data.status);
   if (!status) throw new UnresolvableEventError(`unrecognised subscription status: ${String(data.status)}`);
 
-  const productId = typeof data.product_id === 'string' ? data.product_id : '';
+  const productId = productIdOf(data);
   const mapped = planForProduct(productId);
   if (!mapped) {
     // A product we do not sell, or one whose env var is unset on this instance.
@@ -332,8 +350,8 @@ async function upsertSubscription(data: Record<string, any>, userId: string) {
     bachsProductId: productId,
     interval: mapped.interval,
     // Money stays a decimal string the whole way through.
-    amount: String(data.price?.amount ?? data.amount ?? '0.00'),
-    currency: String(data.price?.currency ?? data.currency ?? 'USD'),
+    amount: String(data.amount ?? '0.00'),
+    currency: String(data.currency ?? 'USD'),
     currentPeriodStart: toDate(data.current_period_start),
     currentPeriodEnd: toDate(data.current_period_end),
     cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),
@@ -354,12 +372,18 @@ async function markCheckout(
   data: Record<string, any>,
   status: 'completed' | 'expired' | 'cancelled',
 ) {
-  const checkoutId = typeof data.id === 'string' ? data.id : null;
-  const reference = typeof data.reference === 'string' ? data.reference : null;
-  const match = reference
-    ? eq(checkoutSessions.reference, reference)
-    : checkoutId ? eq(checkoutSessions.bachsCheckoutId, checkoutId) : null;
-  if (!match) throw new UnresolvableEventError('checkout payload carries neither reference nor id');
+  // Checkout payloads key the identifier as `checkout_id`, never `id`.
+  const checkoutId = typeof data.checkout_id === 'string' ? data.checkout_id : null;
+  // Prefer the checkout ID: `reference` on a checkout event is documented as
+  // "the reference you supplied, when available", and a completed checkout has
+  // been observed carrying a payment reference (`pay_…`) instead of ours, which
+  // would match no row at all.
+  const match = checkoutId
+    ? eq(checkoutSessions.bachsCheckoutId, checkoutId)
+    : typeof data.reference === 'string' && data.reference
+      ? eq(checkoutSessions.reference, data.reference)
+      : null;
+  if (!match) throw new UnresolvableEventError('checkout payload carries neither checkout_id nor reference');
 
   await db
     .update(checkoutSessions)

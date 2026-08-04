@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { billingEnabled, env } from '@/config/env';
 import { db } from '@/db/client';
-import { billingEvents, checkoutSessions, subscriptions, users } from '@/db/schema';
+import { billingEvents, checkoutSessions, revenueLedger, subscriptions, users } from '@/db/schema';
 import {
   cancelSubscription as cancelBachsSubscription,
   createCheckoutSession,
@@ -17,6 +17,7 @@ import {
 } from '@/services/entitlements.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
+import { isMoneyString } from '@/utils/money';
 
 /**
  * Orchestration between Chalkboard and Bachs: starting a checkout, taking the
@@ -382,6 +383,46 @@ async function upsertSubscription(data: Record<string, any>, userId: string) {
     .onConflictDoUpdate({ target: subscriptions.userId, set: values });
 }
 
+/**
+ * Persist a paid invoice as the developer pool's revenue base.
+ *
+ * Keyed on the Bachs invoice id with `onConflictDoNothing`, so this is safe to
+ * call twice: a replayed `invoice.paid` cannot inflate a month's revenue even
+ * if the `billing_events` gate is ever bypassed. The amount is stored as the
+ * decimal string it arrived as and is never parsed into a float.
+ */
+async function recordPaidInvoice(data: Record<string, any>, userId: string | null) {
+  const invoiceId = typeof data.invoice_id === 'string' && data.invoice_id
+    ? data.invoice_id
+    : typeof data.id === 'string' ? data.id : '';
+  if (!invoiceId) throw new UnresolvableEventError('invoice payload carries no id');
+
+  const amount = typeof data.amount === 'string' ? data.amount : String(data.amount ?? '');
+  if (!amount || !isMoneyString(amount)) {
+    // Better to skip the row than to poison the pool base with a value we
+    // cannot represent exactly.
+    throw new UnresolvableEventError(`invoice ${invoiceId} carries an unusable amount`);
+  }
+
+  const productId = productIdOf(data);
+  const mapped = planForProduct(productId);
+
+  await db
+    .insert(revenueLedger)
+    .values({
+      bachsInvoiceId: invoiceId,
+      userId,
+      bachsSubscriptionId: subscriptionIdOf(data),
+      planId: mapped?.planId ?? null,
+      amount,
+      currency: String(data.currency ?? 'USD'),
+      paidAt: toDate(data.paid_at) ?? toDate(data.created_at) ?? new Date(),
+    })
+    .onConflictDoNothing({ target: revenueLedger.bachsInvoiceId });
+
+  logger.info('Recorded paid invoice', { invoiceId, userId: userId ?? 'unresolved' });
+}
+
 async function markCheckout(
   data: Record<string, any>,
   status: 'completed' | 'expired' | 'cancelled',
@@ -440,11 +481,14 @@ async function dispatch(event: BachsWebhookEvent) {
       await markCheckout(data, 'expired');
       return;
 
-    case 'invoice.paid':
-      // The developer pool ledger lands in Task 5. Until then this is a record
-      // that money arrived, and nothing reads it.
-      logger.info('Bachs invoice paid', { eventId: event.id });
+    case 'invoice.paid': {
+      // The pool is derived from money actually *collected*, so this is where
+      // the developer revenue share gets its base. Recorded even when the user
+      // cannot be resolved, because the revenue is real either way.
+      const userId = await resolveUserId(data);
+      await recordPaidInvoice(data, userId);
       return;
+    }
 
     case 'invoice.payment_failed':
       // No downgrade: `past_due` keeps access, and Bachs runs its own retries

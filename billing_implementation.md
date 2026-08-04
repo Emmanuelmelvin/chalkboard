@@ -4,11 +4,15 @@ Wiring the three subscription tiers (Free, Pro, Team) to real money using
 [Bachs](https://docs.bachs.io) for checkout, subscriptions, and the customer portal.
 
 Progress is tracked in §15, where each of the five tasks is broken into five
-sub-tasks. **Task 1 is complete.** The billing environment block, the plan
-enums, the six billing tables, migration `0012_billing.sql`,
-`backend/src/services/entitlements.ts`, `plan` on the public user, and
-`GET /api/billing/summary` all exist. Nothing is gated and no money moves yet:
-every user resolves to Free and the app behaves exactly as it did before.
+sub-tasks. **Tasks 1 and 2 are complete.** The billing environment block, the
+plan enums, the six billing tables, migration `0012_billing.sql`,
+`backend/src/services/entitlements.service.ts`, `plan` on the public user, and
+`GET /api/billing/summary` all exist, and the Free limits are now enforced
+server-side: room count, attendee cap, plan-aware retention, and the plugin
+capability gates, each returning a 402 the frontend turns into an upgrade
+prompt. No money moves yet; every user still resolves to Free until checkout
+lands in Task 3.
+
 
 The presentation layer that predates all of it is
 `frontend/src/constants/plans.ts`, `frontend/src/pages/Plans.tsx`, the `/plans`
@@ -782,25 +786,25 @@ behaves exactly as it did before.
   behind `requireAuth`, returning plan, status, limits, period end, live usage,
   and `billingEnabled`. Plus the constants-parity test.
 
-### Task 2 — Enforcement
+### Task 2 — Enforcement ✅ Done
 
 Free limits become real. Ship this before charging anyone, so the paid tier has
 something to unlock.
 
-- [ ] **2.1 Room count.** Enforce `activeRooms` inside the `createRoom`
+- [x] **2.1 Room count.** Enforce `activeRooms` inside the `createRoom`
   transaction and return `room_limit_reached` (402). Counting inside the
   transaction is what stops two parallel creates from both passing.
-- [ ] **2.2 Attendee cap.** In `joinRoomInTransaction`, resolve the *owner's*
+- [x] **2.2 Attendee cap.** In `joinRoomInTransaction`, resolve the *owner's*
   plan against the already-locked room row and cap at
   `min(room.maxAttendees ?? Infinity, limits.attendeesPerRoom)`, reusing
   `room_full`.
-- [ ] **2.3 Plan-aware retention.** Replace the single `ROOM_INACTIVITY_MS` cutoff
+- [x] **2.3 Plan-aware retention.** Replace the single `ROOM_INACTIVITY_MS` cutoff
   in `closeInactiveRooms` with the owner-plan join, skipping rooms whose plan has
   `retentionDays === UNLIMITED`.
-- [ ] **2.4 Capability gates.** `publishPlugins` on `submitMyPluginHandler`,
+- [x] **2.4 Capability gates.** `publishPlugins` on `submitMyPluginHandler`,
   `proPlugins` on plugin install/enable, and `boardExport` / `customBranding` on
   their handlers, all returning `plan_required` (402).
-- [ ] **2.5 Frontend prompts.** The `useEntitlements` hook, the single 402
+- [x] **2.5 Frontend prompts.** The `useEntitlements` hook, the single 402
   interceptor in `api/client.ts`, and disabled-with-a-reason controls on the gated
   surfaces. Plus the enforcement and retention tests from §14.
 

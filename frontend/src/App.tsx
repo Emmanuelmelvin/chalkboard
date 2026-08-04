@@ -9,6 +9,7 @@ import Docs from '@/pages/Docs';
 import Guide from '@/pages/Guide';
 import Lobby from '@/pages/Lobby';
 import Plans from '@/pages/Plans';
+import BillingReturn from '@/pages/BillingReturn';
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
 import { useAuthStore } from '@/stores/authStore';
@@ -146,6 +147,14 @@ function App() {
         {/* Public pricing and developer revenue explainer */}
         <Route path="/plans">
           <Plans />
+        </Route>
+
+        {/* Checkout return target. The path stays bare because Bachs appends
+            ?checkout_id= to the success_url it was given. */}
+        <Route path="/billing/return">
+          <RequireAuth>
+            {() => <BillingReturn />}
+          </RequireAuth>
         </Route>
 
         {/* Public landing page */}

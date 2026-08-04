@@ -4,14 +4,18 @@ Wiring the three subscription tiers (Free, Pro, Team) to real money using
 [Bachs](https://docs.bachs.io) for checkout, subscriptions, and the customer portal.
 
 Progress is tracked in §15, where each of the five tasks is broken into five
-sub-tasks. **Tasks 1 and 2 are complete.** The billing environment block, the
+sub-tasks. **Tasks 1, 2, and 3 are complete.** The billing environment block, the
 plan enums, the six billing tables, migration `0012_billing.sql`,
 `backend/src/services/entitlements.service.ts`, `plan` on the public user, and
-`GET /api/billing/summary` all exist, and the Free limits are now enforced
+`GET /api/billing/summary` all exist, and the Free limits are enforced
 server-side: room count, attendee cap, plan-aware retention, and the plugin
 capability gates, each returning a 402 the frontend turns into an upgrade
-prompt. No money moves yet; every user still resolves to Free until checkout
-lands in Task 3.
+prompt. Checkout now works end to end: the Bachs client, `startCheckout`, the
+signed webhook intake with its dedupe gate, the subscription upsert, the Dashboard
+billing tab, and the `/billing/return` polling page. Money moves as soon as real
+Bachs credentials are configured; with them absent everything still resolves to
+Free and the checkout routes return 503. Task 4 adds the customer portal,
+cancellation, and voice metering.
 
 
 The presentation layer that predates all of it is
@@ -808,24 +812,24 @@ something to unlock.
   interceptor in `api/client.ts`, and disabled-with-a-reason controls on the gated
   surfaces. Plus the enforcement and retention tests from §14.
 
-### Task 3 — Checkout
+### Task 3 — Checkout ✅ Done
 
 Sandbox first, then the key swap.
 
-- [ ] **3.1 Bachs client.** `services/bachs.ts`: bearer auth, `Idempotency-Key`
+- [x] **3.1 Bachs client.** `services/bachs.ts`: bearer auth, `Idempotency-Key`
   on every POST, flat error body mapped to `APIError` carrying `error_code`, one
   retry on 429/500/503, and a 10s `AbortSignal.timeout`.
-- [ ] **3.2 `startCheckout`.** The plan/interval guards, lazy Bachs customer
+- [x] **3.2 `startCheckout`.** The plan/interval guards, lazy Bachs customer
   creation persisted before the checkout call, product resolution from env, the
   pre-inserted `checkout_sessions` row, and the bare `success_url`.
-- [ ] **3.3 Webhook intake.** Raw-body HMAC verification with `timingSafeEqual`
+- [x] **3.3 Webhook intake.** Raw-body HMAC verification with `timingSafeEqual`
   and the tolerance window, then the `billing_events` dedupe gate. This is the
   security boundary, so it lands with the §14 signature tests.
-- [ ] **3.4 Webhook dispatch.** The subscription upsert (created/updated/deleted),
+- [x] **3.4 Webhook dispatch.** The subscription upsert (created/updated/deleted),
   the checkout status transitions, cache invalidation, and the deliberate
   200-on-unresolvable rule. Plus `GET /billing/checkout/:checkoutId` with
   `provisioned`.
-- [ ] **3.5 Billing tab and return route.** `checkoutRateLimit`, the
+- [x] **3.5 Billing tab and return route.** `checkoutRateLimit`, the
   `frontend/src/api/billing.ts` module, the Dashboard `BillingPanel` pre-checkout
   screen, and `/billing/return` polling until `provisioned`.
 

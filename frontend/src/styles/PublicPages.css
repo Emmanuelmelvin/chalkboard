@@ -2864,6 +2864,43 @@ body.dashboard-active #root {
 .dashboard-empty-state strong { color: var(--dashboard-white); font-size: 13px; font-weight: 600; }
 .dashboard-loader { width: 16px; height: 16px; border: 1px solid #77736c; border-top-color: var(--dashboard-gold-bright); border-radius: 50%; animation: dashboardSpin 800ms linear infinite; }
 @keyframes dashboardSpin { to { transform: rotate(360deg); } }
+.dashboard-spin { animation: dashboardSpin 800ms linear infinite; }
+
+/* Plan and billing tab */
+.dashboard-billing-grid { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.dashboard-billing-notice { display: flex; align-items: center; gap: 9px; margin: 0 0 20px; padding: 12px 14px; border-left: 2px solid var(--dashboard-gold-bright); background: rgba(199, 162, 88, 0.13); color: var(--dashboard-gold-bright); font-size: 12px; }
+.dashboard-billing-current, .dashboard-billing-checkout { padding: 30px; }
+.dashboard-billing-current { background: var(--dashboard-white); color: #191816; }
+.dashboard-billing-current .dashboard-panel-kicker { color: #9c7835; }
+.dashboard-billing-current h3 { color: #191816; font-size: 34px; }
+.dashboard-billing-usage { display: flex; flex-direction: column; gap: 1px; margin: 22px 0 0; padding: 0; background: rgba(25, 24, 22, 0.12); }
+.dashboard-billing-usage > div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 11px 0; background: var(--dashboard-white); }
+.dashboard-billing-usage dt { color: #777169; font-size: 11px; }
+.dashboard-billing-usage dd { margin: 0; color: #191816; font-size: 12px; font-weight: 650; }
+.dashboard-billing-manage { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 26px; }
+.dashboard-billing-limits { display: flex; flex-direction: column; gap: 1px; margin: 22px 0 0; padding: 0; list-style: none; background: var(--dashboard-line); }
+.dashboard-billing-limits li { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 10px 0; background: var(--dashboard-ink, #0b0b0b); }
+.dashboard-billing-limits span { color: var(--dashboard-muted); font-size: 11px; }
+.dashboard-billing-limits strong { color: var(--dashboard-white); font-size: 12px; font-weight: 650; }
+.dashboard-billing-total { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 24px 0 20px; padding-top: 18px; border-top: 1px solid var(--dashboard-line); }
+.dashboard-billing-total span { color: var(--dashboard-muted); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+.dashboard-billing-total strong { color: var(--dashboard-gold-bright); font-family: Georgia, serif; font-size: 36px; font-weight: 400; letter-spacing: -0.05em; }
+.dashboard-billing-fineprint { margin: 16px 0 0; color: var(--dashboard-muted); font-size: 10px; line-height: 1.6; }
+
+/* Checkout return page */
+.billing-return-page { display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 40px 20px; background: #0b0b0b; }
+.billing-return-card { width: 100%; max-width: 470px; padding: 40px 34px; border: 1px solid rgba(227, 199, 126, 0.22); background: rgba(15, 15, 15, 0.9); text-align: center; }
+.billing-return-mark { display: inline-flex; width: 46px; height: 46px; align-items: center; justify-content: center; margin-bottom: 22px; border: 1px solid rgba(227, 199, 126, 0.3); border-radius: 50%; color: #e3c77e; }
+.billing-return-mark.is-done { border-color: rgba(126, 199, 140, 0.45); color: #7ec78c; }
+.billing-return-card h1 { margin: 0 0 12px; color: #f4f1ea; font-family: Georgia, serif; font-size: 30px; font-weight: 400; letter-spacing: -0.05em; }
+.billing-return-card p { margin: 0; color: #97928a; font-size: 12px; line-height: 1.7; }
+.billing-return-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; margin-top: 26px; }
+.billing-return-reference { display: block; margin-top: 22px; color: #6e6a63; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; }
+
+@media (max-width: 900px) {
+  .dashboard-billing-grid { grid-template-columns: 1fr; }
+  .dashboard-billing-current, .dashboard-billing-checkout { padding: 24px 20px; }
+}
 
 .dashboard-rhythm-panel { background: var(--dashboard-white); color: #191816; }
 .dashboard-rhythm-panel .dashboard-panel-kicker { color: #9c7835; }

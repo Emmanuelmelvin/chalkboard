@@ -25,6 +25,7 @@ import {
   Trash2,
   UserRound,
   UsersRound,
+  WalletCards,
   X,
 } from 'lucide-react';
 import { useLocation, useSearch } from 'wouter';
@@ -33,12 +34,13 @@ import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import RoomMembersModal from '@/components/RoomMembersModal';
 import DeveloperPlugins from '@/components/DeveloperPlugins';
+import BillingPanel from '@/components/BillingPanel';
 import type { UserProfile } from '@/stores/authStore';
 import { useCreateRoomMutation, useDeleteRoomMutation, useResetRoomPasswordMutation, useRoomsQuery, useSignOutMutation } from '@/api/hooks';
 import type { RoomAccessMode, RoomSummary } from '@/api/types';
 import '@/styles/PublicPages.css';
 
-type DashboardTab = 'overview' | 'rooms' | 'toolkit' | 'developer' | 'profile';
+type DashboardTab = 'overview' | 'rooms' | 'toolkit' | 'developer' | 'billing' | 'profile';
 interface DashboardProps {
   profile: UserProfile;
   onJoinRoom: (room: string, password?: string) => void;
@@ -49,6 +51,9 @@ const tabItems: Array<{ id: DashboardTab; label: string; icon: typeof LayoutDash
   { id: 'rooms', label: 'Rooms', icon: PanelTopOpen },
   { id: 'toolkit', label: 'Toolkit', icon: LibraryBig },
   { id: 'developer', label: 'Developer', icon: Code2 },
+  // The Plans page links straight here with ?plan=, so this is the pre-checkout
+  // screen as well as the place a plan is managed afterwards.
+  { id: 'billing', label: 'Plan & billing', icon: WalletCards },
   { id: 'profile', label: 'Profile', icon: UserRound },
 ];
 
@@ -715,6 +720,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           {activeTab === 'rooms' && renderRooms()}
           {activeTab === 'toolkit' && renderToolkit()}
           {activeTab === 'developer' && <DeveloperPlugins />}
+          {activeTab === 'billing' && <BillingPanel />}
           {activeTab === 'profile' && renderProfile()}
           {activeTab !== 'rooms' && error && <p className="dashboard-error dashboard-floating-error" role="alert">{error}</p>}
         </div>

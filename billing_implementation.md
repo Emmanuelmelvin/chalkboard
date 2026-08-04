@@ -313,7 +313,7 @@ a minute after cancelling) and is closed explicitly by webhook invalidation.
 
 ## 7. The Bachs client
 
-`backend/src/services/bachs.ts` is a thin typed wrapper over `fetch`. No SDK.
+`backend/src/services/bachs.ts` is a thin typed wrapper over axios. No SDK.
 
 ```ts
 async function bachsRequest<T>(path: string, init?: { method?: string; body?: unknown; idempotencyKey?: string }): Promise<T>
@@ -327,9 +327,11 @@ Behaviour:
 - On a non-2xx, read the flat `{ detail, error_code, doc_url }` error body and
   throw an `APIError` carrying `error_code`. Log `error_code` and status, never
   the request headers.
-- Retry once with backoff on 429/500/503; never retry a 4xx other than 429.
-- Timeout of 10s via `AbortSignal.timeout`, so a slow Bachs response cannot hold
-  a Chalkboard request open.
+- Retry once with backoff on 429/500/503, and on a transport failure that never
+  got a response (`ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET`, and friends). Never
+  retry a 4xx other than 429.
+- Timeout of 10s on the axios instance, so a slow Bachs response cannot hold a
+  Chalkboard request open.
 
 Functions needed:
 
@@ -816,9 +818,10 @@ something to unlock.
 
 Sandbox first, then the key swap.
 
-- [x] **3.1 Bachs client.** `services/bachs.ts`: bearer auth, `Idempotency-Key`
-  on every POST, flat error body mapped to `APIError` carrying `error_code`, one
-  retry on 429/500/503, and a 10s `AbortSignal.timeout`.
+- [x] **3.1 Bachs client.** `services/bachs.ts`: an axios instance with bearer
+  auth, `Idempotency-Key` on every POST, the flat error body mapped to `APIError`
+  carrying `error_code`, one retry on 429/500/503 and on transport failures, and
+  a 10s timeout.
 - [x] **3.2 `startCheckout`.** The plan/interval guards, lazy Bachs customer
   creation persisted before the checkout call, product resolution from env, the
   pre-inserted `checkout_sessions` row, and the bare `success_url`.

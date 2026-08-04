@@ -3220,6 +3220,61 @@ html[data-theme='light'] .dashboard-generated-password {
   background: rgba(41, 39, 34, 0.06);
 }
 
+/* Plan and billing in light mode.
+   The "current plan" card and the access options are painted on a light paper
+   surface in both themes, so their ink has to stay dark rather than follow
+   --dashboard-white, which inverts. The checkout list is the opposite case: it
+   sits on the panel surface, so it takes the themed variables. */
+html[data-theme='light'] .dashboard-billing-current {
+  background: #fffdf7;
+  color: #292722;
+}
+
+html[data-theme='light'] .dashboard-billing-current h3 { color: #292722; }
+html[data-theme='light'] .dashboard-billing-current .dashboard-panel-copy { color: #605b54; }
+html[data-theme='light'] .dashboard-billing-usage { background: rgba(41, 39, 34, 0.14); }
+html[data-theme='light'] .dashboard-billing-usage > div { background: #fffdf7; }
+html[data-theme='light'] .dashboard-billing-usage dt { color: #605b54; }
+html[data-theme='light'] .dashboard-billing-usage dd { color: #292722; }
+
+html[data-theme='light'] .dashboard-billing-current .dashboard-button-outline {
+  border-color: rgba(41, 39, 34, 0.28);
+  color: #292722;
+}
+
+html[data-theme='light'] .dashboard-billing-current .dashboard-button-outline:hover,
+html[data-theme='light'] .dashboard-billing-current .dashboard-button-outline:focus-visible {
+  border-color: #292722;
+  background: #ece7dc;
+}
+
+html[data-theme='light'] .dashboard-billing-current .dashboard-link-button { color: #605b54; }
+html[data-theme='light'] .dashboard-billing-current .dashboard-link-button:hover,
+html[data-theme='light'] .dashboard-billing-current .dashboard-link-button:focus-visible { color: var(--dashboard-gold-bright); }
+
+html[data-theme='light'] .dashboard-billing-limits li { background: var(--dashboard-black-soft); }
+html[data-theme='light'] .dashboard-billing-notice { color: #7a5a1f; }
+
+html[data-theme='light'] .dashboard-billing-checkout .dashboard-panel-copy { color: var(--dashboard-muted); }
+html[data-theme='light'] .dashboard-access-fieldset legend { color: var(--dashboard-muted); }
+
+/* Checkout return page in light mode. */
+html[data-theme='light'] .billing-return-page { background: #f6f3eb; }
+
+html[data-theme='light'] .billing-return-card {
+  border-color: rgba(41, 39, 34, 0.16);
+  background: #fffdf7;
+  box-shadow: 0 24px 80px rgba(81, 66, 38, 0.14);
+}
+
+html[data-theme='light'] .billing-return-mark { border-color: rgba(148, 106, 38, 0.35); color: #946a26; }
+html[data-theme='light'] .billing-return-mark.is-done { border-color: rgba(52, 122, 68, 0.4); color: #347a44; }
+html[data-theme='light'] .billing-return-card h1 { color: #292722; }
+html[data-theme='light'] .billing-return-card p { color: #605b54; }
+html[data-theme='light'] .billing-return-reference { color: #77736c; }
+
+
+
 /* Developer workspace */
 .dashboard-developer { position: relative; }
 .dashboard-developer-summary { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--dashboard-line); border-bottom: 1px solid var(--dashboard-line); margin-bottom: 24px; }

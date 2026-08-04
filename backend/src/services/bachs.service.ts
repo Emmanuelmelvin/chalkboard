@@ -1,9 +1,11 @@
+import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
+
 import { env } from '@/config/env';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 
 /**
- * A thin typed wrapper over `fetch` for the Bachs API. Deliberately not an SDK:
+ * A thin typed wrapper over axios for the Bachs API. Deliberately not an SDK:
  * six calls do not justify a dependency that would sit between us and the wire
  * format, and the retry, timeout, and idempotency rules below are the parts that
  * actually matter for taking money.
@@ -11,6 +13,7 @@ import { logger } from '@/utils/logger';
  * Nothing in this module reads the database or knows about Chalkboard users;
  * orchestration lives in `billing.service.ts`.
  */
+
 
 /** Money is a decimal string paired with a currency. Never minor units. */
 export interface BachsAmount {
@@ -98,6 +101,27 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * A transport failure never reached Bachs, or reached it and never came back.
+ * Either way a second attempt may succeed, and the idempotency key makes
+ * replaying a POST safe.
+ */
+const RETRYABLE_AXIOS_CODES = new Set([
+  'ECONNABORTED', // axios's own timeout
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'EAI_AGAIN', // transient DNS failure
+  'ERR_NETWORK',
+]);
+
+function isRetryable(error: unknown): boolean {
+  if (error instanceof BachsApiError) return RETRYABLE_STATUSES.has(error.bachsStatus);
+  // No response means the request itself failed rather than being refused.
+  if (axios.isAxiosError(error)) return !error.response && RETRYABLE_AXIOS_CODES.has(error.code ?? '');
+  return false;
+}
+
 function assertConfigured() {
   if (!env.BACHS_API_KEY) {
     // Billing disabled is a supported configuration, so this is a 503 rather
@@ -106,57 +130,90 @@ function assertConfigured() {
   }
 }
 
-async function readErrorBody(response: Response) {
-  const text = await response.text().catch(() => '');
-  if (!text) return { detail: '', errorCode: '', docUrl: undefined as string | undefined };
+/**
+ * The flat error body, read defensively. A non-JSON payload is usually a proxy
+ * or gateway page rather than Bachs, and axios hands it over as a string.
+ */
+function readErrorBody(data: unknown) {
+  const empty = { detail: '', errorCode: '', docUrl: undefined as string | undefined };
+  if (!data) return empty;
 
-  try {
-    const parsed = JSON.parse(text) as { detail?: string; error_code?: string; doc_url?: string };
-    return { detail: parsed.detail ?? '', errorCode: parsed.error_code ?? '', docUrl: parsed.doc_url };
-  } catch {
-    // A non-JSON body is usually a proxy or gateway page rather than Bachs.
-    return { detail: '', errorCode: '', docUrl: undefined };
+  let parsed: { detail?: string; error_code?: string; doc_url?: string } | undefined;
+  if (typeof data === 'string') {
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      return empty;
+    }
+  } else if (typeof data === 'object') {
+    parsed = data as typeof parsed;
   }
+
+  if (!parsed) return empty;
+  return {
+    detail: parsed.detail ?? '',
+    errorCode: parsed.error_code ?? '',
+    docUrl: parsed.doc_url,
+  };
+}
+
+/**
+ * Built on first use rather than at import time, so a process with billing
+ * disabled never constructs a client around an empty API key.
+ */
+let client: AxiosInstance | undefined;
+
+function getClient(): AxiosInstance {
+  if (!client) {
+    client = axios.create({
+      baseURL: env.BACHS_API_BASE_URL,
+      // A slow Bachs response must not be able to hold a Chalkboard request open.
+      timeout: REQUEST_TIMEOUT_MS,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      // Read the body ourselves so a non-JSON error page cannot throw inside axios.
+      transformResponse: [(data: unknown) => data],
+    });
+  }
+  return client;
 }
 
 async function attempt<T>(path: string, init: BachsRequestInit): Promise<T> {
   const method = init.method ?? 'GET';
   const headers: Record<string, string> = {
+    // Set per request rather than on the instance: the key is read from env at
+    // call time, and the idempotency key differs on every write.
     Authorization: `Bearer ${env.BACHS_API_KEY}`,
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
   };
   if (init.idempotencyKey) headers['Idempotency-Key'] = init.idempotencyKey;
 
-  const response = await fetch(`${env.BACHS_API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    // A slow Bachs response must not be able to hold a Chalkboard request open.
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  const config: AxiosRequestConfig = { url: path, method, headers };
+  if (init.body !== undefined) config.data = JSON.stringify(init.body);
 
-  if (!response.ok) {
-    const { detail, errorCode, docUrl } = await readErrorBody(response);
+  try {
+    const response = await getClient().request<string>(config);
+    if (response.status === 204) return undefined as T;
+    const body = response.data;
+    return (body ? (JSON.parse(body) as T) : ({} as T));
+  } catch (error) {
+    if (!axios.isAxiosError(error) || !error.response) throw error;
+
+    const { status, data } = error.response;
+    const { detail, errorCode, docUrl } = readErrorBody(data);
     // Never log the request headers: they carry the API key and the idempotency
     // key. The status and the error code are enough to diagnose a failure.
     logger.warn('Bachs API call failed', {
       method,
       path,
-      status: response.status,
+      status,
       errorCode: errorCode || 'unknown',
     });
     throw new BachsApiError(
-      detail || errorCode || `bachs_request_failed_${response.status}`,
-      response.status,
+      detail || errorCode || `bachs_request_failed_${status}`,
+      status,
       errorCode || 'unknown',
       docUrl,
     );
   }
-
-  if (response.status === 204) return undefined as T;
-  const text = await response.text();
-  return (text ? JSON.parse(text) : {}) as T;
 }
 
 /**
@@ -176,13 +233,7 @@ export async function bachsRequest<T>(path: string, init: BachsRequestInit = {})
   try {
     return await attempt<T>(path, init);
   } catch (error) {
-    const retryable = error instanceof BachsApiError
-      ? RETRYABLE_STATUSES.has(error.bachsStatus)
-      // A timeout or a socket error may well succeed on a second try, and the
-      // idempotency key makes replaying a POST safe.
-      : error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError' || error.name === 'TypeError');
-
-    if (!retryable) throw error;
+    if (!isRetryable(error)) throw error;
 
     await sleep(RETRY_BACKOFF_MS);
     logger.info('Retrying Bachs API call once', { method, path });

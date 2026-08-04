@@ -1,5 +1,22 @@
-import { createPluginForUser, createPluginVersionForUser, getPluginDetail, getPublishedPluginDetail, listPluginsForAdmin, listPluginsForAuthor, listPublishedPlugins, publishPlugin, removePluginFromRegistry, reviewPlugin, submitPluginForReview } from '@/services/plugins.service';
-import { createPluginSchema, createPluginVersionSchema, pluginReviewSchema } from '@/validators/plugin.validator';
+import { 
+  createPluginForUser, 
+  createPluginVersionForUser, 
+  getPluginDetail, 
+  getPublishedPluginDetail, 
+  listPluginsForAdmin, 
+  listPluginsForAuthor, 
+  listPublishedPlugins, 
+  publishPlugin, 
+  removePluginFromRegistry, 
+  reviewPlugin, 
+  submitPluginForReview
+} from '@/services/plugins.service';
+import { 
+  createPluginSchema, 
+  createPluginVersionSchema, 
+  pluginReviewSchema
+} from '@/validators/plugin.validator';
+import { getCachedEntitlements } from '@/services/entitlements.service';
 import { APIError } from '@/utils/error';
 import type { Context } from 'hono';
 import type { users } from '@/db/schema';
@@ -18,13 +35,15 @@ export async function listMyPluginsHandler(c: Context) {
 }
 
 export async function listPublishedPluginsHandler(c: any) {
-  requireUser(c);
-  return c.json({ plugins: await listPublishedPlugins() });
+  const user = requireUser(c);
+  const { limits } = await getCachedEntitlements(user.id);
+  return c.json({ plugins: await listPublishedPlugins({ proPlugins: limits.proPlugins }) });
 }
 
 export async function getPublishedPluginHandler(c: any) {
-  requireUser(c);
-  const plugin = await getPublishedPluginDetail(c.req.param('pluginId'));
+  const user = requireUser(c);
+  const { limits } = await getCachedEntitlements(user.id);
+  const plugin = await getPublishedPluginDetail(c.req.param('pluginId'), { proPlugins: limits.proPlugins });
   if (!plugin) throw new APIError('plugin_not_found', 404);
   return c.json({ plugin });
 }

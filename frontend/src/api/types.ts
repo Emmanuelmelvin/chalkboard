@@ -226,6 +226,13 @@ export interface ManagedPlugin {
   status: ManagedPluginStatus;
   plan: ManagedPluginPlan;
   currentVersion: string | null;
+  /**
+   * Set by the catalogue listing when the plugin is Pro and the viewer's plan
+   * does not include Pro plugins. Absent on author and admin payloads, which
+   * are not plan-scoped. Presentational only: the backend refuses to serve the
+   * bundle regardless of what the client does with this flag.
+   */
+  locked?: boolean;
   createdAt: string;
   updatedAt: string;
   versions: ManagedPluginVersion[];

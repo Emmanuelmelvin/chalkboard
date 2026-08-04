@@ -107,7 +107,7 @@ export const defaultPlanId: PlanId = 'free';
  * is already emailing the customer. `unpaid`, `canceled`, and `paused` fall back
  * to Free.
  */
-const ENTITLING_STATUSES: readonly SubscriptionStatus[] = ['active', 'trialing', 'past_due'];
+export const ENTITLING_STATUSES: readonly SubscriptionStatus[] = ['active', 'trialing', 'past_due'];
 
 export function statusGrantsAccess(status: EntitlementStatus) {
   return ENTITLING_STATUSES.includes(status as SubscriptionStatus);

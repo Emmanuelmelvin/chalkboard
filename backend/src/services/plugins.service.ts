@@ -15,7 +15,9 @@ import {
   pluginAssetKey, 
   putPluginAsset 
 } from '@/services/pluginStorage.service';
+import { getEntitlements } from '@/services/entitlements.service';
 import { APIError } from '@/utils/error';
+import { logger } from '@/utils/logger';
 
 type PluginInput = {
   pluginId: string;
@@ -137,20 +139,41 @@ export async function listPluginsForAuthor(authorId: string) {
   return Promise.all(owned.map((plugin) => withVersions(plugin)));
 }
 
-export async function listPublishedPlugins() {
+/**
+ * The catalogue listing, with each plugin marked `locked` when the viewer's
+ * plan does not reach it.
+ *
+ * Pro plugins stay visible to everyone on purpose. Hiding them would make the
+ * catalogue quietly smaller for Free users and give them no reason to think
+ * anything was missing; showing them locked is what makes the upgrade legible.
+ * The listing never carries bundle code, so nothing paid crosses the wire here.
+ */
+export async function listPublishedPlugins(viewer: { proPlugins: boolean }) {
   const candidates = await db.select().from(plugins)
     .orderBy(desc(plugins.updatedAt));
   const publicPlugins = await Promise.all(
     candidates
       .filter((plugin) => plugin.status !== 'suspended')
-      .map((plugin) => withPublishedVersion(plugin, false)),
+      .map(async (plugin) => {
+        const published = await withPublishedVersion(plugin, false);
+        return published && { ...published, locked: plugin.plan === 'pro' && !viewer.proPlugins };
+      }),
   );
-  return publicPlugins.filter((plugin): plugin is NonNullable<typeof plugin> => plugin !== null);
+  return publicPlugins.filter((plugin): plugin is NonNullable<typeof plugin> => plugin != null);
 }
 
-export async function getPublishedPluginDetail(pluginId: string) {
+/**
+ * The detail payload, which *does* include the executable bundle.
+ *
+ * This is the request that actually hands over the paid artefact, so a Free
+ * viewer asking for a Pro plugin is refused outright rather than served a
+ * stripped record: a 402 here is the difference between advertising the plugin
+ * and shipping it.
+ */
+export async function getPublishedPluginDetail(pluginId: string, viewer: { proPlugins: boolean }) {
   const plugin = await getPluginByKey(pluginId);
   if (!plugin || plugin.status === 'suspended') return null;
+  if (plugin.plan === 'pro' && !viewer.proPlugins) throw new APIError('plan_required', 402);
   return withPublishedVersion(plugin, true);
 }
 
@@ -285,6 +308,15 @@ export async function createPluginVersionForUser(pluginId: string, authorId: str
 }
 
 export async function submitPluginForReview(pluginId: string, authorId: string) {
+  // Publishing is the gated step, not authoring. A Free developer can build a
+  // plugin, upload versions, and test it locally; the plan is only consulted
+  // when they ask for it to enter the catalogue.
+  const { limits, plan } = await getEntitlements(authorId);
+  if (!limits.publishPlugins) {
+    logger.warn('Plugin submission rejected because the plan does not allow publishing', { pluginId, authorId, plan });
+    throw new APIError('plan_required', 402);
+  }
+
   const plugin = await getPluginByKey(pluginId);
   if (!plugin) throw new APIError('plugin_not_found', 404);
   if (plugin.authorId !== authorId) throw new APIError('forbidden', 403);

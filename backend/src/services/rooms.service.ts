@@ -3,10 +3,12 @@ import { randomBytes } from 'node:crypto';
 import { and, count, desc, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { joinRequests, roomBans, roomMembers, rooms, users } from '@/db/schema';
+import { UNLIMITED, getCachedEntitlements, getEntitlements, isWithinLimit } from '@/services/entitlements.service';
 import { createVoiceToken } from '@/services/livekit.service';
 import { deleteRoomState, getLiveRoomUserIds } from '@/services/realtimeRooms.service';
 import { isVoicePublisher } from '@/services/roomState.service';
 import { decryptRoomPassword, encryptRoomPassword } from '@/services/roomPasswords.service';
+import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 
 export type RoomRole = 'owner' | 'instructor' | 'viewer';
@@ -91,13 +93,30 @@ async function getJoinRequest(executor: RoomDb | any, roomId: string, userId: st
   return request ?? null;
 }
 
+/**
+ * The effective attendee ceiling for a room: the tighter of what the owner
+ * asked for and what the owner's plan allows.
+ *
+ * The owner's plan is what matters, not the joiner's. A Free viewer joining a
+ * Pro owner's room is using capacity the owner paid for, and a Pro viewer does
+ * not enlarge a Free owner's room.
+ */
+export async function resolveRoomCapacity(room: typeof rooms.$inferSelect) {
+  const { limits, plan } = await getCachedEntitlements(room.ownerId);
+  const planCap = limits.attendeesPerRoom === UNLIMITED ? Number.POSITIVE_INFINITY : limits.attendeesPerRoom;
+  const requestedCap = room.maxAttendees ?? Number.POSITIVE_INFINITY;
+  return { capacity: Math.min(requestedCap, planCap), ownerPlan: plan, planCap, requestedCap };
+}
+
 async function roomIsFull(executor: RoomDb | any, room: typeof rooms.$inferSelect) {
-  if (room.maxAttendees == null) return false;
+  const { capacity } = await resolveRoomCapacity(room);
+  if (!Number.isFinite(capacity)) return false;
+
   const [{ value }] = await executor
     .select({ value: count(roomMembers.id) })
     .from(roomMembers)
     .where(eq(roomMembers.roomId, room.id));
-  return Number(value) >= room.maxAttendees;
+  return Number(value) >= capacity;
 }
 
 async function addRoomMembership(executor: RoomDb | any, roomId: string, userId: string, role: RoomRole = 'viewer') {
@@ -168,7 +187,33 @@ export async function createRoom(user: any, body: any) {
   const passwordHash = generatedPassword ? await bcrypt.hash(generatedPassword, 12) : null;
   const passwordCiphertext = generatedPassword ? encryptRoomPassword(generatedPassword) : null;
 
+  // Read entitlements outside the transaction: it is a separate query plus a
+  // Redis hop, and holding a transaction open across it buys nothing. The count
+  // that actually decides the outcome is taken inside, under a lock.
+  const { limits, plan } = await getEntitlements(user.id);
+
   const room = await db.transaction(async (tx) => {
+    if (limits.activeRooms !== UNLIMITED) {
+      // Lock this owner's open rooms before counting them. Without the lock two
+      // parallel creates both read the pre-insert count and both pass, letting
+      // an owner sit one room over the cap.
+      const owned = await tx
+        .select({ id: rooms.id })
+        .from(rooms)
+        .where(and(eq(rooms.ownerId, user.id), eq(rooms.status, 'open')))
+        .for('update');
+
+      if (!isWithinLimit(owned.length, limits.activeRooms)) {
+        logger.warn('Room creation rejected because the plan room limit is reached', {
+          ownerId: user.id,
+          plan,
+          openRooms: owned.length,
+          limit: limits.activeRooms,
+        });
+        throw new APIError('room_limit_reached', 402);
+      }
+    }
+
     const [created] = await tx
       .insert(rooms)
       .values({ ...roomValues, description, ownerId: user.id, passwordHash, passwordCiphertext })

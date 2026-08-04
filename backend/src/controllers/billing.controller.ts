@@ -55,13 +55,16 @@ export async function startCheckoutHandler(c: any) {
 
 /**
  * Polled by the return page until `provisioned` turns true. Scoped to the
- * signed-in owner, so someone else's checkout ID is a 404 rather than a
+ * signed-in owner, so someone else's identifier is a 404 rather than a
  * readable record.
+ *
+ * The path parameter is our own `reference` in practice, since that is what the
+ * return URL carries; a Bachs `checkout_id` is still accepted for older links.
  */
 export async function getCheckoutStatusHandler(c: any) {
   c.header('Cache-Control', 'no-store');
   const user = c.get('user');
-  const status = await getCheckoutStatus(user.id, c.req.param('checkoutId'));
+  const status = await getCheckoutStatus(user.id, c.req.param('checkoutId') ?? '');
   if (!status) throw new APIError('checkout_not_found', 404);
   return c.json(status);
 }

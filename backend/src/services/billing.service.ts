@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import { billingEnabled, env } from '@/config/env';
 import { db } from '@/db/client';
 import { billingEvents, checkoutSessions, subscriptions, users } from '@/db/schema';
@@ -169,9 +169,10 @@ export async function startCheckout({ user, planId, interval }: StartCheckoutInp
     product_cart: [{ product_id: productId, quantity: 1 }],
     customer: { customer_id: customerId },
     reference,
-    // Deliberately bare: Bachs appends `?checkout_id=<id>` itself, and a URL
-    // that already carries a query string would come back malformed.
-    success_url: `${env.APP_PUBLIC_URL}/billing/return`,
+    // Our own reference is carried in the *path*, not a query string. Bachs
+    // returns the browser to this URL verbatim and appends nothing, so the only
+    // identifier the return page can rely on is one we put there ourselves.
+    success_url: `${env.APP_PUBLIC_URL}/billing/return/${encodeURIComponent(reference)}`,
     cancel_url: `${env.APP_PUBLIC_URL}/plans?checkout=cancelled`,
     // A convenience for reading a Bachs dashboard, not a trust boundary. The
     // authoritative link is the customer ID we stored on the user.
@@ -189,14 +190,27 @@ export async function startCheckout({ user, planId, interval }: StartCheckoutInp
 }
 
 /**
- * What the return page polls. Scoped to the signed-in owner: a checkout ID is
+ * What the return page polls. Scoped to the signed-in owner: an identifier is
  * not a capability, and one user must not be able to read another's checkout.
+ *
+ * The identifier may be either our own `reference` (which is what the return
+ * URL carries, because Bachs appends nothing to `success_url`) or the Bachs
+ * `checkout_id`. Both are unique and both are owner-scoped, so accepting either
+ * costs nothing and keeps older links working.
  */
-export async function getCheckoutStatus(userId: string, checkoutId: string): Promise<CheckoutStatusResult | null> {
+export async function getCheckoutStatus(userId: string, identifier: string): Promise<CheckoutStatusResult | null> {
+  if (!identifier) return null;
+
   const [row] = await db
     .select()
     .from(checkoutSessions)
-    .where(and(eq(checkoutSessions.bachsCheckoutId, checkoutId), eq(checkoutSessions.userId, userId)))
+    .where(and(
+      or(
+        eq(checkoutSessions.reference, identifier),
+        eq(checkoutSessions.bachsCheckoutId, identifier),
+      ),
+      eq(checkoutSessions.userId, userId),
+    ))
     .limit(1);
   if (!row) return null;
 

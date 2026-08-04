@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Route, Switch, useLocation } from 'wouter';
+import { Redirect, Route, Switch, useLocation } from 'wouter';
 import Chalkboard from '@/pages/Chalkboard';
 import Home from '@/pages/Home';
 import Login from '@/pages/Login';
@@ -149,12 +149,20 @@ function App() {
           <Plans />
         </Route>
 
-        {/* Checkout return target. The path stays bare because Bachs appends
-            ?checkout_id= to the success_url it was given. */}
+        {/* Checkout return target. Bachs returns the browser to `success_url`
+            verbatim and appends nothing of its own, so the checkout reference
+            has to be part of the path we hand it. The bare path is kept only so
+            that a return without a reference lands somewhere sensible instead of
+            falling through to the 404 route. */}
+        <Route path="/billing/return/:reference">
+          {({ reference }) => (
+            <RequireAuth>
+              {() => <BillingReturn reference={decodeURIComponent(reference)} />}
+            </RequireAuth>
+          )}
+        </Route>
         <Route path="/billing/return">
-          <RequireAuth>
-            {() => <BillingReturn />}
-          </RequireAuth>
+          <Redirect to="/dashboard?tab=billing" />
         </Route>
 
         {/* Public landing page */}

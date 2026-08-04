@@ -19,16 +19,22 @@ import '@/styles/PublicPages.css';
 /** Roughly 30s at the 2s poll interval before we stop and reassure instead. */
 const MAX_WAIT_MS = 30_000;
 
-function getCheckoutId() {
-  if (typeof window === 'undefined') return null;
-  return new URLSearchParams(window.location.search).get('checkout_id');
+interface BillingReturnProps {
+  /**
+   * Our own checkout `reference`, taken from the URL path.
+   *
+   * It lives in the path rather than a query string because Bachs returns the
+   * browser to `success_url` verbatim and appends nothing of its own, so an
+   * identifier we did not put there ourselves would not exist.
+   */
+  reference: string;
 }
 
-function BillingReturn() {
+function BillingReturn({ reference }: BillingReturnProps) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { hydrate } = useAuthStore();
-  const [checkoutId] = useState(getCheckoutId);
+  const [checkoutId] = useState(() => reference || null);
   const [timedOut, setTimedOut] = useState(false);
 
   const statusQuery = useCheckoutStatusQuery(timedOut ? null : checkoutId);
@@ -38,7 +44,7 @@ function BillingReturn() {
     document.title = 'Confirming your payment - Chalkboard';
   }, []);
 
-  // Nothing to reconcile without an ID, and nothing useful to show either.
+  // Nothing to reconcile without a reference, and nothing useful to show either.
   useEffect(() => {
     if (!checkoutId) setLocation('/dashboard?tab=billing');
   }, [checkoutId, setLocation]);

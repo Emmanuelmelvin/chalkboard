@@ -19,7 +19,6 @@ billingRouter.post('/webhook', bachsWebhookHandler);
 
 billingRouter.use('/', requireAuth);
 billingRouter.use('/*', requireAuth);
-
 billingRouter.get('/summary', getBillingSummaryHandler);
 
 // Checkout session creation calls a paid third-party API, so it carries its own

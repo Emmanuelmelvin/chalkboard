@@ -263,6 +263,7 @@ export interface CreateCheckoutSessionInput {
 }
 
 export function createCheckoutSession(input: CreateCheckoutSessionInput): Promise<BachsCheckoutSession> {
+  logger.info(input);
   return bachsRequest<BachsCheckoutSession>('/v1/checkout-sessions', {
     method: 'POST',
     body: input,

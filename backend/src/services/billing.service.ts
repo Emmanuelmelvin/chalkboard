@@ -100,7 +100,11 @@ async function ensureBachsCustomer(user: typeof users.$inferSelect) {
     // Keyed on our user id, so a retry maps to the same Bachs customer.
     `chalkboard-customer-${user.id}`,
   );
-  await db.update(users).set({ bachsCustomerId: customer.id, updatedAt: new Date() }).where(eq(users.id, user.id));
+  
+  await db
+  .update(users)
+  .set({ bachsCustomerId: customer.id, updatedAt: new Date() })
+  .where(eq(users.id, user.id));
   return customer.id;
 }
 
@@ -171,8 +175,6 @@ export async function startCheckout({ user, planId, interval }: StartCheckoutInp
   logger.info('Checkout session created', { userId: user.id, planId, interval, reference });
   return { checkoutUrl: session.checkout_url, reference };
 }
-
-// --- Checkout status --------------------------------------------------------
 
 export interface CheckoutStatusResult {
   status: 'open' | 'completed' | 'expired' | 'cancelled';

@@ -83,6 +83,38 @@ export interface BachsPortalSession {
   url: string;
 }
 
+/** One charge against a subscription, and the unit a refund is issued against. */
+export interface BachsPayment {
+  payment_id?: string;
+  id?: string;
+  subscription_id?: string | null;
+  invoice_id?: string | null;
+  status?: string;
+  /** Decimal string, paired with `currency`. */
+  amount?: string;
+  currency?: string;
+  /** What Bachs has already refunded against this payment, if anything. */
+  refunded_amount?: string | null;
+  created_at?: string | null;
+}
+
+export interface BachsPaymentList {
+  data?: BachsPayment[];
+  items?: BachsPayment[];
+}
+
+/** `POST /v1/payments/{id}/refund`. */
+export interface BachsRefund {
+  refund_id?: string;
+  id?: string;
+  payment_id?: string;
+  status?: string;
+  amount?: string;
+  currency?: string;
+  reason?: string | null;
+  created_at?: string | null;
+}
+
 export interface CreateCheckoutSessionInput {
   product_cart: { product_id: string; quantity: number }[];
   customer: { customer_id: string };
@@ -324,4 +356,36 @@ export function createPortalSession(customerId: string, idempotencyKey: string):
     body: {},
     idempotencyKey,
   });
+}
+
+/**
+ * `POST /v1/payments/{id}/refund`.
+ *
+ * `amount` is omitted for a full refund and sent as a decimal string for a
+ * partial one. It is deliberately not a number: rounding a refund is the one
+ * arithmetic error a customer always notices.
+ */
+export function refundPayment(
+  paymentId: string,
+  input: { amount?: string; reason?: string },
+  idempotencyKey: string,
+): Promise<BachsRefund> {
+  const body: Record<string, string> = {};
+  // Only send `amount` when a partial refund was asked for. Sending `null` or
+  // `"0"` reads as a zero-value refund on some providers rather than a full one.
+  if (input.amount) body.amount = input.amount;
+  if (input.reason) body.reason = input.reason;
+
+  return bachsRequest<BachsRefund>(`/v1/payments/${encodeURIComponent(paymentId)}/refund`, {
+    method: 'POST',
+    body,
+    idempotencyKey,
+  });
+}
+
+/** `GET /v1/payments?subscription_id=…`, used to find what can be refunded. */
+export function listSubscriptionPayments(subscriptionId: string): Promise<BachsPaymentList> {
+  return bachsRequest<BachsPaymentList>(
+    `/v1/payments?subscription_id=${encodeURIComponent(subscriptionId)}`,
+  );
 }

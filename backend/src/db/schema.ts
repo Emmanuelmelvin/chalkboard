@@ -31,6 +31,12 @@ export const subscriptionStatus = pgEnum('subscription_status', [
   'trialing', 'active', 'past_due', 'unpaid', 'canceled', 'paused',
 ]);
 export const checkoutStatus = pgEnum('checkout_status', ['open', 'completed', 'expired', 'cancelled']);
+export const refundStatus = pgEnum('refund_status', ['pending', 'succeeded', 'failed']);
+/** What an admin did to someone else's billing. Append-only. */
+export const billingAuditAction = pgEnum('billing_audit_action', [
+  'cancel_subscription', 'refund', 'resync_subscription',
+]);
+export const payoutStatus = pgEnum('payout_status', ['pending', 'paid', 'failed']);
 
 
 export const users = pgTable('users', {
@@ -244,4 +250,113 @@ export const pluginUsageDaily = pgTable('plugin_usage_daily', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   day: date('day').notNull(),
 }, (table) => ({ uniq: uniqueIndex('plugin_usage_daily_idx').on(table.pluginId, table.userId, table.day) }));
+
+/**
+ * Money actually collected, one row per paid invoice. This is the pool base:
+ * a month's distributable total is derived from what was *collected*, never
+ * from what was billed, so a failed or refunded charge cannot pay a developer.
+ *
+ * `refundedAmount` is subtracted at distribution time rather than mutating
+ * `amount`, which keeps the original invoice figure auditable.
+ */
+export const revenueLedger = pgTable('revenue_ledger', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  // The Bachs invoice id. Unique, so a replayed `invoice.paid` cannot
+  // double-count revenue even if the billing_events gate is ever bypassed.
+  bachsInvoiceId: text('bachs_invoice_id').notNull().unique(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  bachsSubscriptionId: text('bachs_subscription_id'),
+  planId: planId('plan_id'),
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  refundedAmount: numeric('refunded_amount', { precision: 12, scale: 2 }).default('0.00').notNull(),
+  currency: text('currency').notNull(),
+  // When Bachs says the money arrived, not when we wrote the row.
+  paidAt: timestamp('paid_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  paidAtIdx: index('revenue_ledger_paid_at_idx').on(table.paidAt),
+  userIdx: index('revenue_ledger_user_idx').on(table.userId),
+}));
+
+/** Refunds issued from the admin portal. One row per Bachs refund. */
+export const refunds = pgTable('refunds', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  bachsRefundId: text('bachs_refund_id').unique(),
+  bachsPaymentId: text('bachs_payment_id').notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  currency: text('currency').notNull(),
+  reason: text('reason'),
+  status: refundStatus('status').default('pending').notNull(),
+  // Who authorised it. Never null in practice; `set null` only so removing an
+  // admin account cannot delete the financial record.
+  issuedById: uuid('issued_by_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index('refunds_user_idx').on(table.userId),
+  paymentIdx: index('refunds_payment_idx').on(table.bachsPaymentId),
+}));
+
+/**
+ * Append-only record of an admin acting on someone else's billing. Cancelling
+ * or refunding another person's subscription is exactly the kind of privileged
+ * action that has to be attributable after the fact.
+ */
+export const billingAuditLog = pgTable('billing_audit_log', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+  targetUserId: uuid('target_user_id').references(() => users.id, { onDelete: 'set null' }),
+  action: billingAuditAction('action').notNull(),
+  reason: text('reason'),
+  // Amounts, subscription ids, and the like. Never card data.
+  detail: jsonb('detail').$type<Record<string, unknown>>().default({}).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  actorIdx: index('billing_audit_actor_idx').on(table.actorId),
+  targetIdx: index('billing_audit_target_idx').on(table.targetUserId),
+  createdAtIdx: index('billing_audit_created_at_idx').on(table.createdAt),
+}));
+
+/**
+ * One row per developer per distributed month. The unique index on
+ * (developerId, periodStart) is what makes the distribution job idempotent:
+ * a re-run conflicts instead of paying twice.
+ */
+export const developerEarnings = pgTable('developer_earnings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  developerId: uuid('developer_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+  periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+  // The developer's share of the pool for this month, as a decimal string.
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  currency: text('currency').notNull(),
+  // The measure the split was computed from, kept so a figure can be explained
+  // back to the developer without recomputing a historical month.
+  usageUnits: integer('usage_units').default(0).notNull(),
+  poolTotal: numeric('pool_total', { precision: 12, scale: 2 }).notNull(),
+  status: payoutStatus('status').default('pending').notNull(),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  uniq: uniqueIndex('developer_earnings_dev_period_idx').on(table.developerId, table.periodStart),
+  statusIdx: index('developer_earnings_status_idx').on(table.status),
+}));
+
+/**
+ * One row per month the distribution job has completed. Written last, inside
+ * the same transaction as the earnings rows, so its presence is the signal
+ * that a month is closed and must not be recomputed.
+ */
+export const developerPoolRuns = pgTable('developer_pool_runs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  periodStart: timestamp('period_start', { withTimezone: true }).notNull().unique(),
+  periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+  // Collected revenue for the month, and the share of it that was distributed.
+  revenueTotal: numeric('revenue_total', { precision: 12, scale: 2 }).notNull(),
+  poolTotal: numeric('pool_total', { precision: 12, scale: 2 }).notNull(),
+  poolRate: numeric('pool_rate', { precision: 5, scale: 4 }).notNull(),
+  developerCount: integer('developer_count').default(0).notNull(),
+  totalUsageUnits: integer('total_usage_units').default(0).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
 

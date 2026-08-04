@@ -848,20 +848,26 @@ Sandbox first, then the key swap.
 
 ### Task 4 — Portal and voice metering ✅ Done
 
-- [ ] **4.1 Portal session.** `createPortalUrl` plus `POST /billing/portal`,
+- [x] **4.1 Portal session.** `createPortalUrl` plus `POST /billing/portal`,
   minting a fresh URL per request, never logged, owner only.
-- [ ] **4.2 Cancellation.** `cancelSubscription(userId, atPeriodEnd)` and
+- [x] **4.2 Cancellation.** `cancelSubscription(userId, atPeriodEnd)` and
   `POST /billing/cancel`, with `cancel_at_period_end` reflected in the summary so
   the UI can say when access actually ends.
-- [ ] **4.3 Session capture.** Quota check then a `voice_sessions` insert in
+- [x] **4.3 Session capture.** Quota check then a `voice_sessions` insert in
   `createRoomVoiceToken`, refusing a new token with `voice_quota_exhausted` (402)
   without cutting off live calls.
-- [ ] **4.4 Usage accrual.** On disconnect or voice-leave, close the session and
+- [x] **4.4 Usage accrual.** On disconnect or voice-leave, close the session and
   upsert `voice_usage` for the owner's billing month, which comes from
   `currentPeriodStart` for paid users and the calendar month for Free.
-- [ ] **4.5 Reconciliation.** A BullMQ pass that closes sessions left open past a
+- [x] **4.5 Reconciliation.** A BullMQ pass that closes sessions left open past a
   few hours, capped at `VOICE_SESSION_MAX_SECONDS`, so a closed laptop lid cannot
   leak an open row forever.
+
+Covered by `backend/test/voiceMetering.test.ts`: duration rounding and the
+`VOICE_SESSION_MAX_SECONDS` cap, the clock-skew clamp, close idempotency (a
+disconnect and the sweeper racing must not double-bill), the paid-vs-calendar
+period rule including the canceled-row case, the headroom boundary at the cap,
+and the two-hour orphan cutoff.
 
 ### Task 5 — Developer pool
 

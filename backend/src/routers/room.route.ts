@@ -14,7 +14,7 @@ import {
   voiceTokenHandler,
 } from '@/controllers/room.controller';
 import { requireAuth } from '@/middlewares/auth.middleware';
-import { inviteJoinRateLimit } from '@/middlewares/rateLimit.middleware';
+import { inviteJoinRateLimit, roomPasswordRateLimit } from '@/middlewares/rateLimit.middleware';
 
 export const roomRouter = new Hono();
 
@@ -23,11 +23,13 @@ roomRouter.use('/*', requireAuth);
 
 roomRouter.get('/', listRoomsHandler);
 roomRouter.post('/', createRoomHandler);
-roomRouter.post('/:slug/join', joinRoomHandler);
+// Join accepts the room password, so it needs the password-guessing limiter
+// rather than the looser invite limiter.
+roomRouter.post('/:slug/join', roomPasswordRateLimit, joinRoomHandler);
 roomRouter.get('/:slug/join-requests', listJoinRequestsHandler);
 roomRouter.post('/:slug/join-requests/:userId/approve', approveJoinRequestHandler);
 roomRouter.post('/:slug/join-requests/:userId/deny', denyJoinRequestHandler);
-roomRouter.post('/:slug/password', resetRoomPasswordHandler);
+roomRouter.post('/:slug/password', roomPasswordRateLimit, resetRoomPasswordHandler);
 roomRouter.patch('/:slug/members/:userId', updateRoomMemberRoleHandler);
 roomRouter.get('/:slug', inviteJoinRateLimit, getRoomHandler);
 roomRouter.delete('/:slug', deleteRoomHandler);

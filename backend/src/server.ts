@@ -11,6 +11,7 @@ import { initRedis, closeRedis, redis } from '@/services/roomState.service';
 import { attachSocket } from '@/realtime/socket';
 import { errorHandler } from '@/middlewares/errorHandler.middleware';
 import { requestLogger } from '@/middlewares/requestLogger.middleware';
+import { stopRateLimiterSweeper } from '@/services/rateLimiter.service';
 import { logger } from '@/utils/logger';
 import { initMonitoring } from '@/utils/monitoring';
 import { env, isAllowedCorsOrigin, logBootMode } from '@/config/env';
@@ -121,6 +122,7 @@ export async function startServer() {
       try {
         await io.close();
         logger.info('Socket.IO and HTTP servers closed');
+        stopRateLimiterSweeper();
         const cleanup = await Promise.allSettled([closeRedis(), sql.end({ timeout: 5 })]);
         for (const result of cleanup) {
           if (result.status === 'rejected') logger.error('Server shutdown cleanup failed', { error: result.reason });

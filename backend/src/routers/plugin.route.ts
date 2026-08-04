@@ -9,6 +9,7 @@ import {
   submitMyPluginHandler,
 } from '@/controllers/plugin.controller';
 import { requireAuth } from '@/middlewares/auth.middleware';
+import { pluginWriteRateLimit } from '@/middlewares/rateLimit.middleware';
 
 export const pluginRouter = new Hono();
 
@@ -18,7 +19,8 @@ pluginRouter.use('/*', requireAuth);
 pluginRouter.get('/mine', listMyPluginsHandler);
 pluginRouter.get('/catalog', listPublishedPluginsHandler);
 pluginRouter.get('/catalog/:pluginId', getPublishedPluginHandler);
-pluginRouter.post('/', createMyPluginHandler);
+// Writes accept uploaded plugin bundles and are far costlier than reads.
+pluginRouter.post('/', pluginWriteRateLimit, createMyPluginHandler);
 pluginRouter.get('/:pluginId', getMyPluginHandler);
-pluginRouter.post('/:pluginId/versions', createMyPluginVersionHandler);
-pluginRouter.post('/:pluginId/submit', submitMyPluginHandler);
+pluginRouter.post('/:pluginId/versions', pluginWriteRateLimit, createMyPluginVersionHandler);
+pluginRouter.post('/:pluginId/submit', pluginWriteRateLimit, submitMyPluginHandler);

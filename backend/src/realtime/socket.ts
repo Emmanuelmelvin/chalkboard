@@ -213,13 +213,15 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     return;
   }
 
-  const joinLimit = checkRateLimit(
-    `socket:${socket.id}:join:${data.roomId}`,
+  // Keyed on the authenticated user, not socket.id: socket ids are reissued on
+  // every reconnect, so an id-based key lets a client reset its quota at will.
+  const joinLimit = await checkRateLimit(
+    `socket:join:${user.id}:${data.roomId}`,
     env.INVITE_JOIN_RATE_LIMIT_MAX,
     env.INVITE_JOIN_RATE_LIMIT_WINDOW_MS,
   );
   if (!joinLimit.allowed) {
-    logger.warn('Socket room join rate limited', { socketId: socket.id, roomId: data.roomId });
+    logger.warn('Socket room join rate limited', { socketId: socket.id, userId: user.id, roomId: data.roomId });
     sendAck(ack, { ok: false, error: 'rate_limited' });
     return;
   }
@@ -346,8 +348,10 @@ async function handleChatMessage(io: Server, socket: any, payload: unknown, ack?
   }>(socket, 'chat:send', chatMessageSchema, payload, ack);
   if (!data || !isJoinedRoom(socket, data.roomId, 'chat:send', ack)) return;
 
-  const limit = checkRateLimit(
-    `socket:${socket.id}:chat:${data.roomId}`,
+  const chatActorId = getSocketMeta(socket.id)?.userId ?? socket.data.user?.id ?? socket.id;
+  // Keyed on the user id so reconnecting cannot clear the counter.
+  const limit = await checkRateLimit(
+    `socket:chat:${chatActorId}:${data.roomId}`,
     env.CHAT_RATE_LIMIT_MAX,
     env.CHAT_RATE_LIMIT_WINDOW_MS,
   );
@@ -806,16 +810,17 @@ export async function attachSocket(server: any) {
     });
 
     socket.on('reaction:send', (payload, ack) => {
-      runSafely(socket, 'reaction:send', ack, () => {
+      runSafely(socket, 'reaction:send', ack, async () => {
         const data = parsePayload<{ roomId: string; emoji: string }>(socket, 'reaction:send', reactionSendSchema, payload, ack);
         if (!data || !isJoinedRoom(socket, data.roomId, 'reaction:send', ack)) return;
-        const limit = checkRateLimit(`socket:${socket.id}:reaction`, env.REACTION_RATE_LIMIT_MAX, env.REACTION_RATE_LIMIT_WINDOW_MS);
+        const reactionActorId = getSocketMeta(socket.id)?.userId ?? socket.data.user?.id ?? socket.id;
+        const limit = await checkRateLimit(`socket:reaction:${reactionActorId}`, env.REACTION_RATE_LIMIT_MAX, env.REACTION_RATE_LIMIT_WINDOW_MS);
         if (!limit.allowed) {
-          logger.warn('Socket reaction rate limited', { socketId: socket.id, roomId: data.roomId });
+          logger.warn('Socket reaction rate limited', { socketId: socket.id, userId: reactionActorId, roomId: data.roomId });
           sendAck(ack, { ok: false, error: 'rate_limited' });
           return;
         }
-        io.to(data.roomId).emit('reaction:received', { userId: getSocketMeta(socket.id)?.userId ?? socket.id, emoji: data.emoji, at: Date.now() });
+        io.to(data.roomId).emit('reaction:received', { userId: reactionActorId, emoji: data.emoji, at: Date.now() });
         sendAck(ack, { ok: true });
       });
     });
@@ -824,13 +829,14 @@ export async function attachSocket(server: any) {
       runSafely(socket, 'hand:raise', ack, async () => {
         const data = parsePayload<{ roomId: string; raised: boolean }>(socket, 'hand:raise', handRaiseSchema, payload, ack);
         if (!data || !isJoinedRoom(socket, data.roomId, 'hand:raise', ack)) return;
-        const limit = checkRateLimit(`socket:${socket.id}:hand`, env.HAND_RATE_LIMIT_MAX, env.HAND_RATE_LIMIT_WINDOW_MS);
+        const handActorId = getSocketMeta(socket.id)?.userId ?? socket.data.user?.id ?? socket.id;
+        const limit = await checkRateLimit(`socket:hand:${handActorId}`, env.HAND_RATE_LIMIT_MAX, env.HAND_RATE_LIMIT_WINDOW_MS);
         if (!limit.allowed) {
-          logger.warn('Socket hand-toggle rate limited', { socketId: socket.id, roomId: data.roomId });
+          logger.warn('Socket hand-toggle rate limited', { socketId: socket.id, userId: handActorId, roomId: data.roomId });
           sendAck(ack, { ok: false, error: 'rate_limited' });
           return;
         }
-        io.to(data.roomId).emit('raised-hands:update', await setRaisedHand(data.roomId, getSocketMeta(socket.id)?.userId ?? socket.id, data.raised));
+        io.to(data.roomId).emit('raised-hands:update', await setRaisedHand(data.roomId, handActorId, data.raised));
         sendAck(ack, { ok: true });
       });
     });

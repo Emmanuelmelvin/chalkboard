@@ -1,6 +1,18 @@
 import { z } from 'zod';
 import { logger } from '@/utils/logger';
 
+/**
+ * Environment flags arrive as strings, so `z.coerce.boolean()` cannot be used:
+ * it treats the literal string "false" as true. Parse the usual falsy spellings
+ * explicitly instead.
+ */
+const FALSY_ENV_VALUES = new Set(['0', 'false', 'no', 'off', '']);
+const booleanEnv = (defaultValue: boolean) =>
+  z
+    .union([z.boolean(), z.string()])
+    .default(defaultValue)
+    .transform((value) => (typeof value === 'boolean' ? value : !FALSY_ENV_VALUES.has(value.trim().toLowerCase())));
+
 const envSchema = z.object({
   PROCESS_TYPE: z.enum(['server', 'worker']).default('server'),
   NODE_ENV: z.string().default('development'),
@@ -54,6 +66,36 @@ const envSchema = z.object({
   CHECKOUT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   CHECKOUT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   VOICE_SESSION_MAX_SECONDS: z.coerce.number().int().positive().default(14400),
+
+  // --- Rate limiting -------------------------------------------------------
+  // Number of reverse proxies (LB, CDN, ingress) in front of this process.
+  // 0 means the app is directly exposed and forwarded-for headers must be
+  // ignored, otherwise any client could spoof its identity and bypass limits.
+  TRUSTED_PROXY_HOP_COUNT: z.coerce.number().int().min(0).default(0),
+  // Trust `cf-connecting-ip`. Only enable when Cloudflare is the edge, since
+  // that header is trivially forged by a client talking to the origin directly.
+  TRUST_CLOUDFLARE_HEADER: booleanEnv(false),
+  // Catch-all limiter applied to every /api request.
+  GLOBAL_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
+  GLOBAL_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+  // Sign-in attempts per IP. Deliberately tight: this is a credential endpoint.
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+  // Admin 2FA verification. Tighter still, to make TOTP brute force impractical.
+  ADMIN_2FA_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
+  ADMIN_2FA_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(300000),
+  // Room password submission / reset.
+  ROOM_PASSWORD_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  ROOM_PASSWORD_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+  // Plugin create / version upload / submit.
+  PLUGIN_WRITE_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
+  PLUGIN_WRITE_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+  // When Redis is unavailable, fall back to per-process counters instead of
+  // failing open. Set false to reject traffic outright if that is preferred.
+  RATE_LIMIT_FALLBACK_TO_MEMORY: booleanEnv(true),
+  // Hard cap on in-memory buckets so a key-rotating attacker cannot exhaust
+  // heap while the limiter is running in fallback mode.
+  RATE_LIMIT_MEMORY_MAX_KEYS: z.coerce.number().int().positive().default(50000),
 });
 
 
@@ -101,6 +143,15 @@ export function logBootMode() {
     nodeEnv: env.NODE_ENV,
     errorMonitoring: env.SENTRY_DSN ? 'sentry' : 'disabled',
     billing: billingEnabled ? 'bachs' : 'disabled',
+    trustedProxyHops: env.TRUSTED_PROXY_HOP_COUNT,
   });
 
+  // Behind a load balancer with no trusted hops every request is attributed to
+  // the proxy address, so all clients share one bucket and the limiter becomes
+  // an outage rather than a control. Surface it loudly at boot.
+  if (env.NODE_ENV === 'production' && env.TRUSTED_PROXY_HOP_COUNT === 0) {
+    logger.warn(
+      'TRUSTED_PROXY_HOP_COUNT is 0 in production: forwarded-for headers are ignored and rate limits key on the direct socket address. Set it to the number of reverse proxies in front of this process.',
+    );
+  }
 }

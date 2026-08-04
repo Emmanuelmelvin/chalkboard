@@ -16,12 +16,14 @@ import {
   reviewAdminPluginHandler,
 } from '@/controllers/plugin.controller';
 import { requireAdmin, requireSuperAdmin } from '@/services/adminAuth.service';
+import { adminTwoFactorRateLimit } from '@/middlewares/rateLimit.middleware';
 
 export const adminRouter = new Hono();
 
 adminRouter.get('/session', adminSessionHandler);
-adminRouter.post('/2fa/setup', adminTwoFactorSetupHandler);
-adminRouter.post('/2fa/verify', adminTwoFactorVerifyHandler);
+adminRouter.post('/2fa/setup', adminTwoFactorRateLimit, adminTwoFactorSetupHandler);
+// A TOTP code is only six digits, so unlimited attempts make it guessable.
+adminRouter.post('/2fa/verify', adminTwoFactorRateLimit, adminTwoFactorVerifyHandler);
 adminRouter.post('/2fa/logout', adminTwoFactorLogoutHandler);
 
 adminRouter.get('/admins', requireAdmin, listAdminsHandler);

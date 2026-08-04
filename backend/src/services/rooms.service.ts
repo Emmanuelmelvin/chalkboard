@@ -7,6 +7,7 @@ import { UNLIMITED, getCachedEntitlements, getEntitlements, isWithinLimit } from
 import { createVoiceToken } from '@/services/livekit.service';
 import { deleteRoomState, getLiveRoomUserIds } from '@/services/realtimeRooms.service';
 import { isVoicePublisher } from '@/services/roomState.service';
+import { ownerHasVoiceHeadroom, startVoiceSession } from '@/services/voiceMetering.service';
 import { decryptRoomPassword, encryptRoomPassword } from '@/services/roomPasswords.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
@@ -642,10 +643,28 @@ export async function createRoomVoiceToken(slug: string, user: any) {
     return { error: authorization.error };
   }
 
+  // Metered against the owner's allowance, not the joiner's: capacity in this
+  // room is capacity the owner paid for. An exhausted month refuses new tokens
+  // only, so a call already in progress is never cut off part-way through.
+  if (!await ownerHasVoiceHeadroom(room.ownerId)) {
+    logger.warn('Voice token rejected because the owner has no voice minutes left', {
+      slug,
+      userId: user.id,
+      ownerId: room.ownerId,
+    });
+    return { error: 'voice_minutes_exhausted' };
+  }
+
   // Listening is granted to every accepted room member. Publishing is a
   // separate permission: only the owner or an explicitly invited member may
   // receive a token that can publish microphone audio.
   const canPublish = authorization.role === 'owner' || await isVoicePublisher(slug, user.id);
+
+  // Opened before the token is minted so a participant who connects and then
+  // vanishes is still measured; the reconciliation pass closes what a
+  // disconnect misses.
+  await startVoiceSession(room.id, user.id);
+
   logger.info('Issuing LiveKit voice token', { slug, userId: user.id, role: authorization.role, canPublish });
   return {
     url: process.env.LIVEKIT_URL,

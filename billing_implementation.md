@@ -846,7 +846,7 @@ Sandbox first, then the key swap.
   `frontend/src/api/billing.ts` module, the Dashboard `BillingPanel` pre-checkout
   screen, and `/billing/return/:reference` polling until `provisioned`.
 
-### Task 4 — Portal and voice metering
+### Task 4 — Portal and voice metering ✅ Done
 
 - [ ] **4.1 Portal session.** `createPortalUrl` plus `POST /billing/portal`,
   minting a fresh URL per request, never logged, owner only.

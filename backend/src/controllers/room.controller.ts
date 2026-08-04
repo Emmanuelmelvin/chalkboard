@@ -131,10 +131,19 @@ export async function updateRoomHandler() {
   throw new APIError('Use socket event room:update-settings so all privileged changes are broadcast live.', 409);
 }
 
+/** Status for each refusal `createRoomVoiceToken` can return. */
+function voiceTokenStatus(error: string) {
+  if (error === 'room_closed') return 410;
+  // 402 is the agreed signal for "your plan does not reach this", which the
+  // client turns into an upgrade prompt rather than an error toast.
+  if (error === 'voice_minutes_exhausted') return 402;
+  return 403;
+}
+
 export async function voiceTokenHandler(c: any) {
   const user = c.get('user');
   if (!user) throw new APIError('unauthorized', 401);
   const result = await createRoomVoiceToken(c.req.param('slug'), user);
-  if ('error' in result) throw new APIError(result.error, result.error === 'room_closed' ? 410 : 403);
+  if ('error' in result) throw new APIError(result.error, voiceTokenStatus(result.error));
   return c.json(result);
 }

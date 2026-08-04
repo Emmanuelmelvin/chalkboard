@@ -21,6 +21,7 @@ import {
   setPresenceServer,
   notifyRoomManagers,
 } from '@/services/realtimeRooms.service';
+import { closeVoiceSessions } from '@/services/voiceMetering.service';
 import { logger } from '@/utils/logger';
 import { env, isAllowedCorsOrigin } from '@/config/env';
 import { checkRateLimit } from '@/services/rateLimiter.service';
@@ -618,6 +619,14 @@ async function handleVoiceMembershipAction(
   }
 
   await setVoicePublisher(data.roomId, data.targetUserId, event === 'voice:invite');
+
+  // Leaving voice stops the meter now rather than waiting for the socket to
+  // drop: a member who is removed, or who leaves voice while staying on the
+  // board, must not keep accruing minutes against the owner.
+  if (event === 'voice:remove') {
+    await accrueVoiceUsageSafely(authorization.roomId, data.targetUserId);
+  }
+
   targetSockets.forEach((targetSocket: any) => targetSocket.emit(targetEvent, {
     roomId: data.roomId,
     actorUserId: actor!.userId,
@@ -648,6 +657,42 @@ async function handleVoiceRemove(io: Server, socket: any, payload: unknown, ack?
   return handleVoiceMembershipAction(io, socket, 'voice:remove', 'voice:removed', voiceRemoveSchema, payload, ack);
 }
 
+/**
+ * Sockets carry the room slug; voice_sessions rows are keyed on the room's
+ * database id. Resolve one to the other, tolerating a deleted room.
+ */
+async function resolveRoomIdForMetering(roomSlug: string) {
+  try {
+    const details = await getRoomWithMembers(roomSlug);
+    return details?.room.id ?? null;
+  } catch (error) {
+    logger.error('Voice metering room lookup failed', {
+      roomSlug,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Close a participant's open voice sessions without letting a metering failure
+ * break the surrounding room event.
+ *
+ * Usage that cannot be written here is not lost: every open row is still picked
+ * up by the reconciliation pass in the worker.
+ */
+async function accrueVoiceUsageSafely(roomId: string, userId: string) {
+  try {
+    await closeVoiceSessions(roomId, userId);
+  } catch (error) {
+    logger.error('Voice usage accrual failed; leaving the session for reconciliation', {
+      roomId,
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 async function handleVoiceOwnerConnection(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
   const data = parsePayload<{ roomId: string; connected: boolean }>(socket, 'voice:owner-connection', voiceOwnerConnectionSchema, payload, ack);
   if (!data || !isJoinedRoom(socket, data.roomId, 'voice:owner-connection', ack)) return;
@@ -667,6 +712,12 @@ async function handleVoiceOwnerConnection(io: Server, socket: any, payload: unkn
   if (!roomDetails?.room.voiceEnabled) {
     rejectEvent(socket, 'voice:owner-connection', 'voice_disabled', ack, data.roomId);
     return;
+  }
+
+  // The owner's own participation is metered like anyone else's: disconnecting
+  // from voice closes their session and stops the clock.
+  if (!data.connected) {
+    await accrueVoiceUsageSafely(authorization.roomId, actor!.userId);
   }
 
   await setVoiceOwnerConnected(data.roomId, data.connected);
@@ -870,6 +921,13 @@ export async function attachSocket(server: any) {
       schedulePresenceRemoval(socket.id, env.PRESENCE_GRACE_MS, (removedMeta) => {
         io.to(removedMeta.roomId).emit('user-disconnected', socket.id);
         void emitPresence(io, removedMeta.roomId);
+        // Deliberately after the grace period, and keyed on the room's database
+        // id rather than its slug: a browser refresh reconnects within the
+        // window and reopens voice, so closing the meter on the raw disconnect
+        // would bill two sessions for one continuous call.
+        void resolveRoomIdForMetering(removedMeta.roomId).then((roomId) => {
+          if (roomId) return accrueVoiceUsageSafely(roomId, removedMeta.userId);
+        });
         logger.info('Socket presence removed after grace period', { socketId: socket.id, roomId: removedMeta.roomId });
       });
     });

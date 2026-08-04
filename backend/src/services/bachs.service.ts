@@ -83,6 +83,16 @@ export interface BachsPortalSession {
   url: string;
 }
 
+export interface CreateCheckoutSessionInput {
+  product_cart: { product_id: string; quantity: number }[];
+  customer: { customer_id: string };
+  reference: string;
+  success_url: string;
+  cancel_url: string;
+  metadata?: Record<string, string>;
+  expires_in_minutes?: number;
+}
+
 /**
  * The flat error body Bachs returns on a non-2xx: `{ detail, error_code,
  * doc_url }`. `error_code` is the stable part, so it is what gets carried into
@@ -273,16 +283,6 @@ export function createCustomer(
     body: { email: input.email, name: input.name },
     idempotencyKey,
   });
-}
-
-export interface CreateCheckoutSessionInput {
-  product_cart: { product_id: string; quantity: number }[];
-  customer: { customer_id: string };
-  reference: string;
-  success_url: string;
-  cancel_url: string;
-  metadata?: Record<string, string>;
-  expires_in_minutes?: number;
 }
 
 export function createCheckoutSession(input: CreateCheckoutSessionInput): Promise<BachsCheckoutSession> {

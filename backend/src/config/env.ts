@@ -66,6 +66,10 @@ const envSchema = z.object({
   CHECKOUT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   CHECKOUT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   VOICE_SESSION_MAX_SECONDS: z.coerce.number().int().positive().default(14400),
+  // How often the worker sweeps for voice sessions left open by a crashed
+  // client or backend. Every 15 minutes keeps abandoned rows from ageing far
+  // past the point where their duration is still a fair estimate.
+  VOICE_RECONCILE_REPEAT_MS: z.coerce.number().int().positive().default(900000),
 
   // --- Rate limiting -------------------------------------------------------
   // Number of reverse proxies (LB, CDN, ingress) in front of this process.

@@ -371,7 +371,7 @@ function Plans() {
                                 <div>
                                     <span>01</span>
                                     <strong>The pool</strong>
-                                    <p>{Math.round(developerPoolRate * 100)}% of paid subscription revenue for the month, after payment processing.</p>
+                                    <p>{Math.round(developerPoolRate * 100)}% of subscription revenue actually collected in the month, after payment processing.</p>
                                 </div>
                                 <div>
                                     <span>02</span>
@@ -402,7 +402,7 @@ function Plans() {
                                 <article>
                                     <span className="plans-card-icon"><WalletCards size={18} /></span>
                                     <strong>Accrual</strong>
-                                    <p>Earnings are calculated monthly and held as a balance. You can see the running estimate in the Developer workspace.</p>
+                                    <p>The split runs on the first of each month for the month that just closed, and is held as a balance. Your running total is in the Developer workspace.</p>
                                 </article>
                                 <article>
                                     <span className="plans-card-icon"><BadgeCheck size={18} /></span>

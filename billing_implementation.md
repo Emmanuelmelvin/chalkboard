@@ -3,19 +3,21 @@
 Wiring the three subscription tiers (Free, Pro, Team) to real money using
 [Bachs](https://docs.bachs.io) for checkout, subscriptions, and the customer portal.
 
-Progress is tracked in §15, where each of the five tasks is broken into five
-sub-tasks. **Tasks 1, 2, and 3 are complete.** The billing environment block, the
-plan enums, the six billing tables, migration `0012_billing.sql`,
-`backend/src/services/entitlements.service.ts`, `plan` on the public user, and
-`GET /api/billing/summary` all exist, and the Free limits are enforced
-server-side: room count, attendee cap, plan-aware retention, and the plugin
-capability gates, each returning a 402 the frontend turns into an upgrade
-prompt. Checkout now works end to end: the Bachs client, `startCheckout`, the
-signed webhook intake with its dedupe gate, the subscription upsert, the Dashboard
-billing tab, and the `/billing/return` polling page. Money moves as soon as real
-Bachs credentials are configured; with them absent everything still resolves to
-Free and the checkout routes return 503. Task 4 adds the customer portal,
-cancellation, and voice metering.
+Progress is tracked in §15, where each task is broken into five sub-tasks.
+**All six tasks are complete.** The billing environment block, the plan enums,
+the billing tables and their migrations, `entitlements.service.ts`, `plan` on the
+public user, and `GET /api/billing/summary` all exist, and the Free limits are
+enforced server-side: room count, attendee cap, plan-aware retention, and the
+plugin capability gates, each returning a 402 the frontend turns into an upgrade
+prompt. Checkout works end to end — the Bachs client, `startCheckout`, the signed
+webhook intake with its dedupe gate, the subscription upsert, the Dashboard
+billing tab, and the `/billing/return` polling page — as do the customer portal,
+cancellation, and voice metering. The developer revenue pool now measures plugin
+usage, derives each month's pool from revenue actually collected, and distributes
+it idempotently, with an admin console for subscriptions, refunds, revenue, and
+payouts on top. Money moves as soon as real Bachs credentials are configured;
+with them absent everything still resolves to Free and the checkout routes
+return 503.
 
 
 The presentation layer that predates all of it is
@@ -43,11 +45,9 @@ which the backend now actually returns.
 
 **Deferred (documented, not built in the first pass)**
 
-- The plugin developer revenue pool and payouts. The `/plans` page already
-  promises 15% of paid revenue and a $50 payout threshold, so the measurement
-  tables are included in the schema below and the distribution job is Phase 5.
-  Until then the promise is forward-looking copy, and it should stay worded that
-  way.
+- ~~The plugin developer revenue pool and payouts.~~ Delivered in Task 5: the
+  15% share and the $50 payout threshold the `/plans` page promises are now a
+  live program rather than forward-looking copy.
 - Team seat invitations and the shared workspace. Team can be *sold* before the
   workspace exists only if the plan page says so; otherwise ship Pro first and
   keep Team as "contact us".
@@ -869,22 +869,46 @@ disconnect and the sweeper racing must not double-bill), the paid-vs-calendar
 period rule including the canceled-row case, the headroom boundary at the cap,
 and the two-hour orphan cutoff.
 
-### Task 5 — Developer pool
+### Task 5 — Developer pool ✅ Done
 
-Until this ships, the revenue-share copy on `/plans` stays worded as an intention
-rather than a live program.
-
-- [ ] **5.1 Accrual.** Record `plugin_usage_daily` from the plugin host, one row
+- [x] **5.1 Accrual.** Record `plugin_usage_daily` from the plugin host, one row
   per plugin per paying user per UTC day, relying on the unique index to make the
   count un-inflatable.
-- [ ] **5.2 Revenue ledger.** Persist `invoice.paid` amounts as the pool base,
+- [x] **5.2 Revenue ledger.** Persist `invoice.paid` amounts as the pool base,
   decimal strings throughout, so a month's distributable total is derived from
   money actually collected.
-- [ ] **5.3 Distribution job.** The monthly split of `developerPoolRate` across
+- [x] **5.3 Distribution job.** The monthly split of `developerPoolRate` across
   measured usage, written idempotently so a re-run cannot pay twice.
-- [ ] **5.4 Balances.** Developer-facing accrued and paid balances, plus the
+- [x] **5.4 Balances.** Developer-facing accrued and paid balances, plus the
   `developerPayoutThreshold` gate before anything is released.
-- [ ] **5.5 Payouts and copy.** The payout path itself, then rewrite the `/plans`
+- [x] **5.5 Payouts and copy.** The payout path itself, then rewrite the `/plans`
   revenue-share copy from intention to live program.
+
+Money is only ever divided as decimal strings, and the last cent of a division
+is given to the largest share rather than dropped, so the parts always sum back
+to the pool exactly. A month is written in one transaction guarded by a unique
+index on the period, which is what makes a second run a no-op instead of a
+second payment.
+
+### Task 6 — Admin billing console ✅ Done
+
+The operational surface for the money the previous five tasks move. Everything
+here sits behind the existing admin 2FA guard, and every state-changing action
+writes an append-only `billing_audit` row naming the admin who took it.
+
+- [x] **6.1 Read models.** Paginated, searchable subscriptions with per-customer
+  detail: invoices, refunds, payments, and lifetime paid/refunded/net totals.
+- [x] **6.2 Cancellation.** Admin-initiated cancellation at period end, reason
+  required, reusing the same `cancelSubscription` path as the customer's own
+  action so there is one code path and one set of webhook consequences.
+- [x] **6.3 Refunds.** Full or partial refunds against a specific payment,
+  bounded by what that payment can still refund, so the total refunded can never
+  exceed the amount collected.
+- [x] **6.4 Analytics.** MRR and ARR from contracted subscriptions with annual
+  plans normalised, collected revenue and refunds by month from the ledger, churn
+  counts, and the developer pool's last run and pending payouts.
+- [x] **6.5 Console.** The `Billing` tab in the admin app: revenue overview,
+  subscription management with the two destructive actions gated on a typed
+  reason, the audit log, and a manual pool distribution trigger.
 
 

@@ -431,3 +431,28 @@ export const workspaceInvites = pgTable('workspace_invites', {
   uniq: uniqueIndex('workspace_invites_workspace_email_idx').on(table.workspaceId, table.email),
 }));
 
+/**
+ * One row per *Bachs* seat add-on subscription.
+ *
+ * A seat add-on is sold as its own recurring subscription on the customer, and
+ * every additional seat purchase creates a new Bachs subscription rather than
+ * widening the first one (Bachs folds each checkout's cart quantity into the
+ * unit amount and reports `quantity: 1`, so the true count travels in the
+ * `seat_add_on` metadata our checkout stamps). `subscriptions.seats` is the
+ * materialised total: base count plus the sum of every entitling row here,
+ * recomputed on each add-on webhook so a second purchase accumulates instead of
+ * overwriting the first.
+ */
+export const seatAddOns = pgTable('seat_add_ons', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  bachsSubscriptionId: text('bachs_subscription_id').notNull().unique(),
+  bachsProductId: text('bachs_product_id').notNull(),
+  quantity: integer('quantity').notNull(),
+  status: subscriptionStatus('status').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index('seat_add_ons_user_idx').on(table.userId),
+}));
+

@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { billingEnabled, env } from '@/config/env';
 import { db } from '@/db/client';
-import { billingEvents, checkoutSessions, revenueLedger, subscriptions, users } from '@/db/schema';
+import { billingEvents, checkoutSessions, revenueLedger, seatAddOns, subscriptions, users } from '@/db/schema';
 import {
   cancelSubscription as cancelBachsSubscription,
   createCheckoutSession,
@@ -470,23 +470,29 @@ async function upsertSubscription(data: Record<string, any>, userId: string) {
     throw new UnresolvableEventError(`no plan is configured for product ${productId || '(missing)'}`);
   }
 
-  // A seat add-on is attached to the *current* plan row. When the plan changes
-  // to one without a workspace, the extras are reset and the add-on is
-  // cancelled at period end so it does not keep billing for seats nothing uses.
-  const [existing] = await db
-    .select({
-      planId: subscriptions.planId,
-      seats: subscriptions.seats,
-      seatBachsSubscriptionId: subscriptions.seatBachsSubscriptionId,
-      seatBachsProductId: subscriptions.seatBachsProductId,
-    })
-    .from(subscriptions)
-    .where(eq(subscriptions.userId, userId))
-    .limit(1);
-  const carriedExtras = existing && existing.seatBachsSubscriptionId
-    ? Math.max(0, existing.seats - baseSeats(existing.planId))
-    : 0;
-  const seats = baseSeats(mapped.planId) + (mapped.planId === 'team' ? carriedExtras : 0);
+  // Seat add-ons ride along with the plan row: on a plan change they keep
+  // billing (and counting) until their own period ends, and on a move to a
+  // plan without a workspace they are cancelled at period end below. The
+  // ledger, not a single column, is the source of the carried extras.
+  const carriedExtras = mapped.planId === 'team' ? await entitlingAddOnSeats(userId) : 0;
+  const seats = baseSeats(mapped.planId) + carriedExtras;
+
+  // The seatBachs* columns stay as the latest add-on for logging and legacy
+  // reads; the ledger is what entitlements derive the cap from.
+  const [latestAddOn] = mapped.planId === 'team'
+    ? await db
+        .select({
+          bachsSubscriptionId: seatAddOns.bachsSubscriptionId,
+          bachsProductId: seatAddOns.bachsProductId,
+        })
+        .from(seatAddOns)
+        .where(and(
+          eq(seatAddOns.userId, userId),
+          inArray(seatAddOns.status, [...ENTITLING_STATUSES]),
+        ))
+        .orderBy(seatAddOns.updatedAt)
+        .limit(1)
+    : [];
 
   const values = {
     userId,
@@ -500,8 +506,8 @@ async function upsertSubscription(data: Record<string, any>, userId: string) {
     currency: String(data.currency ?? 'USD'),
     seats,
     // Cleared when the add-on is no longer meaningful; see the branch below.
-    seatBachsSubscriptionId: mapped.planId === 'team' ? existing?.seatBachsSubscriptionId ?? null : null,
-    seatBachsProductId: mapped.planId === 'team' ? existing?.seatBachsProductId ?? null : null,
+    seatBachsSubscriptionId: latestAddOn?.bachsSubscriptionId ?? null,
+    seatBachsProductId: latestAddOn?.bachsProductId ?? null,
     currentPeriodStart: toDate(data.current_period_start),
     currentPeriodEnd: toDate(data.current_period_end),
     cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),
@@ -517,30 +523,86 @@ async function upsertSubscription(data: Record<string, any>, userId: string) {
     .values(values)
     .onConflictDoUpdate({ target: subscriptions.userId, set: values });
 
-  if (mapped.planId !== 'team' && existing?.seatBachsSubscriptionId) {
-    // Fire-and-forget: the webhook must not fail because the add-on cancel
+  if (mapped.planId !== 'team') {
+    // Fire-and-forget: the webhook must not fail because an add-on cancel
     // did. The portal can also cancel it directly; this is the tidy-up path.
-    cancelBachsSubscription(existing.seatBachsSubscriptionId, true, `chalkboard-seat-cancel-${existing.seatBachsSubscriptionId}`)
-      .then(() => logger.info('Seat add-on cancelled after leaving the Team plan', { userId, subscriptionId: existing.seatBachsSubscriptionId }))
-      .catch((error) => logger.warn('Seat add-on cancel after plan change failed; the portal can still cancel it', {
-        userId,
-        subscriptionId: existing.seatBachsSubscriptionId,
-        error: error instanceof Error ? error.message : String(error),
-      }));
+    const activeAddOns = await db
+      .select({ bachsSubscriptionId: seatAddOns.bachsSubscriptionId })
+      .from(seatAddOns)
+      .where(and(
+        eq(seatAddOns.userId, userId),
+        inArray(seatAddOns.status, [...ENTITLING_STATUSES]),
+      ));
+    for (const addOn of activeAddOns) {
+      const { bachsSubscriptionId } = addOn;
+      cancelBachsSubscription(bachsSubscriptionId, true, `chalkboard-seat-cancel-${bachsSubscriptionId}`)
+        .then(() => logger.info('Seat add-on cancelled after leaving the Team plan', { userId, subscriptionId: bachsSubscriptionId }))
+        .catch((error) => logger.warn('Seat add-on cancel after plan change failed; the portal can still cancel it', {
+          userId,
+          subscriptionId: bachsSubscriptionId,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+    }
   }
 }
 
 /**
- * Fold a seat add-on subscription into the single plan row.
+ * The total quantity of the user's entitling seat add-on subscriptions.
+ *
+ * Every seat checkout creates a *new* Bachs subscription on the customer, so
+ * the ledger holds one row per add-on subscription and the cap accumulates
+ * across them; a later purchase never overwrites an earlier one.
+ */
+async function entitlingAddOnSeats(userId: string): Promise<number> {
+  const rows = await db
+    .select({ quantity: seatAddOns.quantity })
+    .from(seatAddOns)
+    .where(and(
+      eq(seatAddOns.userId, userId),
+      inArray(seatAddOns.status, [...ENTITLING_STATUSES]),
+    ));
+  return rows.reduce((total, row) => total + row.quantity, 0);
+}
+
+/**
+ * Recompute the materialised `subscriptions.seats` as the plan's base count
+ * plus every entitling add-on. Runs after every add-on event so a second
+ * purchase accumulates instead of overwriting the first.
+ */
+export async function recomputeSeats(userId: string): Promise<void> {
+  const [row] = await db
+    .select({ planId: subscriptions.planId })
+    .from(subscriptions)
+    .where(eq(subscriptions.userId, userId))
+    .limit(1);
+  if (!row) return;
+  const extras = row.planId === 'team' ? await entitlingAddOnSeats(userId) : 0;
+  await db
+    .update(subscriptions)
+    .set({ seats: baseSeats(row.planId) + extras, updatedAt: new Date() })
+    .where(eq(subscriptions.userId, userId));
+}
+
+/**
+ * Fold a seat add-on subscription into the per-subscription ledger.
  *
  * The add-on is its own Bachs subscription on the same customer, sold with a
- * quantity of seats. Raising `seats` on the existing row keeps the
- * one-row-per-user invariant: the add-on widens the workspace cap and never
- * becomes a competing plan.
+ * quantity of seats; Bachs reports `quantity: 1` on the payload (the cart
+ * quantity is folded into the unit amount), so the true count travels in the
+ * `seat_add_on` metadata our checkout stamps. The row is upserted keyed on the
+ * Bachs subscription id, then the materialised `subscriptions.seats` is
+ * recomputed, so the one-row-per-user invariant still holds: the add-ons widen
+ * the workspace cap and never become a competing plan.
  */
-async function applySeatAddOn(data: Record<string, any>, userId: string) {
+export async function applySeatAddOn(data: Record<string, any>, userId: string) {
   const bachsSubscriptionId = subscriptionIdOf(data);
   if (!bachsSubscriptionId) throw new UnresolvableEventError('seat add-on payload carries no id');
+
+  const status = toSubscriptionStatus(data.status);
+  if (!status) throw new UnresolvableEventError(`unrecognised subscription status: ${String(data.status)}`);
+
+  const productId = productIdOf(data);
+  if (!isSeatProduct(productId)) throw new UnresolvableEventError('payload is not a configured seat add-on product');
 
   const [row] = await db
     .select({ planId: subscriptions.planId })
@@ -552,19 +614,35 @@ async function applySeatAddOn(data: Record<string, any>, userId: string) {
     throw new UnresolvableEventError('seat add-on arrived with no Team subscription to attach to');
   }
 
-  const status = toSubscriptionStatus(data.status);
-  // An add-on that stops entitling no longer pays for seats; reset to the base
-  // count so a lapsed add-on cannot keep a larger cap.
-  const seats = status && ENTITLING_STATUSES.includes(status) && row.planId === 'team'
-    ? baseSeats(row.planId) + seatQuantityOf(data)
-    : baseSeats(row.planId);
+  await db
+    .insert(seatAddOns)
+    .values({
+      userId,
+      bachsSubscriptionId,
+      bachsProductId: productId,
+      quantity: seatQuantityOf(data),
+      status,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: seatAddOns.bachsSubscriptionId,
+      set: {
+        quantity: seatQuantityOf(data),
+        status,
+        bachsProductId: productId,
+        updatedAt: new Date(),
+      },
+    });
 
+  await recomputeSeats(userId);
+
+  // Kept as the latest add-on for logging and legacy reads; the ledger above
+  // is what entitlements now derive the cap from.
   await db
     .update(subscriptions)
     .set({
-      seats,
       seatBachsSubscriptionId: bachsSubscriptionId,
-      seatBachsProductId: productIdOf(data),
+      seatBachsProductId: productId,
       updatedAt: new Date(),
     })
     .where(eq(subscriptions.userId, userId));
@@ -665,45 +743,40 @@ async function dispatch(event: BachsWebhookEvent) {
       const userId = await resolveUserId(data);
       if (!userId) throw new UnresolvableEventError('no Chalkboard user matches this Bachs customer');
 
-      // Which subscription went away? The plan row carries the add-on's Bachs
-      // id, so the event can be matched without guessing.
-      const [row] = await db
-        .select({
-          seatBachsSubscriptionId: subscriptions.seatBachsSubscriptionId,
-          planId: subscriptions.planId,
-        })
-        .from(subscriptions)
-        .where(eq(subscriptions.userId, userId))
-        .limit(1);
-
+      // Which subscription went away? An add-on is looked up in its own ledger
+      // first — every seat checkout is its own Bachs subscription, so any of
+      // them can lapse independently. Anything else is the plan subscription.
       const deletedSubscriptionId = subscriptionIdOf(data);
-      const deletedSeatAddOn = Boolean(row) && deletedSubscriptionId === row?.seatBachsSubscriptionId;
+      const [deletedAddOn] = deletedSubscriptionId
+        ? await db
+            .select({ id: seatAddOns.id })
+            .from(seatAddOns)
+            .where(eq(seatAddOns.bachsSubscriptionId, deletedSubscriptionId))
+            .limit(1)
+        : [];
 
-      if (deletedSeatAddOn) {
-        // The seat add-on lapsed or was cancelled: the workspace goes back to
-        // the base seat count. The plan itself is untouched.
+      if (deletedAddOn) {
+        // The add-on lapsed or was cancelled: it stops paying for seats, so
+        // the cap comes back down. The plan itself is untouched.
         await db
-          .update(subscriptions)
-          .set({
-            seats: baseSeats(row!.planId),
-            seatBachsSubscriptionId: null,
-            seatBachsProductId: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(subscriptions.userId, userId));
+          .update(seatAddOns)
+          .set({ status: 'canceled', updatedAt: new Date() })
+          .where(eq(seatAddOns.bachsSubscriptionId, deletedSubscriptionId));
+        await recomputeSeats(userId);
         await invalidateEntitlements(userId);
         await invalidateWorkspaceMemberEntitlements(userId);
         return;
       }
 
       // The plan subscription itself went away: cancelled, and the workspace
-      // and any attached add-on go with it.
+      // and any attached add-on go with it. The add-on rows are left in place
+      // (they stop entitling with the plan) and the plan row resolves to Free.
       await db
         .update(subscriptions)
         .set({
           status: 'canceled',
           canceledAt: toDate(data.canceled_at) ?? new Date(),
-          seats: baseSeats(row?.planId ?? 'free'),
+          seats: baseSeats('free'),
           seatBachsSubscriptionId: null,
           seatBachsProductId: null,
           updatedAt: new Date(),

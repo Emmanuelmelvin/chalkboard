@@ -26,6 +26,8 @@ export const pluginVersionStatus = pgEnum('plugin_version_status', ['draft', 'in
 export const pluginReviewDecision = pgEnum('plugin_review_decision', ['approved', 'rejected', 'suspended']);
 export const planId = pgEnum('plan_id', ['free', 'pro', 'team']);
 export const billingInterval = pgEnum('billing_interval', ['month', 'year']);
+export const workspaceRole = pgEnum('workspace_role', ['owner', 'member']);
+export const workspaceInviteStatus = pgEnum('workspace_invite_status', ['pending', 'accepted', 'revoked']);
 // Mirrors Bachs subscription statuses exactly so webhook payloads map 1:1.
 export const subscriptionStatus = pgEnum('subscription_status', [
   'trialing', 'active', 'past_due', 'unpaid', 'canceled', 'paused',
@@ -187,6 +189,16 @@ export const subscriptions = pgTable('subscriptions', {
   // Money is a decimal string end to end and never touches a JS number.
   amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
   currency: text('currency').notNull(),
+  // Total workspace seats paid for: the plan's base count plus any seat
+  // add-ons attached to this subscription. Kept on the row so entitlements
+  // resolve without a second lookup.
+  seats: integer('seats').default(1).notNull(),
+  // The Bachs subscription that sold the seat add-on, when one is attached.
+  // The plan subscription and the add-on are two Bachs subscriptions on the
+  // same customer, but both fold into this single row: the add-on only ever
+  // widens `seats`, never the plan.
+  seatBachsSubscriptionId: text('seat_bachs_subscription_id'),
+  seatBachsProductId: text('seat_bachs_product_id'),
   currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
   currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
   cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false).notNull(),
@@ -206,6 +218,12 @@ export const checkoutSessions = pgTable('checkout_sessions', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   planId: planId('plan_id').notNull(),
   interval: billingInterval('interval').notNull(),
+  // What this checkout bought: a whole plan, or a quantity of extra seats on
+  // an existing Team plan. `provisioned` on the status endpoint means
+  // something different for each, so the distinction is persisted.
+  kind: text('kind').default('plan').notNull(),
+  // Number of units bought. Always 1 for a plan checkout.
+  quantity: integer('quantity').default(1).notNull(),
   bachsCheckoutId: text('bachs_checkout_id').unique(),
   reference: text('reference').notNull().unique(),
   status: checkoutStatus('status').default('open').notNull(),
@@ -359,4 +377,57 @@ export const developerPoolRuns = pgTable('developer_pool_runs', {
   totalUsageUnits: integer('total_usage_units').default(0).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * The Team-plan shared workspace. One workspace per subscription owner,
+ * created when the subscription first entitles Team and reused for as long as
+ * the owner holds it. `ownerId` is the Team subscriber; everyone else on the
+ * plan joins through `workspace_members`.
+ */
+export const workspaces = pgTable('workspaces', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Who belongs to a workspace. The owner row is written when the workspace is
+ * created; invites fill in the rest. Membership is what `seats` counts: the
+ * owner occupies a seat like everyone else, so ten seats means ten members
+ * total.
+ */
+export const workspaceMembers = pgTable('workspace_members', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: workspaceRole('role').default('member').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  uniq: uniqueIndex('workspace_members_workspace_user_idx').on(table.workspaceId, table.userId),
+  userIdx: index('workspace_members_user_idx').on(table.userId),
+}));
+
+/**
+ * A seat offer to a specific email. Acceptance requires signing in with an
+ * account whose email matches, so a link is not a capability on its own. An
+ * invite reserves a seat from creation, which is what stops a workspace from
+ * over-booking; acceptance re-checks against members only, inside a lock.
+ */
+export const workspaceInvites = pgTable('workspace_invites', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  token: text('token').notNull().unique(),
+  status: workspaceInviteStatus('status').default('pending').notNull(),
+  invitedById: uuid('invited_by_id').notNull().references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+}, (table) => ({
+  workspaceIdx: index('workspace_invites_workspace_idx').on(table.workspaceId),
+  uniq: uniqueIndex('workspace_invites_workspace_email_idx').on(table.workspaceId, table.email),
+}));
 

@@ -4,6 +4,8 @@ import type {
   CheckoutStatusResponse,
   OkResponse,
   PortalSessionResponse,
+  SeatCheckoutRequest,
+  SeatCheckoutResponse,
   StartCheckoutRequest,
   StartCheckoutResponse,
 } from '@/api/types';
@@ -35,4 +37,13 @@ export function createPortalSession() {
 
 export function cancelSubscription(atPeriodEnd = true) {
   return apiRequest<OkResponse>({ url: '/billing/cancel', method: 'POST', data: { atPeriodEnd } });
+}
+
+/**
+ * Buy more seats on an existing Team subscription. The backend mints a
+ * checkout for the per-seat add-on product with the requested quantity; the
+ * returned URL is the only one the browser ever visits.
+ */
+export function startSeatCheckout(input: SeatCheckoutRequest) {
+  return apiRequest<SeatCheckoutResponse>({ url: '/billing/seats-checkout', method: 'POST', data: input });
 }

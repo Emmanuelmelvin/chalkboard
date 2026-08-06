@@ -136,6 +136,11 @@ type SubscriptionSnapshot = {
   status: SubscriptionStatus;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
+  /**
+   * Total seats paid for: the plan's base count plus any seat add-ons. Absent
+   * on rows written before the seat feature, so it is optional here.
+   */
+  seats?: number;
 };
 
 export function freeEntitlements(): Entitlements {
@@ -159,9 +164,18 @@ export function resolveEntitlements(subscription: SubscriptionSnapshot | null): 
   if (!subscription) return freeEntitlements();
 
   const plan = statusGrantsAccess(subscription.status) ? subscription.planId : 'free';
+  const limits = getPlanLimits(plan);
+  // A Team subscription can buy more seats than the plan's base count, and the
+  // number of seats is a property of the subscription, not of the plan table.
+  // Override only upward and only on Team: a seat add-on must never shrink a
+  // limit, and Free/Pro have no workspace to seat.
+  const seats = subscription.seats;
+  const effectiveLimits = plan === 'team' && seats !== undefined && seats > limits.seats
+    ? { ...limits, seats }
+    : limits;
   return {
     plan,
-    limits: getPlanLimits(plan),
+    limits: effectiveLimits,
     status: subscription.status,
     currentPeriodEnd: subscription.currentPeriodEnd ?? null,
     cancelAtPeriodEnd: subscription.cancelAtPeriodEnd ?? false,
@@ -176,6 +190,7 @@ async function getSubscriptionRow(userId: string) {
       currentPeriodStart: subscriptions.currentPeriodStart,
       currentPeriodEnd: subscriptions.currentPeriodEnd,
       cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd,
+      seats: subscriptions.seats,
     })
     .from(subscriptions)
     .where(eq(subscriptions.userId, userId))
@@ -218,10 +233,16 @@ export async function getCachedEntitlements(userId?: string): Promise<Entitlemen
         status: EntitlementStatus;
         currentPeriodEnd: string | null;
         cancelAtPeriodEnd: boolean;
+        seats?: number;
       };
+      const limits = getPlanLimits(parsed.plan);
+      const seats = parsed.seats;
+      const effectiveLimits = parsed.plan === 'team' && seats !== undefined && seats > limits.seats
+        ? { ...limits, seats }
+        : limits;
       return {
         plan: parsed.plan,
-        limits: getPlanLimits(parsed.plan),
+        limits: effectiveLimits,
         status: parsed.status,
         currentPeriodEnd: parsed.currentPeriodEnd ? new Date(parsed.currentPeriodEnd) : null,
         cancelAtPeriodEnd: parsed.cancelAtPeriodEnd,
@@ -243,6 +264,7 @@ export async function getCachedEntitlements(userId?: string): Promise<Entitlemen
         status: entitlements.status,
         currentPeriodEnd: entitlements.currentPeriodEnd?.toISOString() ?? null,
         cancelAtPeriodEnd: entitlements.cancelAtPeriodEnd,
+        seats: entitlements.limits.seats,
       }),
       { EX: CACHE_TTL_SECONDS },
     );

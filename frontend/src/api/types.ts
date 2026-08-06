@@ -63,6 +63,8 @@ export interface BillingSummary {
   usage: {
     activeRooms: number;
     voiceMinutesUsed: number;
+    /** Members seated in the user's workspace; zero when there is none. */
+    seatsUsed: number;
   };
   /** False when no Bachs credentials are configured; hide the upgrade path. */
   billingEnabled: boolean;
@@ -403,4 +405,70 @@ export interface VoiceTokenResponse {
   url?: string;
   token?: string;
   error?: string;
+}
+
+// --- Team workspace ---------------------------------------------------------
+
+export type WorkspaceRole = 'owner' | 'member';
+
+export interface WorkspaceMemberInfo {
+  userId: string;
+  role: WorkspaceRole;
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+  joinedAt: string;
+}
+
+export interface WorkspaceInviteInfo {
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+/**
+ * The read model of a Team workspace. `seats.used` counts members, owner
+ * included; `seats.limit` is the paid seat count (10 base plus add-ons).
+ */
+export interface WorkspaceInfo {
+  id: string;
+  name: string;
+  ownerId: string;
+  myRole: WorkspaceRole;
+  seats: { used: number; limit: number };
+  members: WorkspaceMemberInfo[];
+  pendingInvites: WorkspaceInviteInfo[];
+}
+
+/** `workspace` is null when the user has no workspace (no Team plan yet). */
+export interface WorkspaceResponse {
+  workspace: WorkspaceInfo | null;
+}
+
+export interface CreateWorkspaceInviteResponse {
+  invite: { email: string; token: string; expiresAt: string };
+}
+
+/** Rendered by the accept page before the user decides. */
+export interface InviteLookupResponse {
+  workspaceName: string;
+  email: string;
+  status: 'pending' | 'accepted' | 'revoked';
+  expiresAt: string;
+  expired: boolean;
+}
+
+export interface AcceptInviteResponse {
+  ok: true;
+  workspace: { id: string; name: string };
+}
+
+export interface SeatCheckoutRequest {
+  /** How many seats to add to the Team subscription, 1..100. */
+  quantity: number;
+}
+
+export interface SeatCheckoutResponse {
+  checkoutUrl: string;
+  reference: string;
 }

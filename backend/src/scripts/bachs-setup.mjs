@@ -21,6 +21,11 @@ const catalogue = [
     { env: 'BACHS_PRODUCT_PRO_ANNUAL', name: 'Chalkboard Pro (annual)', price: '50.00', interval: 'year' },
     { env: 'BACHS_PRODUCT_TEAM_MONTHLY', name: 'Chalkboard Team (monthly)', price: '30.00', interval: 'month' },
     { env: 'BACHS_PRODUCT_TEAM_ANNUAL', name: 'Chalkboard Team (annual)', price: '300.00', interval: 'year' },
+    // Per-seat add-ons. Sold with quantity = number of seats in the checkout
+    // cart, and folded into `subscriptions.seats` by the webhook. $2/seat is
+    // the self-serve rate for going above the ten seats the base plan buys.
+    { env: 'BACHS_PRODUCT_TEAM_SEAT_MONTHLY', name: 'Chalkboard Team extra seat (monthly)', price: '2.00', interval: 'month' },
+    { env: 'BACHS_PRODUCT_TEAM_SEAT_ANNUAL', name: 'Chalkboard Team extra seat (annual)', price: '20.00', interval: 'year' },
 ];
 
 async function bachs(path, init = {}) {

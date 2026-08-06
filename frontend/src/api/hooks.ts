@@ -4,8 +4,9 @@ import { getCurrentUser, getGoogleConfig, signInWithGoogle, signOut } from '@/ap
 import { createRoom, deleteRoom, getRoom, joinRoom, listJoinRequests, listRooms, resetRoomPassword, resolveJoinRequest } from '@/api/rooms';
 import { createPlugin, createPluginVersion, getMyPluginAnalytics, getPluginCataloguePlugin, listMyPlugins, listPluginCatalogue, submitPlugin } from '@/api/plugins';
 import { addAdmin, beginAdminTwoFactorSetup, getAdminSession, listAdminPlugins, listAdmins, logoutAdminTwoFactor, publishAdminPlugin, removeAdmin, removeAdminPluginFromRegistry, reviewAdminPlugin, verifyAdminTwoFactor } from '@/api/admin';
-import { cancelSubscription, createPortalSession, getCheckoutStatus, startCheckout } from '@/api/billing';
-import type { AddAdminRequest, AdminPluginReviewRequest, CreatePluginRequest, CreatePluginVersionRequest, CreateRoomRequest, GoogleSignInRequest, JoinRoomRequest, StartCheckoutRequest } from '@/api/types';
+import { cancelSubscription, createPortalSession, getCheckoutStatus, startCheckout, startSeatCheckout } from '@/api/billing';
+import { acceptWorkspaceInvite, createWorkspaceInvite, getWorkspace, removeWorkspaceMember, revokeWorkspaceInvite } from '@/api/workspace';
+import type { AddAdminRequest, AdminPluginReviewRequest, CreatePluginRequest, CreatePluginVersionRequest, CreateRoomRequest, GoogleSignInRequest, JoinRoomRequest, SeatCheckoutRequest, StartCheckoutRequest } from '@/api/types';
 
 export function useCurrentUserQuery(enabled = true) {
   return useQuery({ queryKey: apiKeys.auth.me, queryFn: getCurrentUser, enabled });
@@ -204,6 +205,59 @@ export function useCancelSubscriptionMutation() {
     // still arrives by webhook.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: apiKeys.billing.summary }),
   });
+}
+
+// --- Team workspace ---------------------------------------------------------
+
+export function useWorkspaceQuery(enabled = true) {
+  return useQuery({ queryKey: apiKeys.workspace.mine, queryFn: getWorkspace, enabled });
+}
+
+export function useCreateWorkspaceInviteMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (email: string) => createWorkspaceInvite(email),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: apiKeys.workspace.mine }),
+  });
+}
+
+export function useRevokeWorkspaceInviteMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (token: string) => revokeWorkspaceInvite(token),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: apiKeys.workspace.mine }),
+  });
+}
+
+export function useAcceptWorkspaceInviteMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (token: string) => acceptWorkspaceInvite(token),
+    onSuccess: () => {
+      // Seating changes what the summary reports and the invite page renders.
+      queryClient.invalidateQueries({ queryKey: apiKeys.workspace.mine });
+      queryClient.invalidateQueries({ queryKey: apiKeys.billing.summary });
+    },
+  });
+}
+
+export function useRemoveWorkspaceMemberMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => removeWorkspaceMember(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: apiKeys.workspace.mine });
+      queryClient.invalidateQueries({ queryKey: apiKeys.billing.summary });
+    },
+  });
+}
+
+/**
+ * Buy more seats. Nothing is invalidated on success: payment has not happened
+ * yet, and the seat count only changes once the webhook lands.
+ */
+export function useStartSeatCheckoutMutation() {
+  return useMutation({ mutationFn: (input: SeatCheckoutRequest) => startSeatCheckout(input) });
 }
 
 export function useAdminSessionQuery(enabled = true) {

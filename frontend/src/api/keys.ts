@@ -18,6 +18,10 @@ export const apiKeys = {
     summary: ['billing', 'summary'] as const,
     checkout: (checkoutId: string) => ['billing', 'checkout', checkoutId] as const,
   },
+  workspace: {
+    mine: ['workspace'] as const,
+    invite: (token: string) => ['workspace', 'invite', token] as const,
+  },
   admin: {
     session: ['admin', 'session'] as const,
 

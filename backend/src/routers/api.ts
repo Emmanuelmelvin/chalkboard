@@ -4,6 +4,7 @@ import { authRouter } from '@/routers/auth.route';
 import { billingRouter } from '@/routers/billing.route';
 import { pluginRouter } from '@/routers/plugin.route';
 import { roomRouter } from '@/routers/room.route';
+import { workspaceRouter } from '@/routers/workspace.route';
 import { globalRateLimit } from '@/middlewares/rateLimit.middleware';
 
 export const api = new Hono();
@@ -19,3 +20,4 @@ api.route('/plugins', pluginRouter);
 api.route('/admin', adminRouter);
 api.route('/billing', billingRouter);
 api.route('/rooms', roomRouter);
+api.route('/workspace', workspaceRouter);

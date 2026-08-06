@@ -61,6 +61,10 @@ const envSchema = z.object({
   BACHS_PRODUCT_PRO_ANNUAL: z.string().default(''),
   BACHS_PRODUCT_TEAM_MONTHLY: z.string().default(''),
   BACHS_PRODUCT_TEAM_ANNUAL: z.string().default(''),
+  // Per-seat add-on products for Team. Bought with a quantity of seats; the
+  // webhook folds them into `subscriptions.seats` rather than a second plan.
+  BACHS_PRODUCT_TEAM_SEAT_MONTHLY: z.string().default(''),
+  BACHS_PRODUCT_TEAM_SEAT_ANNUAL: z.string().default(''),
   // Absolute, public origin used to build checkout success and cancel URLs.
   APP_PUBLIC_URL: z.string().url().default('http://localhost:5173'),
   CHECKOUT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),

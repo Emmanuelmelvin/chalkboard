@@ -5,8 +5,10 @@ import {
   getCheckoutStatus,
   handleWebhook,
   startCheckout,
+  startSeatCheckout,
 } from '@/services/billing.service';
 import { getBillingUsage, getEntitlements } from '@/services/entitlements.service';
+import { getSeatsUsed } from '@/services/workspaces.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 
@@ -19,9 +21,10 @@ import { logger } from '@/utils/logger';
 export async function getBillingSummaryHandler(c: any) {
   c.header('Cache-Control', 'no-store');
   const user = c.get('user');
-  const [entitlements, usage] = await Promise.all([
+  const [entitlements, usage, seatsUsed] = await Promise.all([
     getEntitlements(user.id),
     getBillingUsage(user.id),
+    getSeatsUsed(user.id),
   ]);
 
   return c.json({
@@ -33,6 +36,8 @@ export async function getBillingSummaryHandler(c: any) {
     usage: {
       activeRooms: usage.activeRooms,
       voiceMinutesUsed: usage.voiceMinutesUsed,
+      // Zero when the user has no workspace, so the summary never branches.
+      seatsUsed,
     },
     billingEnabled,
   });
@@ -50,6 +55,18 @@ export async function startCheckoutHandler(c: any) {
     planId: String(body?.planId ?? ''),
     interval: String(body?.interval ?? ''),
   });
+  return c.json({ checkoutUrl, reference });
+}
+
+/**
+ * Mint a checkout for extra seats on an existing Team plan. The requested
+ * quantity becomes the Bachs cart quantity for the per-seat add-on product;
+ * the returned URL is the only one the browser ever visits.
+ */
+export async function startSeatCheckoutHandler(c: any) {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  const { checkoutUrl, reference } = await startSeatCheckout(user, body?.quantity);
   return c.json({ checkoutUrl, reference });
 }
 

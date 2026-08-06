@@ -6,6 +6,7 @@ import {
   getBillingSummaryHandler,
   getCheckoutStatusHandler,
   startCheckoutHandler,
+  startSeatCheckoutHandler,
 } from '@/controllers/billing.controller';
 import { requireAuth } from '@/middlewares/auth.middleware';
 import { checkoutRateLimit } from '@/middlewares/rateLimit.middleware';
@@ -24,6 +25,7 @@ billingRouter.get('/summary', getBillingSummaryHandler);
 // Checkout session creation calls a paid third-party API, so it carries its own
 // limiter (CHECKOUT_RATE_LIMIT_*) on top of the global one.
 billingRouter.post('/checkout', checkoutRateLimit, startCheckoutHandler);
+billingRouter.post('/seats-checkout', checkoutRateLimit, startSeatCheckoutHandler);
 billingRouter.get('/checkout/:checkoutId', getCheckoutStatusHandler);
 billingRouter.post('/portal', createPortalSessionHandler);
 billingRouter.post('/cancel', cancelSubscriptionHandler);

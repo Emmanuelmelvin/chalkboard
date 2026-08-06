@@ -168,9 +168,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .admin-community-panel { margin-top: 27px; }
 .admin-community-muted { color: var(--admin-muted); font-size: 11px; line-height: 1.7; }
 .admin-community-row { display: grid; grid-template-columns: 31px minmax(0, 1fr) auto; gap: 11px; align-items: center; }
-.admin-community-share { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
-.admin-community-share strong { color: var(--admin-gold-bright); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* The share column: percentage, label, and a proportion bar pinned beneath it.
+   `position: relative` on the column is what the bar measures itself against. */
+.admin-community-share { position: relative; display: flex; flex-direction: column; align-items: flex-end; min-width: 96px; padding-bottom: 7px; text-align: right; }
+.admin-community-share strong { color: var(--admin-gold-bright); font-size: 15px; font-variant-numeric: tabular-nums; }
 .admin-community-share small { margin-top: 2px; color: var(--admin-muted); font-size: 9px; }
+.admin-community-share i { position: absolute; right: 0; bottom: 0; height: 2px; min-width: 1px; background: var(--admin-gold); }
 .admin-community-drawer-overlay { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(6, 6, 5, 0.88); }
 .admin-community-drawer { position: relative; width: min(100%, 720px); max-height: 90vh; overflow: auto; background: var(--admin-panel); border: 1px solid var(--admin-gold); box-shadow: 22px 22px 0 rgba(199, 162, 88, 0.15); }
 .admin-community-drawer-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: start; gap: 18px; padding: 26px 28px; border-bottom: 1px solid var(--admin-line); background: var(--admin-panel); }
@@ -181,10 +184,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .admin-community-drawer-body { padding: 28px; }
 .admin-community-drawer-body section { margin-bottom: 32px; }
 .admin-community-drawer-body section:last-child { margin-bottom: 0; }
-.admin-community-earnings { padding: 18px 0; border-top: 1px solid var(--admin-line); border-bottom: 1px solid var(--admin-line); }
-.admin-community-earnings span { display: block; margin-bottom: 6px; color: var(--admin-muted); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
-.admin-community-earnings strong { display: block; margin-bottom: 5px; color: var(--admin-gold-bright); font-size: 32px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-.admin-community-earnings small { color: var(--admin-muted); font-size: 11px; }
+.admin-community-entitlement { padding: 18px 0; border-top: 1px solid var(--admin-line); border-bottom: 1px solid var(--admin-line); }
+.admin-community-entitlement span { display: block; margin-bottom: 6px; color: var(--admin-muted); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+.admin-community-entitlement strong { display: block; margin-bottom: 5px; color: var(--admin-gold-bright); font-family: Georgia, serif; font-size: 42px; font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.05em; line-height: 1; }
+.admin-community-entitlement small { color: var(--admin-muted); font-size: 11px; line-height: 1.6; }
 .admin-community-developer-row { display: grid; grid-template-columns: 31px minmax(0, 1fr); gap: 11px; align-items: center; margin-top: 12px; }
 .admin-community-developer-row strong { display: block; color: var(--admin-white); font-size: 13px; }
 .admin-community-developer-row small { display: flex; align-items: center; gap: 5px; margin-top: 3px; color: var(--admin-muted); font-size: 10px; }
@@ -192,9 +195,27 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .admin-community-range button { flex: 1; min-width: 70px; padding: 7px 12px; border: 0; background: var(--admin-panel); color: var(--admin-muted); font: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
 .admin-community-range button:hover { color: var(--admin-white); }
 .admin-community-range button.is-active { background: var(--admin-panel-deep); color: var(--admin-gold-bright); }
-.admin-community-chart { display: flex; align-items: flex-end; gap: 3px; height: 140px; margin: 22px 0; padding: 12px 0; border-top: 1px solid var(--admin-line); border-bottom: 1px solid var(--admin-line); }
-.admin-community-chart span { flex: 1; min-width: 0; background: rgba(198, 181, 145, 0.15); cursor: default; }
-.admin-community-chart span.is-active { background: var(--admin-gold); }
+/* Recharts surfaces. The library draws SVG and takes colours as props, so the
+   only styling needed here is the frame, the legend, and the replacement
+   tooltip — its default card is white and unreadable on this palette. */
+.admin-chart { position: relative; margin: 22px 0; padding: 14px 0 6px; border-top: 1px solid var(--admin-line); border-bottom: 1px solid var(--admin-line); }
+.admin-chart .recharts-surface { overflow: visible; }
+/* Recharts renders a focus outline on the wrapper when tooltips are used; it
+   fires on hover, not keyboard, so it is noise rather than an affordance. */
+.admin-chart .recharts-wrapper:focus, .admin-chart .recharts-wrapper:focus-visible { outline: none; }
+.admin-chart-legend { display: flex; gap: 18px; padding: 9px 0 3px; color: var(--admin-muted); font-size: 9.5px; letter-spacing: 0.04em; }
+.admin-chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.admin-chart-legend i, .admin-chart-tooltip i { width: 8px; height: 2px; flex-shrink: 0; }
+.admin-chart-tooltip { min-width: 132px; padding: 9px 11px; border: 1px solid var(--admin-gold); background: rgba(13, 13, 12, 0.97); box-shadow: 6px 6px 0 rgba(199, 162, 88, 0.12); }
+.admin-chart-tooltip strong { display: block; margin-bottom: 7px; color: var(--admin-white); font-size: 10px; font-weight: 650; }
+.admin-chart-tooltip span { display: flex; align-items: center; gap: 7px; margin-top: 4px; color: var(--admin-muted); font-size: 9.5px; }
+.admin-chart-tooltip b { margin-left: auto; color: var(--admin-gold-bright); font-variant-numeric: tabular-nums; }
+/* The donut's centre figure is positioned over the hole rather than drawn as a
+   label, so it keeps the console's serif numerals instead of SVG text. */
+.admin-chart-donut { display: grid; place-items: center; }
+.admin-chart-donut-centre { position: absolute; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.admin-chart-donut-centre strong { color: var(--admin-gold-bright); font-family: Georgia, serif; font-size: 25px; font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.04em; }
+.admin-chart-donut-centre small { margin-top: 2px; color: var(--admin-muted); font-size: 8.5px; letter-spacing: 0.09em; text-transform: uppercase; }
 .admin-community-stat-grid { grid-template-columns: repeat(3, 1fr); margin-top: 18px; }
 .admin-community-description { max-width: 600px; margin: 28px 0 0; padding-top: 24px; border-top: 1px solid var(--admin-line); color: var(--admin-muted); font-size: 12px; line-height: 1.7; }
 

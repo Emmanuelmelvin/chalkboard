@@ -1,45 +1,32 @@
-import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import {
-  developerEarnings,
-  developerPoolRuns,
-  pluginUsageDaily,
-  plugins,
-  users,
-} from '@/db/schema';
-import {
-  collectedRevenue,
-  DEVELOPER_POOL_BASIS_POINTS,
-  monthBounds,
-  POOL_CURRENCY,
-} from '@/services/developerPool.service';
+import { developerPoolRuns, pluginUsageDaily, plugins, users } from '@/db/schema';
+import { DEVELOPER_POOL_BASIS_POINTS, monthBounds } from '@/services/developerPool.service';
 import { APIError } from '@/utils/error';
-import { allocateByWeight, applyRate, sumMoney, ZERO_MONEY } from '@/utils/money';
+import { allocateByWeight } from '@/utils/money';
 
 /**
  * The community view of the developer pool.
  *
- * This is the read-only half of `developerPool.service`: it answers "how much
- * of the money belongs to the community, and which plugin earned which part of
- * it" without moving anything. Nothing here writes, so an admin browsing the
- * console can never change a payout by accident.
+ * This is the read-only half of `developerPool.service`, and it deliberately
+ * reports *entitlement* rather than *earnings*: which share of the pool each Pro
+ * plugin has earned, expressed as a percentage, with no dollar figures anywhere.
  *
- * Two deliberate choices:
+ * That is not squeamishness, it is the only honest option. A money figure here
+ * would have to come from `revenue_ledger`, which is written solely by the
+ * `invoice.paid` webhook — so it contains only invoices paid while this backend
+ * was up and receiving hooks, and reads `0.00` for every invoice that came
+ * before. Bachs exposes no balance or revenue-by-period endpoint to reconcile
+ * against, and MRR is a forward projection rather than cash collected, so it is
+ * the wrong input for a pool derived from money actually received. A confident
+ * `$0.00` is worse than no number at all.
  *
- *  1. Shares are computed *per plugin*, while a distribution pays *per
- *     developer*. A developer with three plugins is one payee, but an admin
- *     asking "what is this plugin worth" needs the plugin-level number, so we
- *     re-derive it from the same usage measure with the same allocator.
- *  2. The current, still-accruing month is projected rather than read from a
- *     run row. It has not been distributed yet, so no run exists; showing a
- *     projection is more useful than showing nothing, and it is labelled as
- *     such by `distributed: false`.
+ * The percentages, by contrast, are sound: `plugin_usage_daily` is our own
+ * table, written by our own host, so the weights hold regardless of what the
+ * ledger knows. The dollar amounts still exist and are still correct wherever
+ * the ledger has data — the monthly job writes `developer_earnings` exactly as
+ * before, and the developer-facing balance view is untouched.
  */
-
-/** The month containing `now`, which is still accruing. */
-function currentMonthBounds(now = new Date()) {
-  return monthBounds(now);
-}
 
 /** Usage units per plugin for a period. One unit = one paying user, one day. */
 async function usageByPlugin(periodStart: Date, periodEnd: Date) {
@@ -58,21 +45,25 @@ async function usageByPlugin(periodStart: Date, periodEnd: Date) {
     .groupBy(pluginUsageDaily.pluginId);
 }
 
+/**
+ * Split 100% across the given weights so the parts sum to exactly 100.00.
+ *
+ * Reuses `allocateByWeight`, the same largest-remainder allocator the payout job
+ * uses, over a notional pool of `100.00`. Naive `units / total * 100` would give
+ * three plugins 33.3% each and leave a tenth of a percent unaccounted for; here
+ * the remainder is handed to the largest fractional parts, so the column adds up
+ * and an admin is never left wondering where the missing slice went.
+ */
+function percentShares(weights: bigint[]): string[] {
+  return allocateByWeight('100.00', weights);
+}
+
 export interface CommunityPoolSummary {
-  currency: string;
-  /** 15%, rendered as a percentage for display. */
+  /** The policy: the share of paid revenue that belongs to developers. */
   poolRate: string;
   period: { start: Date; end: Date; label: string };
-  /** Revenue collected in the period the pool is derived from. */
-  revenueTotal: string;
-  /** 15% of that revenue: what belongs to the community. */
-  poolTotal: string;
-  /** True once the month has actually been closed and distributed. */
+  /** True once the month has been closed by the distribution job. */
   distributed: boolean;
-  /** Accrued but unpaid earnings across every developer, all periods. */
-  pendingPayouts: string;
-  /** Everything ever allocated to developers. */
-  lifetimePool: string;
   lastRun: Date | null;
   totalUsageUnits: number;
   proPluginCount: number;
@@ -80,48 +71,24 @@ export interface CommunityPoolSummary {
 }
 
 /**
- * The headline figure: what share of the pool belongs to the community now.
- *
- * Reads the most recent distributed run when one exists for the current month,
- * and otherwise projects from revenue collected so far. Both paths apply the
- * same 15% rate through `applyRate`, so the number cannot drift between them.
+ * The headline: the pool rate, the period, and how much usage there is to
+ * divide. No money — see the note at the top of this file.
  */
 export async function getCommunityPoolSummary(now = new Date()): Promise<CommunityPoolSummary> {
-  const { periodStart, periodEnd } = currentMonthBounds(now);
+  const { periodStart, periodEnd } = monthBounds(now);
 
-  const [
-    revenueTotal,
-    [existingRun],
-    [lastRun],
-    pendingRows,
-    allEarnings,
-    usage,
-    [proCount],
-    [developerRows],
-  ] = await Promise.all([
-    collectedRevenue(periodStart, periodEnd),
+  const [[existingRun], [lastRun], usage, [proCount], [developerRows]] = await Promise.all([
     db.select().from(developerPoolRuns).where(eq(developerPoolRuns.periodStart, periodStart)).limit(1),
     db.select().from(developerPoolRuns).orderBy(desc(developerPoolRuns.periodStart)).limit(1),
-    db.select({ amount: developerEarnings.amount }).from(developerEarnings).where(eq(developerEarnings.status, 'pending')),
-    db.select({ amount: developerEarnings.amount }).from(developerEarnings),
     usageByPlugin(periodStart, periodEnd),
     db.select({ value: sql<number>`count(*)::int` }).from(plugins).where(eq(plugins.plan, 'pro')),
     db.select({ value: sql<number>`count(distinct ${plugins.authorId})::int` }).from(plugins).where(eq(plugins.plan, 'pro')),
   ]);
 
-  // The distributed figure is authoritative when the month is closed; before
-  // that it is a projection of the same rate over what has arrived so far.
-  const poolTotal = existingRun?.poolTotal ?? applyRate(revenueTotal, DEVELOPER_POOL_BASIS_POINTS);
-
   return {
-    currency: POOL_CURRENCY,
     poolRate: `${Number(DEVELOPER_POOL_BASIS_POINTS) / 100}%`,
     period: { start: periodStart, end: periodEnd, label: periodStart.toISOString().slice(0, 7) },
-    revenueTotal: existingRun?.revenueTotal ?? revenueTotal,
-    poolTotal,
     distributed: Boolean(existingRun),
-    pendingPayouts: sumMoney(pendingRows.map((row) => row.amount)),
-    lifetimePool: sumMoney(allEarnings.map((row) => row.amount)),
     lastRun: lastRun?.periodStart ?? null,
     totalUsageUnits: usage.reduce((sum, row) => sum + row.units, 0),
     proPluginCount: proCount?.value ?? 0,
@@ -142,24 +109,17 @@ export interface CommunityPluginListItem {
   /** Usage units this period. The measure the split is computed from. */
   usageUnits: number;
   uniqueUsers: number;
-  /** This plugin's cut of the pool for the current period. */
-  poolShare: string;
-  /** That cut as a percentage of the whole pool, for the list view. */
+  /** This plugin's entitlement, as a percentage of the whole pool. */
   poolSharePercent: string;
-  currency: string;
 }
 
 /**
- * Every Pro plugin, with the share of this period's pool it has earned.
- *
- * Shares come from `allocateByWeight`, the same largest-remainder allocator the
- * distribution job uses, so the numbers an admin reads here add up to exactly
- * the pool rather than drifting a cent per plugin.
+ * Every Pro plugin, with the share of the pool its usage entitles it to.
  */
 export async function listCommunityProPlugins(now = new Date()): Promise<CommunityPluginListItem[]> {
-  const { periodStart, periodEnd } = currentMonthBounds(now);
+  const { periodStart, periodEnd } = monthBounds(now);
 
-  const [rows, usage, revenueTotal, [existingRun]] = await Promise.all([
+  const [rows, usage] = await Promise.all([
     db
       .select({
         id: plugins.id,
@@ -179,24 +139,18 @@ export async function listCommunityProPlugins(now = new Date()): Promise<Communi
       .where(eq(plugins.plan, 'pro'))
       .orderBy(desc(plugins.updatedAt)),
     usageByPlugin(periodStart, periodEnd),
-    collectedRevenue(periodStart, periodEnd),
-    db.select().from(developerPoolRuns).where(eq(developerPoolRuns.periodStart, periodStart)).limit(1),
   ]);
 
-  const poolTotal = existingRun?.poolTotal ?? applyRate(revenueTotal, DEVELOPER_POOL_BASIS_POINTS);
   const usageByRowId = new Map(usage.map((row) => [row.pluginRowId, row]));
 
-  // Allocate across *all* measured plugins, not just the Pro ones, so a Pro
-  // plugin's share reflects its real weight in the pool rather than being
-  // inflated by excluding free plugins that also earned units.
-  const measured = usage.map((row) => row.pluginRowId);
-  const shares = allocateByWeight(poolTotal, usage.map((row) => BigInt(row.units)));
-  const shareByRowId = new Map(measured.map((rowId, index) => [rowId, shares[index]]));
-  const totalUnits = usage.reduce((sum, row) => sum + row.units, 0);
+  // Split across *all* measured plugins, not just the Pro ones: a Pro plugin's
+  // entitlement reflects its real weight in the pool, and excluding free plugins
+  // that also earned units would inflate every percentage on this page.
+  const shares = percentShares(usage.map((row) => BigInt(row.units)));
+  const percentByRowId = new Map(usage.map((row, index) => [row.pluginRowId, shares[index]]));
 
   return rows.map((row) => {
     const measure = usageByRowId.get(row.id);
-    const units = measure?.units ?? 0;
     return {
       id: row.id,
       pluginId: row.pluginId,
@@ -209,13 +163,9 @@ export async function listCommunityProPlugins(now = new Date()): Promise<Communi
       developer: row.developerId
         ? { id: row.developerId, displayName: row.developerName ?? '', email: row.developerEmail ?? '' }
         : null,
-      usageUnits: units,
+      usageUnits: measure?.units ?? 0,
       uniqueUsers: measure?.uniqueUsers ?? 0,
-      poolShare: shareByRowId.get(row.id) ?? ZERO_MONEY,
-      // Percent of the pool, to one decimal. Presentational only — the money
-      // figure above is the exact one and is never recomputed from this.
-      poolSharePercent: totalUnits === 0 ? '0.0' : ((units / totalUnits) * 100).toFixed(1),
-      currency: POOL_CURRENCY,
+      poolSharePercent: percentByRowId.get(row.id) ?? '0.00',
     };
   });
 }
@@ -233,22 +183,12 @@ export interface CommunityPluginAnalytics {
     createdAt: Date;
     updatedAt: Date;
   };
-  developer: {
-    id: string;
-    displayName: string;
-    email: string;
-    avatarUrl: string | null;
-    /** Everything this developer has ever been allocated, across all plugins. */
-    lifetimeEarnings: string;
-    pendingEarnings: string;
-  } | null;
-  earnings: {
-    currency: string;
-    /** The pool for the current period, in full. */
-    poolTotal: string;
-    /** What this plugin takes from that pool. */
-    pluginShare: string;
-    pluginSharePercent: string;
+  developer: { id: string; displayName: string; email: string; avatarUrl: string | null } | null;
+  entitlement: {
+    /** The policy rate the pool is carved from, e.g. "15%". */
+    poolRate: string;
+    /** This plugin's share of that pool, as a percentage. */
+    poolSharePercent: string;
     periodLabel: string;
     distributed: boolean;
   };
@@ -259,21 +199,32 @@ export interface CommunityPluginAnalytics {
     activeDaysThisPeriod: number;
     unitsAllTime: number;
     uniqueUsersAllTime: number;
-    /** Daily series for the last 30 days, oldest first. Gaps are zero-filled. */
-    daily: { day: string; units: number }[];
+    /**
+     * Daily series for the last 30 days, oldest first. Gaps are zero-filled.
+     *
+     * `uniqueUsers` rides alongside `units` because the gap between the two is
+     * the signal: units well above users means a small group leaning on the
+     * plugin constantly, the two tracking together means broad, shallow use.
+     */
+    daily: { day: string; units: number; uniqueUsers: number }[];
     /** Monthly totals for the last twelve months, oldest first. */
-    monthly: { month: string; units: number }[];
+    monthly: { month: string; units: number; uniqueUsers: number }[];
     firstSeen: Date | null;
     lastSeen: Date | null;
   };
+  /**
+   * Every measured plugin's slice of the pool, this one included, so the drawer
+   * can show the share in context rather than as a bare percentage.
+   */
+  poolBreakdown: { pluginId: string; name: string; poolSharePercent: string; isCurrent: boolean }[];
 }
 
 /**
  * Everything the drawer shows for one plugin.
  *
  * Assembled in a single call rather than several endpoints because it is opened
- * as one unit: a drawer that paints in three stages is worse than one that
- * takes a moment.
+ * as one unit: a drawer that paints in three stages is worse than one that takes
+ * a moment.
  */
 export async function getCommunityPluginAnalytics(
   pluginKey: string,
@@ -294,88 +245,109 @@ export async function getCommunityPluginAnalytics(
 
   if (!row) throw new APIError('plugin_not_found', 404);
 
-  const { periodStart, periodEnd } = currentMonthBounds(now);
+  const { periodStart, periodEnd } = monthBounds(now);
   const thirtyDaysAgo = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
   const twelveMonthsAgo = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), 1));
 
-  const [periodUsage, allTime, daily, monthly, developerEarningRows, revenueTotal, [existingRun], poolUsage] =
-    await Promise.all([
-      db
-        .select({
-          units: sql<number>`count(*)::int`,
-          uniqueUsers: sql<number>`count(distinct ${pluginUsageDaily.userId})::int`,
-          activeDays: sql<number>`count(distinct ${pluginUsageDaily.day})::int`,
-        })
-        .from(pluginUsageDaily)
-        .where(and(
-          eq(pluginUsageDaily.pluginId, row.plugin.id),
-          gte(pluginUsageDaily.day, periodStart.toISOString().slice(0, 10)),
-          lt(pluginUsageDaily.day, periodEnd.toISOString().slice(0, 10)),
-        )),
-      db
-        .select({
-          units: sql<number>`count(*)::int`,
-          uniqueUsers: sql<number>`count(distinct ${pluginUsageDaily.userId})::int`,
-          firstSeen: sql<Date | null>`min(${pluginUsageDaily.day})`,
-          lastSeen: sql<Date | null>`max(${pluginUsageDaily.day})`,
-        })
-        .from(pluginUsageDaily)
-        .where(eq(pluginUsageDaily.pluginId, row.plugin.id)),
-      db
-        .select({ day: pluginUsageDaily.day, units: sql<number>`count(*)::int` })
-        .from(pluginUsageDaily)
-        .where(and(
-          eq(pluginUsageDaily.pluginId, row.plugin.id),
-          gte(pluginUsageDaily.day, thirtyDaysAgo.toISOString().slice(0, 10)),
-        ))
-        .groupBy(pluginUsageDaily.day),
-      db
-        .select({
-          month: sql<string>`to_char(${pluginUsageDaily.day}, 'YYYY-MM')`,
-          units: sql<number>`count(*)::int`,
-        })
-        .from(pluginUsageDaily)
-        .where(and(
-          eq(pluginUsageDaily.pluginId, row.plugin.id),
-          gte(pluginUsageDaily.day, twelveMonthsAgo.toISOString().slice(0, 10)),
-        ))
-        .groupBy(sql`to_char(${pluginUsageDaily.day}, 'YYYY-MM')`),
-      row.developerId
-        ? db
-            .select({ amount: developerEarnings.amount, status: developerEarnings.status })
-            .from(developerEarnings)
-            .where(eq(developerEarnings.developerId, row.developerId))
-        : Promise.resolve([] as { amount: string; status: string }[]),
-      collectedRevenue(periodStart, periodEnd),
-      db.select().from(developerPoolRuns).where(eq(developerPoolRuns.periodStart, periodStart)).limit(1),
-      usageByPlugin(periodStart, periodEnd),
-    ]);
+  const [periodUsage, allTime, daily, monthly, [existingRun], poolUsage] = await Promise.all([
+    db
+      .select({
+        units: sql<number>`count(*)::int`,
+        uniqueUsers: sql<number>`count(distinct ${pluginUsageDaily.userId})::int`,
+        activeDays: sql<number>`count(distinct ${pluginUsageDaily.day})::int`,
+      })
+      .from(pluginUsageDaily)
+      .where(and(
+        eq(pluginUsageDaily.pluginId, row.plugin.id),
+        gte(pluginUsageDaily.day, periodStart.toISOString().slice(0, 10)),
+        lt(pluginUsageDaily.day, periodEnd.toISOString().slice(0, 10)),
+      )),
+    db
+      .select({
+        units: sql<number>`count(*)::int`,
+        uniqueUsers: sql<number>`count(distinct ${pluginUsageDaily.userId})::int`,
+        firstSeen: sql<Date | null>`min(${pluginUsageDaily.day})`,
+        lastSeen: sql<Date | null>`max(${pluginUsageDaily.day})`,
+      })
+      .from(pluginUsageDaily)
+      .where(eq(pluginUsageDaily.pluginId, row.plugin.id)),
+    db
+      .select({
+        day: pluginUsageDaily.day,
+        units: sql<number>`count(*)::int`,
+        uniqueUsers: sql<number>`count(distinct ${pluginUsageDaily.userId})::int`,
+      })
+      .from(pluginUsageDaily)
+      .where(and(
+        eq(pluginUsageDaily.pluginId, row.plugin.id),
+        gte(pluginUsageDaily.day, thirtyDaysAgo.toISOString().slice(0, 10)),
+      ))
+      .groupBy(pluginUsageDaily.day),
+    db
+      .select({
+        month: sql<string>`to_char(${pluginUsageDaily.day}, 'YYYY-MM')`,
+        units: sql<number>`count(*)::int`,
+        uniqueUsers: sql<number>`count(distinct ${pluginUsageDaily.userId})::int`,
+      })
+      .from(pluginUsageDaily)
+      .where(and(
+        eq(pluginUsageDaily.pluginId, row.plugin.id),
+        gte(pluginUsageDaily.day, twelveMonthsAgo.toISOString().slice(0, 10)),
+      ))
+      .groupBy(sql`to_char(${pluginUsageDaily.day}, 'YYYY-MM')`),
+    db.select().from(developerPoolRuns).where(eq(developerPoolRuns.periodStart, periodStart)).limit(1),
+    usageByPlugin(periodStart, periodEnd),
+  ]);
 
-  const poolTotal = existingRun?.poolTotal ?? applyRate(revenueTotal, DEVELOPER_POOL_BASIS_POINTS);
-  const shares = allocateByWeight(poolTotal, poolUsage.map((entry) => BigInt(entry.units)));
+  const shares = percentShares(poolUsage.map((entry) => BigInt(entry.units)));
   const shareIndex = poolUsage.findIndex((entry) => entry.pluginRowId === row.plugin.id);
-  const pluginShare = shareIndex >= 0 ? shares[shareIndex] : ZERO_MONEY;
-  const totalUnits = poolUsage.reduce((sum, entry) => sum + entry.units, 0);
-  const unitsThisPeriod = periodUsage[0]?.units ?? 0;
+  const poolSharePercent = shareIndex >= 0 ? shares[shareIndex] : '0.00';
 
-  // Zero-fill the daily series so a flat stretch reads as "nobody used it"
-  // rather than collapsing into a shorter, misleadingly dense chart.
-  const dailyMap = new Map(daily.map((entry) => [String(entry.day).slice(0, 10), entry.units]));
-  const dailySeries: { day: string; units: number }[] = [];
+  // Zero-fill the daily series so a quiet stretch reads as "nobody used it"
+  // rather than collapsing into a shorter, misleadingly dense chart. A time axis
+  // needs the empty days present as data, not merely absent.
+  const dailyMap = new Map(daily.map((entry) => [String(entry.day).slice(0, 10), entry]));
+  const dailySeries: { day: string; units: number; uniqueUsers: number }[] = [];
   for (let offset = 0; offset < 30; offset += 1) {
     const date = new Date(thirtyDaysAgo.getTime() + offset * 24 * 60 * 60 * 1000);
     const key = date.toISOString().slice(0, 10);
-    dailySeries.push({ day: key, units: dailyMap.get(key) ?? 0 });
+    const entry = dailyMap.get(key);
+    dailySeries.push({ day: key, units: entry?.units ?? 0, uniqueUsers: entry?.uniqueUsers ?? 0 });
   }
 
-  const monthlySeries = [...monthly]
-    .sort((a, b) => a.month.localeCompare(b.month))
-    .map((entry) => ({ month: entry.month, units: entry.units }));
+  // Months are zero-filled too, for the same reason: a gap in a twelve-month
+  // line should read as a trough, not as a shorter chart.
+  const monthlyMap = new Map(monthly.map((entry) => [entry.month, entry]));
+  const monthlySeries: { month: string; units: number; uniqueUsers: number }[] = [];
+  for (let offset = 0; offset < 12; offset += 1) {
+    const date = new Date(Date.UTC(twelveMonthsAgo.getUTCFullYear(), twelveMonthsAgo.getUTCMonth() + offset, 1));
+    const key = date.toISOString().slice(0, 7);
+    const entry = monthlyMap.get(key);
+    monthlySeries.push({ month: key, units: entry?.units ?? 0, uniqueUsers: entry?.uniqueUsers ?? 0 });
+  }
 
-  const lifetimeEarnings = sumMoney(developerEarningRows.map((entry) => entry.amount));
-  const pendingEarnings = sumMoney(
-    developerEarningRows.filter((entry) => entry.status === 'pending').map((entry) => entry.amount),
-  );
+  // Names for the donut. Only the measured plugins are looked up, so this stays
+  // proportional to what actually earned units rather than the whole catalogue.
+  const measuredIds = poolUsage.map((entry) => entry.pluginRowId);
+  const names = measuredIds.length
+    ? await db
+        .select({ id: plugins.id, pluginId: plugins.pluginId, name: plugins.name })
+        .from(plugins)
+        .where(inArray(plugins.id, measuredIds))
+    : [];
+  const nameByRowId = new Map(names.map((entry) => [entry.id, entry]));
+
+  const poolBreakdown = poolUsage
+    .map((entry, index) => {
+      const named = nameByRowId.get(entry.pluginRowId);
+      return {
+        pluginId: named?.pluginId ?? entry.pluginRowId,
+        name: named?.name ?? 'Unknown plugin',
+        poolSharePercent: shares[index],
+        isCurrent: entry.pluginRowId === row.plugin.id,
+      };
+    })
+    .sort((a, b) => Number(b.poolSharePercent) - Number(a.poolSharePercent));
 
   return {
     plugin: {
@@ -396,20 +368,16 @@ export async function getCommunityPluginAnalytics(
           displayName: row.developerName ?? '',
           email: row.developerEmail ?? '',
           avatarUrl: row.developerAvatar ?? null,
-          lifetimeEarnings,
-          pendingEarnings,
         }
       : null,
-    earnings: {
-      currency: POOL_CURRENCY,
-      poolTotal,
-      pluginShare,
-      pluginSharePercent: totalUnits === 0 ? '0.0' : ((unitsThisPeriod / totalUnits) * 100).toFixed(1),
+    entitlement: {
+      poolRate: `${Number(DEVELOPER_POOL_BASIS_POINTS) / 100}%`,
+      poolSharePercent,
       periodLabel: periodStart.toISOString().slice(0, 7),
       distributed: Boolean(existingRun),
     },
     usage: {
-      unitsThisPeriod,
+      unitsThisPeriod: periodUsage[0]?.units ?? 0,
       uniqueUsersThisPeriod: periodUsage[0]?.uniqueUsers ?? 0,
       activeDaysThisPeriod: periodUsage[0]?.activeDays ?? 0,
       unitsAllTime: allTime[0]?.units ?? 0,
@@ -419,5 +387,6 @@ export async function getCommunityPluginAnalytics(
       firstSeen: allTime[0]?.firstSeen ? new Date(allTime[0].firstSeen) : null,
       lastSeen: allTime[0]?.lastSeen ? new Date(allTime[0].lastSeen) : null,
     },
+    poolBreakdown,
   };
 }

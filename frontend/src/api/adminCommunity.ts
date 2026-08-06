@@ -3,25 +3,25 @@ import { apiRequest } from '@/api/client';
 /**
  * Admin community API client.
  *
- * Every endpoint here is behind admin 2FA on the server, and every one of them
- * is a read: the console explains how the developer pool divides, it does not
- * move money. Amounts cross this boundary as decimal *strings* and are never
- * parsed into a number — `Number('0.1') + Number('0.2')` is exactly the class of
- * bug a payout figure cannot afford.
+ * Every endpoint here is behind admin 2FA on the server, and every one is a
+ * read. Note that nothing in these payloads is money: the console reports what
+ * share of the developer pool a plugin's usage *entitles* it to, not what it
+ * earned. The dollar value of that share depends on revenue collected in the
+ * period, which only the ledger knows and which the admin view deliberately
+ * does not guess at.
+ *
+ * Percentages arrive as decimal strings ("23.40") and are rendered as-is. They
+ * are allocated server-side to sum to exactly 100.00, so re-deriving them here
+ * from `usageUnits` would only reintroduce the rounding drift that allocation
+ * exists to remove.
  */
 
 export interface CommunityPoolSummary {
-  currency: string;
-  /** The share of revenue that belongs to the community, e.g. "15%". */
+  /** The policy rate, e.g. "15%" — what developers get of paid revenue. */
   poolRate: string;
   period: { start: string; end: string; label: string };
-  revenueTotal: string;
-  /** 15% of collected revenue: the community's money. */
-  poolTotal: string;
-  /** False while the month is still accruing, i.e. the figure is a projection. */
+  /** False while the month is still accruing and has not been closed. */
   distributed: boolean;
-  pendingPayouts: string;
-  lifetimePool: string;
   lastRun: string | null;
   totalUsageUnits: number;
   proPluginCount: number;
@@ -40,9 +40,8 @@ export interface CommunityPlugin {
   developer: { id: string; displayName: string; email: string } | null;
   usageUnits: number;
   uniqueUsers: number;
-  poolShare: string;
+  /** Share of the pool this plugin's usage entitles it to, e.g. "23.40". */
   poolSharePercent: string;
-  currency: string;
 }
 
 export interface CommunityPluginAnalytics {
@@ -63,14 +62,10 @@ export interface CommunityPluginAnalytics {
     displayName: string;
     email: string;
     avatarUrl: string | null;
-    lifetimeEarnings: string;
-    pendingEarnings: string;
   } | null;
-  earnings: {
-    currency: string;
-    poolTotal: string;
-    pluginShare: string;
-    pluginSharePercent: string;
+  entitlement: {
+    poolRate: string;
+    poolSharePercent: string;
     periodLabel: string;
     distributed: boolean;
   };
@@ -80,11 +75,19 @@ export interface CommunityPluginAnalytics {
     activeDaysThisPeriod: number;
     unitsAllTime: number;
     uniqueUsersAllTime: number;
-    daily: { day: string; units: number }[];
-    monthly: { month: string; units: number }[];
+    /** Zero-filled, oldest first, so the time axis has no holes in it. */
+    daily: { day: string; units: number; uniqueUsers: number }[];
+    monthly: { month: string; units: number; uniqueUsers: number }[];
     firstSeen: string | null;
     lastSeen: string | null;
   };
+  /** Every measured plugin's slice, so the share can be drawn in context. */
+  poolBreakdown: {
+    pluginId: string;
+    name: string;
+    poolSharePercent: string;
+    isCurrent: boolean;
+  }[];
 }
 
 export function getCommunityPool() {

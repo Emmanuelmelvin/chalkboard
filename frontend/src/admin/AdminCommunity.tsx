@@ -18,24 +18,24 @@ import {
   type CommunityPoolSummary,
 } from '@/api/adminCommunity';
 import { ApiRequestError } from '@/api/client';
+import { PoolShareChart, UsageChart } from '@/admin/AdminCommunityCharts';
 
 /**
- * The admin community console: the developer pool, and the Pro plugins it is
- * divided between.
+ * The admin community console: the developer pool, and how it divides across
+ * the Pro plugins that earn it.
  *
- * Two decisions shape this component. First, amounts are held and displayed as
- * the decimal strings the API returns; nothing here does arithmetic on money,
- * because the frontend has no business recomputing a share the allocator has
- * already worked out to the cent. Second, the drawer fetches its own payload
- * rather than reusing the row: a list row carries a summary, and the analytics
- * a reviewer actually wants — daily usage, the developer's lifetime earnings —
- * are far too heavy to load for every plugin up front.
+ * This view reports *entitlement*, not earnings. There are no dollar figures
+ * anywhere, and that is on purpose: the cash value of a share depends on
+ * revenue collected in the period, which the ledger only knows for invoices it
+ * actually received, so any amount shown here would be confidently wrong. The
+ * percentages are safe — they come from our own usage table — and they are what
+ * an admin is really asking about when they open this page.
+ *
+ * The drawer fetches its own payload rather than reusing the list row: a row
+ * carries a summary, while the analytics a reviewer wants — daily usage, unique
+ * users, first and last seen — are far too heavy to load for every plugin up
+ * front.
  */
-
-function money(amount: string, currency = 'USD') {
-  // Formatted from the string, never from a parsed float.
-  return `${currency === 'USD' ? '$' : `${currency} `}${amount}`;
-}
 
 function formatDate(value: string | null) {
   if (!value) return '—';
@@ -51,7 +51,7 @@ function formatMonth(label: string) {
 /**
  * `apiRequest` normalises every failure into an `ApiRequestError` carrying the
  * server's stable error code, so we translate that code rather than parsing a
- * raw axios response. Anything unmapped keeps the message the client derived.
+ * raw response. Anything unmapped keeps the message the client derived.
  */
 function errorMessage(error: unknown, fallback: string) {
   const code = error instanceof ApiRequestError ? error.code : undefined;
@@ -62,29 +62,6 @@ function errorMessage(error: unknown, fallback: string) {
     forbidden: 'This console needs a verified admin session.',
   };
   return messages[code] ?? (error instanceof Error ? error.message : code.replace(/_/g, ' '));
-}
-
-/**
- * A bare bar chart, drawn with divs.
- *
- * A charting library would be several hundred kilobytes for what is, here,
- * thirty rectangles. Heights are relative to the busiest day so a quiet plugin
- * still shows shape rather than a flat line.
- */
-function UsageBars({ series }: { series: { label: string; units: number }[] }) {
-  const peak = Math.max(1, ...series.map((point) => point.units));
-  return (
-    <div className="admin-community-chart" role="img" aria-label="Plugin usage over time">
-      {series.map((point) => (
-        <span
-          key={point.label}
-          className={point.units > 0 ? 'is-active' : ''}
-          style={{ height: `${Math.max(2, (point.units / peak) * 100)}%` }}
-          title={`${point.label}: ${point.units} usage unit${point.units === 1 ? '' : 's'}`}
-        />
-      ))}
-    </div>
-  );
 }
 
 function PluginDrawer({ pluginId, onClose }: { pluginId: string; onClose: () => void }) {
@@ -111,11 +88,12 @@ function PluginDrawer({ pluginId, onClose }: { pluginId: string; onClose: () => 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  const series = useMemo(() => {
-    if (!analytics) return [];
-    return range === 'daily'
-      ? analytics.usage.daily.map((point) => ({ label: point.day, units: point.units }))
-      : analytics.usage.monthly.map((point) => ({ label: point.month, units: point.units }));
+  // The charts are zero-filled server-side, so "has data" cannot be inferred
+  // from series length — an all-zero month is still thirty points.
+  const hasUsage = useMemo(() => {
+    if (!analytics) return false;
+    const series = range === 'daily' ? analytics.usage.daily : analytics.usage.monthly;
+    return series.some((point) => point.units > 0);
   }, [analytics, range]);
 
   return (
@@ -144,39 +122,30 @@ function PluginDrawer({ pluginId, onClose }: { pluginId: string; onClose: () => 
           <div className="admin-empty"><LoaderCircle className="admin-spin" size={18} /> Loading analytics…</div>
         ) : analytics ? (
           <div className="admin-community-drawer-body">
-            <section className="admin-community-earnings">
-              <div>
-                <span>Takes from the pool</span>
-                {/* The exact allocated figure, not a percentage of a rounded total. */}
-                <strong>{money(analytics.earnings.pluginShare, analytics.earnings.currency)}</strong>
-                <small>
-                  {analytics.earnings.pluginSharePercent}% of {money(analytics.earnings.poolTotal, analytics.earnings.currency)}
-                  {' · '}{formatMonth(analytics.earnings.periodLabel)}
-                  {analytics.earnings.distributed ? ' · distributed' : ' · accruing'}
-                </small>
-              </div>
+            <section className="admin-community-entitlement">
+              <span>Entitled to</span>
+              <strong>{analytics.entitlement.poolSharePercent}%</strong>
+              <small>
+                of the developer pool ({analytics.entitlement.poolRate} of paid revenue)
+                {' · '}{formatMonth(analytics.entitlement.periodLabel)}
+                {analytics.entitlement.distributed ? ' · closed' : ' · still accruing'}
+              </small>
             </section>
 
             <section className="admin-community-developer">
               <p className="admin-eyebrow">Developer</p>
               {analytics.developer ? (
-                <>
-                  <div className="admin-community-developer-row">
-                    <span className="admin-queue-icon">
-                      {analytics.developer.avatarUrl
-                        ? <img src={analytics.developer.avatarUrl} alt="" referrerPolicy="no-referrer" />
-                        : <Users size={15} />}
-                    </span>
-                    <span>
-                      <strong>{analytics.developer.displayName || analytics.developer.email}</strong>
-                      <small><Mail size={10} /> {analytics.developer.email}</small>
-                    </span>
-                  </div>
-                  <div className="admin-detail-meta">
-                    <span>Lifetime earned <strong>{money(analytics.developer.lifetimeEarnings)}</strong></span>
-                    <span>Awaiting payout <strong>{money(analytics.developer.pendingEarnings)}</strong></span>
-                  </div>
-                </>
+                <div className="admin-community-developer-row">
+                  <span className="admin-queue-icon">
+                    {analytics.developer.avatarUrl
+                      ? <img src={analytics.developer.avatarUrl} alt="" referrerPolicy="no-referrer" />
+                      : <Users size={15} />}
+                  </span>
+                  <span>
+                    <strong>{analytics.developer.displayName || analytics.developer.email}</strong>
+                    <small><Mail size={10} /> {analytics.developer.email}</small>
+                  </span>
+                </div>
               ) : (
                 <p className="admin-community-muted">This plugin has no linked developer account.</p>
               )}
@@ -194,10 +163,14 @@ function PluginDrawer({ pluginId, onClose }: { pluginId: string; onClose: () => 
                 </div>
               </div>
 
-              {series.length === 0 ? (
-                <div className="admin-empty"><PieChart size={22} /><strong>No measured usage.</strong><span>Nothing has been recorded for this range yet.</span></div>
+              {hasUsage ? (
+                <UsageChart usage={analytics.usage} range={range} />
               ) : (
-                <UsageBars series={series} />
+                <div className="admin-empty">
+                  <PieChart size={22} />
+                  <strong>No measured usage.</strong>
+                  <span>Nothing has been recorded for this range yet.</span>
+                </div>
               )}
 
               <div className="admin-stat-grid admin-community-stat-grid">
@@ -232,6 +205,22 @@ function PluginDrawer({ pluginId, onClose }: { pluginId: string; onClose: () => 
                 count once, so a plugin cannot inflate its own share.
               </small>
             </section>
+
+            {analytics.poolBreakdown.length > 0 && (
+              <section>
+                <div className="admin-panel-heading">
+                  <div>
+                    <p className="admin-eyebrow">Share of the pool</p>
+                    <h2>Against every measured plugin</h2>
+                  </div>
+                </div>
+                <PoolShareChart
+                  breakdown={analytics.poolBreakdown}
+                  currentName={analytics.plugin.name}
+                  sharePercent={analytics.entitlement.poolSharePercent}
+                />
+              </section>
+            )}
 
             <p className="admin-community-description">{analytics.plugin.description}</p>
           </div>
@@ -268,21 +257,19 @@ export default function AdminCommunity() {
     <section className="admin-community">
       <div className="admin-stat-grid">
         <article>
-          <span>Community pool</span>
-          <strong>{pool ? money(pool.poolTotal, pool.currency) : '—'}</strong>
-          <small>
-            {pool ? `${pool.poolRate} of ${money(pool.revenueTotal, pool.currency)} collected` : 'developer pool'}
-          </small>
-        </article>
-        <article>
-          <span>Awaiting payout</span>
-          <strong>{pool ? money(pool.pendingPayouts, pool.currency) : '—'}</strong>
-          <small>{pool ? `${money(pool.lifetimePool)} allocated all time` : ''}</small>
+          <span>Developer pool</span>
+          <strong>{pool?.poolRate ?? '15%'}</strong>
+          <small>of paid subscription revenue</small>
         </article>
         <article>
           <span>Pro plugins</span>
           <strong>{pool ? String(pool.proPluginCount).padStart(2, '0') : '—'}</strong>
           <small>{pool ? `${pool.developerCount} developer(s) sharing the pool` : ''}</small>
+        </article>
+        <article>
+          <span>Usage this period</span>
+          <strong>{pool ? pool.totalUsageUnits : '—'}</strong>
+          <small>units the split is weighted by</small>
         </article>
       </div>
 
@@ -300,10 +287,12 @@ export default function AdminCommunity() {
           </button>
         </div>
 
+        {/* Says what the percentage is a percentage *of*, which is the first
+            question anyone asks when the money is not on screen. */}
         <p className="admin-community-muted">
-          {pool?.poolRate ?? '15%'} of collected subscription revenue belongs to the community and is split by
-          measured plugin usage. Select a plugin to see how it is used and what it takes from the pool.
-          {pool && !pool.distributed && ' This month has not closed yet, so the figures are a projection.'}
+          {pool?.poolRate ?? '15%'} of collected subscription revenue belongs to the community, split between
+          plugins by measured usage. The shares below are each plugin's entitlement to that pool; what a share is
+          worth depends on revenue collected for the month. Select a plugin to see how it is being used.
         </p>
 
         {busy && plugins.length === 0 ? (
@@ -335,9 +324,12 @@ export default function AdminCommunity() {
                   </small>
                 </span>
                 <span className="admin-community-share">
-                  {/* The money first: it is the reason this row is here. */}
-                  <strong>{money(plugin.poolShare, plugin.currency)}</strong>
-                  <small>{plugin.poolSharePercent}% of pool</small>
+                  <strong>{plugin.poolSharePercent}%</strong>
+                  <small>of pool</small>
+                  {/* A proportion bar: with only percentages on screen, the
+                      relative sizes are the story, and a number column alone
+                      makes them work to read. */}
+                  <i style={{ width: `${Math.min(100, Number(plugin.poolSharePercent))}%` }} />
                 </span>
               </button>
             ))}

@@ -208,17 +208,19 @@
 /* Pro plugin the current plan cannot reach: blur the content and badge it,
    so the plugin is still discoverable but visibly gated. */
 .insert-plugin-card.is-pro-locked {
-  border-color: rgba(251, 191, 36, 0.35);
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.03);
 }
 
 .insert-plugin-card.is-pro-locked .insert-plugin-logo,
 .insert-plugin-card.is-pro-locked .insert-plugin-copy {
-  filter: blur(2.5px);
-  opacity: 0.7;
+  filter: none;
+  opacity: 0.95;
 }
 
 .insert-plugin-card.is-pro-locked:hover {
-  border-color: rgba(251, 191, 36, 0.65);
+  border-color: rgba(251, 191, 36, 0.7);
+  background: rgba(251, 191, 36, 0.07);
 }
 
 .insert-plugin-pro-badge,
@@ -334,76 +336,17 @@
   padding: 14px;
 }
 
-/* Locked Pro plugin body: the real tools stay rendered underneath, blurred,
-   with an upgrade card floating over them. */
-.plugin-locked-body {
-  position: relative;
-}
-
-.plugin-locked-blur {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  filter: blur(4px);
-  opacity: 0.55;
-  pointer-events: none;
-  user-select: none;
-}
-
-.plugin-locked-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  text-align: center;
-  background: rgba(15, 23, 42, 0.72);
-}
-
-.plugin-locked-overlay strong {
-  color: #f8fafc;
-  font-size: 14px;
-}
-
-.plugin-locked-overlay p {
-  margin: 0;
-  max-width: 280px;
-  color: #cbd5e1;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.plugin-locked-crown {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
+.insert-links-add-btn.plugin-upgrade-action-btn {
   background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border-color: rgba(245, 158, 11, 0.4);
   color: #1f2937;
-}
-
-.plugin-locked-upgrade {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  margin-top: 4px;
-  padding: 8px 14px;
-  border: 0;
-  border-radius: 0;
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
-  color: #1f2937;
-  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
 
-.plugin-locked-upgrade:hover {
+.insert-links-add-btn.plugin-upgrade-action-btn:hover {
   background: linear-gradient(135deg, #fcd34d, #fbbf24);
+  border-color: rgba(251, 191, 36, 0.6);
 }
 
 .plugin-tool-card {

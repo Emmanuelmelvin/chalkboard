@@ -215,6 +215,7 @@ interface RoomMemberVoiceControlsProps {
   currentUserId: string;
   socket: unknown;
   roomId: string;
+  voiceEnabled?: boolean;
 }
 
 function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, currentUserId, socket, roomId }: RoomMemberVoiceControlsProps) {
@@ -282,6 +283,8 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
 }
 
 function RoomMemberVoiceControls(props: RoomMemberVoiceControlsProps) {
+  if (!props.voiceEnabled) return null;
+
   const room = useMaybeRoomContext();
   if (!room) {
     const isMe = props.memberUserId === props.currentUserId;
@@ -1378,6 +1381,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                                 currentUserId={userId}
                                 socket={socket}
                                 roomId={roomId}
+                                voiceEnabled={roomQuery.data?.room.voiceEnabled ?? false}
                               />
                               {canManageMembers && member.role !== 'owner' ? (
                                 <select className="room-member-role-select"

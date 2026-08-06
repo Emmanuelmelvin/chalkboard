@@ -307,19 +307,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
         </button>
       </div>
       <div className={`plugin-floating-body${locked ? ' plugin-locked-body' : ''}`}>
-        {locked && (
-          <div className="plugin-locked-overlay" role="note">
-            <span className="plugin-locked-crown"><Crown size={20} /></span>
-            <strong>This is a Pro plugin</strong>
-            <p>Pro plugins are available on the Pro and Team plans. Upgrade to use {plugin.name} on your boards.</p>
-            {onUpgrade && (
-              <button type="button" className="plugin-locked-upgrade" onClick={onUpgrade}>
-                <Crown size={13} /> Upgrade plan
-              </button>
-            )}
-          </div>
-        )}
-        <div className={locked ? 'plugin-locked-blur' : undefined} aria-hidden={locked || undefined}>
+        <div className="plugin-floating-content">
 
         {tools.length === 0 ? (
           <div className="tag-plugin-preview-empty">This plugin has no available tools.</div>
@@ -456,15 +444,25 @@ const PluginModal: React.FC<PluginModalProps> = ({
                 );
               })}
               {matrixError && <div className="plugin-validation-error" role="alert">{matrixError}</div>}
-              <button
-                type="button"
-                className="insert-links-add-btn"
-                disabled={!canSubmit || !pluginReady}
-                onClick={() => void handleSubmit(tool)}
-              >
-                <Check size={14} />
-                {!pluginReady ? 'Loading plugin…' : isTagPlugin ? 'Add tag' : 'Add to canvas'}
-              </button>
+              {locked ? (
+                <button
+                  type="button"
+                  className="insert-links-add-btn plugin-upgrade-action-btn"
+                  onClick={onUpgrade}
+                >
+                  <Crown size={14} /> Upgrade plan
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="insert-links-add-btn"
+                  disabled={!canSubmit || !pluginReady}
+                  onClick={() => void handleSubmit(tool)}
+                >
+                  <Check size={14} />
+                  {!pluginReady ? 'Loading plugin…' : isTagPlugin ? 'Add tag' : 'Add to canvas'}
+                </button>
+              )}
             </div>
           );
         })}

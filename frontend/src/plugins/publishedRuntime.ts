@@ -137,8 +137,14 @@ export function publishedPluginManifest(plugin: ManagedPlugin): PluginManifest |
       commands: normalizeCommands(rawContributes.commands),
       selectionTools: normalizeSelectionTools(rawContributes.selectionTools),
     },
+    // Carried through so the room can present a Pro plugin as locked rather
+    // than as a bundle that never finishes loading. The server is still the
+    // thing that refuses to hand over the code.
+    plan: plugin.plan,
+    locked: plugin.locked ?? false,
   };
   return manifest;
+
 }
 
 export function publishedPluginDefinition(plugin: ManagedPlugin): PublishedPluginDefinition | null {

@@ -590,13 +590,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const openPluginModal = useCallback((pluginId: string) => {
     setShowInsertShapes(false);
-    if (publishedCataloguePlugins.some((plugin) => plugin.pluginId === pluginId)) {
-      setActivePublishedPluginId(pluginId);
+    const cataloguePlugin = publishedCataloguePlugins.find((plugin) => plugin.pluginId === pluginId);
+    if (cataloguePlugin) {
+      // The server will not hand over a locked Pro bundle, so asking for it
+      // only produces a request that fails and a modal that spins forever.
+      // Open the modal anyway; it renders its own locked state.
+      if (!cataloguePlugin.locked) setActivePublishedPluginId(pluginId);
       setActivePluginModals((current) => current.some((modal) => modal.pluginId === pluginId)
         ? current
         : [...current, { pluginId }]);
       return;
     }
+
     if (pluginId === NOTES_PLUGIN_ID) {
       setActivePublishedPluginId(null);
       void activateInstalledPlugin(NOTES_PLUGIN_ID).then(() => pluginRegistry.executeCommand('notes.create'));
@@ -613,9 +618,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId);
     else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId);
     else if (tool?.pluginId && publishedCataloguePlugins.some((plugin) => plugin.pluginId === tool.pluginId)) {
+      const cataloguePlugin = publishedCataloguePlugins.find((plugin) => plugin.pluginId === tool.pluginId);
+      if (cataloguePlugin?.locked) {
+        // Nothing to run: the bundle was never served. Show the locked modal.
+        openPluginModal(tool.pluginId);
+        return;
+      }
       setActivePublishedPluginId(tool.pluginId);
       pendingPublishedCommandRef.current = { pluginId: tool.pluginId, commandId };
     } else if (tool?.pluginId) {
+
       void activateInstalledPlugin(tool.pluginId).then(() => pluginRegistry.executeCommand(commandId));
     } else {
       void pluginRegistry.executeCommand(commandId);
@@ -1433,13 +1445,20 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           const plugin = pluginManifests.find((item) => item.id === modal.pluginId);
           if (!plugin) return null;
           const tools = pluginTools.filter((tool) => (tool.pluginId ?? plugin.id) === plugin.id);
+          // A locked Pro plugin has no bundle to wait for, so it is never
+          // "loading" — the modal shows its upgrade state instead.
+          const pluginLocked = Boolean(plugin.locked);
           return <PluginModal key={modal.pluginId} plugin={plugin} tools={tools}
             selectedStrokes={strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id))}
             selectionStrokeIds={selectedStrokeIds}
             sharedOutput={sharedPluginOutput}
             onPublishOutput={setSharedPluginOutput}
-            pluginReady={!publishedCataloguePlugins.some((candidate) => candidate.pluginId === plugin.id)
+            locked={pluginLocked}
+            onUpgrade={() => window.open('/dashboard?tab=billing', '_blank', 'noopener,noreferrer')}
+            pluginReady={pluginLocked
+              || !publishedCataloguePlugins.some((candidate) => candidate.pluginId === plugin.id)
               || publishedPluginDefinitions.some((definition) => definition.pluginId === plugin.id)}
+
             onClose={() => {
               setActivePluginModals((current) => current.filter((item) => item.pluginId !== modal.pluginId));
               if (activePublishedPluginId === modal.pluginId) setActivePublishedPluginId(null);

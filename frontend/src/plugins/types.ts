@@ -81,7 +81,19 @@ export interface PluginManifest {
   logoUrl?: string | null;
   permissions: PluginPermission[];
   contributes: PluginContributions;
+  /**
+   * The access plan the catalogue published this plugin under. Undefined for
+   * built-in plugins, which are always available.
+   */
+  plan?: 'free' | 'pro';
+  /**
+   * True when the plugin is Pro and the viewer's plan does not reach it.
+   * Presentational only: the backend refuses to serve the bundle regardless of
+   * what the client does with this flag.
+   */
+  locked?: boolean;
 }
+
 
 export interface InsertStrokeOptions {
   select?: boolean;

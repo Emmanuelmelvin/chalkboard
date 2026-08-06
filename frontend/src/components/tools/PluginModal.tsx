@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, Crown, X } from 'lucide-react';
 import type { Stroke } from '@/types';
 import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
 import PluginIcon from '@/components/svg/PluginIcons';
@@ -165,7 +165,14 @@ interface PluginModalProps {
   sharedOutput?: string;
   onPublishOutput?: (value: string) => void;
   pluginReady?: boolean;
+  /**
+   * True when this is a Pro plugin the viewer's plan does not reach. The tools
+   * are still rendered, blurred, so the user can see what upgrading buys them.
+   */
+  locked?: boolean;
+  onUpgrade?: () => void;
 }
+
 
 /*
 
@@ -182,7 +189,10 @@ const PluginModal: React.FC<PluginModalProps> = ({
   sharedOutput,
   onPublishOutput,
   pluginReady = true,
+  locked = false,
+  onUpgrade,
 }) => {
+
   const clampPosition = useCallback((x: number, y: number) => ({
     x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 432)),
     y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 120)),
@@ -275,7 +285,8 @@ const PluginModal: React.FC<PluginModalProps> = ({
 
   return (
     <div
-      className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${isMathSetPlugin ? 'math-set-plugin-modal' : ''} ${isStatisticsPlugin ? 'statistics-plugin-modal' : ''}`}
+      className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${isMathSetPlugin ? 'math-set-plugin-modal' : ''} ${isStatisticsPlugin ? 'statistics-plugin-modal' : ''} ${locked ? 'plugin-modal-locked' : ''}`}
+
       data-left={position.x}
       data-top={position.y}
       role="dialog"
@@ -285,14 +296,31 @@ const PluginModal: React.FC<PluginModalProps> = ({
       <div className="plugin-floating-header" onPointerDown={handleHeaderPointerDown}>
         <span className="insert-plugin-logo">{plugin.logoUrl ? <img src={plugin.logoUrl} alt="" /> : <PluginIcon pluginId={plugin.id} fallback={plugin.name.slice(0, 1)} />}</span>
         <div>
-          <strong>{plugin.name}</strong>
+          <strong>
+            {plugin.name}
+            {locked && <span className="plugin-pro-badge"><Crown size={10} /> PRO</span>}
+          </strong>
           <small>{plugin.description}</small>
         </div>
         <button className="insert-shapes-close" type="button" onClick={onClose} aria-label="Close plugin modal">
           <X size={14} />
         </button>
       </div>
-      <div className="plugin-floating-body">
+      <div className={`plugin-floating-body${locked ? ' plugin-locked-body' : ''}`}>
+        {locked && (
+          <div className="plugin-locked-overlay" role="note">
+            <span className="plugin-locked-crown"><Crown size={20} /></span>
+            <strong>This is a Pro plugin</strong>
+            <p>Pro plugins are available on the Pro and Team plans. Upgrade to use {plugin.name} on your boards.</p>
+            {onUpgrade && (
+              <button type="button" className="plugin-locked-upgrade" onClick={onUpgrade}>
+                <Crown size={13} /> Upgrade plan
+              </button>
+            )}
+          </div>
+        )}
+        <div className={locked ? 'plugin-locked-blur' : undefined} aria-hidden={locked || undefined}>
+
         {tools.length === 0 ? (
           <div className="tag-plugin-preview-empty">This plugin has no available tools.</div>
         ) : !activeToolId ? tools.map((tool) => (
@@ -440,9 +468,11 @@ const PluginModal: React.FC<PluginModalProps> = ({
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );
 };
+
 
 export default PluginModal;

@@ -20,7 +20,9 @@ import {
   Trash2,
   Edit3,
   Check,
+  Crown,
 } from 'lucide-react';
+
 
 import type { ShapeType, SavedLink } from '@/types';
 import PluginIcon from '@/components/svg/PluginIcons';
@@ -208,17 +210,23 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
                 {filteredPlugins.map((plugin) => (
                   <button
                     key={plugin.id}
-                    className="insert-plugin-card"
+                    className={`insert-plugin-card${plugin.locked ? ' is-pro-locked' : ''}`}
                     disabled={plugin.id === 'chalkboard.tag' && !hasSelection}
                     onClick={() => { if (plugin.id !== 'chalkboard.tag' || hasSelection) onOpenPlugin(plugin.id); }}
-                    title={plugin.description}
+                    title={plugin.locked ? `${plugin.name} — Pro plugin, upgrade to use` : plugin.description}
                   >
+                    {plugin.locked && (
+                      <span className="insert-plugin-pro-badge" aria-label="Pro plugin">
+                        <Crown size={9} /> PRO
+                      </span>
+                    )}
                     <span className="insert-plugin-logo">{plugin.logoUrl ? <img src={plugin.logoUrl} alt="" /> : <PluginIcon pluginId={plugin.id} fallback={plugin.name.slice(0, 1)} />}</span>
                     <span className="insert-plugin-copy">
                       <strong>{plugin.name}</strong>
                       <small>{plugin.description}</small>
                     </span>
                   </button>
+
                 ))}
               </div>
             )}

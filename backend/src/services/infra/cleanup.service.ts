@@ -3,8 +3,8 @@ import { alias } from 'drizzle-orm/pg-core';
 import { db } from '@/db/client';
 import { rooms, subscriptions, users, workspaceMembers, workspaces } from '@/db/schema';
 import { env } from '@/config/env';
-import { ENTITLING_STATUSES, UNLIMITED, getPlanLimits, type PlanId } from '@/services/entitlements.service';
-import { deleteRoomState } from '@/services/realtimeRooms.service';
+import { ENTITLING_STATUSES, UNLIMITED, getPlanLimits, type PlanId } from '@/services/billing/entitlements.service';
+import { deleteRoomState } from '@/services/rooms/realtimeRooms.service';
 import { logger } from '@/utils/logger';
 
 const DAY_MS = 86400000;

@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { developerPoolRuns, pluginUsageDaily, plugins, users } from '@/db/schema';
-import { DEVELOPER_POOL_BASIS_POINTS, monthBounds } from '@/services/developerPool.service';
+import { DEVELOPER_POOL_BASIS_POINTS, monthBounds } from '@/services/billing/developerPool.service';
 import { APIError } from '@/utils/error';
 import { allocateByWeight } from '@/utils/money';
 

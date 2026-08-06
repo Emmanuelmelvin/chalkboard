@@ -2,7 +2,7 @@ import { and, count, eq, gt, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { db } from '@/db/client';
 import { subscriptions, users, workspaceInvites, workspaceMembers, workspaces } from '@/db/schema';
-import { getEntitlements, invalidateEntitlements, planLimits } from '@/services/entitlements.service';
+import { getEntitlements, invalidateEntitlements, planLimits } from '@/services/billing/entitlements.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 

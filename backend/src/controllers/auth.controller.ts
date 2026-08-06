@@ -5,7 +5,7 @@ import {
   toPublicUser,
   upsertGoogleUser,
   verifyGoogleIdToken,
-} from '@/services/auth.service';
+} from '@/services/auth/auth.service';
 import { googleAuthSchema } from '@/validators/room.validator';
 import { logger } from '@/utils/logger';
 import { env } from '@/config/env';

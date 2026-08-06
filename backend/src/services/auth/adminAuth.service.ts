@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { db } from '@/db/client';
 import { adminTwoFactor, users } from '@/db/schema';
-import { authenticateRequest } from '@/services/auth.service';
+import { authenticateRequest } from '@/services/auth/auth.service';
 import { env } from '@/config/env';
 import { APIError } from '@/utils/error';
 

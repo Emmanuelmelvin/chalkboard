@@ -1,11 +1,11 @@
 import { Queue, Worker } from 'bullmq';
 import { env, logBootMode } from '@/config/env';
-import { closeInactiveRooms } from '@/services/cleanup.service';
-import { distributeMonth, previousMonthBounds } from '@/services/developerPool.service';
-import { reconcileExpiredSeatAddOns } from '@/services/billing.service';
-import { reconcileOpenVoiceSessions } from '@/services/voiceMetering.service';
+import { closeInactiveRooms } from '@/services/infra/cleanup.service';
+import { distributeMonth, previousMonthBounds } from '@/services/billing/developerPool.service';
+import { reconcileExpiredSeatAddOns } from '@/services/billing/billing.service';
+import { reconcileOpenVoiceSessions } from '@/services/rooms/voiceMetering.service';
 import { sql } from '@/db/client';
-import { closeRedis, initRedis } from '@/services/roomState.service';
+import { closeRedis, initRedis } from '@/services/rooms/roomState.service';
 import { logger } from '@/utils/logger';
 import { captureException, initMonitoring } from '@/utils/monitoring';
 

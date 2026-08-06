@@ -1,6 +1,6 @@
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { env } from '@/config/env';
-import { checkRateLimit, getRateLimitRetryAfterSeconds } from '@/services/rateLimiter.service';
+import { checkRateLimit, getRateLimitRetryAfterSeconds } from '@/services/infra/rateLimiter.service';
 import { logger } from '@/utils/logger';
 import type { Context } from 'hono';
 

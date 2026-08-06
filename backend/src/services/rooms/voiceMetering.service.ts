@@ -9,7 +9,7 @@ import {
   getEntitlements,
   getVoicePeriodStart,
   isWithinLimit,
-} from '@/services/entitlements.service';
+} from '@/services/billing/entitlements.service';
 import { logger } from '@/utils/logger';
 
 

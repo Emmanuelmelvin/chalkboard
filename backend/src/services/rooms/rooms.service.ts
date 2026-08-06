@@ -3,12 +3,12 @@ import { randomBytes } from 'node:crypto';
 import { and, count, desc, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { joinRequests, roomBans, roomMembers, rooms, users } from '@/db/schema';
-import { UNLIMITED, getCachedEntitlements, getEntitlements, isWithinLimit } from '@/services/entitlements.service';
-import { createVoiceToken } from '@/services/livekit.service';
-import { deleteRoomState, getLiveRoomUserIds } from '@/services/realtimeRooms.service';
-import { isVoicePublisher } from '@/services/roomState.service';
-import { ownerHasVoiceHeadroom, startVoiceSession } from '@/services/voiceMetering.service';
-import { decryptRoomPassword, encryptRoomPassword } from '@/services/roomPasswords.service';
+import { UNLIMITED, getCachedEntitlements, getEntitlements, isWithinLimit } from '@/services/billing/entitlements.service';
+import { createVoiceToken } from '@/services/rooms/livekit.service';
+import { deleteRoomState, getLiveRoomUserIds } from '@/services/rooms/realtimeRooms.service';
+import { isVoicePublisher } from '@/services/rooms/roomState.service';
+import { ownerHasVoiceHeadroom, startVoiceSession } from '@/services/rooms/voiceMetering.service';
+import { decryptRoomPassword, encryptRoomPassword } from '@/services/rooms/roomPasswords.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 

@@ -8,15 +8,15 @@ import {
   createCheckoutSession,
   createCustomer,
   createPortalSession,
-} from '@/services/bachs.service';
+} from '@/services/billing/bachs.service';
 import {
   ENTITLING_STATUSES,
   invalidateEntitlements,
   planLimits,
   type PlanId,
   type SubscriptionStatus,
-} from '@/services/entitlements.service';
-import { ensureWorkspaceForOwner, invalidateWorkspaceMemberEntitlements } from '@/services/workspaces.service';
+} from '@/services/billing/entitlements.service';
+import { ensureWorkspaceForOwner, invalidateWorkspaceMemberEntitlements } from '@/services/billing/workspaces.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 import { isMoneyString } from '@/utils/money';

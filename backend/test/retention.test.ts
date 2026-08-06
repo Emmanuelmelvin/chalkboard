@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { UNLIMITED, getPlanLimits, type PlanId } from '../src/services/entitlements.service.ts';
+import { UNLIMITED, getPlanLimits, type PlanId } from '../src/services/billing/entitlements.service.ts';
 
 /**
  * Retention decides when a board is closed and its Redis canvas deleted, which

@@ -14,8 +14,8 @@ import {
   getPluginAssetReadUrl, 
   pluginAssetKey, 
   putPluginAsset 
-} from '@/services/pluginStorage.service';
-import { getEntitlements } from '@/services/entitlements.service';
+} from '@/services/plugins/pluginStorage.service';
+import { getEntitlements } from '@/services/billing/entitlements.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 

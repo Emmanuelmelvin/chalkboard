@@ -6,9 +6,9 @@ import {
   handleWebhook,
   startCheckout,
   startSeatCheckout,
-} from '@/services/billing.service';
-import { getBillingUsage, getEntitlements } from '@/services/entitlements.service';
-import { getSeatsUsed, getWorkspaceMembership } from '@/services/workspaces.service';
+} from '@/services/billing/billing.service';
+import { getBillingUsage, getEntitlements } from '@/services/billing/entitlements.service';
+import { getSeatsUsed, getWorkspaceMembership } from '@/services/billing/workspaces.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 

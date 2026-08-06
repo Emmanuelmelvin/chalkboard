@@ -1,8 +1,8 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, sql } from '@/db/client';
 import { subscriptions, users } from '@/db/schema';
-import { applySeatAddOn, isSeatProduct } from '@/services/billing.service';
-import { ENTITLING_STATUSES } from '@/services/entitlements.service';
+import { applySeatAddOn, isSeatProduct } from '@/services/billing/billing.service';
+import { ENTITLING_STATUSES } from '@/services/billing/entitlements.service';
 import { logger } from '@/utils/logger';
 
 /**

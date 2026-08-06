@@ -1,8 +1,8 @@
 import { Server } from 'socket.io';
 import { randomUUID } from 'node:crypto';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { redis, setRaisedHand, getRaisedHands, isVoiceOwnerConnected, setVoiceOwnerConnected, setVoicePublisher } from '@/services/roomState.service';
-import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, closeRoomForOwner, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms.service';
+import { redis, setRaisedHand, getRaisedHands, isVoiceOwnerConnected, setVoiceOwnerConnected, setVoicePublisher } from '@/services/rooms/roomState.service';
+import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, closeRoomForOwner, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms/rooms.service';
 import {
   appendStroke,
   appendChatMessage,
@@ -20,12 +20,12 @@ import {
   removePresenceNow,
   setPresenceServer,
   notifyRoomManagers,
-} from '@/services/realtimeRooms.service';
-import { closeVoiceSessions } from '@/services/voiceMetering.service';
+} from '@/services/rooms/realtimeRooms.service';
+import { closeVoiceSessions } from '@/services/rooms/voiceMetering.service';
 import { logger } from '@/utils/logger';
 import { env, isAllowedCorsOrigin } from '@/config/env';
-import { checkRateLimit } from '@/services/rateLimiter.service';
-import { authenticateSocketSession } from '@/services/auth.service';
+import { checkRateLimit } from '@/services/infra/rateLimiter.service';
+import { authenticateSocketSession } from '@/services/auth/auth.service';
 import {
   SOCKET_LIMITS,
   clearBoardSchema,

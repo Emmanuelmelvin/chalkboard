@@ -12,7 +12,7 @@ import {
   statusGrantsAccess,
   type PlanId,
   type SubscriptionStatus,
-} from '@/services/entitlements.service.ts';
+} from '@/services/billing/entitlements.service.ts';
 
 /**
  * These tests cover the parts of enforcement that decide access, without a

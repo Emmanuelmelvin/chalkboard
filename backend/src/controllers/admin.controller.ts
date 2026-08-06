@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { addAdminByEmail, listAdmins, removeAdmin } from '@/services/admins.service';
-import { beginAdminTwoFactorSetup, clearAdminTwoFactorSession, getAdminAccessState, hasAdminTwoFactorSession, requireAdminIdentity, setAdminTwoFactorSession, verifyAdminTwoFactor } from '@/services/adminAuth.service';
+import { addAdminByEmail, listAdmins, removeAdmin } from '@/services/auth/admins.service';
+import { beginAdminTwoFactorSetup, clearAdminTwoFactorSession, getAdminAccessState, hasAdminTwoFactorSession, requireAdminIdentity, setAdminTwoFactorSession, verifyAdminTwoFactor } from '@/services/auth/adminAuth.service';
 import { APIError } from '@/utils/error';
 
 const twoFactorCodeSchema = z.object({ code: z.string().trim().min(6).max(32) });

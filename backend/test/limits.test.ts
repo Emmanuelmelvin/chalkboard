@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { UNLIMITED, getPlanLimits, isWithinLimit, type PlanId } from '../src/services/entitlements.service.ts';
+import { UNLIMITED, getPlanLimits, isWithinLimit, type PlanId } from '../src/services/billing/entitlements.service.ts';
 
 /**
  * The three limits that refuse a request rather than hide a button: the room

@@ -6,7 +6,7 @@ import {
   leaveWorkspace,
   removeMember,
   revokeInvite,
-} from '@/services/workspaces.service';
+} from '@/services/billing/workspaces.service';
 import { APIError } from '@/utils/error';
 
 /**

@@ -20,7 +20,7 @@ import {
   removeAdminPluginFromRegistryHandler,
   reviewAdminPluginHandler,
 } from '@/controllers/plugin.controller';
-import { requireAdmin, requireSuperAdmin } from '@/services/adminAuth.service';
+import { requireAdmin, requireSuperAdmin } from '@/services/auth/adminAuth.service';
 import { adminTwoFactorRateLimit } from '@/middlewares/rateLimit.middleware';
 
 export const adminRouter = new Hono();

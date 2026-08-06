@@ -6,7 +6,7 @@ import {
   isInviteEmailUsable,
   normalizeEmail,
   seatsOccupied,
-} from '@/services/workspaces.service.ts';
+} from '@/services/billing/workspaces.service.ts';
 
 /**
  * The workspace seat rules, tested without a database.

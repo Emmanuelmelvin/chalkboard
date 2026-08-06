@@ -10,15 +10,15 @@ import {
   removePluginFromRegistry, 
   reviewPlugin, 
   submitPluginForReview
-} from '@/services/plugins.service';
+} from '@/services/plugins/plugins.service';
 import { 
   createPluginSchema, 
   createPluginVersionSchema, 
   pluginReviewSchema
 } from '@/validators/plugin.validator';
-import { recordPluginUsage } from '@/services/developerPool.service';
-import { getMyPluginAnalytics } from '@/services/community.service';
-import { getCachedEntitlements } from '@/services/entitlements.service';
+import { recordPluginUsage } from '@/services/billing/developerPool.service';
+import { getMyPluginAnalytics } from '@/services/plugins/community.service';
+import { getCachedEntitlements } from '@/services/billing/entitlements.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 import type { Context } from 'hono';

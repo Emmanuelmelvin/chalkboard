@@ -1,8 +1,8 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db, sql } from '@/db/client';
 import { subscriptions, workspaces } from '@/db/schema';
-import { ENTITLING_STATUSES } from '@/services/entitlements.service';
-import { ensureWorkspaceForOwner } from '@/services/workspaces.service';
+import { ENTITLING_STATUSES } from '@/services/billing/entitlements.service';
+import { ensureWorkspaceForOwner } from '@/services/billing/workspaces.service';
 import { logger } from '@/utils/logger';
 
 /**

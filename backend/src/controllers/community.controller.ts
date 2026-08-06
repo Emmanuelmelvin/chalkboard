@@ -2,7 +2,7 @@ import {
   getCommunityPluginAnalytics,
   getCommunityPoolSummary,
   listCommunityProPlugins,
-} from '@/services/community.service';
+} from '@/services/plugins/community.service';
 import { APIError } from '@/utils/error';
 
 /**

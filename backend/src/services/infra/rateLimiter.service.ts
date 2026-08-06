@@ -1,5 +1,5 @@
 import { env } from '@/config/env';
-import { redis } from '@/services/roomState.service';
+import { redis } from '@/services/rooms/roomState.service';
 import { logger } from '@/utils/logger';
 
 export type RateLimitResult = {

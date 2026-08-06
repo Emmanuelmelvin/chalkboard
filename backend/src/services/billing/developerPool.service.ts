@@ -8,7 +8,7 @@ import {
   revenueLedger,
   subscriptions,
 } from '@/db/schema';
-import { ENTITLING_STATUSES } from '@/services/entitlements.service';
+import { ENTITLING_STATUSES } from '@/services/billing/entitlements.service';
 import { logger } from '@/utils/logger';
 import {
   allocateByWeight,

@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { db } from '@/db/client';
 import { users } from '@/db/schema';
-import { getEntitlements, type PlanId } from '@/services/entitlements.service';
+import { getEntitlements, type PlanId } from '@/services/billing/entitlements.service';
 import { logger } from '@/utils/logger';
 import { env } from '@/config/env';
 import { APIError } from '@/utils/error';

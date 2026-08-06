@@ -20,6 +20,7 @@ import { ensureWorkspaceForOwner, invalidateWorkspaceMemberEntitlements } from '
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 import { isMoneyString } from '@/utils/money';
+import { MAX_SEATS_PER_CHECKOUT, parseSeatQuantity } from '@/utils/seats';
 
 /**
  * Orchestration between Chalkboard and Bachs: starting a checkout, taking the
@@ -103,10 +104,7 @@ export function baseSeats(planId: PlanId): number {
  * the same 1..100 band the checkout endpoint accepts.
  */
 export function seatQuantityOf(data: Record<string, any>): number {
-  const raw = data.quantity ?? data.items?.[0]?.quantity ?? 1;
-  const value = Math.floor(Number(raw));
-  if (!Number.isFinite(value)) return 1;
-  return Math.min(100, Math.max(1, value));
+  return parseSeatQuantity(data);
 }
 
 function requireBillingEnabled() {
@@ -270,8 +268,6 @@ export async function getCheckoutStatus(userId: string, identifier: string): Pro
       : Boolean(subscription && subscription.planId === row.planId),
   };
 }
-
-const MAX_SEATS_PER_CHECKOUT = 100;
 
 /**
  * Sell more seats on an existing Team subscription.
@@ -588,7 +584,10 @@ async function recordPaidInvoice(data: Record<string, any>, userId: string | nul
     : typeof data.id === 'string' ? data.id : '';
   if (!invoiceId) throw new UnresolvableEventError('invoice payload carries no id');
 
-  const amount = typeof data.amount === 'string' ? data.amount : String(data.amount ?? '');
+  // Bachs invoices carry the collected total as `total`/`amount_paid`; `amount`
+  // is accepted as well for payloads that spell it that way (subscriptions do).
+  const raw = data.amount ?? data.total ?? data.amount_paid;
+  const amount = typeof raw === 'string' ? raw : String(raw ?? '');
   if (!amount || !isMoneyString(amount)) {
     // Better to skip the row than to poison the pool base with a value we
     // cannot represent exactly.

@@ -20,6 +20,7 @@ import {
 import PluginPackagePicker, {
   type PluginPackageFile,
 } from "@/components/PluginPackagePicker";
+import DeveloperPluginAnalytics from "@/components/DeveloperPluginAnalytics";
 import {
   createBrowserModuleBundle,
   findZipEntry,
@@ -1162,6 +1163,10 @@ export default function DeveloperPlugins() {
                 </div>
               ))}
             </div>
+            <DeveloperPluginAnalytics
+              pluginId={selectedPlugin.pluginId}
+              plan={selectedPlugin.plan}
+            />
             <form
               className="dashboard-developer-form"
               onSubmit={handleCreateVersion}

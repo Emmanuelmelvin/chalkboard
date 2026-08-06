@@ -219,17 +219,15 @@ export interface CommunityPluginAnalytics {
   poolBreakdown: { pluginId: string; name: string; poolSharePercent: string; isCurrent: boolean }[];
 }
 
-/**
- * Everything the drawer shows for one plugin.
- *
- * Assembled in a single call rather than several endpoints because it is opened
- * as one unit: a drawer that paints in three stages is worse than one that takes
- * a moment.
- */
-export async function getCommunityPluginAnalytics(
-  pluginKey: string,
-  now = new Date(),
-): Promise<CommunityPluginAnalytics> {
+type CommunityPluginRow = {
+  plugin: typeof plugins.$inferSelect;
+  developerId: string | null;
+  developerName: string | null;
+  developerEmail: string | null;
+  developerAvatar: string | null;
+};
+
+async function resolveCommunityPlugin(pluginKey: string): Promise<CommunityPluginRow> {
   const [row] = await db
     .select({
       plugin: plugins,
@@ -244,7 +242,48 @@ export async function getCommunityPluginAnalytics(
     .limit(1);
 
   if (!row) throw new APIError('plugin_not_found', 404);
+  return row;
+}
 
+function pluginSummary(plugin: typeof plugins.$inferSelect): CommunityPluginAnalytics['plugin'] {
+  return {
+    id: plugin.id,
+    pluginId: plugin.pluginId,
+    name: plugin.name,
+    description: plugin.description,
+    logoUrl: plugin.logoDataUrl,
+    status: plugin.status,
+    plan: plugin.plan,
+    currentVersion: plugin.currentVersion,
+    createdAt: plugin.createdAt,
+    updatedAt: plugin.updatedAt,
+  };
+}
+
+function developerSummary(row: CommunityPluginRow): CommunityPluginAnalytics['developer'] {
+  return row.developerId
+    ? {
+        id: row.developerId,
+        displayName: row.developerName ?? '',
+        email: row.developerEmail ?? '',
+        avatarUrl: row.developerAvatar ?? null,
+      }
+    : null;
+}
+
+interface UsageAnalyticsResult {
+  usage: CommunityPluginAnalytics['usage'];
+  entitlement: CommunityPluginAnalytics['entitlement'];
+  /** Every measured plugin's period usage, the input to the share allocation. */
+  poolUsage: Awaited<ReturnType<typeof usageByPlugin>>;
+}
+
+/**
+ * The usage and entitlement halves of a plugin's analytics. Shared by the admin
+ * community drawer and the developer's own view so the two can never disagree
+ * about what a plugin measured.
+ */
+async function loadUsageAnalytics(pluginRowId: string, now: Date): Promise<UsageAnalyticsResult> {
   const { periodStart, periodEnd } = monthBounds(now);
   const thirtyDaysAgo = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
   const twelveMonthsAgo = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), 1));
@@ -258,7 +297,7 @@ export async function getCommunityPluginAnalytics(
       })
       .from(pluginUsageDaily)
       .where(and(
-        eq(pluginUsageDaily.pluginId, row.plugin.id),
+        eq(pluginUsageDaily.pluginId, pluginRowId),
         gte(pluginUsageDaily.day, periodStart.toISOString().slice(0, 10)),
         lt(pluginUsageDaily.day, periodEnd.toISOString().slice(0, 10)),
       )),
@@ -270,7 +309,7 @@ export async function getCommunityPluginAnalytics(
         lastSeen: sql<Date | null>`max(${pluginUsageDaily.day})`,
       })
       .from(pluginUsageDaily)
-      .where(eq(pluginUsageDaily.pluginId, row.plugin.id)),
+      .where(eq(pluginUsageDaily.pluginId, pluginRowId)),
     db
       .select({
         day: pluginUsageDaily.day,
@@ -279,7 +318,7 @@ export async function getCommunityPluginAnalytics(
       })
       .from(pluginUsageDaily)
       .where(and(
-        eq(pluginUsageDaily.pluginId, row.plugin.id),
+        eq(pluginUsageDaily.pluginId, pluginRowId),
         gte(pluginUsageDaily.day, thirtyDaysAgo.toISOString().slice(0, 10)),
       ))
       .groupBy(pluginUsageDaily.day),
@@ -291,7 +330,7 @@ export async function getCommunityPluginAnalytics(
       })
       .from(pluginUsageDaily)
       .where(and(
-        eq(pluginUsageDaily.pluginId, row.plugin.id),
+        eq(pluginUsageDaily.pluginId, pluginRowId),
         gte(pluginUsageDaily.day, twelveMonthsAgo.toISOString().slice(0, 10)),
       ))
       .groupBy(sql`to_char(${pluginUsageDaily.day}, 'YYYY-MM')`),
@@ -300,7 +339,7 @@ export async function getCommunityPluginAnalytics(
   ]);
 
   const shares = percentShares(poolUsage.map((entry) => BigInt(entry.units)));
-  const shareIndex = poolUsage.findIndex((entry) => entry.pluginRowId === row.plugin.id);
+  const shareIndex = poolUsage.findIndex((entry) => entry.pluginRowId === pluginRowId);
   const poolSharePercent = shareIndex >= 0 ? shares[shareIndex] : '0.00';
 
   // Zero-fill the daily series so a quiet stretch reads as "nobody used it"
@@ -326,6 +365,42 @@ export async function getCommunityPluginAnalytics(
     monthlySeries.push({ month: key, units: entry?.units ?? 0, uniqueUsers: entry?.uniqueUsers ?? 0 });
   }
 
+  return {
+    usage: {
+      unitsThisPeriod: periodUsage[0]?.units ?? 0,
+      uniqueUsersThisPeriod: periodUsage[0]?.uniqueUsers ?? 0,
+      activeDaysThisPeriod: periodUsage[0]?.activeDays ?? 0,
+      unitsAllTime: allTime[0]?.units ?? 0,
+      uniqueUsersAllTime: allTime[0]?.uniqueUsers ?? 0,
+      daily: dailySeries,
+      monthly: monthlySeries,
+      firstSeen: allTime[0]?.firstSeen ? new Date(allTime[0].firstSeen) : null,
+      lastSeen: allTime[0]?.lastSeen ? new Date(allTime[0].lastSeen) : null,
+    },
+    entitlement: {
+      poolRate: `${Number(DEVELOPER_POOL_BASIS_POINTS) / 100}%`,
+      poolSharePercent,
+      periodLabel: periodStart.toISOString().slice(0, 7),
+      distributed: Boolean(existingRun),
+    },
+    poolUsage,
+  };
+}
+
+/**
+ * Everything the drawer shows for one plugin.
+ *
+ * Assembled in a single call rather than several endpoints because it is opened
+ * as one unit: a drawer that paints in three stages is worse than one that takes
+ * a moment.
+ */
+export async function getCommunityPluginAnalytics(
+  pluginKey: string,
+  now = new Date(),
+): Promise<CommunityPluginAnalytics> {
+  const row = await resolveCommunityPlugin(pluginKey);
+  const { usage, entitlement, poolUsage } = await loadUsageAnalytics(row.plugin.id, now);
+
   // Names for the donut. Only the measured plugins are looked up, so this stays
   // proportional to what actually earned units rather than the whole catalogue.
   const measuredIds = poolUsage.map((entry) => entry.pluginRowId);
@@ -337,6 +412,7 @@ export async function getCommunityPluginAnalytics(
     : [];
   const nameByRowId = new Map(names.map((entry) => [entry.id, entry]));
 
+  const shares = percentShares(poolUsage.map((entry) => BigInt(entry.units)));
   const poolBreakdown = poolUsage
     .map((entry, index) => {
       const named = nameByRowId.get(entry.pluginRowId);
@@ -350,43 +426,40 @@ export async function getCommunityPluginAnalytics(
     .sort((a, b) => Number(b.poolSharePercent) - Number(a.poolSharePercent));
 
   return {
-    plugin: {
-      id: row.plugin.id,
-      pluginId: row.plugin.pluginId,
-      name: row.plugin.name,
-      description: row.plugin.description,
-      logoUrl: row.plugin.logoDataUrl,
-      status: row.plugin.status,
-      plan: row.plugin.plan,
-      currentVersion: row.plugin.currentVersion,
-      createdAt: row.plugin.createdAt,
-      updatedAt: row.plugin.updatedAt,
-    },
-    developer: row.developerId
-      ? {
-          id: row.developerId,
-          displayName: row.developerName ?? '',
-          email: row.developerEmail ?? '',
-          avatarUrl: row.developerAvatar ?? null,
-        }
-      : null,
-    entitlement: {
-      poolRate: `${Number(DEVELOPER_POOL_BASIS_POINTS) / 100}%`,
-      poolSharePercent,
-      periodLabel: periodStart.toISOString().slice(0, 7),
-      distributed: Boolean(existingRun),
-    },
-    usage: {
-      unitsThisPeriod: periodUsage[0]?.units ?? 0,
-      uniqueUsersThisPeriod: periodUsage[0]?.uniqueUsers ?? 0,
-      activeDaysThisPeriod: periodUsage[0]?.activeDays ?? 0,
-      unitsAllTime: allTime[0]?.units ?? 0,
-      uniqueUsersAllTime: allTime[0]?.uniqueUsers ?? 0,
-      daily: dailySeries,
-      monthly: monthlySeries,
-      firstSeen: allTime[0]?.firstSeen ? new Date(allTime[0].firstSeen) : null,
-      lastSeen: allTime[0]?.lastSeen ? new Date(allTime[0].lastSeen) : null,
-    },
+    plugin: pluginSummary(row.plugin),
+    developer: developerSummary(row),
+    entitlement,
+    usage,
     poolBreakdown,
+  };
+}
+
+export interface MyPluginAnalytics {
+  plugin: CommunityPluginAnalytics['plugin'];
+  entitlement: CommunityPluginAnalytics['entitlement'];
+  usage: CommunityPluginAnalytics['usage'];
+}
+
+/**
+ * The developer's own view of one of their plugins' usage.
+ *
+ * Same numbers as the admin drawer, minus the pool breakdown: a developer sees
+ * how their plugin is used and the share it is entitled to, but not how every
+ * other plugin's slice compares — that cross-catalogue view is the admin's, not
+ * a developer's business. Ownership is enforced here, not left to the route.
+ */
+export async function getMyPluginAnalytics(
+  pluginKey: string,
+  authorId: string,
+  now = new Date(),
+): Promise<MyPluginAnalytics> {
+  const row = await resolveCommunityPlugin(pluginKey);
+  if (row.plugin.authorId !== authorId) throw new APIError('forbidden', 403);
+
+  const { usage, entitlement } = await loadUsageAnalytics(row.plugin.id, now);
+  return {
+    plugin: pluginSummary(row.plugin),
+    entitlement,
+    usage,
   };
 }

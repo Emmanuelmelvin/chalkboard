@@ -12,6 +12,7 @@ export const apiKeys = {
     mine: ['plugins', 'mine'] as const,
     catalogue: ['plugins', 'catalogue'] as const,
     catalogueDetail: (pluginId: string) => ['plugins', 'catalogue', pluginId] as const,
+    analytics: (pluginId: string) => ['plugins', 'analytics', pluginId] as const,
   },
   billing: {
     summary: ['billing', 'summary'] as const,

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import {
   createMyPluginHandler,
   createMyPluginVersionHandler,
+  getMyPluginAnalyticsHandler,
   getMyPluginHandler,
   getPublishedPluginHandler,
   listMyPluginsHandler,
@@ -22,5 +23,6 @@ pluginRouter.get('/catalog/:pluginId', getPublishedPluginHandler);
 // Writes accept uploaded plugin bundles and are far costlier than reads.
 pluginRouter.post('/', pluginWriteRateLimit, createMyPluginHandler);
 pluginRouter.get('/:pluginId', getMyPluginHandler);
+pluginRouter.get('/:pluginId/analytics', getMyPluginAnalyticsHandler);
 pluginRouter.post('/:pluginId/versions', pluginWriteRateLimit, createMyPluginVersionHandler);
 pluginRouter.post('/:pluginId/submit', pluginWriteRateLimit, submitMyPluginHandler);

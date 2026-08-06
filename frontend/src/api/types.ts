@@ -299,6 +299,43 @@ export interface PluginMutationResponse {
   plugin: ManagedPlugin;
 }
 
+export interface ManagedPluginAnalytics {
+  plugin: {
+    id: string;
+    pluginId: string;
+    name: string;
+    description: string;
+    logoUrl: string | null;
+    status: ManagedPluginStatus;
+    plan: ManagedPluginPlan;
+    currentVersion: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+  entitlement: {
+    /** The policy rate the pool is carved from, e.g. "15%". */
+    poolRate: string;
+    /** This plugin's share of that pool, as a percentage. */
+    poolSharePercent: string;
+    periodLabel: string;
+    /** True once the month has been closed by the distribution job. */
+    distributed: boolean;
+  };
+  usage: {
+    /** Units in the current period: one paying user, one UTC day. */
+    unitsThisPeriod: number;
+    uniqueUsersThisPeriod: number;
+    activeDaysThisPeriod: number;
+    unitsAllTime: number;
+    uniqueUsersAllTime: number;
+    /** Zero-filled, oldest first, so the time axis has no holes in it. */
+    daily: { day: string; units: number; uniqueUsers: number }[];
+    monthly: { month: string; units: number; uniqueUsers: number }[];
+    firstSeen: string | null;
+    lastSeen: string | null;
+  };
+}
+
 export interface AdminSession {
   user: { id: string; email: string; displayName: string; avatarUrl: string | null; platformRole: 'admin' | 'super_admin' };
   twoFactorEnabled: boolean;

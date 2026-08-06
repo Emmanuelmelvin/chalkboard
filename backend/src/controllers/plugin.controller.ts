@@ -17,6 +17,7 @@ import {
   pluginReviewSchema
 } from '@/validators/plugin.validator';
 import { recordPluginUsage } from '@/services/developerPool.service';
+import { getMyPluginAnalytics } from '@/services/community.service';
 import { getCachedEntitlements } from '@/services/entitlements.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
@@ -85,6 +86,11 @@ export async function getMyPluginHandler(c: any) {
   if (!plugin) throw new APIError('plugin_not_found', 404);
   if (plugin.authorId !== user.id) throw new APIError('forbidden', 403);
   return c.json({ plugin });
+}
+
+export async function getMyPluginAnalyticsHandler(c: any) {
+  const user = requireUser(c);
+  return c.json({ analytics: await getMyPluginAnalytics(c.req.param('pluginId'), user.id) });
 }
 
 export async function listAdminPluginsHandler(c: any) {

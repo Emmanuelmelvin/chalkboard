@@ -1,5 +1,5 @@
 import { apiRequest } from '@/api/client';
-import type { CreatePluginRequest, CreatePluginVersionRequest, ManagedPlugin, ManagedPluginPlan, PluginListResponse, PluginMutationResponse } from '@/api/types';
+import type { CreatePluginRequest, CreatePluginVersionRequest, ManagedPlugin, ManagedPluginAnalytics, ManagedPluginPlan, PluginListResponse, PluginMutationResponse } from '@/api/types';
 
 export function getManagedPluginLogo(plugin: Pick<ManagedPlugin, 'logoUrl' | 'logoDataUrl'>) {
   return plugin.logoUrl || plugin.logoDataUrl || null;
@@ -15,6 +15,13 @@ export function listPluginCatalogue() {
 
 export function getPluginCataloguePlugin(pluginId: string) {
   return apiRequest<PluginMutationResponse>({ url: `/plugins/catalog/${encodeURIComponent(pluginId)}`, method: 'GET' });
+}
+
+export function getMyPluginAnalytics(pluginId: string) {
+  return apiRequest<{ analytics: ManagedPluginAnalytics }>({
+    url: `/plugins/${encodeURIComponent(pluginId)}/analytics`,
+    method: 'GET',
+  });
 }
 
 export function createPlugin(input: CreatePluginRequest) {

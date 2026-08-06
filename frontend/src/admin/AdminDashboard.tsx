@@ -31,15 +31,15 @@ import {
   useReviewAdminPluginMutation,
 } from "@/api/hooks";
 import type { AdminPlugin, AdminSession, AdminUser } from "@/api/types";
-import AdminBilling from "@/admin/AdminBilling";
+import AdminCommunity from "@/admin/AdminCommunity";
 import AdminPluginSandbox from "@/admin/AdminPluginSandbox";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import "./Admin.css";
 
-type AdminView = "plugins" | "billing" | "admins";
+type AdminView = "plugins" | "community" | "admins";
 type TwoFactorMode = "loading" | "setup" | "verify" | "ready" | "forbidden";
 
-const adminViews: AdminView[] = ["plugins", "billing", "admins"];
+const adminViews: AdminView[] = ["plugins", "community", "admins"];
 
 function getAdminViewFromUrl(): AdminView {
   const value = new URLSearchParams(window.location.search).get("tab");
@@ -603,11 +603,11 @@ export default function AdminDashboard() {
             <Code2 size={16} /> Plugins
           </button>
           <button
-            className={view === "billing" ? "is-active" : ""}
+            className={view === "community" ? "is-active" : ""}
             type="button"
-            onClick={() => selectView("billing")}
+            onClick={() => selectView("community")}
           >
-            <WalletCards size={16} /> Billing
+            <WalletCards size={16} /> Community
           </button>
           <button
             className={view === "admins" ? "is-active" : ""}
@@ -640,15 +640,15 @@ export default function AdminDashboard() {
               Chalkboard /{" "}
               {view === "plugins"
                 ? "Plugin review"
-                : view === "billing"
-                  ? "Billing"
+                : view === "community"
+                  ? "Community"
                   : "Administrators"}
             </p>
             <h1>
               {view === "plugins"
                 ? "Review the next tool."
-                : view === "billing"
-                  ? "Follow the money."
+                : view === "community"
+                  ? "The developer pool."
                   : "Protect the people who run it."}
             </h1>
           </div>
@@ -667,8 +667,8 @@ export default function AdminDashboard() {
             </div>
           </div>
         </header>
-        {view === "billing" ? (
-          <AdminBilling />
+        {view === "community" ? (
+          <AdminCommunity />
         ) : view === "admins" ? (
           <section className="admin-admin-workspace">
             <div className="admin-panel">

@@ -163,27 +163,40 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .admin-loading-error a { color: var(--admin-gold-bright); font-size: 10px; text-decoration: none; }
 .admin-spin { animation: admin-spin 1s linear infinite; }
 @keyframes admin-spin { to { transform: rotate(360deg); } }
-/* Billing console. Reuses the panel, queue, status, and feedback primitives
-   above; only the layout and the money tables are new. */
-.admin-billing { display: block; }
-.admin-billing-tabs { display: flex; gap: 1px; margin-bottom: 22px; border: 1px solid var(--admin-line); background: var(--admin-line); }
-.admin-billing-tabs button { flex: 1; padding: 11px 14px; border: 0; background: var(--admin-panel); color: var(--admin-muted); font: inherit; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
-.admin-billing-tabs button:hover { color: var(--admin-white); }
-.admin-billing-tabs button.is-active { background: var(--admin-panel-deep); color: var(--admin-gold-bright); }
-.admin-billing-workspace { display: grid; grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.25fr); gap: 1px; border: 1px solid var(--admin-line); background: var(--admin-line); }
-.admin-billing-list, .admin-billing-detail { min-height: 560px; }
-.admin-billing-search { display: flex; align-items: center; gap: 9px; margin: 16px 0 4px; padding: 0 11px; border: 1px solid var(--admin-line); color: var(--admin-muted); }
-.admin-billing-search input { flex: 1; padding: 10px 0; border: 0; background: transparent; color: var(--admin-white); font: inherit; font-size: 13px; }
-.admin-billing-search input:focus { outline: none; }
-.admin-billing-search button { flex-shrink: 0; margin: 5px 0; }
-.admin-billing-table { width: 100%; margin-top: 18px; border-collapse: collapse; font-size: 12.5px; }
-.admin-billing-table th { padding: 8px 10px; border-bottom: 1px solid var(--admin-line); color: var(--admin-muted); font-weight: 500; letter-spacing: 0.06em; text-align: left; text-transform: uppercase; font-size: 10.5px; }
-.admin-billing-table td { padding: 10px; border-bottom: 1px solid rgba(198, 181, 145, 0.08); color: var(--admin-white); }
-/* Amounts sit right-aligned and tabular so columns of money line up on the
-   decimal point rather than drifting with glyph width. */
-.admin-billing-table td:not(:first-child), .admin-billing-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
-.admin-billing-table code { color: var(--admin-muted); font-size: 11.5px; }
-.admin-billing-pager { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; color: var(--admin-muted); font-size: 12px; }
+/* Community console: the developer pool and Pro plugins. */
+.admin-community { display: block; }
+.admin-community-panel { margin-top: 27px; }
+.admin-community-muted { color: var(--admin-muted); font-size: 11px; line-height: 1.7; }
+.admin-community-row { display: grid; grid-template-columns: 31px minmax(0, 1fr) auto; gap: 11px; align-items: center; }
+.admin-community-share { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.admin-community-share strong { color: var(--admin-gold-bright); font-size: 13px; font-variant-numeric: tabular-nums; }
+.admin-community-share small { margin-top: 2px; color: var(--admin-muted); font-size: 9px; }
+.admin-community-drawer-overlay { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(6, 6, 5, 0.88); }
+.admin-community-drawer { position: relative; width: min(100%, 720px); max-height: 90vh; overflow: auto; background: var(--admin-panel); border: 1px solid var(--admin-gold); box-shadow: 22px 22px 0 rgba(199, 162, 88, 0.15); }
+.admin-community-drawer-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: start; gap: 18px; padding: 26px 28px; border-bottom: 1px solid var(--admin-line); background: var(--admin-panel); }
+.admin-community-drawer-head h2 { margin: 7px 0 5px; font-family: Georgia, serif; font-size: 26px; font-weight: 400; letter-spacing: -0.04em; }
+.admin-community-drawer-head span { display: block; color: var(--admin-muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; }
+.admin-community-drawer-close { flex-shrink: 0; width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--admin-line); background: transparent; color: var(--admin-muted); cursor: pointer; }
+.admin-community-drawer-close:hover { border-color: var(--admin-gold); color: var(--admin-white); }
+.admin-community-drawer-body { padding: 28px; }
+.admin-community-drawer-body section { margin-bottom: 32px; }
+.admin-community-drawer-body section:last-child { margin-bottom: 0; }
+.admin-community-earnings { padding: 18px 0; border-top: 1px solid var(--admin-line); border-bottom: 1px solid var(--admin-line); }
+.admin-community-earnings span { display: block; margin-bottom: 6px; color: var(--admin-muted); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+.admin-community-earnings strong { display: block; margin-bottom: 5px; color: var(--admin-gold-bright); font-size: 32px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.admin-community-earnings small { color: var(--admin-muted); font-size: 11px; }
+.admin-community-developer-row { display: grid; grid-template-columns: 31px minmax(0, 1fr); gap: 11px; align-items: center; margin-top: 12px; }
+.admin-community-developer-row strong { display: block; color: var(--admin-white); font-size: 13px; }
+.admin-community-developer-row small { display: flex; align-items: center; gap: 5px; margin-top: 3px; color: var(--admin-muted); font-size: 10px; }
+.admin-community-range { display: flex; gap: 1px; border: 1px solid var(--admin-line); background: var(--admin-line); }
+.admin-community-range button { flex: 1; min-width: 70px; padding: 7px 12px; border: 0; background: var(--admin-panel); color: var(--admin-muted); font: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
+.admin-community-range button:hover { color: var(--admin-white); }
+.admin-community-range button.is-active { background: var(--admin-panel-deep); color: var(--admin-gold-bright); }
+.admin-community-chart { display: flex; align-items: flex-end; gap: 3px; height: 140px; margin: 22px 0; padding: 12px 0; border-top: 1px solid var(--admin-line); border-bottom: 1px solid var(--admin-line); }
+.admin-community-chart span { flex: 1; min-width: 0; background: rgba(198, 181, 145, 0.15); cursor: default; }
+.admin-community-chart span.is-active { background: var(--admin-gold); }
+.admin-community-stat-grid { grid-template-columns: repeat(3, 1fr); margin-top: 18px; }
+.admin-community-description { max-width: 600px; margin: 28px 0 0; padding-top: 24px; border-top: 1px solid var(--admin-line); color: var(--admin-muted); font-size: 12px; line-height: 1.7; }
 
 .admin-recovery-overlay { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(6, 6, 5, 0.78); }
 .admin-recovery-card { width: min(100%, 420px); padding: 30px; border: 1px solid var(--admin-gold); background: var(--admin-panel); box-shadow: 18px 18px 0 rgba(199, 162, 88, 0.13); }

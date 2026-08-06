@@ -9,16 +9,10 @@ import {
   removeAdminHandler,
 } from '@/controllers/admin.controller';
 import {
-  billingAuditHandler,
-  cancelSubscriptionAdminHandler,
-  developerBalanceHandler,
-  getSubscriptionDetailHandler,
-  listSubscriptionsHandler,
-  markDeveloperPaidHandler,
-  refundPaymentHandler,
-  revenueAnalyticsHandler,
-  runPoolDistributionHandler,
-} from '@/controllers/adminBilling.controller';
+  communityPluginAnalyticsHandler,
+  communityPoolSummaryHandler,
+  communityProPluginsHandler,
+} from '@/controllers/community.controller';
 import {
   getAdminPluginHandler,
   listAdminPluginsHandler,
@@ -27,7 +21,7 @@ import {
   reviewAdminPluginHandler,
 } from '@/controllers/plugin.controller';
 import { requireAdmin, requireSuperAdmin } from '@/services/adminAuth.service';
-import { adminBillingActionRateLimit, adminTwoFactorRateLimit } from '@/middlewares/rateLimit.middleware';
+import { adminTwoFactorRateLimit } from '@/middlewares/rateLimit.middleware';
 
 export const adminRouter = new Hono();
 
@@ -49,23 +43,12 @@ adminRouter.post('/plugins/:pluginId/review', reviewAdminPluginHandler);
 adminRouter.post('/plugins/:pluginId/publish', publishAdminPluginHandler);
 adminRouter.delete('/plugins/:pluginId/registry', removeAdminPluginFromRegistryHandler);
 
-// Billing. Guarded exactly like the plugin routes above: `requireAdmin` means
-// an admin role *plus* a live 2FA session, which is the bar for anything that
-// can cancel a customer or move money.
-adminRouter.use('/billing/*', requireAdmin);
-adminRouter.get('/billing/subscriptions', listSubscriptionsHandler);
-adminRouter.get('/billing/subscriptions/:userId', getSubscriptionDetailHandler);
-adminRouter.get('/billing/analytics', revenueAnalyticsHandler);
-adminRouter.get('/billing/audit', billingAuditHandler);
-
-// State-changing, and each writes an attributed audit row. The refund and
-// payout paths carry their own limiter on top: they are irreversible and cost
-// real money, so a scripted loop must not get far.
-adminRouter.post('/billing/subscriptions/:userId/cancel', cancelSubscriptionAdminHandler);
-adminRouter.post('/billing/subscriptions/:userId/refund', adminBillingActionRateLimit, refundPaymentHandler);
-
-adminRouter.get('/billing/developers/:developerId', developerBalanceHandler);
-adminRouter.post('/billing/developers/:developerId/payout', adminBillingActionRateLimit, markDeveloperPaidHandler);
-// Manual trigger for the monthly pool run. Idempotent by construction, so a
-// second click reports `already_distributed` rather than paying twice.
-adminRouter.post('/billing/pool/distribute', adminBillingActionRateLimit, runPoolDistributionHandler);
+// Community: the 15% developer pool, and how it divides across Pro plugins.
+// Guarded exactly like the plugin routes above — `requireAdmin` means an admin
+// role *plus* a live 2FA session. These are all reads: the console explains
+// where the pool goes, and the scheduled job remains the only thing that moves
+// it, so there is no endpoint here that can pay anyone.
+adminRouter.use('/community/*', requireAdmin);
+adminRouter.get('/community/pool', communityPoolSummaryHandler);
+adminRouter.get('/community/plugins', communityProPluginsHandler);
+adminRouter.get('/community/plugins/:pluginId', communityPluginAnalyticsHandler);

@@ -140,21 +140,6 @@ export const adminTwoFactorRateLimit = rateLimit({
   scope: 'user-or-ip',
 });
 
-/**
- * Refunds, payouts, and pool runs.
- *
- * Deliberately small and hard-coded rather than env-tunable: these move real
- * money and are irreversible, so a legitimate admin never needs a high ceiling
- * and a compromised session should not be handed one. Scoped per admin, so one
- * account's mistake cannot exhaust the budget for the rest of the team.
- */
-export const adminBillingActionRateLimit = rateLimit({
-  name: 'admin-billing-action',
-  max: 20,
-  windowMs: 60_000,
-  scope: 'user-or-ip',
-});
-
 export const inviteJoinRateLimit = rateLimit({
   name: 'invite',
   max: env.INVITE_JOIN_RATE_LIMIT_MAX,

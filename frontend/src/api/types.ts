@@ -422,6 +422,8 @@ export interface WorkspaceMemberInfo {
 
 export interface WorkspaceInviteInfo {
   email: string;
+  /** Only present for the owner, who is the only role that can revoke. */
+  token: string;
   createdAt: string;
   expiresAt: string;
 }

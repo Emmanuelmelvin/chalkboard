@@ -35,12 +35,13 @@ import ConfirmModal from '@/components/ui/ConfirmModal';
 import RoomMembersModal from '@/components/RoomMembersModal';
 import DeveloperPlugins from '@/components/DeveloperPlugins';
 import BillingPanel from '@/components/BillingPanel';
+import WorkspacePanel from '@/components/WorkspacePanel';
 import type { UserProfile } from '@/stores/authStore';
 import { useCreateRoomMutation, useDeleteRoomMutation, useResetRoomPasswordMutation, useRoomsQuery, useSignOutMutation } from '@/api/hooks';
 import type { RoomAccessMode, RoomSummary } from '@/api/types';
 import '@/styles/PublicPages.css';
 
-type DashboardTab = 'overview' | 'rooms' | 'toolkit' | 'developer' | 'billing' | 'profile';
+type DashboardTab = 'overview' | 'rooms' | 'toolkit' | 'developer' | 'billing' | 'team' | 'profile';
 interface DashboardProps {
   profile: UserProfile;
   onJoinRoom: (room: string, password?: string) => void;
@@ -54,6 +55,9 @@ const tabItems: Array<{ id: DashboardTab; label: string; icon: typeof LayoutDash
   // The Plans page links straight here with ?plan=, so this is the pre-checkout
   // screen as well as the place a plan is managed afterwards.
   { id: 'billing', label: 'Plan & billing', icon: WalletCards },
+  // The Team tab needs no plan gating: its panel explains itself when the
+  // account is not on Team, and the rail stays stable while entitlements load.
+  { id: 'team', label: 'Team', icon: UsersRound },
   { id: 'profile', label: 'Profile', icon: UserRound },
 ];
 
@@ -721,6 +725,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           {activeTab === 'toolkit' && renderToolkit()}
           {activeTab === 'developer' && <DeveloperPlugins />}
           {activeTab === 'billing' && <BillingPanel />}
+          {activeTab === 'team' && <WorkspacePanel />}
           {activeTab === 'profile' && renderProfile()}
           {activeTab !== 'rooms' && error && <p className="dashboard-error dashboard-floating-error" role="alert">{error}</p>}
         </div>

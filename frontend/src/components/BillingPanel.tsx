@@ -151,6 +151,10 @@ function BillingPanel() {
                 <dd>{summary.usage.voiceMinutesUsed} of {formatLimit(summary.limits.voiceMinutesPerMonth)}</dd>
               </div>
               <div>
+                <dt>Seats used</dt>
+                <dd>{summary.usage.seatsUsed} of {formatLimit(summary.limits.seats)}</dd>
+              </div>
+              <div>
                 <dt>Board retention</dt>
                 <dd>{formatRetention(summary.limits.retentionDays)}</dd>
               </div>

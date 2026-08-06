@@ -64,7 +64,7 @@ export async function getWorkspaceView(userId: string) {
     .limit(1);
   if (!membership) return null;
 
-  const [members, pendingInvites] = await Promise.all([
+  const [members] = await Promise.all([
     db
       .select({
         userId: workspaceMembers.userId,
@@ -78,19 +78,25 @@ export async function getWorkspaceView(userId: string) {
       .innerJoin(users, eq(users.id, workspaceMembers.userId))
       .where(eq(workspaceMembers.workspaceId, membership.workspaceId))
       .orderBy(workspaceMembers.createdAt),
-    db
-      .select({
-        email: workspaceInvites.email,
-        createdAt: workspaceInvites.createdAt,
-        expiresAt: workspaceInvites.expiresAt,
-      })
-      .from(workspaceInvites)
-      .where(and(
-        eq(workspaceInvites.workspaceId, membership.workspaceId),
-        eq(workspaceInvites.status, 'pending'),
-        gt(workspaceInvites.expiresAt, sql`now()`),
-      )),
   ]);
+
+  // Only the owner sees who is waiting: an invite is a seat being held, and the
+  // roster of not-yet-joined addresses is the owner's admin data, not a member's.
+  const pendingInvites = membership.role === 'owner'
+    ? await db
+        .select({
+          email: workspaceInvites.email,
+          token: workspaceInvites.token,
+          createdAt: workspaceInvites.createdAt,
+          expiresAt: workspaceInvites.expiresAt,
+        })
+        .from(workspaceInvites)
+        .where(and(
+          eq(workspaceInvites.workspaceId, membership.workspaceId),
+          eq(workspaceInvites.status, 'pending'),
+          gt(workspaceInvites.expiresAt, sql`now()`),
+        ))
+    : [];
 
   return {
     id: membership.workspaceId,

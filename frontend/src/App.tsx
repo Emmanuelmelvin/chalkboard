@@ -10,6 +10,7 @@ import Guide from '@/pages/Guide';
 import Lobby from '@/pages/Lobby';
 import Plans from '@/pages/Plans';
 import BillingReturn from '@/pages/BillingReturn';
+import InviteAccept from '@/pages/InviteAccept';
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
 import { useAuthStore } from '@/stores/authStore';
@@ -163,6 +164,13 @@ function App() {
         </Route>
         <Route path="/billing/return">
           <Redirect to="/dashboard?tab=billing" />
+        </Route>
+
+        {/* Team workspace invite. Public at the router level: the page decides
+            between sign-in, a closed invite, and the accept button, and the
+            server does the email matching. */}
+        <Route path="/invite/:token">
+          <InviteAccept />
         </Route>
 
         {/* Public landing page */}

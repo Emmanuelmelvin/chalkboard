@@ -96,6 +96,54 @@ describe('limit arithmetic', () => {
   });
 });
 
+describe('seat add-on override', () => {
+  // The subscription's own seat count is the paid cap: the plan base is the
+  // floor, and an add-on can only raise it. These are the boundary cases that
+  // decide what a Team workspace is allowed to seat.
+  const teamActive = { planId: 'team' as const, status: 'active' as const, ...period };
+
+  it('raises the cap above the plan base when seats were bought', () => {
+    const entitlements = resolveEntitlements({ ...teamActive, seats: 15 });
+    assert.equal(entitlements.plan, 'team');
+    assert.equal(entitlements.limits.seats, 15);
+    // Everything else comes from the plan table unchanged.
+    assert.equal(entitlements.limits.workspaceAdmin, true);
+    assert.equal(entitlements.limits.voiceMinutesPerMonth, planLimits.team.voiceMinutesPerMonth);
+  });
+
+  it('never lowers the cap below the plan base', () => {
+    // A mis-typed webhook must not shrink a subscription below what its plan
+    // pays for; the plan table stays the floor.
+    const entitlements = resolveEntitlements({ ...teamActive, seats: 3 });
+    assert.equal(entitlements.limits.seats, planLimits.team.seats);
+  });
+
+  it('treats an exact match with the plan base as the plan base', () => {
+    const entitlements = resolveEntitlements({ ...teamActive, seats: planLimits.team.seats });
+    assert.equal(entitlements.limits.seats, planLimits.team.seats);
+  });
+
+  it('treats a legacy row without a seat count as the plan base', () => {
+    // Rows written before the seat feature exist; they must resolve to 10.
+    const entitlements = resolveEntitlements(teamActive);
+    assert.equal(entitlements.limits.seats, planLimits.team.seats);
+  });
+
+  it('ignores seat counts on non-Team plans', () => {
+    // Free and Pro have no workspace to seat; an add-on flag must not leak in.
+    const proActive = resolveEntitlements({ planId: 'pro', status: 'active', ...period, seats: 50 });
+    assert.equal(proActive.limits.seats, planLimits.pro.seats);
+  });
+
+  it('grants no seats at all once the subscription stops entitling', () => {
+    // A cancelled Team with bought seats falls back to Free like any other
+    // lapsed plan; nobody keeps extra seats after churn.
+    const lapsed = resolveEntitlements({ planId: 'team', status: 'canceled', ...period, seats: 15 });
+    assert.equal(lapsed.plan, 'free');
+    assert.deepEqual(lapsed.limits, planLimits.free);
+  });
+});
+
 describe('constants parity with the frontend pricing page', () => {
   /**
    * The frontend copy exists so `/plans` can render without a round trip. It is

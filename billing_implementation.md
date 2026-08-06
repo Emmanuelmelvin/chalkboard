@@ -4,7 +4,7 @@ Wiring the three subscription tiers (Free, Pro, Team) to real money using
 [Bachs](https://docs.bachs.io) for checkout, subscriptions, and the customer portal.
 
 Progress is tracked in §15, where each task is broken into five sub-tasks.
-**All six tasks are complete.** The billing environment block, the plan enums,
+**All eight tasks are complete.** The billing environment block, the plan enums,
 the billing tables and their migrations, `entitlements.service.ts`, `plan` on the
 public user, and `GET /api/billing/summary` all exist, and the Free limits are
 enforced server-side: room count, attendee cap, plan-aware retention, and the
@@ -15,9 +15,13 @@ billing tab, and the `/billing/return` polling page — as do the customer porta
 cancellation, and voice metering. The developer revenue pool now measures plugin
 usage, derives each month's pool from revenue actually collected, and distributes
 it idempotently, with an admin console for subscriptions, refunds, revenue, and
-payouts on top. Money moves as soon as real Bachs credentials are configured;
-with them absent everything still resolves to Free and the checkout routes
-return 503.
+payouts on top. The Team plan now seats people for real: every Team subscription
+owns a shared workspace with email invites (reserved seats, 7-day TTL, acceptance
+gated on the signed-in email), owner-only member administration, a seat cap that
+counts members plus pending invites against the paid total, and a buy-extra-seats
+checkout for the per-seat add-on product that raises the cap on the next webhook.
+Money moves as soon as real Bachs credentials are configured; with them absent
+everything still resolves to Free and the checkout routes return 503.
 
 
 The presentation layer that predates all of it is
@@ -48,9 +52,12 @@ which the backend now actually returns.
 - ~~The plugin developer revenue pool and payouts.~~ Delivered in Task 5: the
   15% share and the $50 payout threshold the `/plans` page promises are now a
   live program rather than forward-looking copy.
-- Team seat invitations and the shared workspace. Team can be *sold* before the
-  workspace exists only if the plan page says so; otherwise ship Pro first and
-  keep Team as "contact us".
+- ~~Team seat invitations and the shared workspace.~~ Delivered in Task 7: the
+  workspace, invites, member administration, and paid extra seats are live.
+  What is *not* built: per-member role management beyond owner/member, SSO,
+  org-wide analytics, and leaving/transferring a workspace (the owner holds
+  the subscription, so the owner cannot leave; a transfer flow is the next
+  candidate).
 
 ---
 
@@ -78,7 +85,7 @@ a nudge toward the shared workspace.
 
 Do this in the sandbox first. Going live is a key swap, per the Bachs docs.
 
-Create four recurring products with `POST /v1/products`, each with a
+Create six recurring products with `POST /v1/products`, each with a
 `billing_cycle` so it is recurring rather than one-time:
 
 | Product | Price | `billing_cycle` | Env var holding the ID |
@@ -87,6 +94,16 @@ Create four recurring products with `POST /v1/products`, each with a
 | Chalkboard Pro (annual) | `50.00` USD | `{ interval: "year", frequency: 1 }` | `BACHS_PRODUCT_PRO_ANNUAL` |
 | Chalkboard Team (monthly) | `30.00` USD | `{ interval: "month", frequency: 1 }` | `BACHS_PRODUCT_TEAM_MONTHLY` |
 | Chalkboard Team (annual) | `300.00` USD | `{ interval: "year", frequency: 1 }` | `BACHS_PRODUCT_TEAM_ANNUAL` |
+| Chalkboard Team extra seat (monthly) | `2.00` USD | `{ interval: "month", frequency: 1 }` | `BACHS_PRODUCT_TEAM_SEAT_MONTHLY` |
+| Chalkboard Team extra seat (annual) | `20.00` USD | `{ interval: "year", frequency: 1 }` | `BACHS_PRODUCT_TEAM_SEAT_ANNUAL` |
+
+The two seat add-ons exist because the Team product cannot be bought twice or
+re-quantified: `quantity` on a single `$30 × 15` checkout would bill $450, not
+`$30 + 14 × $2`. A seat add-on is its own subscription with its own quantity,
+folded into `subscriptions.seats` (10 base + add-on quantity) by the webhook.
+The add-on's interval always matches the parent Team subscription, so the owner
+is never asked to choose; `upsertSubscription` carries the existing add-on
+across a plan change and cancels it when the parent stops being Team.
 
 A `billing_cycle` is immutable once set, so a mistake here means a new product.
 
@@ -127,6 +144,10 @@ Append to `envSchema`:
   BACHS_PRODUCT_PRO_ANNUAL: z.string().default(''),
   BACHS_PRODUCT_TEAM_MONTHLY: z.string().default(''),
   BACHS_PRODUCT_TEAM_ANNUAL: z.string().default(''),
+  // Per-seat add-on for Team. Sold as its own recurring product with a
+  // quantity; the webhook folds it into subscriptions.seats.
+  BACHS_PRODUCT_TEAM_SEAT_MONTHLY: z.string().default(''),
+  BACHS_PRODUCT_TEAM_SEAT_ANNUAL: z.string().default(''),
   // Absolute, public origin used to build checkout success and cancel URLs.
   APP_PUBLIC_URL: z.string().url().default('http://localhost:5173'),
   CHECKOUT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),

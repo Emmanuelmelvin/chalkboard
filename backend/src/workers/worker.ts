@@ -2,6 +2,7 @@ import { Queue, Worker } from 'bullmq';
 import { env, logBootMode } from '@/config/env';
 import { closeInactiveRooms } from '@/services/cleanup.service';
 import { distributeMonth, previousMonthBounds } from '@/services/developerPool.service';
+import { reconcileExpiredSeatAddOns } from '@/services/billing.service';
 import { reconcileOpenVoiceSessions } from '@/services/voiceMetering.service';
 import { sql } from '@/db/client';
 import { closeRedis, initRedis } from '@/services/roomState.service';
@@ -13,6 +14,7 @@ const queueName = 'chalkboard-background';
 const cleanupJobName = 'room-inactivity-cleanup';
 const voiceReconcileJobName = 'voice-session-reconciliation';
 const poolDistributionJobName = 'developer-pool-distribution';
+const seatExpiryJobName = 'seat-addon-expiry';
 
 /**
  * How often the pool job wakes up. It runs daily rather than monthly because a
@@ -55,10 +57,23 @@ export async function startWorker() {
       removeOnFail: 100,
     });
 
+    // A seat add-on cancelled at period end keeps its seats until the paid
+    // period elapses, then normally drops via the `subscription.deleted`
+    // webhook. This daily pass is the fallback for a webhook that is delayed
+    // or lost, so a cancelled add-on can never keep seats past what was paid
+    // for. Runs daily like the pool job: missing one day is survivable.
+    await queue.add(seatExpiryJobName, {}, {
+      jobId: seatExpiryJobName,
+      repeat: { every: POOL_DISTRIBUTION_REPEAT_MS },
+      removeOnComplete: 100,
+      removeOnFail: 100,
+    });
+
     const worker = new Worker(queueName, async (job) => {
       logger.info('Background job started', { jobId: job.id, name: job.name });
       if (job.name === cleanupJobName) return closeInactiveRooms();
       if (job.name === voiceReconcileJobName) return reconcileOpenVoiceSessions();
+      if (job.name === seatExpiryJobName) return reconcileExpiredSeatAddOns();
       if (job.name === poolDistributionJobName) {
         // Always the *previous* month: the current one is still accruing, and
         // closing it early would pay out a partial period.
@@ -79,6 +94,7 @@ export async function startWorker() {
       cleanupJobName,
       voiceReconcileJobName,
       poolDistributionJobName,
+      seatExpiryJobName,
     });
 
     let shutdownPromise: Promise<void> | undefined;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { MAX_SEATS_PER_CHECKOUT, parseSeatQuantity } from '@/utils/seats.ts';
+import { MAX_SEATS_PER_CHECKOUT, parseSeatQuantity, seatAddOnIsEntitling } from '@/utils/seats.ts';
 
 /**
  * Seat counts arrive on webhook payloads in three shapes and one lie.
@@ -45,5 +45,36 @@ describe('parseSeatQuantity', () => {
     assert.equal(parseSeatQuantity({ metadata: { seat_add_on: '-5' } }), 1);
     assert.equal(parseSeatQuantity({ metadata: { seat_add_on: String(MAX_SEATS_PER_CHECKOUT) } }), MAX_SEATS_PER_CHECKOUT);
     assert.equal(parseSeatQuantity({ metadata: { seat_add_on: '999' } }), MAX_SEATS_PER_CHECKOUT);
+  });
+});
+
+describe('seatAddOnIsEntitling', () => {
+  const now = new Date('2026-08-06T12:00:00.000Z');
+  const future = new Date('2027-08-06T12:00:00.000Z');
+  const past = new Date('2026-07-06T12:00:00.000Z');
+
+  it('counts an active add-on that is not cancelled', () => {
+    assert.equal(seatAddOnIsEntitling('active', false, future, now), true);
+  });
+
+  it('keeps counting a cancel-at-period-end add-on until its period ends', () => {
+    assert.equal(seatAddOnIsEntitling('active', true, future, now), true);
+  });
+
+  it('stops counting once the paid period has elapsed', () => {
+    assert.equal(seatAddOnIsEntitling('active', true, past, now), false);
+  });
+
+  it('stops counting an add-on that is no longer entitling by status', () => {
+    assert.equal(seatAddOnIsEntitling('canceled', false, future, now), false);
+    assert.equal(seatAddOnIsEntitling('unpaid', true, past, now), false);
+    assert.equal(seatAddOnIsEntitling('paused', false, future, now), false);
+  });
+
+  it('keeps counting when the period end is unknown', () => {
+    // Without a date we cannot prove the seats are expired; a lost or late
+    // webhook must not drop seats the customer may still be paying for.
+    assert.equal(seatAddOnIsEntitling('active', true, null, now), true);
+    assert.equal(seatAddOnIsEntitling('active', true, 'not-a-date', now), true);
   });
 });

@@ -30,3 +30,32 @@ export function parseSeatQuantity(data: SeatQuantityPayload): number {
   if (!Number.isFinite(value)) return 1;
   return Math.min(MAX_SEATS_PER_CHECKOUT, Math.max(1, value));
 }
+
+/**
+ * Mirrors `ENTITLING_STATUSES` in entitlements.service without importing it:
+ * that module opens the database at import time, and this file stays pure so
+ * the contract is testable.
+ */
+const ENTITLING_SEAT_STATUSES = ['active', 'trialing', 'past_due'] as const;
+
+/**
+ * Whether a ledger row still pays for seats.
+ *
+ * A cancel-at-period-end add-on keeps its seats until the paid period ends
+ * (the customer already paid for them), then stops counting — even if Bachs'
+ * `subscription.deleted` webhook is delayed or lost. A row whose period end is
+ * unknown is kept: without a date we cannot prove the seats are expired.
+ */
+export function seatAddOnIsEntitling(
+  status: string | null | undefined,
+  cancelAtPeriodEnd: boolean | null | undefined,
+  currentPeriodEnd: Date | string | null | undefined,
+  now = new Date(),
+): boolean {
+  if (!status || !(ENTITLING_SEAT_STATUSES as readonly string[]).includes(status)) return false;
+  if (!cancelAtPeriodEnd) return true;
+  if (currentPeriodEnd == null) return true;
+  const end = currentPeriodEnd instanceof Date ? currentPeriodEnd : new Date(currentPeriodEnd);
+  if (Number.isNaN(end.getTime())) return true;
+  return end.getTime() > now.getTime();
+}

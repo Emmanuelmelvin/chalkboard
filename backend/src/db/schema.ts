@@ -450,9 +450,16 @@ export const seatAddOns = pgTable('seat_add_ons', {
   bachsProductId: text('bachs_product_id').notNull(),
   quantity: integer('quantity').notNull(),
   status: subscriptionStatus('status').notNull(),
+  // A cancel-at-period-end add-on keeps paying for its seats until
+  // `currentPeriodEnd`; the daily reconciliation drops it from the cap after
+  // that, so a lost or delayed Bachs `deleted` webhook cannot keep seats that
+  // are no longer paid for.
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false).notNull(),
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   userIdx: index('seat_add_ons_user_idx').on(table.userId),
+  expiryIdx: index('seat_add_ons_expiry_idx').on(table.cancelAtPeriodEnd, table.currentPeriodEnd),
 }));
 

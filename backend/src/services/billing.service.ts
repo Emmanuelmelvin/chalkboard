@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { and, eq, inArray, or } from 'drizzle-orm';
+import { and, eq, inArray, lt, or } from 'drizzle-orm';
 import { billingEnabled, env } from '@/config/env';
 import { db } from '@/db/client';
 import { billingEvents, checkoutSessions, revenueLedger, seatAddOns, subscriptions, users } from '@/db/schema';
@@ -20,7 +20,7 @@ import { ensureWorkspaceForOwner, invalidateWorkspaceMemberEntitlements } from '
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 import { isMoneyString } from '@/utils/money';
-import { MAX_SEATS_PER_CHECKOUT, parseSeatQuantity } from '@/utils/seats';
+import { MAX_SEATS_PER_CHECKOUT, parseSeatQuantity, seatAddOnIsEntitling } from '@/utils/seats';
 
 /**
  * Orchestration between Chalkboard and Bachs: starting a checkout, taking the
@@ -551,17 +551,22 @@ async function upsertSubscription(data: Record<string, any>, userId: string) {
  *
  * Every seat checkout creates a *new* Bachs subscription on the customer, so
  * the ledger holds one row per add-on subscription and the cap accumulates
- * across them; a later purchase never overwrites an earlier one.
+ * across them; a later purchase never overwrites an earlier one. A
+ * cancel-at-period-end add-on stops counting once its paid period elapses.
  */
 async function entitlingAddOnSeats(userId: string): Promise<number> {
   const rows = await db
-    .select({ quantity: seatAddOns.quantity })
+    .select({
+      quantity: seatAddOns.quantity,
+      status: seatAddOns.status,
+      cancelAtPeriodEnd: seatAddOns.cancelAtPeriodEnd,
+      currentPeriodEnd: seatAddOns.currentPeriodEnd,
+    })
     .from(seatAddOns)
-    .where(and(
-      eq(seatAddOns.userId, userId),
-      inArray(seatAddOns.status, [...ENTITLING_STATUSES]),
-    ));
-  return rows.reduce((total, row) => total + row.quantity, 0);
+    .where(eq(seatAddOns.userId, userId));
+  return rows
+    .filter((row) => seatAddOnIsEntitling(row.status, row.cancelAtPeriodEnd, row.currentPeriodEnd))
+    .reduce((total, row) => total + row.quantity, 0);
 }
 
 /**
@@ -581,6 +586,50 @@ export async function recomputeSeats(userId: string): Promise<void> {
     .update(subscriptions)
     .set({ seats: baseSeats(row.planId) + extras, updatedAt: new Date() })
     .where(eq(subscriptions.userId, userId));
+}
+
+/**
+ * Daily reconciliation for seat add-ons cancelled at period end.
+ *
+ * A cancelled add-on keeps counting until its paid period elapses; normally
+ * Bachs then sends `customer.subscription.deleted` and the cap drops. This is
+ * the fallback for the webhook being delayed or lost: any add-on whose period
+ * has ended is marked cancelled and the cap recomputed, so seats never linger
+ * past the period the customer paid for. Idempotent — a run after the first
+ * finds no entitling rows with an elapsed period.
+ */
+export async function reconcileExpiredSeatAddOns(now = new Date()): Promise<number> {
+  const expired = await db
+    .select({
+      userId: seatAddOns.userId,
+      bachsSubscriptionId: seatAddOns.bachsSubscriptionId,
+    })
+    .from(seatAddOns)
+    .where(and(
+      eq(seatAddOns.cancelAtPeriodEnd, true),
+      inArray(seatAddOns.status, [...ENTITLING_STATUSES]),
+      lt(seatAddOns.currentPeriodEnd, now),
+    ));
+
+  if (expired.length === 0) return 0;
+
+  const affectedUserIds = new Set<string>();
+  for (const addOn of expired) {
+    await db
+      .update(seatAddOns)
+      .set({ status: 'canceled', updatedAt: now })
+      .where(eq(seatAddOns.bachsSubscriptionId, addOn.bachsSubscriptionId));
+    affectedUserIds.add(addOn.userId);
+  }
+
+  for (const userId of affectedUserIds) {
+    await recomputeSeats(userId);
+    await invalidateEntitlements(userId);
+    await invalidateWorkspaceMemberEntitlements(userId);
+  }
+
+  logger.info('Expired seat add-ons reconciled', { count: expired.length, users: affectedUserIds.size });
+  return expired.length;
 }
 
 /**
@@ -622,6 +671,8 @@ export async function applySeatAddOn(data: Record<string, any>, userId: string) 
       bachsProductId: productId,
       quantity: seatQuantityOf(data),
       status,
+      cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),
+      currentPeriodEnd: toDate(data.current_period_end),
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -630,6 +681,8 @@ export async function applySeatAddOn(data: Record<string, any>, userId: string) 
         quantity: seatQuantityOf(data),
         status,
         bachsProductId: productId,
+        cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),
+        currentPeriodEnd: toDate(data.current_period_end),
         updatedAt: new Date(),
       },
     });

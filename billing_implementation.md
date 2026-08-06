@@ -273,6 +273,59 @@ export const pluginUsageDaily = pgTable('plugin_usage_daily', {
 }, (table) => ({ uniq: uniqueIndex('plugin_usage_daily_idx').on(table.pluginId, table.userId, table.day) }));
 ```
 
+Team seats were added to this schema in Task 7 rather than a new migration:
+
+- `subscriptions.seats` — total paid seats (10 base + add-on quantity). Written
+  by the webhook: the plan upsert sets it to `baseSeats(plan) + addonQuantity`,
+  and the seat add-on handler rewrites it. Nullable for rows written before the
+  feature; entitlement resolution treats null as the plan base.
+- `subscriptions.seat_bachs_subscription_id` / `seat_bachs_product_id` — the
+  add-on subscription currently being folded in, so the add-on's own
+  `subscription.updated` can find it and a plan change can cancel it.
+- `checkout_sessions.kind` (`'plan' | 'seats'`) and `checkout_sessions.quantity`
+  — how the return route and the webhook tell a seat checkout from a plan
+  checkout. Seat checkouts keep `planId = 'team'`, so `getCheckoutStatus`
+  reports the plan the user is paying into.
+
+Then Task 7's migration `0014_workspaces.sql`:
+
+```ts
+export const workspaceRole = pgEnum('workspace_role', ['owner', 'member']);
+export const workspaceInviteStatus = pgEnum('workspace_invite_status', ['pending', 'accepted', 'revoked']);
+
+export const workspaces = pgTable('workspaces', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const workspaceMembers = pgTable('workspace_members', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: workspaceRole('role').default('member').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  uniq: uniqueIndex('workspace_members_workspace_user_idx').on(table.workspaceId, table.userId),
+}));
+
+export const workspaceInvites = pgTable('workspace_invites', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  token: text('token').notNull().unique(),
+  invitedById: uuid('invited_by_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status: workspaceInviteStatus('status').default('pending').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  uniq: uniqueIndex('workspace_invites_workspace_email_idx').on(table.workspaceId, table.email),
+}));
+```
+
 Migration notes:
 
 - Generate with `npm run db:generate` in `backend/` rather than hand-writing the
@@ -281,6 +334,10 @@ Migration notes:
   data.
 - No backfill. Absent subscription row means Free, which is exactly what every
   existing user should get.
+- `0014_workspaces.sql` is also additive: new tables and nullable columns only.
+  Existing Team subscribers have no workspace until their next subscription
+  webhook runs `ensureWorkspaceForOwner` (idempotent), which seats the owner as
+  the first member.
 
 ---
 
@@ -421,6 +478,28 @@ Two details worth being deliberate about:
   stored on the user, with `reference` as a secondary lookup. Metadata is read
   only as a fallback.
 
+### 8.1b Buying extra seats
+
+```ts
+export async function startSeatCheckout(userId: string, seats: number): Promise<{ checkoutUrl: string; reference: string }>
+```
+
+1. Reject `seats` outside 1..100 with `invalid_quantity`, and require the user's
+   current plan to be Team (`team_plan_required`, 402): extra seats only exist
+   on top of a Team subscription.
+2. Resolve the seat product for the *subscription's* interval. The owner never
+   chooses monthly or annual for an add-on; it follows the plan they are
+   already paying. Missing env IDs are a 503 `billing_unavailable`, logged
+   loudly.
+3. Insert a `checkout_sessions` row with `kind = 'seats'` and the quantity,
+   then call Bachs with `product_cart: [{ product_id: seatProductId,
+   quantity: seats }]`. The metadata carries `seat_add_on`, and the cancel URL
+   lands back on the Team tab (`/dashboard?tab=team&seats=cancelled`).
+4. The return route is shared with plan checkout: the same
+   `/billing/return/:reference` page polls `GET /api/billing/checkout/:id`, and
+   `provisioned` is true once the subscription row is active with the new seat
+   count. Nothing on the return page needs to know which kind it is.
+
 ### 8.2 Handling webhooks
 
 ```ts
@@ -446,6 +525,18 @@ export async function handleWebhook(rawBody: string, signature: string, timestam
 | `checkout.expired` | Mark the row `expired`. |
 | `invoice.paid` | Record for the developer pool once Phase 5 lands. Until then, log only. |
 | `invoice.payment_failed` | Log and (later) notify. Do not downgrade: `past_due` still has access, and Bachs runs its own retry and recovery emails. |
+
+Seat add-ons ride the same events, distinguished by `product_id`:
+
+| Event | Seat add-on behaviour |
+| --- | --- |
+| `customer.subscription.created` / `updated` (seat product) | `applySeatAddOn`: fold `quantity` into the owner's `subscriptions.seats` (`baseSeats + quantity` when the add-on entitles and the plan is Team, else reset to base), store the add-on subscription ID and product ID, invalidate the cache. |
+| `customer.subscription.deleted` (seat product) | `handleSeatAddOnDeleted`: remove the add-on IDs and reset `seats` to the plan base, so a cancelled add-on cannot keep a larger cap. |
+| `customer.subscription.updated` (plan product) | `upsertSubscription` carries the *existing* add-on across plan changes: switching Pro→Team keeps the add-on and the raised cap; leaving Team cancels the add-on via Bachs and drops `seats` to the new plan's base. |
+
+`invoice.paid` for a seat add-on is attributed to the Team plan in the ledger
+(same `planId = 'team'`), so seat revenue shows up under the subscription it
+belongs to.
 
 4. Anything unrecognised: log at info and return 200. Returning a non-2xx for an
    event we simply do not handle would make Bachs retry it forever.
@@ -495,6 +586,21 @@ api.post('/billing/checkout', checkoutRateLimit, startCheckoutHandler);
 api.get('/billing/checkout/:checkoutId', getCheckoutStatusHandler);
 api.post('/billing/portal', createPortalSessionHandler);
 api.post('/billing/cancel', cancelSubscriptionHandler);
+api.post('/billing/seats-checkout', checkoutRateLimit, startSeatCheckoutHandler);
+```
+
+The workspace router (`backend/src/routers/workspace.route.ts`) mounts at
+`/api/workspace` behind `requireAuth`. The routes are REST over the seat model;
+every state-changing call re-checks plan, ownership, and the seat cap
+server-side:
+
+```ts
+GET    /workspace                 // the user's workspace view, or null
+POST   /workspace/invites         // { email } → 201 { invite: { email, token, expiresAt } }
+GET    /workspace/invites/:token  // { workspaceName, email, status, expiresAt, expired } — no member data
+POST   /workspace/invites/:token/accept
+POST   /workspace/invites/:token/revoke   // owner only
+DELETE /workspace/members/:userId         // owner removes, or self-leave
 ```
 
 Notes on the webhook handler:
@@ -518,11 +624,14 @@ Response shapes:
   limits: PlanLimits,
   currentPeriodEnd: string | null,
   cancelAtPeriodEnd: boolean,
-  usage: { activeRooms: number, voiceMinutesUsed: number },
+  usage: { activeRooms: number, voiceMinutesUsed: number, seatsUsed: number },
   billingEnabled: boolean,
 }
 
 // POST /api/billing/checkout  { planId, interval }
+{ checkoutUrl: string, reference: string }
+
+// POST /api/billing/seats-checkout  { quantity }
 { checkoutUrl: string, reference: string }
 
 // GET /api/billing/checkout/:checkoutId
@@ -553,6 +662,7 @@ upgrade prompt rather than a generic failure.
 | `voiceMinutesPerMonth` | `createRoomVoiceToken` | Refuse a new token when the owner's month is spent: `voice_quota_exhausted` (402). Existing sessions are not cut off mid-call. |
 | `publishPlugins` | `submitMyPluginHandler` | Free cannot submit for review: `plan_required` (402). |
 | `proPlugins` | plugin install/enable | Installing a `plan: 'pro'` plugin requires a paid plan: `plan_required` (402). |
+| `seats` | `createInvite`, `acceptInvite` | An invite reserves a seat at creation (`seat_limit_reached`, 402 when the workspace is full, members + pending invites counted). Acceptance re-checks against members alone inside a row-locked transaction, so two simultaneous accepts cannot over-book. |
 | `boardExport`, `customBranding` | the relevant handlers | Same 402 shape. |
 
 402 Payment Required is the right status here. It is unambiguous on the client,
@@ -587,6 +697,36 @@ filtered out in application code rather than by a second index.
 The `/plans` page says an upgrade rescues a board that is still open. That is
 true given this ordering, because retention is evaluated at cleanup time rather
 than stamped onto the room. Worth keeping it that way.
+
+### Seats: the workspace as an entitlement
+
+The seat limit is enforced by `backend/src/services/workspaces.service.ts`, and
+the rules that make it safe:
+
+- **One workspace per Team owner, created lazily.** The webhook dispatch calls
+  `ensureWorkspaceForOwner` after any event that entitles Team; it is idempotent
+  (unique `owner_id`, `onConflictDoNothing`, a second lookup inside the
+  transaction for a racing insert), and the owner is seated as the first member
+  with role `owner`. Only the owner may invite, revoke, or remove.
+- **The cap is `subscriptions.seats`, not the plan table.** `resolveEntitlements`
+  overrides `limits.seats` upward on Team only, from the subscription's own
+  count, so a bought add-on takes effect on the next webhook without a deploy.
+  The override is never allowed below the plan base.
+- **Invites reserve a seat from creation.** `seatsOccupied = members + pending
+  invites`; a full workspace refuses the invite with `seat_limit_reached` (402).
+  Revoked or expired invites release their seat. Acceptance re-checks against
+  members alone, inside a transaction that locks the workspace row.
+- **Acceptance is gated on the signed-in email.** Possession of an invite link
+  is not a capability; `acceptInvite` compares the signed-in user's email to the
+  invited email (`invite_email_mismatch`, 403) so a leaked link cannot seat an
+  arbitrary account. The accept page (`/invite/:token`) renders only the
+  workspace name and invited email — never member data — and routes
+  unauthenticated visitors to sign in first.
+- **Members never see pending invites.** The workspace view returns
+  pending-invite rows (with their tokens) only to the owner.
+- **Seats used is reported in the billing summary** (`usage.seatsUsed`) so the
+  billing tab and the Team tab agree on one number, both derived from the
+  `workspace_members` table.
 
 ### Voice metering
 
@@ -786,20 +926,29 @@ Extend `backend/test/`:
   window does not; a room whose owner upgraded mid-window survives.
 - **Constants parity.** Assert the backend limit table matches
   `frontend/src/constants/plans.ts`, so the two copies cannot silently diverge.
+- **Seat add-on override.** Pure `resolveEntitlements` cases: an add-on raises
+  the Team cap, never lowers it, legacy rows without a seat count resolve to the
+  base, non-Team plans ignore seat counts, and a lapsed Team grants no seats.
+- **Workspace arithmetic.** `seatsOccupied` (members + pending invites) and the
+  invite email rules: normalization, the length cap, and the 7-day TTL. The
+  DB-backed flows (invite creation, acceptance, revoke, remove) are covered by
+  the route contract and a manual sandbox pass.
 
 Manual sandbox pass before going live: a full monthly checkout, a full annual
 checkout, an abandoned checkout, an expired checkout, a portal plan change, a
-portal cancellation, and a replayed webhook from the developer portal.
+portal cancellation, a replayed webhook from the developer portal, a seat
+add-on checkout, a seat add-on cancellation, and a Plan → Team → Pro round trip
+to watch the add-on be carried and then cancelled.
 
 ---
 
 ## 15. Order of work
 
-Five tasks, each split into five sub-tasks. Every sub-task is meant to be
+Eight tasks, each split into five sub-tasks. Every sub-task is meant to be
 independently reviewable and to leave the app in a shippable state. Tasks 1 and 2
 are worth landing on their own even if checkout slips: they are what makes the
 Free tier a defined product rather than an unmetered one, and they carry no
-payment risk.
+payment risk. Tasks 7 and 8 deliver the Team workspace the earlier tasks sold.
 
 ### Task 1 — Schema and entitlements ✅ Done
 
@@ -931,5 +1080,48 @@ writes an append-only `billing_audit` row naming the admin who took it.
 - [x] **6.5 Console.** The `Billing` tab in the admin app: revenue overview,
   subscription management with the two destructive actions gated on a typed
   reason, the audit log, and a manual pool distribution trigger.
+
+### Task 7 — The Team workspace ✅ Done
+
+The Team plan's headline promise: one subscription seats ten people.
+
+- [x] **7.1 Schema and migration.** `0014_workspaces.sql`: the three workspace
+  tables, the two enums, `subscriptions.seats` + the seat add-on columns, and
+  `checkout_sessions.kind`/`quantity`. Additive; no backfill.
+- [x] **7.2 Workspaces service.** `ensureWorkspaceForOwner` (lazy, idempotent,
+  owner seated first), `getWorkspaceView` (owner-only pending invites),
+  `createInvite` (email validation, duplicate guards, seat reservation),
+  `acceptInvite` (email-match gate, locked re-check of the cap),
+  `revokeInvite`, `removeMember` (owner cannot be removed; members may leave),
+  and `getSeatsUsed` for the summary.
+- [x] **7.3 Billing integration.** Seat add-on products in env + setup script,
+  `startSeatCheckout` (quantity 1..100, Team-only, interval follows the parent
+  subscription), `applySeatAddOn` / `handleSeatAddOnDeleted` in the webhook,
+  and `upsertSubscription` carrying the add-on across plan changes and
+  cancelling it when leaving Team. `resolveEntitlements` and the Redis cache
+  serve the raised cap.
+- [x] **7.4 Routes and summary.** `/api/workspace/*` behind `requireAuth`,
+  `POST /api/billing/seats-checkout`, and `usage.seatsUsed` on the billing
+  summary.
+- [x] **7.5 Frontend.** `api/workspace.ts` + hooks, the Team tab with
+  `WorkspacePanel` (seat meter, buy-seats stepper, invite form, pending invites,
+  member roster), `/invite/:token` accept page, seats used on the billing tab,
+  and the `seat_limit_reached` 402 copy.
+
+### Task 8 — Verification ✅ Done
+
+- [x] **8.1 Backend.** `tsc --noEmit`, the full `node --test` suite (100
+  tests), and the `tsup` production build all green.
+- [x] **8.2 Frontend.** `tsc -b` and `vite build` green; new files lint-clean
+  (the repo's pre-existing lint debt in `AdminCommunity.tsx`,
+  `DeveloperPlugins.tsx`, `BillingPanel.tsx`, and `Chalkboard.tsx` is
+  untouched).
+- [x] **8.3 Migration integrity.** `npm run db:generate` runs clean against
+  the current schema; the migration was renamed to `0014_workspaces.sql` with
+  its journal tag and snapshot to match.
+- [x] **8.4 Docs.** `billing_implementation.md` updated end to end.
+
+The remaining manual pass is the sandbox webhook rehearsal in §14: seat add-on
+checkout, add-on cancellation, and the Plan → Team → Pro round trip.
 
 

@@ -19,6 +19,9 @@ import '@/styles/PublicPages.css';
 /** Roughly 30s at the 2s poll interval before we stop and reassure instead. */
 const MAX_WAIT_MS = 30_000;
 
+/** How long the "Your plan is live." confirmation stays on screen before the redirect. */
+const HOLD_MS = 1_500;
+
 interface BillingReturnProps {
   /**
    * Our own checkout `reference`, taken from the URL path.
@@ -56,14 +59,17 @@ function BillingReturn({ reference }: BillingReturnProps) {
   }, [provisioned]);
 
   // The plan reaches every component reading `profile.plan` through the auth
-  // store, so hydrate before handing the user back to the dashboard.
+  // store, so hydrate before handing the user back to the dashboard. The hold
+  // runs in parallel with hydrate so the confirmation is readable without
+  // adding a second redirect delay on top of it.
   useEffect(() => {
     if (!provisioned) return;
     let cancelled = false;
     void (async () => {
       queryClient.invalidateQueries({ queryKey: apiKeys.billing.summary });
       queryClient.invalidateQueries({ queryKey: apiKeys.auth.me });
-      await hydrate();
+      const hold = new Promise((resolve) => window.setTimeout(resolve, HOLD_MS));
+      await Promise.all([hydrate(), hold]);
       if (!cancelled) setLocation('/dashboard?tab=billing&upgraded=1');
     })();
     return () => { cancelled = true; };

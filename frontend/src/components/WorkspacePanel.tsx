@@ -11,7 +11,6 @@ import {
   useStartSeatCheckoutMutation,
   useWorkspaceQuery,
 } from '@/api/hooks';
-import { useEntitlements } from '@/hooks/useEntitlements';
 import type { WorkspaceInfo, WorkspaceMemberInfo } from '@/api/types';
 import '@/styles/PublicPages.css';
 
@@ -19,9 +18,9 @@ import '@/styles/PublicPages.css';
  * The Team tab: who is seated in the workspace, who is waiting on an invite,
  * and how to add seats when the paid cap runs out.
  *
- * Ownership decides what is shown: members see the roster and their own row;
- * the owner additionally invites, revokes, removes, and buys seats. Everything
- * is re-checked on the server regardless of what this panel lets through.
+ * The dashboard shows this tab only to the owner of a Team-plan workspace, so
+ * everyone who reaches this panel is the owner. Everything is still re-checked
+ * on the server regardless of what this panel lets through.
  */
 
 /** The add-on prices the backend was configured with, for the preview only. */
@@ -249,7 +248,6 @@ function MembersCard({ workspace, isOwner, onRemoveRequest }: { workspace: Works
 function WorkspacePanel() {
   const workspaceQuery = useWorkspaceQuery();
   const removeMemberMutation = useRemoveWorkspaceMemberMutation();
-  const entitlements = useEntitlements();
   const search = useSearch();
   const [error, setError] = useState('');
   const [memberToRemove, setMemberToRemove] = useState<WorkspaceMemberInfo | null>(null);
@@ -292,12 +290,6 @@ function WorkspacePanel() {
       {justCancelledSeats && (
         <p className="dashboard-billing-notice" role="status">
           <Check size={15} /> The seat checkout was cancelled. Nothing was charged and your seat count is unchanged.
-        </p>
-      )}
-
-      {entitlements.summary?.plan !== 'team' && (
-        <p className="dashboard-billing-notice" role="status">
-          <UsersRound size={15} /> The Team workspace opens with the Team plan. It looks like this account is not on it yet.
         </p>
       )}
 

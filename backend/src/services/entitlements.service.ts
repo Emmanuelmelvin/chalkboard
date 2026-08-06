@@ -1,6 +1,6 @@
 import { and, count, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { rooms, subscriptions, voiceUsage } from '@/db/schema';
+import { rooms, subscriptions, voiceUsage, workspaceMembers, workspaces } from '@/db/schema';
 import { redis } from '@/services/roomState.service';
 import { logger } from '@/utils/logger';
 
@@ -131,9 +131,11 @@ export interface Entitlements {
   cancelAtPeriodEnd: boolean;
 }
 
-type SubscriptionSnapshot = {
+export type SubscriptionSnapshot = {
   planId: PlanId;
   status: SubscriptionStatus;
+  /** Absent on legacy rows, so it is optional. The voice period needs it. */
+  currentPeriodStart?: Date | null;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
   /**
@@ -199,12 +201,47 @@ async function getSubscriptionRow(userId: string) {
 }
 
 /**
- * Resolve what a user is entitled to right now. An absent subscription row
- * means Free, which is what every user without a paid plan gets.
+ * The subscription a seated member is entitled by: the workspace owner's row.
+ * The owner is always a member of their own workspace, so a user who owns a
+ * Team subscription also matches here; `pickEffectiveSubscription` prefers
+ * their own row anyway. Returns null when the user is not seated anywhere.
+ */
+async function getSeatingSubscriptionRow(userId: string) {
+  const [membership] = await db
+    .select({ ownerId: workspaces.ownerId })
+    .from(workspaceMembers)
+    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1);
+  if (!membership) return null;
+  return getSubscriptionRow(membership.ownerId);
+}
+
+/**
+ * Which subscription entitles a user. A user's own row wins when it grants
+ * access (they are paying for it); a seated member is otherwise entitled by
+ * the workspace owner's Team subscription, which is what "their plan is Team"
+ * means. Both rows are used only as inputs; the status table still decides.
+ */
+export function pickEffectiveSubscription(
+  own: SubscriptionSnapshot | null,
+  seating: SubscriptionSnapshot | null,
+): SubscriptionSnapshot | null {
+  if (own && statusGrantsAccess(own.status)) return own;
+  if (seating && statusGrantsAccess(seating.status)) return seating;
+  return own ?? null;
+}
+
+/**
+ * Resolve what a user is entitled to right now. A user with no entitling
+ * subscription of their own who is seated in a workspace is entitled by the
+ * workspace owner's subscription; an absent subscription otherwise means Free.
  */
 export async function getEntitlements(userId?: string): Promise<Entitlements> {
   if (!userId) return freeEntitlements();
-  return resolveEntitlements(await getSubscriptionRow(userId));
+  const own = await getSubscriptionRow(userId);
+  if (own && statusGrantsAccess(own.status)) return resolveEntitlements(own);
+  return resolveEntitlements(pickEffectiveSubscription(own, await getSeatingSubscriptionRow(userId)));
 }
 
 const CACHE_TTL_SECONDS = 60;
@@ -297,12 +334,15 @@ export function calendarMonthStart(now = new Date()) {
 
 /**
  * The period the voice allowance is measured against: the subscription's own
- * period for a paying user, the calendar month for everyone else, so the
- * allowance resets when the pricing page says it does.
+ * period for a paying user (including a seated member, whose allowance is the
+ * workspace owner's), the calendar month for everyone else, so the allowance
+ * resets when the pricing page says it does.
  */
 export async function getVoicePeriodStart(userId: string, now = new Date()) {
-  const row = await getSubscriptionRow(userId);
-  if (row?.currentPeriodStart && statusGrantsAccess(row.status)) return row.currentPeriodStart;
+  const own = await getSubscriptionRow(userId);
+  const seating = await getSeatingSubscriptionRow(userId);
+  const effective = pickEffectiveSubscription(own, seating);
+  if (effective?.currentPeriodStart && statusGrantsAccess(effective.status)) return effective.currentPeriodStart;
   return calendarMonthStart(now);
 }
 

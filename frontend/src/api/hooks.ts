@@ -5,7 +5,7 @@ import { createRoom, deleteRoom, getRoom, joinRoom, listJoinRequests, listRooms,
 import { createPlugin, createPluginVersion, getMyPluginAnalytics, getPluginCataloguePlugin, listMyPlugins, listPluginCatalogue, submitPlugin } from '@/api/plugins';
 import { addAdmin, beginAdminTwoFactorSetup, getAdminSession, listAdminPlugins, listAdmins, logoutAdminTwoFactor, publishAdminPlugin, removeAdmin, removeAdminPluginFromRegistry, reviewAdminPlugin, verifyAdminTwoFactor } from '@/api/admin';
 import { cancelSubscription, createPortalSession, getCheckoutStatus, startCheckout, startSeatCheckout } from '@/api/billing';
-import { acceptWorkspaceInvite, createWorkspaceInvite, getWorkspace, removeWorkspaceMember, revokeWorkspaceInvite } from '@/api/workspace';
+import { acceptWorkspaceInvite, createWorkspaceInvite, getWorkspace, leaveWorkspace, removeWorkspaceMember, revokeWorkspaceInvite } from '@/api/workspace';
 import type { AddAdminRequest, AdminPluginReviewRequest, CreatePluginRequest, CreatePluginVersionRequest, CreateRoomRequest, GoogleSignInRequest, JoinRoomRequest, SeatCheckoutRequest, StartCheckoutRequest } from '@/api/types';
 
 export function useCurrentUserQuery(enabled = true) {
@@ -234,9 +234,11 @@ export function useAcceptWorkspaceInviteMutation() {
   return useMutation({
     mutationFn: (token: string) => acceptWorkspaceInvite(token),
     onSuccess: () => {
-      // Seating changes what the summary reports and the invite page renders.
+      // Seating changes what the summary and profile plan report: the member's
+      // plan is now the workspace owner's Team subscription.
       queryClient.invalidateQueries({ queryKey: apiKeys.workspace.mine });
       queryClient.invalidateQueries({ queryKey: apiKeys.billing.summary });
+      queryClient.invalidateQueries({ queryKey: apiKeys.auth.me });
     },
   });
 }
@@ -248,6 +250,19 @@ export function useRemoveWorkspaceMemberMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: apiKeys.workspace.mine });
       queryClient.invalidateQueries({ queryKey: apiKeys.billing.summary });
+    },
+  });
+}
+
+/** A member frees their own seat; the plan they resolve to reverts at once. */
+export function useLeaveWorkspaceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: leaveWorkspace,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: apiKeys.workspace.mine });
+      queryClient.invalidateQueries({ queryKey: apiKeys.billing.summary });
+      queryClient.invalidateQueries({ queryKey: apiKeys.auth.me });
     },
   });
 }

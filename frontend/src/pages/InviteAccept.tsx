@@ -59,7 +59,9 @@ function InviteAccept() {
     setActionError('');
     try {
       await acceptMutation.mutateAsync(token);
-      setLocation('/dashboard?tab=team');
+      // The Team tab belongs to the workspace owner; a member lands on the
+      // overview and finds their Team plan under Plan & billing.
+      setLocation('/dashboard');
     } catch (cause) {
       const message = getApiError(cause, 'We could not accept the invite.').message;
       setActionError(message === 'invite_not_found' ? 'This invite link is not valid.' : message);

@@ -5,9 +5,9 @@ import { env } from '@/config/env';
 import {
   ENTITLING_STATUSES,
   UNLIMITED,
-  calendarMonthStart,
   getBillingUsage,
   getEntitlements,
+  getVoicePeriodStart,
   isWithinLimit,
 } from '@/services/entitlements.service';
 import { logger } from '@/utils/logger';
@@ -127,22 +127,12 @@ async function accrueVoiceUsage(ownerId: string, seconds: number) {
 
 /**
  * The billing month for voice: the subscription's current period for a paying
- * user, the calendar month for everyone else.
+ * user (including a member seated in a workspace, whose allowance is the
+ * workspace owner's), the calendar month for everyone else. Delegates to the
+ * entitlements resolver so accrual and the billing summary always agree.
  */
 async function getOwnerPeriodStart(ownerId: string) {
-  const [sub] = await db
-    .select({
-      currentPeriodStart: subscriptions.currentPeriodStart,
-      status: subscriptions.status,
-    })
-    .from(subscriptions)
-    .where(eq(subscriptions.userId, ownerId))
-    .limit(1);
-
-  if (sub?.currentPeriodStart && (ENTITLING_STATUSES as readonly string[]).includes(sub.status)) {
-    return sub.currentPeriodStart;
-  }
-  return calendarMonthStart();
+  return getVoicePeriodStart(ownerId);
 }
 
 /**

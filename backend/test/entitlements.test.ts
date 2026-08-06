@@ -6,6 +6,7 @@ import {
   UNLIMITED,
   getPlanLimits,
   isWithinLimit,
+  pickEffectiveSubscription,
   planLimits,
   resolveEntitlements,
   statusGrantsAccess,
@@ -79,6 +80,48 @@ describe('entitlement resolution', () => {
     assert.equal(statusGrantsAccess('canceled'), false);
     assert.equal(statusGrantsAccess('paused'), false);
     assert.equal(statusGrantsAccess('none'), false);
+  });
+});
+
+describe('seated member resolution', () => {
+  const teamActive = { planId: 'team' as const, status: 'active' as const, ...period };
+  const teamLapsed = { planId: 'team' as const, status: 'canceled' as const, ...period };
+  const proActive = { planId: 'pro' as const, status: 'active' as const, ...period };
+
+  it('entitles a member with no subscription by the workspace owner\'s Team row', () => {
+    const effective = pickEffectiveSubscription(null, teamActive);
+    assert.equal(resolveEntitlements(effective).plan, 'team');
+    assert.equal(resolveEntitlements(effective).status, 'active');
+  });
+
+  it('prefers the user\'s own subscription when it grants access', () => {
+    // A member who also pays for their own Pro keeps Pro: the plan they are
+    // paying for wins over the workspace they are seated in.
+    const effective = pickEffectiveSubscription(proActive, teamActive);
+    assert.equal(effective, proActive);
+    assert.equal(resolveEntitlements(effective).plan, 'pro');
+  });
+
+  it('rescues a member whose own row lapsed, when the workspace still entitles', () => {
+    // A cancelled personal subscription must not drag a seated member to Free:
+    // their seat on the workspace's paid plan is what entitles them now.
+    const effective = pickEffectiveSubscription(teamLapsed, teamActive);
+    assert.equal(effective, teamActive);
+    assert.equal(resolveEntitlements(effective).plan, 'team');
+  });
+
+  it('does not entitle when the workspace owner has lapsed either', () => {
+    // The owner cancelling drops the whole workspace, owner and members alike.
+    // A member with no own row reports `none` rather than the owner's status.
+    const effective = pickEffectiveSubscription(null, teamLapsed);
+    assert.equal(resolveEntitlements(effective).plan, 'free');
+    assert.equal(resolveEntitlements(effective).status, 'none');
+  });
+
+  it('stays Free when there is no subscription and no workspace', () => {
+    const effective = pickEffectiveSubscription(null, null);
+    assert.equal(resolveEntitlements(effective).plan, 'free');
+    assert.equal(resolveEntitlements(effective).status, 'none');
   });
 });
 

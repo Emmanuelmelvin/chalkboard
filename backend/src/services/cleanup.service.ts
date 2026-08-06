@@ -1,12 +1,16 @@
 import { and, eq, inArray, lt, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db } from '@/db/client';
-import { rooms, subscriptions, users } from '@/db/schema';
+import { rooms, subscriptions, users, workspaceMembers, workspaces } from '@/db/schema';
 import { env } from '@/config/env';
 import { ENTITLING_STATUSES, UNLIMITED, getPlanLimits, type PlanId } from '@/services/entitlements.service';
 import { deleteRoomState } from '@/services/realtimeRooms.service';
 import { logger } from '@/utils/logger';
 
 const DAY_MS = 86400000;
+
+/** The workspace owner's subscription a member resolves to, joined separately. */
+const seatingSubscriptions = alias(subscriptions, 'seating_subscriptions');
 
 /**
  * Retention is evaluated at cleanup time from the owner's *current* plan rather
@@ -40,14 +44,22 @@ export async function closeInactiveRooms() {
       lastActivityAt: rooms.lastActivityAt,
       // A cancelled owner has no entitling subscription row, so they coalesce
       // back to Free and their boards are measured from last activity. Nobody
-      // loses a board the moment a card fails.
-      plan: sql<PlanId>`coalesce(${subscriptions.planId}, 'free')`,
+      // loses a board the moment a card fails. A seated member resolves to
+      // their workspace owner's plan, exactly as their entitlements do, so a
+      // Team member's boards are kept like the owner's.
+      plan: sql<PlanId>`coalesce(${subscriptions.planId}, ${seatingSubscriptions.planId}, 'free')`,
     })
     .from(rooms)
     .innerJoin(users, eq(users.id, rooms.ownerId))
     .leftJoin(subscriptions, and(
       eq(subscriptions.userId, users.id),
       inArray(subscriptions.status, [...ENTITLING_STATUSES]),
+    ))
+    .leftJoin(workspaceMembers, eq(workspaceMembers.userId, rooms.ownerId))
+    .leftJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+    .leftJoin(seatingSubscriptions, and(
+      eq(seatingSubscriptions.userId, workspaces.ownerId),
+      inArray(seatingSubscriptions.status, [...ENTITLING_STATUSES]),
     ))
     .where(and(eq(rooms.status, 'open'), lt(rooms.lastActivityAt, freeCutoff)));
 

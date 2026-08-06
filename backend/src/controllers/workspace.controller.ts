@@ -3,6 +3,7 @@ import {
   createInvite,
   getInviteView,
   getWorkspaceView,
+  leaveWorkspace,
   removeMember,
   revokeInvite,
 } from '@/services/workspaces.service';
@@ -50,5 +51,12 @@ export async function revokeInviteHandler(c: any) {
 export async function removeWorkspaceMemberHandler(c: any) {
   const user = c.get('user');
   await removeMember(user.id, c.req.param('userId') ?? '');
+  return c.json({ ok: true });
+}
+
+/** A member frees their own seat. The owner cannot leave; they own the plan. */
+export async function leaveWorkspaceHandler(c: any) {
+  const user = c.get('user');
+  await leaveWorkspace(user.id);
   return c.json({ ok: true });
 }

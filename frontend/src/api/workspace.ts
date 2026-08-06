@@ -50,3 +50,8 @@ export function removeWorkspaceMember(userId: string) {
     method: 'DELETE',
   });
 }
+
+/** A member frees their own seat. The owner cannot leave; they own the plan. */
+export function leaveWorkspace() {
+  return apiRequest<OkResponse>({ url: '/workspace/leave', method: 'POST', data: {} });
+}

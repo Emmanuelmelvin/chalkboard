@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, CheckCircle2, LoaderCircle, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, DoorOpen, LoaderCircle, ShieldCheck, UsersRound } from 'lucide-react';
 import { useSearch } from 'wouter';
 import {
   formatLimit,
@@ -10,9 +10,10 @@ import {
   plans,
   type PlanId,
 } from '@/constants/plans';
-import { useCancelSubscriptionMutation, useCreatePortalSessionMutation, useStartCheckoutMutation } from '@/api/hooks';
+import { useCancelSubscriptionMutation, useCreatePortalSessionMutation, useLeaveWorkspaceMutation, useStartCheckoutMutation } from '@/api/hooks';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { getApiError } from '@/api/client';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import type { BillingInterval } from '@/api/types';
 
 /**
@@ -50,7 +51,9 @@ function BillingPanel() {
   const startCheckoutMutation = useStartCheckoutMutation();
   const portalMutation = useCreatePortalSessionMutation();
   const cancelMutation = useCancelSubscriptionMutation();
+  const leaveWorkspaceMutation = useLeaveWorkspaceMutation();
   const [error, setError] = useState('');
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
 
   const params = useMemo(() => new URLSearchParams(search), [search]);
   const requestedPlan = params.get('plan');
@@ -58,9 +61,16 @@ function BillingPanel() {
 
   const summary = entitlements.summary;
   const currentPlan = summary?.plan ?? 'free';
+  // A seated member's plan is not theirs to manage: the workspace owner holds
+  // the subscription, so the portal, cancellation, and plan changes belong to
+  // the owner alone.
+  const isWorkspaceMember = summary?.workspaceRole === 'member';
+  const isWorkspaceOwner = summary?.workspaceRole === 'owner';
   // A live subscription is managed in the portal, not bought again. This mirrors
   // the server rule in startCheckout, so the UI cannot ask for a refusal.
-  const hasManagedSubscription = Boolean(summary && summary.plan !== 'free' && MANAGED_STATUSES.has(summary.status));
+  const hasManagedSubscription = Boolean(
+    summary && summary.plan !== 'free' && MANAGED_STATUSES.has(summary.status) && !isWorkspaceMember,
+  );
 
   const [selectedPlan, setSelectedPlan] = useState<PaidPlanId>(
     isPlanId(requestedPlan) && requestedPlan !== 'free' ? requestedPlan : 'pro',
@@ -140,6 +150,19 @@ function BillingPanel() {
                   : getPlan(currentPlan).tagline}
           </p>
 
+          {isWorkspaceMember && summary?.workspaceOwnerName && (
+            <div className="dashboard-billing-workspace-note">
+              <UsersRound size={14} strokeWidth={1.7} />
+              <p>
+                <strong>You're on the Team plan</strong>
+                <span>Seated through {summary.workspaceOwnerName}'s workspace. The workspace owner manages the subscription, seats, and members.</span>
+              </p>
+              <button className="dashboard-link-button" type="button" onClick={() => setConfirmingLeave(true)} disabled={leaveWorkspaceMutation.isPending}>
+                <DoorOpen size={14} /> {leaveWorkspaceMutation.isPending ? 'Leaving…' : 'Leave workspace'}
+              </button>
+            </div>
+          )}
+
           {summary && (
             <dl className="dashboard-billing-usage">
               <div>
@@ -150,10 +173,13 @@ function BillingPanel() {
                 <dt>Voice minutes this period</dt>
                 <dd>{summary.usage.voiceMinutesUsed} of {formatLimit(summary.limits.voiceMinutesPerMonth)}</dd>
               </div>
-              <div>
-                <dt>Seats used</dt>
-                <dd>{summary.usage.seatsUsed} of {formatLimit(summary.limits.seats)}</dd>
-              </div>
+              {/* Seats are workspace data: only the workspace owner sees them. */}
+              {isWorkspaceOwner && currentPlan === 'team' && (
+                <div>
+                  <dt>Seats used</dt>
+                  <dd>{summary.usage.seatsUsed} of {formatLimit(summary.limits.seats)}</dd>
+                </div>
+              )}
               <div>
                 <dt>Board retention</dt>
                 <dd>{formatRetention(summary.limits.retentionDays)}</dd>
@@ -175,7 +201,25 @@ function BillingPanel() {
           )}
         </div>
 
-        {entitlements.canUpgrade ? (
+        {isWorkspaceMember ? (
+          <div className="dashboard-panel dashboard-billing-checkout">
+            <p className="dashboard-panel-kicker">Your plan</p>
+            <h3>Seated through a workspace.</h3>
+            <p className="dashboard-panel-copy">
+              The Team plan is provided by {summary?.workspaceOwnerName ?? 'your workspace owner'}&apos;s workspace.
+              Only the workspace owner can change the plan, add seats, or manage billing.
+            </p>
+            <ul className="dashboard-billing-limits">
+              <li><span>Active rooms</span><strong>{formatLimit(summary?.limits.activeRooms ?? 5)}</strong></li>
+              <li><span>Participants per room</span><strong>{formatLimit(summary?.limits.attendeesPerRoom ?? 25)}</strong></li>
+              <li><span>Board retention</span><strong>{formatRetention(summary?.limits.retentionDays ?? 7)}</strong></li>
+              <li><span>Voice minutes each period</span><strong>{formatLimit(summary?.limits.voiceMinutesPerMonth ?? 200)}</strong></li>
+            </ul>
+            <p className="dashboard-billing-fineprint">
+              If you no longer need the workspace, you can leave it and the owner&apos;s next seat is freed.
+            </p>
+          </div>
+        ) : entitlements.canUpgrade ? (
           <div className="dashboard-panel dashboard-billing-checkout">
             <p className="dashboard-panel-kicker">{hasManagedSubscription ? 'Change your plan' : 'Upgrade'}</p>
             <h3>{plan.name}</h3>
@@ -268,6 +312,24 @@ function BillingPanel() {
       </section>
 
       {error && <p className="dashboard-error" role="alert">{error}</p>}
+
+      {confirmingLeave && (
+        <ConfirmModal
+          title="Leave workspace?"
+          message={`You'll lose the Team plan provided by ${summary?.workspaceOwnerName ?? 'the workspace owner'} and your seat is freed. Your own rooms and canvases are not deleted.`}
+          confirmLabel="Leave workspace"
+          danger
+          variant="dashboard"
+          onCancel={() => { if (!leaveWorkspaceMutation.isPending) setConfirmingLeave(false); }}
+          onConfirm={() => {
+            setConfirmingLeave(false);
+            setError('');
+            leaveWorkspaceMutation.mutate(undefined, {
+              onError: (cause) => setError(getApiError(cause, 'We could not leave the workspace.').message),
+            });
+          }}
+        />
+      )}
     </>
   );
 }

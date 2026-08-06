@@ -8,7 +8,7 @@ import {
   startSeatCheckout,
 } from '@/services/billing.service';
 import { getBillingUsage, getEntitlements } from '@/services/entitlements.service';
-import { getSeatsUsed } from '@/services/workspaces.service';
+import { getSeatsUsed, getWorkspaceMembership } from '@/services/workspaces.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 
@@ -21,10 +21,11 @@ import { logger } from '@/utils/logger';
 export async function getBillingSummaryHandler(c: any) {
   c.header('Cache-Control', 'no-store');
   const user = c.get('user');
-  const [entitlements, usage, seatsUsed] = await Promise.all([
+  const [entitlements, usage, seatsUsed, membership] = await Promise.all([
     getEntitlements(user.id),
     getBillingUsage(user.id),
     getSeatsUsed(user.id),
+    getWorkspaceMembership(user.id),
   ]);
 
   return c.json({
@@ -39,6 +40,10 @@ export async function getBillingSummaryHandler(c: any) {
       // Zero when the user has no workspace, so the summary never branches.
       seatsUsed,
     },
+    // Who the user is in their workspace, if any: the Team tab belongs to the
+    // owner alone, and a seated member sees their plan with the owner's name.
+    workspaceRole: membership?.role ?? null,
+    workspaceOwnerName: membership?.ownerName ?? null,
     billingEnabled,
   });
 }

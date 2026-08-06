@@ -16,7 +16,7 @@ import {
   type PlanId,
   type SubscriptionStatus,
 } from '@/services/entitlements.service';
-import { ensureWorkspaceForOwner } from '@/services/workspaces.service';
+import { ensureWorkspaceForOwner, invalidateWorkspaceMemberEntitlements } from '@/services/workspaces.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 import { isMoneyString } from '@/utils/money';
@@ -655,7 +655,10 @@ async function dispatch(event: BachsWebhookEvent) {
         // unconditionally: it is idempotent and a no-op off Team.
         await ensureWorkspaceForOwner(userId);
       }
+      // Seated members resolve their plan from this subscription, so every
+      // change moves what all of them are entitled to, not just the owner.
       await invalidateEntitlements(userId);
+      await invalidateWorkspaceMemberEntitlements(userId);
       return;
     }
 
@@ -690,6 +693,7 @@ async function dispatch(event: BachsWebhookEvent) {
           })
           .where(eq(subscriptions.userId, userId));
         await invalidateEntitlements(userId);
+        await invalidateWorkspaceMemberEntitlements(userId);
         return;
       }
 
@@ -706,8 +710,9 @@ async function dispatch(event: BachsWebhookEvent) {
           updatedAt: new Date(),
         })
         .where(eq(subscriptions.userId, userId));
-      // The user resolves to Free on the next check.
+      // The user resolves to Free on the next check, and so do their members.
       await invalidateEntitlements(userId);
+      await invalidateWorkspaceMemberEntitlements(userId);
       return;
     }
 

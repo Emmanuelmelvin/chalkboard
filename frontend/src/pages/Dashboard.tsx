@@ -36,6 +36,7 @@ import RoomMembersModal from '@/components/RoomMembersModal';
 import DeveloperPlugins from '@/components/DeveloperPlugins';
 import BillingPanel from '@/components/BillingPanel';
 import WorkspacePanel from '@/components/WorkspacePanel';
+import { useEntitlements } from '@/hooks/useEntitlements';
 import type { UserProfile } from '@/stores/authStore';
 import { useCreateRoomMutation, useDeleteRoomMutation, useResetRoomPasswordMutation, useRoomsQuery, useSignOutMutation } from '@/api/hooks';
 import type { RoomAccessMode, RoomSummary } from '@/api/types';
@@ -55,8 +56,9 @@ const tabItems: Array<{ id: DashboardTab; label: string; icon: typeof LayoutDash
   // The Plans page links straight here with ?plan=, so this is the pre-checkout
   // screen as well as the place a plan is managed afterwards.
   { id: 'billing', label: 'Plan & billing', icon: WalletCards },
-  // The Team tab needs no plan gating: its panel explains itself when the
-  // account is not on Team, and the rail stays stable while entitlements load.
+  // The Team tab is the workspace owner's surface: it is filtered out of the
+  // rail for everyone who is not the owner of a Team-plan workspace, and a
+  // deep link is redirected to the overview (see the guard effect below).
   { id: 'team', label: 'Team', icon: UsersRound },
   { id: 'profile', label: 'Profile', icon: UserRound },
 ];
@@ -108,6 +110,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const createRoomMutation = useCreateRoomMutation();
   const deleteRoomMutation = useDeleteRoomMutation();
   const resetRoomPasswordMutation = useResetRoomPasswordMutation();
+  const entitlements = useEntitlements();
   const rooms = useMemo(() => roomsQuery.data?.rooms ?? [], [roomsQuery.data?.rooms]);
   const [roomTitle, setRoomTitle] = useState('');
   const [roomDescription, setRoomDescription] = useState('');
@@ -134,9 +137,13 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const activeTab = getTab(search, developerMode);
   const firstName = profile.displayName.trim().split(/\s+/)[0] || 'friend';
   const openRooms = useMemo(() => rooms.filter((room) => room.status === 'open'), [rooms]);
+  // The Team tab exists only for the owner of a Team-plan workspace. Members
+  // are seated on the same plan, but the workspace admin surface is the
+  // owner's alone, and a plan that is not Team has no workspace at all.
+  const isTeamOwner = entitlements.summary?.plan === 'team' && entitlements.summary?.workspaceRole === 'owner';
   const visibleTabItems = useMemo(
-    () => tabItems.filter(({ id }) => id !== 'developer' || developerMode),
-    [developerMode],
+    () => tabItems.filter(({ id }) => (id !== 'developer' || developerMode) && (id !== 'team' || isTeamOwner)),
+    [developerMode, isTeamOwner],
   );
 
   useEffect(() => {
@@ -144,6 +151,15 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       setLocation('/dashboard?tab=overview');
     }
   }, [developerMode, search, setLocation]);
+
+  useEffect(() => {
+    // Entitlements arrive after first paint; only redirect once the plan is
+    // known, so a Team owner deep-linking straight to the tab is not bounced.
+    if (entitlements.isLoading) return;
+    if (!isTeamOwner && getTab(search, developerMode) === 'team') {
+      setLocation('/dashboard?tab=overview');
+    }
+  }, [entitlements.isLoading, isTeamOwner, developerMode, search, setLocation]);
 
   useEffect(() => {
     document.documentElement.classList.add('dashboard-active');
@@ -725,7 +741,9 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           {activeTab === 'toolkit' && renderToolkit()}
           {activeTab === 'developer' && <DeveloperPlugins />}
           {activeTab === 'billing' && <BillingPanel />}
-          {activeTab === 'team' && <WorkspacePanel />}
+          {/* Only the owner of a Team workspace reaches this: the rail filters
+              the tab, and the guard effect redirects deep links otherwise. */}
+          {activeTab === 'team' && (isTeamOwner || entitlements.isLoading) && <WorkspacePanel />}
           {activeTab === 'profile' && renderProfile()}
           {activeTab !== 'rooms' && error && <p className="dashboard-error dashboard-floating-error" role="alert">{error}</p>}
         </div>

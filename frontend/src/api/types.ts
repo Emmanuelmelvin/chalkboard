@@ -66,6 +66,13 @@ export interface BillingSummary {
     /** Members seated in the user's workspace; zero when there is none. */
     seatsUsed: number;
   };
+  /**
+   * Who the user is in their workspace, if any. The Team tab belongs to the
+   * owner alone; a seated member sees their plan without any workspace admin.
+   */
+  workspaceRole: WorkspaceRole | null;
+  /** The account that actually holds the Team subscription. Null when the user has no workspace. */
+  workspaceOwnerName: string | null;
   /** False when no Bachs credentials are configured; hide the upgrade path. */
   billingEnabled: boolean;
 }

@@ -25,6 +25,7 @@ import {
     plans,
 } from '@/constants/plans';
 import { useAuthStore } from '@/stores/authStore';
+import { useEntitlements } from '@/hooks/useEntitlements';
 import '@/styles/Plans.css';
 
 const planSections = [
@@ -97,7 +98,9 @@ const faqs = [
 
 function Plans() {
     const { profile, status } = useAuthStore();
+    const entitlements = useEntitlements(status === 'authenticated');
     const isSignedIn = status === 'authenticated' && Boolean(profile);
+    const seatedWorkspaceOwner = entitlements.summary?.workspaceRole === 'member' ? entitlements.summary.workspaceOwnerName : null;
 
     useEffect(() => {
         document.title = 'Plans and pricing — Chalkboard';
@@ -243,9 +246,16 @@ function Plans() {
                                             </ul>
 
                                             {isCurrent ? (
-                                                <span className="plans-tier-action is-disabled">Current plan</span>
-                                            ) : plan.id === 'free' ? (
-                                                <Link className="plans-tier-action" href={isSignedIn ? '/dashboard?tab=rooms' : '/login'}>
+                                                <>
+                                                    <span className="plans-tier-action is-disabled">Current plan</span>
+                                                    {plan.id === 'team' && seatedWorkspaceOwner && (
+                                                        <p className="plans-tier-seated-note">
+                                                            Seated through <strong>{seatedWorkspaceOwner}&apos;s workspace</strong>. The
+                                                            workspace owner manages the plan, seats, and members.
+                                                        </p>
+                                                    )}
+                                                </>
+                                            ) : plan.id === 'free' ? (                                                <Link className="plans-tier-action" href={isSignedIn ? '/dashboard?tab=rooms' : '/login'}>
                                                     {isSignedIn ? 'Open dashboard' : 'Start free'}
                                                 </Link>
                                             ) : (

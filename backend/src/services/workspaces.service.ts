@@ -2,7 +2,7 @@ import { and, count, eq, gt, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { db } from '@/db/client';
 import { subscriptions, users, workspaceInvites, workspaceMembers, workspaces } from '@/db/schema';
-import { getEntitlements, planLimits } from '@/services/entitlements.service';
+import { getEntitlements, invalidateEntitlements, planLimits } from '@/services/entitlements.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 
@@ -330,6 +330,9 @@ export async function acceptInvite(userId: string, token: string) {
   });
 
   logger.info('Workspace invite accepted', { workspaceId: result.id, userId, email: user.email });
+  // Seating changes what the new member resolves to: their plan is now the
+  // workspace owner's Team subscription.
+  await invalidateEntitlements(userId);
   return result;
 }
 
@@ -383,6 +386,9 @@ export async function removeMember(actorId: string, targetUserId: string) {
   }
 
   await db.delete(workspaceMembers).where(eq(workspaceMembers.id, target.id));
+  // Leaving or being removed ends the seating: the member's plan reverts to
+  // whatever their own subscription entitles.
+  await invalidateEntitlements(targetUserId);
 }
 
 /**
@@ -397,4 +403,46 @@ export async function getSeatsUsed(userId: string): Promise<number> {
     .where(eq(workspaceMembers.userId, userId))
     .limit(1);
   return Number(row?.value ?? 0);
+}
+
+/**
+ * Who the user is in their workspace, for the billing summary: their role and
+ * the display name of the account that actually holds the Team subscription.
+ * Null when the user has no workspace.
+ */
+export async function getWorkspaceMembership(userId: string) {
+  const [row] = await db
+    .select({
+      role: workspaceMembers.role,
+      ownerName: users.displayName,
+    })
+    .from(workspaceMembers)
+    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+    .innerJoin(users, eq(users.id, workspaces.ownerId))
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * A member leaves the workspace on their own, freeing their seat. The owner
+ * cannot leave: they hold the subscription the workspace is built on.
+ */
+export async function leaveWorkspace(userId: string) {
+  await removeMember(userId, userId);
+}
+
+/**
+ * Drop the entitlement cache for every member of an owner's workspace. Called
+ * when the owner's subscription changes, because seated members resolve their
+ * plan from it: a plan change, a cancellation, or a seat add-on moves what all
+ * of them are entitled to.
+ */
+export async function invalidateWorkspaceMemberEntitlements(ownerId: string) {
+  const members = await db
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+    .where(eq(workspaces.ownerId, ownerId));
+  await Promise.all(members.map((member) => invalidateEntitlements(member.userId)));
 }

@@ -2886,6 +2886,12 @@ body.dashboard-active #root {
 .dashboard-billing-total span { color: var(--dashboard-muted); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
 .dashboard-billing-total strong { color: var(--dashboard-gold-bright); font-family: Georgia, serif; font-size: 36px; font-weight: 400; letter-spacing: -0.05em; }
 .dashboard-billing-fineprint { margin: 16px 0 0; color: var(--dashboard-muted); font-size: 10px; line-height: 1.6; }
+.dashboard-billing-workspace-note { display: flex; align-items: flex-start; gap: 10px; margin-top: 20px; padding: 13px 14px; border-left: 2px solid var(--dashboard-gold-bright); background: rgba(199, 162, 88, 0.13); }
+.dashboard-billing-workspace-note svg { flex: none; margin-top: 1px; color: var(--dashboard-gold-bright); }
+.dashboard-billing-workspace-note p { display: flex; flex-direction: column; gap: 3px; margin: 0; }
+.dashboard-billing-workspace-note strong { color: #191816; font-size: 12px; }
+.dashboard-billing-workspace-note span { color: #777169; font-size: 11px; line-height: 1.55; }
+.dashboard-billing-workspace-note .dashboard-link-button { flex: none; margin-left: auto; align-self: center; color: #191816; }
 
 /* Checkout return page */
 .billing-return-page { display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 40px 20px; background: #0b0b0b; }

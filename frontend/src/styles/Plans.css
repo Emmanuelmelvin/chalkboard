@@ -517,6 +517,20 @@ body.plans-active {
     color: #17140f;
 }
 
+.plans-tier-seated-note {
+    margin: 14px 0 0;
+    padding: 11px 12px;
+    border-left: 2px solid var(--plans-gold);
+    background: rgba(227, 199, 126, 0.09);
+    color: var(--plans-muted);
+    font-size: 10px;
+    line-height: 1.6;
+}
+.plans-tier-seated-note strong {
+    color: var(--plans-gold-bright);
+    font-weight: 700;
+}
+
 .plans-tier-action.is-disabled {
     border-style: dashed;
     color: var(--plans-dim);

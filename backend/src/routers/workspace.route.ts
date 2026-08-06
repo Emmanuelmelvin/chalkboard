@@ -4,6 +4,7 @@ import {
   createInviteHandler,
   getInviteHandler,
   getWorkspaceHandler,
+  leaveWorkspaceHandler,
   removeWorkspaceMemberHandler,
   revokeInviteHandler,
 } from '@/controllers/workspace.controller';
@@ -24,3 +25,4 @@ workspaceRouter.get('/invites/:token', getInviteHandler);
 workspaceRouter.post('/invites/:token/accept', acceptInviteHandler);
 workspaceRouter.post('/invites/:token/revoke', revokeInviteHandler);
 workspaceRouter.delete('/members/:userId', removeWorkspaceMemberHandler);
+workspaceRouter.post('/leave', leaveWorkspaceHandler);

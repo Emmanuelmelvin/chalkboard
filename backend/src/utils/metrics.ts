@@ -87,6 +87,11 @@ export function hit(metric: MetricName, attributes?: MetricAttributes) {
   metrics.count(metric, 1, attributes);
 }
 
+/** Increment a counter by an amount other than 1, e.g. rows processed by a job. */
+export function add(metric: MetricName, value: number, attributes?: MetricAttributes) {
+  metrics.count(metric, value, attributes);
+}
+
 export function failed(metric: MetricName, attributes?: MetricAttributes) {
   metrics.count(metric, 1, { ...attributes, outcome: 'failed' });
 }

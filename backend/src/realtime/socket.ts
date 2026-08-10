@@ -1,8 +1,24 @@
 import { Server } from 'socket.io';
 import { randomUUID } from 'node:crypto';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { redis, setRaisedHand, getRaisedHands, isVoiceOwnerConnected, setVoiceOwnerConnected, setVoicePublisher } from '@/services/rooms/roomState.service';
-import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, closeRoomForOwner, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms/rooms.service';
+import {
+  redis,
+  setRaisedHand,
+  getRaisedHands,
+  isVoiceOwnerConnected,
+  setVoiceOwnerConnected,
+  setVoicePublisher
+} from '@/services/rooms/roomState.service';
+import {
+  assertRoomJoinAllowed,
+  authorizeRoomAction,
+  banRoomUser,
+  closeRoomForOwner,
+  getRoomWithMembers,
+  touchRoomActivity,
+  updateRoomMemberRole,
+  updateRoomPeakAttendeeCount
+} from '@/services/rooms/rooms.service';
 import {
   appendStroke,
   appendChatMessage,
@@ -24,6 +40,7 @@ import {
 import { closeVoiceSessions } from '@/services/rooms/voiceMetering.service';
 import { logger } from '@/utils/logger';
 import { captureSocketError } from '@/utils/monitoring';
+import { failed, hit, metricNames, record, timed } from '@/utils/metrics';
 import { env, isAllowedCorsOrigin } from '@/config/env';
 import { checkRateLimit } from '@/services/infra/rateLimiter.service';
 import { authenticateSocketSession } from '@/services/auth/auth.service';
@@ -154,6 +171,7 @@ function sendAck(ack: SocketAck, response: SocketAckResponse) {
 
 function rejectEvent(socket: any, event: string, error: string, ack?: SocketAck, roomId?: string) {
   logger.warn('Socket event rejected', { event, error, socketId: socket.id, roomId });
+  hit(metricNames.socketEventRejected, { event, reason: error });
   sendAck(ack, { ok: false, error });
 }
 
@@ -189,8 +207,10 @@ async function canEditRoom(socket: any, roomId: string, event: string, ack?: Soc
 }
 
 function runSafely(socket: any, event: string, ack: SocketAck, handler: () => unknown) {
+  hit(metricNames.socketEvent, { event });
   const reportFailure = (error: unknown) => {
     const meta = getSocketMeta(socket.id);
+    failed(metricNames.socketEventFailed, { event });
     logger.error('Socket event failed', { event, socketId: socket.id, error: error instanceof Error ? error.message : String(error) });
     sendAck(ack, { ok: false, error: 'internal_error' });
     captureSocketError(error, {
@@ -200,14 +220,9 @@ function runSafely(socket: any, event: string, ack: SocketAck, handler: () => un
       roomId: meta?.roomId,
     });
   };
-  try {
-    const result = handler();
-    if (result && typeof (result as Promise<unknown>).catch === 'function') {
-      void (result as Promise<unknown>).catch(reportFailure);
-    }
-  } catch (error) {
-    reportFailure(error);
-  }
+  // Event latency is recorded for successful and failed handlers alike: a slow
+  // failure is still a slow event.
+  void timed(metricNames.socketEventDuration, async () => handler(), { event }).catch(reportFailure);
 }
 
 async function handleJoin(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
@@ -257,6 +272,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
 
   if (await hasActiveRoomSession(io, data.roomId, user.id, socket.id, data.clientSessionId)) {
     logger.info('Duplicate room session rejected', { roomId: data.roomId, userId: user.id, socketId: socket.id });
+    hit(metricNames.roomJoin, { outcome: 'already_joined' });
     sendAck(ack, { ok: false, error: 'already_joined' });
     return;
   }
@@ -331,6 +347,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     role: join.role,
     reconnected: presence.reconnected,
   });
+  hit(metricNames.roomJoin, { outcome: 'joined', role: join.role, reconnected: presence.reconnected });
   sendAck(ack, {
     ok: true,
     role: join.role,
@@ -395,6 +412,7 @@ async function handleChatMessage(io: Server, socket: any, payload: unknown, ack?
   };
 
   await appendChatMessage(data.roomId, message);
+  hit(metricNames.chatMessageSent);
   io.to(data.roomId).emit('chat:message', message);
 
   if (mentionedUserIds.length > 0) {
@@ -631,6 +649,7 @@ async function handleVoiceMembershipAction(
   }
 
   await setVoicePublisher(data.roomId, data.targetUserId, event === 'voice:invite');
+  hit(metricNames.voiceMembership, { action: event === 'voice:invite' ? 'invite' : 'remove' });
 
   // Leaving voice stops the meter now rather than waiting for the socket to
   // drop: a member who is removed, or who leaves voice while staying on the
@@ -735,6 +754,7 @@ async function handleVoiceOwnerConnection(io: Server, socket: any, payload: unkn
   }
 
   await setVoiceOwnerConnected(data.roomId, data.connected);
+  hit(metricNames.voiceOwnerConnection, { connected: data.connected });
   io.to(data.roomId).emit('voice:owner-connection-changed', data);
   sendAck(ack, { ok: true });
 }
@@ -775,11 +795,13 @@ export async function attachSocket(server: any) {
     } catch (error) {
       logger.error('Socket authentication failed', { error: error instanceof Error ? error.message : String(error) });
       captureSocketError(error, { socketId: socket.id });
+      failed(metricNames.socketConnected, { reason: 'auth_failed' });
       next(new Error('unauthorized'));
     }
   });
 
   io.on('connection', (socket) => {
+    hit(metricNames.socketConnected);
     socket.on('join-room', (payload, ack) => {
       runSafely(socket, 'join-room', ack, () => handleJoin(io, socket, payload, ack));
     });
@@ -824,6 +846,8 @@ export async function attachSocket(server: any) {
         }
         const stroke = { ...(data.stroke as Record<string, any>), userId: socket.id } as Record<string, any>;
         await appendStroke(data.roomId, stroke);
+        hit(metricNames.strokeDrawn);
+        record(metricNames.strokePoints, (stroke.points as Array<{ x: number; y: number }> | undefined)?.length ?? 0);
         socket.to(data.roomId).emit('stroke-start', {
           ...stroke,
           strokeId: stroke.id,
@@ -842,6 +866,7 @@ export async function attachSocket(server: any) {
           return;
         }
         await replaceHistory(data.roomId, data.strokes);
+        hit(metricNames.strokeUndone);
         socket.to(data.roomId).emit('undo-stroke', { strokes: data.strokes });
         sendAck(ack, { ok: true });
       });
@@ -856,6 +881,7 @@ export async function attachSocket(server: any) {
           return;
         }
         await clearHistory(data.roomId);
+        hit(metricNames.boardCleared);
         io.to(data.roomId).emit('clear-board');
         sendAck(ack, { ok: true });
       });
@@ -870,6 +896,7 @@ export async function attachSocket(server: any) {
           return;
         }
         await replaceLinks(data.roomId, data.links);
+        hit(metricNames.boardLinksUpdated);
         socket.to(data.roomId).emit('links-update', { links: data.links });
         sendAck(ack, { ok: true });
       });
@@ -887,6 +914,7 @@ export async function attachSocket(server: any) {
           return;
         }
         io.to(data.roomId).emit('reaction:received', { userId: reactionActorId, emoji: data.emoji, at: Date.now() });
+        hit(metricNames.reactionSent, { emoji: data.emoji });
         sendAck(ack, { ok: true });
       });
     });
@@ -903,6 +931,7 @@ export async function attachSocket(server: any) {
           return;
         }
         io.to(data.roomId).emit('raised-hands:update', await setRaisedHand(data.roomId, handActorId, data.raised));
+        hit(metricNames.handRaiseChanged, { raised: data.raised });
         sendAck(ack, { ok: true });
       });
     });
@@ -926,6 +955,7 @@ export async function attachSocket(server: any) {
     });
 
     socket.on('disconnect', () => {
+      hit(metricNames.socketDisconnected);
       const meta = getSocketMeta(socket.id);
       if (!meta) return;
       logger.info('Socket disconnected; scheduling presence grace removal', {

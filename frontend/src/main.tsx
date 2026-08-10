@@ -13,6 +13,8 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     environment: import.meta.env.MODE,
     release: import.meta.env.VITE_SENTRY_RELEASE || undefined,
     tracesSampleRate: Number(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
+    profilesSampleRate: Number(import.meta.env.VITE_SENTRY_PROFILES_SAMPLE_RATE ?? 0.1),
+    tracePropagationTargets: [/^\//],
     integrations: [Sentry.browserTracingIntegration()],
   })
 }

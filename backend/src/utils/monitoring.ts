@@ -9,6 +9,12 @@ export function initMonitoring() {
         environment: env.NODE_ENV,
         release: env.SENTRY_RELEASE || undefined,
         tracesSampleRate: env.SENTRY_TRACES_SAMPLE_RATE,
+        integrations: [
+            // send console.log, console.warn, and console.error calls as logs to Sentry
+            Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
+        ],
+        // Enable logs to be sent to Sentry
+        enableLogs: true,
     });
 }
 

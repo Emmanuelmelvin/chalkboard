@@ -336,6 +336,7 @@ export async function startSeatCheckout(
     .where(eq(checkoutSessions.reference, reference));
 
   logger.info('Seat add-on checkout created', { userId: user.id, seats, interval: subscription.interval, reference });
+  hit(metricNames.billingSeatCheckoutStarted, { quantity: seats });
   return { checkoutUrl: session.checkout_url, reference };
 }
 
@@ -630,6 +631,7 @@ export async function reconcileExpiredSeatAddOns(now = new Date()): Promise<numb
   }
 
   logger.info('Expired seat add-ons reconciled', { count: expired.length, users: affectedUserIds.size });
+  add(metricNames.billingSeatAddOnExpired, expired.length, { source: 'sweep' });
   return expired.length;
 }
 
@@ -689,6 +691,8 @@ export async function applySeatAddOn(data: Record<string, any>, userId: string) 
     });
 
   await recomputeSeats(userId);
+
+  hit(metricNames.billingSeatAddOnApplied, { quantity: seatQuantityOf(data) });
 
   // Kept as the latest add-on for logging and legacy reads; the ledger above
   // is what entitlements now derive the cap from.
@@ -819,6 +823,7 @@ async function dispatch(event: BachsWebhookEvent) {
         await recomputeSeats(userId);
         await invalidateEntitlements(userId);
         await invalidateWorkspaceMemberEntitlements(userId);
+        hit(metricNames.billingSeatAddOnExpired, { source: 'webhook' });
         return;
       }
 
@@ -839,6 +844,7 @@ async function dispatch(event: BachsWebhookEvent) {
       // The user resolves to Free on the next check, and so do their members.
       await invalidateEntitlements(userId);
       await invalidateWorkspaceMemberEntitlements(userId);
+      hit(metricNames.billingSubscriptionEnded);
       return;
     }
 
@@ -866,6 +872,7 @@ async function dispatch(event: BachsWebhookEvent) {
       // and recovery emails. Dropping a paying customer on a first decline is
       // how a card problem becomes a churn event.
       logger.warn('Bachs invoice payment failed', { eventId: event.id });
+      hit(metricNames.billingInvoicePaymentFailed);
       return;
 
     default:
@@ -891,6 +898,7 @@ export async function handleWebhook(
 ): Promise<WebhookResult> {
   if (!verifyWebhookSignature(rawBody, signature, timestamp)) {
     logger.warn('Rejected a Bachs webhook with an invalid signature');
+    failed(metricNames.billingWebhookReceived, { reason: 'invalid_signature' });
     throw new APIError('invalid_signature', 401);
   }
 
@@ -898,10 +906,13 @@ export async function handleWebhook(
   try {
     event = JSON.parse(rawBody) as BachsWebhookEvent;
   } catch {
+    failed(metricNames.billingWebhookReceived, { reason: 'invalid_payload' });
     throw new APIError('invalid_payload', 400);
   }
 
   if (!event.id || !event.type) throw new APIError('invalid_payload', 400);
+
+  hit(metricNames.billingWebhookReceived, { type: event.type });
 
   // The dedupe gate for at-least-once delivery: zero rows inserted means this
   // event has already been applied.
@@ -913,11 +924,13 @@ export async function handleWebhook(
 
   if (inserted.length === 0) {
     logger.info('Ignored a duplicate Bachs webhook delivery', { eventId: event.id, type: event.type });
+    hit(metricNames.billingWebhookProcessed, { type: event.type, result: 'duplicate' });
     return 'duplicate';
   }
 
   try {
     await dispatch(event);
+    hit(metricNames.billingWebhookProcessed, { type: event.type, result: 'processed' });
     return 'processed';
   } catch (error) {
     if (error instanceof UnresolvableEventError) {
@@ -928,8 +941,10 @@ export async function handleWebhook(
         type: event.type,
         reason: error.message,
       });
+      hit(metricNames.billingWebhookProcessed, { type: event.type, result: 'unresolvable' });
       return 'unresolvable';
     }
+    failed(metricNames.billingWebhookProcessed, { type: event.type });
     logger.error('Bachs webhook handler failed and will be retried', {
       eventId: event.id,
       type: event.type,

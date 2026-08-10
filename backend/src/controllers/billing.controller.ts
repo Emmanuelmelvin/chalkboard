@@ -11,6 +11,7 @@ import { getBillingUsage, getEntitlements } from '@/services/billing/entitlement
 import { getSeatsUsed, getWorkspaceMembership } from '@/services/billing/workspaces.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
+import { failed, metricNames } from '@/utils/metrics';
 
 /**
  * The single read model the frontend gates on. Limits are served from the
@@ -55,12 +56,20 @@ export async function getBillingSummaryHandler(c: any) {
 export async function startCheckoutHandler(c: any) {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
-  const { checkoutUrl, reference } = await startCheckout({
-    user,
-    planId: String(body?.planId ?? ''),
-    interval: String(body?.interval ?? ''),
-  });
-  return c.json({ checkoutUrl, reference });
+  try {
+    const { checkoutUrl, reference } = await startCheckout({
+      user,
+      planId: String(body?.planId ?? ''),
+      interval: String(body?.interval ?? ''),
+    });
+    return c.json({ checkoutUrl, reference });
+  } catch (error) {
+    failed(metricNames.billingCheckoutStarted, {
+      plan: String(body?.planId ?? 'unknown'),
+      reason: error instanceof APIError ? error.message : 'unknown',
+    });
+    throw error;
+  }
 }
 
 /**

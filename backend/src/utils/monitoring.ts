@@ -11,14 +11,14 @@ export function initMonitoring() {
         tracesSampleRate: env.SENTRY_TRACES_SAMPLE_RATE,
         integrations: [
             // send console.log, console.warn, and console.error calls as logs to Sentry
-            Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
+            Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error", "info"] }),
         ],
         // Enable logs to be sent to Sentry
         enableLogs: true,
     });
 
     // Verification: confirm logs arrive in Sentry
-    Sentry.logger.info('User triggered test log', { action: 'test_log' });
+    //Sentry.logger.info('User triggered test log', { action: 'test_log' });
 }
 
 export function captureException(error: unknown, context?: Record<string, unknown>) {

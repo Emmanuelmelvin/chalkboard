@@ -11,6 +11,7 @@ import { ownerHasVoiceHeadroom, startVoiceSession } from '@/services/rooms/voice
 import { decryptRoomPassword, encryptRoomPassword } from '@/services/rooms/roomPasswords.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
+import { hit, metricNames } from '@/utils/metrics';
 
 export type RoomRole = 'owner' | 'instructor' | 'viewer';
 export type JoinRequestStatus = 'pending' | 'approved' | 'denied';
@@ -193,35 +194,44 @@ export async function createRoom(user: any, body: any) {
   // that actually decides the outcome is taken inside, under a lock.
   const { limits, plan } = await getEntitlements(user.id);
 
-  const room = await db.transaction(async (tx) => {
-    if (limits.activeRooms !== UNLIMITED) {
-      // Lock this owner's open rooms before counting them. Without the lock two
-      // parallel creates both read the pre-insert count and both pass, letting
-      // an owner sit one room over the cap.
-      const owned = await tx
-        .select({ id: rooms.id })
-        .from(rooms)
-        .where(and(eq(rooms.ownerId, user.id), eq(rooms.status, 'open')))
-        .for('update');
+  let room;
+  try {
+    room = await db.transaction(async (tx) => {
+      if (limits.activeRooms !== UNLIMITED) {
+        // Lock this owner's open rooms before counting them. Without the lock two
+        // parallel creates both read the pre-insert count and both pass, letting
+        // an owner sit one room over the cap.
+        const owned = await tx
+          .select({ id: rooms.id })
+          .from(rooms)
+          .where(and(eq(rooms.ownerId, user.id), eq(rooms.status, 'open')))
+          .for('update');
 
-      if (!isWithinLimit(owned.length, limits.activeRooms)) {
-        logger.warn('Room creation rejected because the plan room limit is reached', {
-          ownerId: user.id,
-          plan,
-          openRooms: owned.length,
-          limit: limits.activeRooms,
-        });
-        throw new APIError('room_limit_reached', 402);
+        if (!isWithinLimit(owned.length, limits.activeRooms)) {
+          logger.warn('Room creation rejected because the plan room limit is reached', {
+            ownerId: user.id,
+            plan,
+            openRooms: owned.length,
+            limit: limits.activeRooms,
+          });
+          throw new APIError('room_limit_reached', 402);
+        }
       }
-    }
 
-    const [created] = await tx
-      .insert(rooms)
-      .values({ ...roomValues, description, ownerId: user.id, passwordHash, passwordCiphertext })
-      .returning();
-    await tx.insert(roomMembers).values({ roomId: created.id, userId: user.id, role: 'owner' });
-    return created;
-  });
+      const [created] = await tx
+        .insert(rooms)
+        .values({ ...roomValues, description, ownerId: user.id, passwordHash, passwordCiphertext })
+        .returning();
+      await tx.insert(roomMembers).values({ roomId: created.id, userId: user.id, role: 'owner' });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof APIError && error.message === 'room_limit_reached') {
+      hit(metricNames.roomCreated, { outcome: 'rejected', reason: 'room_limit_reached', plan });
+    }
+    throw error;
+  }
+  hit(metricNames.roomCreated, { outcome: 'created', plan });
 
   logger.info('Created room', { roomId: room.id, slug: room.slug, ownerId: user.id });
   return {
@@ -290,6 +300,7 @@ export async function updateRoomMemberRole({
     .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, targetUserId)))
     .returning();
 
+  hit(metricNames.roomMemberRoleChanged, { role });
   return { ok: true as const, membership: updated };
 }
 
@@ -306,6 +317,7 @@ export async function closeRoomForOwner(roomSlug: string, userId: string) {
 
   if (!closedRoom) return { ok: false as const, error: 'room_closed' as const };
   logger.info('Room closed by owner', { roomSlug, roomId: closedRoom.id, ownerId: userId });
+  hit(metricNames.roomClosed);
   return { ok: true as const, roomId: closedRoom.id, slug: closedRoom.slug };
 }
 
@@ -362,6 +374,7 @@ export async function deleteRoomForUser(roomSlug: string, userId: string) {
   if (!deleted) return { ok: false as const, error: 'not_found' as const };
   await deleteRoomState(deleted.slug);
   logger.info('Room permanently deleted', { roomId: deleted.id, roomSlug: deleted.slug, ownerId: userId });
+  hit(metricNames.roomDeleted);
   return { ok: true as const };
 }
 
@@ -567,6 +580,7 @@ export async function approveJoinRequest({
       .returning();
     const member = await addRoomMembership(tx, room.id, targetUserId, room.defaultRole);
     logger.info('Room join request approved', { roomSlug, roomId: room.id, targetUserId, decidedById });
+    hit(metricNames.roomJoinRequestApproved);
     return { ok: true as const, request: approved, member };
   });
 }
@@ -599,6 +613,7 @@ export async function denyJoinRequest({
       .where(eq(joinRequests.id, request.id))
       .returning();
     logger.info('Room join request denied', { roomSlug, roomId: room.id, targetUserId, decidedById });
+    hit(metricNames.roomJoinRequestDenied);
     return { ok: true as const, request: denied };
   });
 }
@@ -623,6 +638,7 @@ export async function banRoomUser({
 
   await db.insert(roomBans).values({ roomId: room.id, userId: targetUserId, bannedById, reason }).onConflictDoNothing();
   logger.warn('Room user banned', { roomSlug, targetUserId, bannedById, reason });
+  hit(metricNames.roomMemberBanned);
   return { ok: true as const };
 }
 
@@ -630,6 +646,7 @@ export async function createRoomVoiceToken(slug: string, user: any) {
   const room = await getRoomBySlug(db, slug);
   if (!room?.voiceEnabled) {
     logger.warn('Voice token rejected because voice is disabled', { slug, userId: user.id });
+    hit(metricNames.roomVoiceToken, { outcome: 'voice_disabled' });
     return { error: 'voice_disabled' };
   }
 
@@ -640,6 +657,7 @@ export async function createRoomVoiceToken(slug: string, user: any) {
       userId: user.id,
       error: authorization.error,
     });
+    hit(metricNames.roomVoiceToken, { outcome: 'not_member' });
     return { error: authorization.error };
   }
 
@@ -652,6 +670,7 @@ export async function createRoomVoiceToken(slug: string, user: any) {
       userId: user.id,
       ownerId: room.ownerId,
     });
+    hit(metricNames.roomVoiceToken, { outcome: 'voice_minutes_exhausted' });
     return { error: 'voice_minutes_exhausted' };
   }
 
@@ -666,6 +685,7 @@ export async function createRoomVoiceToken(slug: string, user: any) {
   await startVoiceSession(room.id, user.id);
 
   logger.info('Issuing LiveKit voice token', { slug, userId: user.id, role: authorization.role, canPublish });
+  hit(metricNames.roomVoiceToken, { outcome: 'issued', role: authorization.role, can_publish: canPublish });
   return {
     url: process.env.LIVEKIT_URL,
     token: await createVoiceToken({

@@ -8,7 +8,7 @@ import { sql } from '@/db/client';
 import { closeRedis, initRedis } from '@/services/rooms/roomState.service';
 import { logger } from '@/utils/logger';
 import { captureException, initMonitoring } from '@/utils/monitoring';
-import { add, hit, metricNames, record, timed } from '@/utils/metrics';
+import { add, hit, metricNames, timed } from '@/utils/metrics';
 
 const connection = { url: env.REDIS_URL };
 const queueName = 'chalkboard-background';
@@ -92,14 +92,7 @@ export async function startWorker() {
           // Always the *previous* month: the current one is still accruing, and
           // closing it early would pay out a partial period.
           const { periodStart, periodEnd } = previousMonthBounds();
-          const result = await distributeMonth(periodStart, periodEnd);
-          if (result.status === 'distributed') {
-            record(metricNames.billingPoolDistributed, Number(result.poolTotal), { status: 'distributed' });
-            add(metricNames.billingPoolDevelopersPaid, result.developerCount);
-          } else {
-            hit(metricNames.billingPoolDistributed, { status: result.status });
-          }
-          return result;
+          return distributeMonth(periodStart, periodEnd);
         }
         logger.warn('Unknown background job ignored', { jobId: job.id, name: job.name });
         return { ignored: true };

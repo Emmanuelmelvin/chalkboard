@@ -18,6 +18,7 @@ import {
 import { getEntitlements } from '@/services/billing/entitlements.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
+import { hit, metricNames } from '@/utils/metrics';
 
 type PluginInput = {
   pluginId: string;
@@ -336,6 +337,7 @@ export async function submitPluginForReview(pluginId: string, authorId: string) 
     await tx.update(plugins).set({ status: 'in_review', updatedAt: new Date() }).where(eq(plugins.id, plugin.id));
     await tx.update(pluginVersions).set({ status: 'in_review', updatedAt: new Date() }).where(eq(pluginVersions.id, latestVersion.id));
   });
+  hit(metricNames.pluginSubmitted);
   return getPluginDetail(pluginId);
 }
 
@@ -355,6 +357,7 @@ export async function reviewPlugin(pluginId: string, reviewerId: string, decisio
     await tx.update(pluginVersions).set({ status: nextVersionStatus, updatedAt: new Date() }).where(eq(pluginVersions.id, latestVersion.id));
     await tx.insert(pluginReviews).values({ pluginId: plugin.id, versionId: latestVersion.id, reviewerId, decision, notes: notes || null });
   });
+  hit(metricNames.pluginReviewed, { decision });
   return getPluginDetail(pluginId);
 }
 
@@ -375,6 +378,7 @@ export async function publishPlugin(pluginId: string) {
     await tx.update(plugins).set({ status: 'published', currentVersion: latestVersion.version, updatedAt: publishedAt }).where(eq(plugins.id, plugin.id));
     await tx.update(pluginVersions).set({ status: 'published', updatedAt: publishedAt }).where(eq(pluginVersions.id, latestVersion.id));
   });
+  hit(metricNames.pluginPublished);
   return getPluginDetail(pluginId);
 }
 

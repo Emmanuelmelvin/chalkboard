@@ -10,6 +10,7 @@ import {
 } from '@/db/schema';
 import { ENTITLING_STATUSES } from '@/services/billing/entitlements.service';
 import { logger } from '@/utils/logger';
+import { add, hit, metricNames, record } from '@/utils/metrics';
 import {
   allocateByWeight,
   applyRate,
@@ -70,6 +71,11 @@ export async function recordPluginUsage(pluginId: string, userId: string, when =
     .where(and(eq(subscriptions.userId, userId), inArray(subscriptions.status, [...ENTITLING_STATUSES])))
     .limit(1);
   if (!paying) return;
+
+  // Plugin ids are a bounded set (the published catalogue), so carrying the id
+  // on the metric keeps the pool's driver observable without exploding the
+  // attribute cardinality.
+  hit(metricNames.pluginInstall, { pluginId });
 
   const day = when.toISOString().slice(0, 10); // UTC date, matching the `date` column.
   await db
@@ -161,6 +167,16 @@ export async function distributeMonth(
   const shares = emptyReason
     ? []
     : allocateByWeight(poolTotal, usage.map((row) => BigInt(row.units)));
+
+  // Closed-period observability: for a real distribution, the exact dollar
+  // value stays inside the worker's already_distributed guard; this records
+  // the amounts actually paid out.
+  if (!emptyReason) {
+    record(metricNames.billingPoolDistributed, Number(poolTotal));
+    add(metricNames.billingPoolDevelopersPaid, usage.length);
+  } else {
+    hit(metricNames.billingPoolDistributed, { status: emptyReason });
+  }
 
   await db.transaction(async (tx) => {
     if (!emptyReason) {

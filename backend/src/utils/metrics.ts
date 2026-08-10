@@ -78,7 +78,7 @@ export const metricNames = {
   pluginSubmitted: 'plugin.submitted',
   pluginReviewed: 'plugin.reviewed',
   pluginPublished: 'plugin.published',
-  pluginInstall: 'plugin.install',
+  pluginUsageCount: 'plugin.usage_daily',
 } as const;
 
 export type MetricName = (typeof metricNames)[keyof typeof metricNames];

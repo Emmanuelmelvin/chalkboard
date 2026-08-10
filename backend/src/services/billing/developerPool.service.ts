@@ -75,7 +75,7 @@ export async function recordPluginUsage(pluginId: string, userId: string, when =
   // Plugin ids are a bounded set (the published catalogue), so carrying the id
   // on the metric keeps the pool's driver observable without exploding the
   // attribute cardinality.
-  hit(metricNames.pluginInstall, { pluginId });
+  hit(metricNames.pluginUsageCount, { pluginId });
 
   const day = when.toISOString().slice(0, 10); // UTC date, matching the `date` column.
   await db

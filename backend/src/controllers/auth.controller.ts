@@ -7,16 +7,26 @@ import {
   verifyGoogleIdToken,
 } from '@/services/auth/auth.service';
 import { googleAuthSchema } from '@/validators/room.validator';
+import { ZodError } from 'zod';
+import { failed, metricNames, timed } from '@/utils/metrics';
 import { logger } from '@/utils/logger';
 import { env } from '@/config/env';
 
 export async function googleAuth(c: any) {
   c.header('Cache-Control', 'no-store');
-  const { idToken } = googleAuthSchema.parse(await c.req.json());
-  const user = await upsertGoogleUser(await verifyGoogleIdToken(idToken));
-  setAuthSession(c, user.id);
-  logger.info('Google auth completed', { userId: user.id, email: user.email });
-  return c.json({ user: await toPublicUser(user) });
+  try {
+    const { idToken } = googleAuthSchema.parse(await c.req.json());
+    const user = await timed(metricNames.authLoginDuration, () => upsertGoogleUser(verifyGoogleIdToken(idToken)), { provider: 'google' });
+    setAuthSession(c, user.id);
+    logger.info('Google auth completed', { userId: user.id, email: user.email });
+    return c.json({ user: await toPublicUser(user) });
+  } catch (error) {
+    failed(metricNames.authLogin, {
+      provider: 'google',
+      reason: error instanceof ZodError ? 'invalid_payload' : 'unknown',
+    });
+    throw error;
+  }
 }
 
 

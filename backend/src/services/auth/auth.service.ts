@@ -5,6 +5,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { db } from '@/db/client';
 import { users } from '@/db/schema';
 import { getEntitlements, type PlanId } from '@/services/billing/entitlements.service';
+import { hit, metricNames } from '@/utils/metrics';
 import { logger } from '@/utils/logger';
 import { env } from '@/config/env';
 import { APIError } from '@/utils/error';
@@ -72,12 +73,14 @@ export async function upsertGoogleUser(profile) {
       ...(shouldPromoteToSuperAdmin ? { platformRole: 'super_admin' as const } : {}),
       updatedAt: new Date(),
     }).where(eq(users.id, existing.id)).returning();
+    hit(metricNames.authLogin, { provider: 'google' });
     return updated;
   }
   const [created] = await db.insert(users).values({
     ...profile,
     platformRole: shouldPromoteToSuperAdmin ? 'super_admin' : 'user',
   }).returning();
+  hit(metricNames.authSignup, { provider: 'google' });
   return created;
 }
 

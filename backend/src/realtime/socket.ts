@@ -23,6 +23,7 @@ import {
 } from '@/services/rooms/realtimeRooms.service';
 import { closeVoiceSessions } from '@/services/rooms/voiceMetering.service';
 import { logger } from '@/utils/logger';
+import { captureSocketError } from '@/utils/monitoring';
 import { env, isAllowedCorsOrigin } from '@/config/env';
 import { checkRateLimit } from '@/services/infra/rateLimiter.service';
 import { authenticateSocketSession } from '@/services/auth/auth.service';
@@ -82,6 +83,7 @@ async function emitPresence(io: Server, roomId: string) {
       roomId,
       error: error instanceof Error ? error.message : String(error),
     });
+    captureSocketError(error, { roomId });
     users = [...getRoomUsers(roomId).entries()];
   }
 
@@ -119,6 +121,7 @@ async function hasActiveRoomSession(
       userId,
       error: error instanceof Error ? error.message : String(error),
     });
+    captureSocketError(error, { userId, roomId });
     return [...getRoomUsers(roomId).entries()].some(([socketId, user]) => {
       if (socketId === currentSocketId || user.userId !== userId) return false;
       const existingMeta = getSocketMeta(socketId);
@@ -135,6 +138,7 @@ async function recordRoomActivity(roomId: string) {
       roomId,
       error: error instanceof Error ? error.message : String(error),
     });
+    captureSocketError(error, { roomId });
     return false;
   }
 }
@@ -185,17 +189,24 @@ async function canEditRoom(socket: any, roomId: string, event: string, ack?: Soc
 }
 
 function runSafely(socket: any, event: string, ack: SocketAck, handler: () => unknown) {
+  const reportFailure = (error: unknown) => {
+    const meta = getSocketMeta(socket.id);
+    logger.error('Socket event failed', { event, socketId: socket.id, error: error instanceof Error ? error.message : String(error) });
+    sendAck(ack, { ok: false, error: 'internal_error' });
+    captureSocketError(error, {
+      event,
+      socketId: socket.id,
+      userId: socket.data?.user?.id ?? meta?.userId,
+      roomId: meta?.roomId,
+    });
+  };
   try {
     const result = handler();
     if (result && typeof (result as Promise<unknown>).catch === 'function') {
-      void (result as Promise<unknown>).catch((error) => {
-        logger.error('Socket event failed', { event, socketId: socket.id, error: error instanceof Error ? error.message : String(error) });
-        sendAck(ack, { ok: false, error: 'internal_error' });
-      });
+      void (result as Promise<unknown>).catch(reportFailure);
     }
   } catch (error) {
-    logger.error('Socket event failed', { event, socketId: socket.id, error: error instanceof Error ? error.message : String(error) });
-    sendAck(ack, { ok: false, error: 'internal_error' });
+    reportFailure(error);
   }
 }
 
@@ -481,6 +492,7 @@ async function handleRoomClose(io: Server, socket: any, payload: unknown, ack?: 
       roomId: data.roomId,
       error: error instanceof Error ? error.message : String(error),
     });
+    captureSocketError(error, { socketId: socket.id, roomId: data.roomId });
   }
 
   io.to(data.roomId).emit('room:closed', { roomId: data.roomId });
@@ -670,6 +682,7 @@ async function resolveRoomIdForMetering(roomSlug: string) {
       roomSlug,
       error: error instanceof Error ? error.message : String(error),
     });
+    captureSocketError(error, { roomId: roomSlug });
     return null;
   }
 }
@@ -690,6 +703,7 @@ async function accrueVoiceUsageSafely(roomId: string, userId: string) {
       userId,
       error: error instanceof Error ? error.message : String(error),
     });
+    captureSocketError(error, { userId, roomId });
   }
 }
 
@@ -759,7 +773,8 @@ export async function attachSocket(server: any) {
       socket.data.user = user;
       next();
     } catch (error) {
-      logger.warn('Socket authentication failed', { error: error instanceof Error ? error.message : String(error) });
+      logger.error('Socket authentication failed', { error: error instanceof Error ? error.message : String(error) });
+      captureSocketError(error, { socketId: socket.id });
       next(new Error('unauthorized'));
     }
   });

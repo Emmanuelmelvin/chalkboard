@@ -19,3 +19,34 @@ export function captureException(error: unknown, context?: Record<string, unknow
         Sentry.captureException(error);
     });
 }
+
+/**
+ * Attribute the current async scope to a signed-in user, or clear it when no
+ * user is present. Only the id is attached, never the email.
+ */
+export function setUserContext(userId: string | null) {
+    if (!env.SENTRY_DSN) return;
+    Sentry.setUser(userId ? { id: userId } : null);
+}
+
+/**
+ * Capture an error from the Socket.IO surface. Socket handlers run outside the
+ * HTTP async scope, so user and event identity are attached explicitly.
+ */
+export function captureSocketError(
+    error: unknown,
+    context: { event?: string; socketId?: string; userId?: string; roomId?: string } = {},
+) {
+    if (!env.SENTRY_DSN) return;
+    Sentry.withScope((scope) => {
+        if (context.userId) scope.setUser({ id: context.userId });
+        scope.setTag('surface', 'socket');
+        if (context.event) scope.setTag('event', context.event);
+        scope.setExtras({
+            socketId: context.socketId,
+            roomId: context.roomId,
+            event: context.event,
+        });
+        Sentry.captureException(error);
+    });
+}

@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/node';
+import * as Sentry from '@sentry/hono/node';
 import { env } from '@/config/env';
 
 export function initMonitoring() {
@@ -16,6 +16,9 @@ export function initMonitoring() {
         // Enable logs to be sent to Sentry
         enableLogs: true,
     });
+
+    // Verification: confirm logs arrive in Sentry
+    Sentry.logger.info('User triggered test log', { action: 'test_log' });
 }
 
 export function captureException(error: unknown, context?: Record<string, unknown>) {
@@ -25,6 +28,25 @@ export function captureException(error: unknown, context?: Record<string, unknow
         Sentry.captureException(error);
     });
 }
+
+/**
+ * Emit metrics to Sentry. All helpers are no-ops unless monitoring is
+ * configured, so they are safe to call in any environment.
+ */
+export const metrics = {
+    count(name: string, value = 1, attributes?: Record<string, string | number | boolean>) {
+        if (!env.SENTRY_DSN) return;
+        Sentry.metrics.count(name, value, attributes ? { attributes } : undefined);
+    },
+    gauge(name: string, value: number, attributes?: Record<string, string | number | boolean>, unit?: string) {
+        if (!env.SENTRY_DSN) return;
+        Sentry.metrics.gauge(name, value, { ...(attributes ? { attributes } : {}), ...(unit ? { unit } : {}) });
+    },
+    distribution(name: string, value: number, attributes?: Record<string, string | number | boolean>, unit?: string) {
+        if (!env.SENTRY_DSN) return;
+        Sentry.metrics.distribution(name, value, { ...(attributes ? { attributes } : {}), ...(unit ? { unit } : {}) });
+    },
+};
 
 /**
  * Attribute the current async scope to a signed-in user, or clear it when no

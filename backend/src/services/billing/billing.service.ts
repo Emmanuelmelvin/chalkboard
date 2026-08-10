@@ -226,6 +226,7 @@ export async function startCheckout({ user, planId, interval }: StartCheckoutInp
     .where(eq(checkoutSessions.reference, reference));
 
   logger.info('Checkout session created', { userId: user.id, planId, interval, reference });
+  hit(metricNames.billingCheckoutStarted, { plan: planId, interval });
   return { checkoutUrl: session.checkout_url, reference };
 }
 

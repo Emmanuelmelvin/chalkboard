@@ -11,6 +11,7 @@ import {
   isWithinLimit,
 } from '@/services/billing/entitlements.service';
 import { logger } from '@/utils/logger';
+import { add, metricNames, record } from '@/utils/metrics';
 
 
 /**
@@ -88,6 +89,9 @@ export async function closeVoiceSessions(roomId: string, userId: string) {
       .update(voiceSessions)
       .set({ endedAt, seconds })
       .where(and(eq(voiceSessions.id, session.id), isNull(voiceSessions.endedAt)));
+
+    record(metricNames.voiceSessionSeconds, seconds, { surface: 'socket' }, 'second');
+    add(metricNames.voiceSessionClosed, 1, { surface: 'socket' });
 
     if (!ownerId) {
       logger.warn('Voice session closed but room owner is missing — usage dropped', {
@@ -201,6 +205,8 @@ export async function reconcileOpenVoiceSessions() {
       .returning({ id: voiceSessions.id });
 
     if (updated) {
+      record(metricNames.voiceSessionSeconds, seconds, { surface: 'reconcile' }, 'second');
+      add(metricNames.voiceSessionClosed, 1, { surface: 'reconcile' });
       // Resolve the room owner and accrue usage.
       const [room] = await db
         .select({ ownerId: rooms.ownerId })

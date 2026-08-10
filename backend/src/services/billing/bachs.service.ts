@@ -3,6 +3,7 @@ import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import { env } from '@/config/env';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
+import { failed, hit, metricNames, timed } from '@/utils/metrics';
 
 /**
  * A thin typed wrapper over axios for the Bachs API. Deliberately not an SDK:
@@ -14,6 +15,10 @@ import { logger } from '@/utils/logger';
  * orchestration lives in `billing.service.ts`.
  */
 
+/** Low-cardinality route key for a Bachs path, e.g. `/v1/customers`. */
+function routeKey(path: string): string {
+  return path.split('/').slice(0, 3).join('/');
+}
 
 /** Money is a decimal string paired with a currency. Never minor units. */
 export interface BachsAmount {
@@ -295,14 +300,34 @@ export async function bachsRequest<T>(path: string, init: BachsRequestInit = {})
     throw new Error(`Bachs POST ${path} was issued without an idempotency key.`);
   }
 
-  try {
-    return await attempt<T>(path, init);
-  } catch (error) {
-    if (!isRetryable(error)) throw error;
+  const route = routeKey(path);
+  const attrs = { method, route };
+  const recordSuccess = (extra?: Record<string, string | number | boolean>) =>
+    hit(metricNames.billingProviderRequest, { ...attrs, outcome: 'success', ...extra });
+  const recordFailure = (extra?: Record<string, string | number | boolean>) =>
+    failed(metricNames.billingProviderRequest, { ...attrs, ...extra });
 
+  try {
+    const result = await timed(metricNames.billingProviderDuration, () => attempt<T>(path, init), attrs);
+    recordSuccess();
+    return result;
+  } catch (error) {
+    if (!isRetryable(error)) {
+      recordFailure();
+      throw error;
+    }
+
+    hit(metricNames.billingProviderRetry, attrs);
     await sleep(RETRY_BACKOFF_MS);
     logger.info('Retrying Bachs API call once', { method, path });
-    return attempt<T>(path, init);
+    try {
+      const result = await timed(metricNames.billingProviderDuration, () => attempt<T>(path, init), { ...attrs, retry: true });
+      recordSuccess({ retry: true });
+      return result;
+    } catch (secondError) {
+      recordFailure({ retry: true });
+      throw secondError;
+    }
   }
 }
 

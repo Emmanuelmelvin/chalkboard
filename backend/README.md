@@ -30,6 +30,7 @@ Hono serves REST routes from `/api` and Socket.IO attaches to the same raw HTTP 
 - `GOOGLE_CLIENT_ID` is required for Google Sign-In verification
 - `SUPER_ADMIN_EMAIL` optionally promotes the matching Google account to the initial `super_admin` role when it signs in
 - `AUTH_SESSION_SECRET` signs the HTTP-only same-origin session cookie created after Google Sign-In
+- `SENTRY_API_TOKEN`, `SENTRY_API_BASE_URL` power the Sentry metrics dashboard in the admin console (see below); org and project resolve from `SENTRY_DSN`
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` are required for voice token issuance
 - `ROOM_INACTIVITY_MS` defaults to 24 hours. An open room is permanently closed after this period without a join or canvas update.
 - `ROOM_CLEANUP_REPEAT_MS` controls how often the worker scans for inactive rooms and defaults to one hour.
@@ -46,6 +47,13 @@ that session.
 Plugin authoring uses `/api/plugins` and persists plugin drafts, immutable versions, review
 submissions, and user installations in Postgres. Admin plugin routes live under
 `/api/admin/plugins` and require an admin role plus a verified eight-hour admin 2FA session.
+
+The admin console's Metrics tab reads the custom metrics the SDK emits (see `src/utils/metrics.ts`)
+back out of Sentry through `GET /api/admin/metrics`, which proxies
+`/api/0/organizations/{org}/metrics/data/` in a single call, passing the project
+as a `project` query parameter. It needs `SENTRY_API_TOKEN`
+with the `org:read` and `project:read` scopes; without it the tab explains what is missing
+instead of failing. The token stays in the backend and is never exposed to the browser.
 
 Plugin assets use the storage adapter in `src/services/pluginStorage.ts`. Development defaults
 to a local object-store directory at `backend/.data/plugin-storage`. To use Cloudflare R2,

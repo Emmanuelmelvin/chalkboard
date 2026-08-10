@@ -4,6 +4,7 @@ import { getCurrentUser, getGoogleConfig, signInWithGoogle, signOut } from '@/ap
 import { createRoom, deleteRoom, getRoom, joinRoom, listJoinRequests, listRooms, resetRoomPassword, resolveJoinRequest } from '@/api/rooms';
 import { createPlugin, createPluginVersion, getMyPluginAnalytics, getPluginCataloguePlugin, listMyPlugins, listPluginCatalogue, submitPlugin } from '@/api/plugins';
 import { addAdmin, beginAdminTwoFactorSetup, getAdminSession, listAdminPlugins, listAdmins, logoutAdminTwoFactor, publishAdminPlugin, removeAdmin, removeAdminPluginFromRegistry, reviewAdminPlugin, verifyAdminTwoFactor } from '@/api/admin';
+import { getAdminMetrics, type AdminMetricsRange } from '@/api/adminMetrics';
 import { cancelSubscription, createPortalSession, getCheckoutStatus, startCheckout, startSeatCheckout } from '@/api/billing';
 import { acceptWorkspaceInvite, createWorkspaceInvite, getWorkspace, leaveWorkspace, removeWorkspaceMember, revokeWorkspaceInvite } from '@/api/workspace';
 import type { AddAdminRequest, AdminPluginReviewRequest, CreatePluginRequest, CreatePluginVersionRequest, CreateRoomRequest, GoogleSignInRequest, JoinRoomRequest, SeatCheckoutRequest, StartCheckoutRequest } from '@/api/types';
@@ -328,6 +329,22 @@ export function useAddAdminMutation() {
   return useMutation({
     mutationFn: (input: AddAdminRequest) => addAdmin(input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: apiKeys.admin.admins }),
+  });
+}
+
+/**
+ * Read the Sentry metrics dashboard. The response never fails at the HTTP
+ * level: the backend reports configuration and token problems as `ok: false`
+ * with a structured `error`, so the console can explain them in place.
+ */
+export function useAdminMetricsQuery(range: AdminMetricsRange, enabled = true) {
+  return useQuery({
+    queryKey: apiKeys.admin.metrics(range),
+    queryFn: () => getAdminMetrics(range),
+    enabled,
+    // The numbers only change when the backend restores access; a transient
+    // retry is noise, and errors are reported inside the payload anyway.
+    retry: false,
   });
 }
 

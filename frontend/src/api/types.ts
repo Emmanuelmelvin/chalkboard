@@ -404,6 +404,46 @@ export interface AddAdminResponse {
   admin: AdminUser;
 }
 
+/** One bucket of a metric series as served by the Sentry proxy. */
+export interface AdminMetricPoint {
+  /** ISO 8601 bucket start. */
+  t: string;
+  /** Null when Sentry has no data for the bucket. */
+  v: number | null;
+}
+
+/** A labeled metric with its series, for the admin Metrics dashboard. */
+export interface AdminMetricSeries {
+  /** Stable key, e.g. `auth.login`. */
+  key: string;
+  /** The Sentry field expression, e.g. `sum(auth.login)`. */
+  field: string;
+  /** Human label, e.g. "Sign-ins". */
+  label: string;
+  /** `ms` metrics are latency percentiles, rendered as averages. */
+  unit: 'count' | 'ms';
+  /** Sum over the window for count metrics; average for ms metrics. */
+  total: number;
+  /** Aligned with `intervals`, oldest first, zero-filled where empty. */
+  points: AdminMetricPoint[];
+}
+
+export interface AdminMetricsResponse {
+  /** False when the backend has no DSN or token to read Sentry with. */
+  configured: boolean;
+  ok: boolean;
+  range: '24h' | '7d' | '30d';
+  interval: string;
+  period: { start: string; end: string } | null;
+  error: {
+    code: string;
+    message: string;
+    /** What an admin can do about it, e.g. "add the project:read scope". */
+    hint: string;
+  } | null;
+  metrics: AdminMetricSeries[];
+}
+
 export interface OkResponse {
   ok: true;
 }

@@ -239,6 +239,7 @@ export async function createPluginForUser(authorId: string, input: PluginInput) 
       return plugin;
     });
 
+    hit(metricNames.pluginCreated, { plan: input.plan });
     return withVersions(created);
   } catch (error) {
     await Promise.allSettled(uploadedKeys.map(deletePluginAsset));
@@ -300,6 +301,7 @@ export async function createPluginVersionForUser(pluginId: string, authorId: str
       bundleArchiveStorageKey,
       createdById: authorId,
     });
+    hit(metricNames.pluginVersionCreated);
     return getPluginDetail(pluginId);
   } catch (error) {
     await Promise.allSettled(uploadedKeys.map(deletePluginAsset));

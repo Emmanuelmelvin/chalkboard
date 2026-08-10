@@ -19,6 +19,7 @@ import {
 import { ensureWorkspaceForOwner, invalidateWorkspaceMemberEntitlements } from '@/services/billing/workspaces.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
+import { add, failed, hit, metricNames } from '@/utils/metrics';
 import { isMoneyString } from '@/utils/money';
 import { MAX_SEATS_PER_CHECKOUT, parseSeatQuantity, seatAddOnIsEntitling } from '@/utils/seats';
 
@@ -993,4 +994,5 @@ export async function cancelUserSubscription(userId: string, atPeriodEnd = true)
     .set({ cancelAtPeriodEnd: atPeriodEnd, updatedAt: new Date() })
     .where(eq(subscriptions.userId, userId));
   await invalidateEntitlements(userId);
+  hit(metricNames.billingSubscriptionCancelled, { at_period_end: atPeriodEnd });
 }

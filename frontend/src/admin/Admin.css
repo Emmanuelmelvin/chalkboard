@@ -272,6 +272,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .admin-metrics-ranges button + button { border-left: 1px solid var(--admin-line); }
 .admin-metrics-ranges button:hover { color: var(--admin-white); }
 .admin-metrics-ranges button.is-active { background: var(--admin-panel-deep); color: var(--admin-gold-bright); }
+.admin-metrics-refresh { display: inline-flex; align-items: center; gap: 6px; min-height: 33px; padding: 0 11px; border: 1px solid var(--admin-line); background: var(--admin-panel); color: var(--admin-gold-bright); font: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
+.admin-metrics-refresh:hover:not(:disabled) { border-color: var(--admin-gold); color: var(--admin-white); }
+.admin-metrics-refresh:disabled { cursor: wait; opacity: 0.7; }
 .admin-metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .admin-metric-card { min-width: 0; padding: 19px 21px 9px; border: 1px solid var(--admin-line); background: var(--admin-panel); }
 .admin-metric-card-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 12px; }

@@ -427,17 +427,15 @@ export interface AdminCapacityInfo {
 export interface AdminMetricSeries {
   /** Stable key, e.g. `auth.login`. */
   key: string;
-  /** The Sentry field expression, e.g. `sum(auth.login)`. */
-  field: string;
   /** Human label, e.g. "Sign-ins". */
   label: string;
-  /** `ms` metrics are latency percentiles, rendered as averages. */
-  unit: 'count' | 'ms';
+  /** `ms` metrics are latency percentiles; `seconds` for durations; `count` for totals. */
+  unit: 'count' | 'ms' | 'seconds';
   /** Metric category for tab classification */
   category: MetricCategory;
   /** Component rendering hint: full chart vs compact badge */
   displayType: MetricDisplayType;
-  /** Sum over the window for count metrics; average for ms metrics. */
+  /** Sum over the window for count metrics; average for ms/seconds metrics. */
   total: number;
   /** Aligned with `intervals`, oldest first, zero-filled where empty. */
   points: AdminMetricPoint[];

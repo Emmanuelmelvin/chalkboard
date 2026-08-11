@@ -4,8 +4,13 @@ import { env, sentryMetricsEnabled } from '@/config/env';
 import { logger } from '@/utils/logger';
 
 /**
- * Read metrics from Sentry (Discover events stats API), powering the admin
- * dashboard with classified tabs, KPI badges, time-series charts, and server load/spike alerts.
+ * Read metrics from Sentry, powering the admin dashboard with classified tabs,
+ * KPI badges, time-series charts, and server load/spike alerts.
+ *
+ * Two data sources are queried:
+ * 1. **Discover events-stats** — HTTP transactions, latency, errors (event.type:transaction/error)
+ * 2. **Trace Metrics** — counters & distributions emitted via Sentry.metrics.count/distribution,
+ *    queried through Discover's supported `tracemetrics` dataset.
  */
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -13,6 +18,9 @@ const REQUEST_TIMEOUT_MS = 10_000;
 export type MetricsRange = '24h' | '7d' | '30d';
 export type MetricCategory = 'overview' | 'api_auth' | 'realtime' | 'monetized' | 'infra';
 export type MetricDisplayType = 'chart' | 'badge';
+
+/** Which Sentry data source to query */
+type MetricSource = 'discover' | 'custom_counter' | 'custom_distribution';
 
 /** How Sentry buckets the window. */
 function intervalForRange(range: MetricsRange): string {
@@ -29,41 +37,119 @@ function intervalSeconds(range: MetricsRange): number {
 }
 
 export interface DashboardMetricDef {
-  field: string;
   key: string;
   label: string;
-  unit: 'count' | 'ms';
+  unit: 'count' | 'ms' | 'seconds';
   category: MetricCategory;
   displayType: MetricDisplayType;
-  query?: string;
+
+  /** Which API to hit */
+  source: MetricSource;
+
+  /** For source=discover: the yAxis field and query filter */
   yAxis?: string;
+  query?: string;
+
+  /** For source=custom_counter/custom_distribution: the emitted metric name. */
+  metricName?: string;
+  /** For custom metrics: the aggregation function over `value`. */
+  aggregation?: string;
 }
 
 export const DASHBOARD_METRICS: DashboardMetricDef[] = [
-  // Overview (Golden Signals)
-  { field: 'count()', key: 'traffic.transactions', label: 'Total Transactions', unit: 'count', category: 'overview', displayType: 'chart', query: 'event.type:transaction', yAxis: 'count()' },
-  { field: 'count()', key: 'overview.errors', label: 'Errors Reported', unit: 'count', category: 'overview', displayType: 'badge', query: 'event.type:error', yAxis: 'count()' },
-  { field: 'p75(transaction.duration)', key: 'overview.latency', label: 'App Latency (p75)', unit: 'ms', category: 'overview', displayType: 'chart', query: 'event.type:transaction', yAxis: 'p75(transaction.duration)' },
-  { field: 'count()', key: 'overview.sockets', label: 'Socket Traffic', unit: 'count', category: 'overview', displayType: 'badge', query: 'transaction:*socket* OR transaction:*redis*', yAxis: 'count()' },
+  // ═══════════════════════════════════════════════════════════════════
+  //  OVERVIEW & HEALTH
+  // ═══════════════════════════════════════════════════════════════════
+  { key: 'traffic.transactions', label: 'Total Transactions', unit: 'count', category: 'overview', displayType: 'chart',
+    source: 'discover', query: 'event.type:transaction', yAxis: 'count()' },
+  { key: 'overview.latency', label: 'App Latency (p75)', unit: 'ms', category: 'overview', displayType: 'chart',
+    source: 'discover', query: 'event.type:transaction', yAxis: 'p75(transaction.duration)' },
+  { key: 'overview.errors', label: 'Errors Reported', unit: 'count', category: 'overview', displayType: 'badge',
+    source: 'discover', query: 'event.type:error', yAxis: 'count()' },
+  { key: 'overview.sockets', label: 'Socket Connections', unit: 'count', category: 'overview', displayType: 'badge',
+    source: 'custom_counter', metricName: 'socket.connected', aggregation: 'sum' },
 
-  // API & Auth
-  { field: 'count()', key: 'api.requests', label: 'HTTP API Requests', unit: 'count', category: 'api_auth', displayType: 'chart', query: 'transaction.op:http.server', yAxis: 'count()' },
-  { field: 'count()', key: 'auth.login', label: 'Sign-ins & Auth Checks', unit: 'count', category: 'api_auth', displayType: 'badge', query: 'transaction:*auth* OR transaction:*login*', yAxis: 'count()' },
-  { field: 'count()', key: 'auth.signup', label: 'New Account Signups', unit: 'count', category: 'api_auth', displayType: 'badge', query: 'transaction:*signup*', yAxis: 'count()' },
-  { field: 'p75(transaction.duration)', key: 'api.latency', label: 'API Endpoint Latency (p75)', unit: 'ms', category: 'api_auth', displayType: 'chart', query: 'transaction.op:http.server', yAxis: 'p75(transaction.duration)' },
+  // ═══════════════════════════════════════════════════════════════════
+  //  API & AUTH
+  // ═══════════════════════════════════════════════════════════════════
+  { key: 'api.requests', label: 'HTTP API Requests', unit: 'count', category: 'api_auth', displayType: 'chart',
+    source: 'discover', query: 'transaction.op:http.server', yAxis: 'count()' },
+  { key: 'api.latency', label: 'API Endpoint Latency (p75)', unit: 'ms', category: 'api_auth', displayType: 'chart',
+    source: 'discover', query: 'transaction.op:http.server', yAxis: 'p75(transaction.duration)' },
+  { key: 'auth.login', label: 'Sign-ins', unit: 'count', category: 'api_auth', displayType: 'badge',
+    source: 'custom_counter', metricName: 'auth.login', aggregation: 'sum' },
+  { key: 'auth.signup', label: 'New Signups', unit: 'count', category: 'api_auth', displayType: 'badge',
+    source: 'custom_counter', metricName: 'auth.signup', aggregation: 'sum' },
+  { key: 'auth.login.duration', label: 'Auth Latency (avg)', unit: 'ms', category: 'api_auth', displayType: 'chart',
+    source: 'custom_distribution', metricName: 'auth.login.duration_ms', aggregation: 'avg' },
 
-  // Realtime & Rooms
-  { field: 'count()', key: 'socket.connected', label: 'Socket & Realtime Events', unit: 'count', category: 'realtime', displayType: 'chart', query: 'transaction:*socket* OR transaction:*redis*', yAxis: 'count()' },
-  { field: 'count()', key: 'room.activity', label: 'Room Events & Joins', unit: 'count', category: 'realtime', displayType: 'badge', query: 'transaction:*room*', yAxis: 'count()' },
-  { field: 'count()', key: 'canvas.strokes', label: 'Whiteboard Stroke Activity', unit: 'count', category: 'realtime', displayType: 'chart', query: 'transaction:*stroke* OR transaction:*board*', yAxis: 'count()' },
+  // ═══════════════════════════════════════════════════════════════════
+  //  REALTIME & ROOMS
+  // ═══════════════════════════════════════════════════════════════════
+  { key: 'room.created', label: 'Rooms Created', unit: 'count', category: 'realtime', displayType: 'badge',
+    source: 'custom_counter', metricName: 'room.created', aggregation: 'sum' },
+  { key: 'room.join', label: 'Room Joins', unit: 'count', category: 'realtime', displayType: 'badge',
+    source: 'custom_counter', metricName: 'room.join', aggregation: 'sum' },
+  { key: 'room.closed', label: 'Rooms Closed', unit: 'count', category: 'realtime', displayType: 'badge',
+    source: 'custom_counter', metricName: 'room.closed', aggregation: 'sum' },
+  { key: 'room.deleted', label: 'Rooms Deleted', unit: 'count', category: 'realtime', displayType: 'badge',
+    source: 'custom_counter', metricName: 'room.deleted', aggregation: 'sum' },
+  { key: 'stroke.drawn', label: 'Strokes Drawn', unit: 'count', category: 'realtime', displayType: 'chart',
+    source: 'custom_counter', metricName: 'stroke.drawn', aggregation: 'sum' },
+  { key: 'stroke.undone', label: 'Strokes Undone', unit: 'count', category: 'realtime', displayType: 'badge',
+    source: 'custom_counter', metricName: 'stroke.undone', aggregation: 'sum' },
+  { key: 'board.cleared', label: 'Boards Cleared', unit: 'count', category: 'realtime', displayType: 'badge',
+    source: 'custom_counter', metricName: 'board.cleared', aggregation: 'sum' },
+  { key: 'chat.message.sent', label: 'Chat Messages', unit: 'count', category: 'realtime', displayType: 'badge',
+    source: 'custom_counter', metricName: 'chat.message.sent', aggregation: 'sum' },
+  { key: 'reaction.sent', label: 'Reactions Sent', unit: 'count', category: 'realtime', displayType: 'badge',
+    source: 'custom_counter', metricName: 'reaction.sent', aggregation: 'sum' },
+  { key: 'socket.event', label: 'Socket Events', unit: 'count', category: 'realtime', displayType: 'chart',
+    source: 'custom_counter', metricName: 'socket.event', aggregation: 'sum' },
+  { key: 'voice.session.closed', label: 'Voice Sessions Closed', unit: 'count', category: 'realtime', displayType: 'badge',
+    source: 'custom_counter', metricName: 'voice.session.closed', aggregation: 'sum' },
+  { key: 'voice.session.duration', label: 'Voice Session Duration (avg)', unit: 'seconds', category: 'realtime', displayType: 'chart',
+    source: 'custom_distribution', metricName: 'voice.session.duration_seconds', aggregation: 'avg' },
 
-  // Monetization & Plugins
-  { field: 'count()', key: 'billing.checkout', label: 'Checkout Starts', unit: 'count', category: 'monetized', displayType: 'badge', query: 'transaction:*checkout* OR transaction:*billing*', yAxis: 'count()' },
-  { field: 'count()', key: 'plugin.usage', label: 'Plugin Executions', unit: 'count', category: 'monetized', displayType: 'chart', query: 'transaction:*plugin*', yAxis: 'count()' },
+  // ═══════════════════════════════════════════════════════════════════
+  //  MONETIZATION & PLUGINS
+  // ═══════════════════════════════════════════════════════════════════
+  { key: 'billing.checkout.started', label: 'Checkout Starts', unit: 'count', category: 'monetized', displayType: 'badge',
+    source: 'custom_counter', metricName: 'billing.checkout.started', aggregation: 'sum' },
+  { key: 'billing.seats_checkout.started', label: 'Seat Checkout Starts', unit: 'count', category: 'monetized', displayType: 'badge',
+    source: 'custom_counter', metricName: 'billing.seats_checkout.started', aggregation: 'sum' },
+  { key: 'billing.webhook.received', label: 'Webhooks Received', unit: 'count', category: 'monetized', displayType: 'chart',
+    source: 'custom_counter', metricName: 'billing.webhook.received', aggregation: 'sum' },
+  { key: 'billing.webhook.processed', label: 'Webhooks Processed', unit: 'count', category: 'monetized', displayType: 'badge',
+    source: 'custom_counter', metricName: 'billing.webhook.processed', aggregation: 'sum' },
+  { key: 'billing.subscription.cancelled', label: 'Subscription Cancellations', unit: 'count', category: 'monetized', displayType: 'badge',
+    source: 'custom_counter', metricName: 'billing.subscription.cancelled', aggregation: 'sum' },
+  { key: 'billing.invoice.payment_failed', label: 'Invoice Payment Failures', unit: 'count', category: 'monetized', displayType: 'badge',
+    source: 'custom_counter', metricName: 'billing.invoice.payment_failed', aggregation: 'sum' },
+  { key: 'plugin.created', label: 'Plugins Created', unit: 'count', category: 'monetized', displayType: 'badge',
+    source: 'custom_counter', metricName: 'plugin.created', aggregation: 'sum' },
+  { key: 'plugin.published', label: 'Plugins Published', unit: 'count', category: 'monetized', displayType: 'badge',
+    source: 'custom_counter', metricName: 'plugin.published', aggregation: 'sum' },
+  { key: 'plugin.usage_daily', label: 'Plugin Daily Usage', unit: 'count', category: 'monetized', displayType: 'chart',
+    source: 'custom_counter', metricName: 'plugin.usage_daily', aggregation: 'sum' },
 
-  // Infrastructure
-  { field: 'p75(transaction.duration)', key: 'infra.db.latency', label: 'Database & Service Latency', unit: 'ms', category: 'infra', displayType: 'chart', query: 'transaction.op:db OR transaction:*redis*', yAxis: 'p75(transaction.duration)' },
-  { field: 'count()', key: 'infra.worker.jobs', label: 'Background Worker Tasks', unit: 'count', category: 'infra', displayType: 'badge', query: 'transaction:*worker* OR transaction:*cleanup*', yAxis: 'count()' },
+  // ═══════════════════════════════════════════════════════════════════
+  //  INFRASTRUCTURE
+  // ═══════════════════════════════════════════════════════════════════
+  { key: 'infra.db.latency', label: 'Database & Service Latency', unit: 'ms', category: 'infra', displayType: 'chart',
+    source: 'discover', query: 'transaction.op:db OR transaction:*redis*', yAxis: 'p75(transaction.duration)' },
+  { key: 'worker.job.succeeded', label: 'Worker Jobs Succeeded', unit: 'count', category: 'infra', displayType: 'badge',
+    source: 'custom_counter', metricName: 'worker.job.succeeded', aggregation: 'sum' },
+  { key: 'worker.job.failed', label: 'Worker Jobs Failed', unit: 'count', category: 'infra', displayType: 'badge',
+    source: 'custom_counter', metricName: 'worker.job.failed', aggregation: 'sum' },
+  { key: 'worker.job.duration', label: 'Worker Job Duration (avg)', unit: 'ms', category: 'infra', displayType: 'chart',
+    source: 'custom_distribution', metricName: 'worker.job.duration_ms', aggregation: 'avg' },
+  { key: 'cleanup.rooms.closed', label: 'Rooms Auto-Closed (cleanup)', unit: 'count', category: 'infra', displayType: 'badge',
+    source: 'custom_counter', metricName: 'cleanup.rooms.closed', aggregation: 'sum' },
+  { key: 'voice.reconcile.sessions_closed', label: 'Voice Sessions Reconciled', unit: 'count', category: 'infra', displayType: 'badge',
+    source: 'custom_counter', metricName: 'voice.reconcile.sessions_closed', aggregation: 'sum' },
+  { key: 'billing.provider.duration', label: 'Billing Provider Latency (avg)', unit: 'ms', category: 'infra', displayType: 'chart',
+    source: 'custom_distribution', metricName: 'billing.provider.duration_ms', aggregation: 'avg' },
 ];
 
 export class SentryApiError extends Error {
@@ -147,9 +233,8 @@ export interface MetricPoint {
 
 export interface DashboardMetricSeries {
   key: string;
-  field: string;
   label: string;
-  unit: 'count' | 'ms';
+  unit: 'count' | 'ms' | 'seconds';
   category: MetricCategory;
   displayType: MetricDisplayType;
   total: number;
@@ -175,6 +260,104 @@ export interface MetricDashboardResponse {
   metrics: DashboardMetricSeries[];
 }
 
+// ─── Sentry API headers ─────────────────────────────────────────────
+function sentryHeaders() {
+  return {
+    Authorization: `Bearer ${env.SENTRY_API_TOKEN}`,
+    Accept: 'application/json',
+  };
+}
+
+// ─── Discover events-stats fetcher (transactions, errors) ───────────
+async function fetchDiscoverMetric(
+  def: DashboardMetricDef,
+  target: { org: string; project: string },
+  range: MetricsRange,
+): Promise<DashboardMetricSeries> {
+  const params = new URLSearchParams();
+  params.set('statsPeriod', range);
+  params.set('interval', intervalForRange(range));
+  if (target.project) params.set('project', target.project);
+  params.set('yAxis', def.yAxis || 'count()');
+  if (def.query) params.set('query', def.query);
+
+  try {
+    const response = await axios.get<{ data?: [number, [{ count?: number; val?: number }]][]; start?: number; end?: number }>(
+      `${env.SENTRY_API_BASE_URL}/api/0/organizations/${encodeURIComponent(target.org)}/events-stats/`,
+      { params, timeout: REQUEST_TIMEOUT_MS, headers: sentryHeaders() },
+    );
+
+    const rawData = response.data.data || [];
+    const points: MetricPoint[] = rawData.map((pt) => {
+      const v = pt[1]?.[0]?.count ?? pt[1]?.[0]?.val ?? null;
+      return {
+        t: new Date(pt[0] * 1000).toISOString(),
+        v: typeof v === 'number' ? v : null,
+      };
+    });
+
+    const validValues = points.map((p) => p.v).filter((v): v is number => typeof v === 'number' && v > 0);
+    const total =
+      def.unit === 'ms'
+        ? validValues.length
+          ? Math.round(validValues.reduce((a, b) => a + b, 0) / validValues.length)
+          : 0
+        : points.reduce((sum, p) => sum + (p.v ?? 0), 0);
+
+    return { key: def.key, label: def.label, unit: def.unit, category: def.category, displayType: def.displayType, total, points };
+  } catch {
+    return { key: def.key, label: def.label, unit: def.unit, category: def.category, displayType: def.displayType, total: 0, points: [] };
+  }
+}
+
+// ─── Trace Metrics fetcher (counters & distributions) ───────────────
+async function fetchCustomMetric(
+  def: DashboardMetricDef,
+  target: { org: string; project: string },
+  range: MetricsRange,
+): Promise<DashboardMetricSeries> {
+  const agg = def.aggregation || 'sum';
+  const yAxis = `${agg}(value)`;
+
+  const params = new URLSearchParams();
+  params.set('statsPeriod', range);
+  params.set('interval', intervalForRange(range));
+  params.set('dataset', 'tracemetrics');
+  params.set('yAxis', yAxis);
+  params.set('query', `metric.name:${def.metricName}`);
+  if (target.project) params.set('project', target.project);
+
+  try {
+    const response = await axios.get<{ data?: [number, [{ count?: number; val?: number }]][] }>(
+      `${env.SENTRY_API_BASE_URL}/api/0/organizations/${encodeURIComponent(target.org)}/events-stats/`,
+      { params, timeout: REQUEST_TIMEOUT_MS, headers: sentryHeaders() },
+    );
+
+    const points: MetricPoint[] = (response.data.data || []).map((pt) => {
+      const value = pt[1]?.[0]?.count ?? pt[1]?.[0]?.val ?? null;
+      return {
+        t: new Date(pt[0] * 1000).toISOString(),
+        v: typeof value === 'number' ? value : null,
+      };
+    });
+    const values = points.map((point) => point.v).filter((value): value is number => typeof value === 'number');
+    const total = def.source === 'custom_distribution'
+      ? values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100 : 0
+      : values.reduce((sum, value) => sum + value, 0);
+
+    return { key: def.key, label: def.label, unit: def.unit, category: def.category, displayType: def.displayType, total, points };
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      logger.debug(`Custom metric fetch failed for ${def.key}`, {
+        status: err.response?.status,
+        detail: readErrorBody(err.response?.data).detail,
+      });
+    }
+    return { key: def.key, label: def.label, unit: def.unit, category: def.category, displayType: def.displayType, total: 0, points: [] };
+  }
+}
+
+// ─── Main dashboard fetcher ─────────────────────────────────────────
 export async function getSentryMetricDashboard(range: MetricsRange): Promise<MetricDashboardResponse> {
   const base: MetricDashboardResponse = {
     configured: sentryMetricsEnabled,
@@ -207,48 +390,11 @@ export async function getSentryMetricDashboard(range: MetricsRange): Promise<Met
 
   try {
     const metrics = await Promise.all(
-      DASHBOARD_METRICS.map(async (def): Promise<DashboardMetricSeries> => {
-        const params = new URLSearchParams();
-        params.set('statsPeriod', range);
-        params.set('interval', intervalForRange(range));
-        if (target.project) params.set('project', target.project);
-        params.set('yAxis', def.yAxis || 'count()');
-        if (def.query) params.set('query', def.query);
-
-        try {
-          const response = await axios.get<{ data?: [number, [{ count?: number; val?: number }]][]; start?: number; end?: number }>(
-            `${env.SENTRY_API_BASE_URL}/api/0/organizations/${encodeURIComponent(target.org)}/events-stats/`,
-            {
-              params,
-              timeout: REQUEST_TIMEOUT_MS,
-              headers: {
-                Authorization: `Bearer ${env.SENTRY_API_TOKEN}`,
-                Accept: 'application/json',
-              },
-            },
-          );
-
-          const rawData = response.data.data || [];
-          const points: MetricPoint[] = rawData.map((pt) => {
-            const v = pt[1]?.[0]?.count ?? pt[1]?.[0]?.val ?? null;
-            return {
-              t: new Date(pt[0] * 1000).toISOString(),
-              v: typeof v === 'number' ? v : null,
-            };
-          });
-
-          const validValues = points.map((p) => p.v).filter((v): v is number => typeof v === 'number' && v > 0);
-          const total =
-            def.unit === 'ms'
-              ? validValues.length
-                ? Math.round(validValues.reduce((a, b) => a + b, 0) / validValues.length)
-                : 0
-              : points.reduce((sum, p) => sum + (p.v ?? 0), 0);
-
-          return { ...def, total, points };
-        } catch {
-          return { ...def, total: 0, points: [] };
+      DASHBOARD_METRICS.map((def) => {
+        if (def.source === 'discover') {
+          return fetchDiscoverMetric(def, target, range);
         }
+        return fetchCustomMetric(def, target, range);
       }),
     );
 
@@ -297,7 +443,7 @@ export async function getSentryMetricDashboard(range: MetricsRange): Promise<Met
       const { status } = error.response;
       const { detail } = readErrorBody(error.response.data);
       const described = describeError(status);
-      logger.warn('Sentry events-stats API call failed', { status, code: described.code });
+      logger.warn('Sentry API call failed', { status, code: described.code });
       base.error = {
         code: described.code,
         message: detail ? `${described.message} ${detail}` : described.message,
@@ -305,7 +451,7 @@ export async function getSentryMetricDashboard(range: MetricsRange): Promise<Met
       };
       return base;
     }
-    logger.error('Sentry events-stats API call failed without a response', {
+    logger.error('Sentry API call failed without a response', {
       error: error instanceof Error ? error.message : String(error),
     });
     base.error = {

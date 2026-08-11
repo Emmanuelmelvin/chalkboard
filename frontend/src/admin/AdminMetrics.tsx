@@ -18,6 +18,7 @@ import {
   Layers,
   LoaderCircle,
   Palette,
+  RefreshCw,
   Settings2,
   TrendingUp,
   Zap,
@@ -300,17 +301,30 @@ export default function AdminMetrics() {
               System & Telemetry Metrics
             </h2>
           </div>
-          <div className="admin-metrics-ranges">
-            {RANGES.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={range === option.value ? 'is-active' : ''}
-                onClick={() => setRange(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="admin-metrics-ranges">
+              {RANGES.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={range === option.value ? 'is-active' : ''}
+                  onClick={() => setRange(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="admin-metrics-refresh"
+              onClick={() => void metricsQuery.refetch()}
+              disabled={metricsQuery.isFetching}
+              aria-label="Refresh metrics"
+              title="Refresh metrics"
+            >
+              <RefreshCw className={metricsQuery.isFetching ? 'admin-spin' : undefined} size={14} />
+              {metricsQuery.isFetching ? 'Refreshing' : 'Refresh'}
+            </button>
           </div>
         </div>
 

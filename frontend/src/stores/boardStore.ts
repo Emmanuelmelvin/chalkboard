@@ -59,7 +59,7 @@ export interface BoardState {
 
   // ── UI helpers used by some tools ──────────────────────────────────────
   showInsertShapes: boolean;
-  insertShapesTab: 'shapes' | 'links' | 'plugins';
+  insertShapesTab: 'shapes' | 'plugins';
   highlightedLinkId: string | null;
   isCopied: boolean;
   spacePressed: boolean;
@@ -91,7 +91,8 @@ export interface BoardState {
   setCursorPos: (pos: Point) => void;
   setCanvas: (canvas: HTMLCanvasElement | null) => void;
   setShowInsertShapes: (show: boolean | ((prev: boolean) => boolean)) => void;
-  setInsertShapesTab: (tab: 'shapes' | 'links' | 'plugins') => void;
+  setInsertShapesTab: (tab: 'shapes' | 'plugins') => void;
+  setLinksPanelOpen: (open: boolean) => void;
   setHighlightedLinkId: (id: string | null) => void;
   setIsCopied: (copied: boolean) => void;
   setSpacePressed: (spacePressed: boolean) => void;
@@ -155,6 +156,7 @@ export const useBoardStore = create<BoardState>((set) => ({
 
   showInsertShapes: false,
   insertShapesTab: 'shapes',
+  linksPanelOpen: false,
   highlightedLinkId: null,
   isCopied: false,
   spacePressed: false,
@@ -208,6 +210,7 @@ export const useBoardStore = create<BoardState>((set) => ({
           : showInsertShapes,
     })),
   setInsertShapesTab: (insertShapesTab) => set({ insertShapesTab }),
+  setLinksPanelOpen: (linksPanelOpen) => set({ linksPanelOpen }),
   setHighlightedLinkId: (highlightedLinkId) => set({ highlightedLinkId }),
   setIsCopied: (isCopied) => set({ isCopied }),
   setSpacePressed: (spacePressed) => set({ spacePressed }),

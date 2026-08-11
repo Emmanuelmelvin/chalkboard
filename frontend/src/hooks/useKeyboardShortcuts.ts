@@ -32,6 +32,7 @@ export function useKeyboardShortcuts(canEdit = true) {
     setSpacePressed,
     setInsertShapesTab,
     setShowInsertShapes,
+    setLinksPanelOpen,
     setShowSelectionToolbox,
     setActiveTool,
   } = useBoardStore();
@@ -209,13 +210,13 @@ export function useKeyboardShortcuts(canEdit = true) {
         return;
       }
 
-      // Ctrl+L: open links tab directly (only when not in input)
+      // Ctrl+L: open links panel directly (only when not in input)
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && !inInput) {
         const key = e.key.toLowerCase();
         if (key === 'l') {
           e.preventDefault();
-          setInsertShapesTab('links');
-          setShowInsertShapes(true);
+          setShowInsertShapes(false);
+          setLinksPanelOpen(true);
           return;
         }
       }
@@ -272,6 +273,6 @@ export function useKeyboardShortcuts(canEdit = true) {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [canEdit, setSpacePressed, setInsertShapesTab, setShowInsertShapes, setShowSelectionToolbox, setActiveTool]);
+  }, [canEdit, setSpacePressed, setInsertShapesTab, setShowInsertShapes, setLinksPanelOpen, setShowSelectionToolbox, setActiveTool]);
 }
 export default useKeyboardShortcuts;

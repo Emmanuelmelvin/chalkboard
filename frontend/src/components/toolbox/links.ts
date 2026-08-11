@@ -154,7 +154,7 @@ export function handleNavigateToLink(link: SavedLink): boolean {
 }
 
 /**
- * Open the InsertShapes modal on the Links tab so the user can manage links.
+ * Open the links panel so the user can manage links.
  * This is a UI-only action and does not modify board state.
  *
  * @example
@@ -164,9 +164,9 @@ export function handleNavigateToLink(link: SavedLink): boolean {
  * ```
  */
 export function handleOpenLinksTab(): void {
-  const { setInsertShapesTab, setShowInsertShapes } = getBoard();
-  setInsertShapesTab('links');
-  setShowInsertShapes(true);
+  const { setShowInsertShapes, setLinksPanelOpen } = getBoard();
+  setShowInsertShapes(false);
+  setLinksPanelOpen(true);
 }
 
 /**

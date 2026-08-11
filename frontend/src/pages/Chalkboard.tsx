@@ -25,9 +25,11 @@ import {
   Radio,
   RadioOff,
   Share2,
+  Link,
   LogOut,
   UserPlus,
   UserX,
+  Menu,
   X,
 } from 'lucide-react';
 import * as Avatar from '@radix-ui/react-avatar';
@@ -37,6 +39,7 @@ import Button from '@/components/ui/Button';
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import LinkIcon from '@/components/svg/LinkIcon';
+import ChalkboardLogo from '@/components/svg/ChalkboardLogo';
 import { getCanvasCursor } from '@/components/svg/cursors';
 import {
   getCombinedBoundingBox,
@@ -56,6 +59,7 @@ import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
+import LinksPanel from '@/components/tools/LinksPanel';
 import ChatPanel from '@/components/ChatPanel';
 import PluginModal from '@/components/tools/PluginModal';
 import {
@@ -363,7 +367,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     redoStack,
     trimState,
     showInsertShapes, setShowInsertShapes,
-    insertShapesTab, setInsertShapesTab,
+    insertShapesTab,
+    linksPanelOpen, setLinksPanelOpen,
     highlightedLinkId, setHighlightedLinkId,
     isCopied, setIsCopied,
     initSession,
@@ -561,7 +566,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const [closingRoom, setClosingRoom] = useState(false);
   const roomClosureHandledRef = useRef(false);
-  const roomDetailsRef = useRef<HTMLDivElement | null>(null);
+  const linksPanelRef = useRef<HTMLDivElement | null>(null);
+  const roomInfoRef = useRef<HTMLDivElement | null>(null);
+  const roomMembersRef = useRef<HTMLDivElement | null>(null);
+  const [roomInfoOpen, setRoomInfoOpen] = useState(false);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -864,7 +872,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   useEffect(() => {
     if (!roomDetailsOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (!roomDetailsRef.current?.contains(event.target as Node)) setRoomDetailsOpen(false);
+      if (!roomMembersRef.current?.contains(event.target as Node)) setRoomDetailsOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setRoomDetailsOpen(false);
@@ -876,6 +884,38 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [roomDetailsOpen]);
+
+  useEffect(() => {
+    if (!linksPanelOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!linksPanelRef.current?.contains(event.target as Node)) setLinksPanelOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLinksPanelOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [linksPanelOpen, setLinksPanelOpen]);
+
+  useEffect(() => {
+    if (!roomInfoOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!roomInfoRef.current?.contains(event.target as Node)) setRoomInfoOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setRoomInfoOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [roomInfoOpen]);
 
   const updateMemberRole = (targetUserId: string, role: 'instructor' | 'viewer') => {
     if (!canManageMembers || targetUserId === userId) return;
@@ -1070,9 +1110,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             pluginManifests={pluginManifests}
             onOpenPlugin={openPluginModal}
             onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
-            links={links} hasSelection={selectedStrokeIds.length > 0} onNavigateToLink={handleNavigateToLink}
-            onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
-            initialTab={insertShapesTab} highlightedLinkId={highlightedLinkId} />
+            initialTab={insertShapesTab} />
         )}
         <div className="board-utility-actions">
           {canEdit && <button
@@ -1135,7 +1173,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             const linkY = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y - 12;
 
             return (
-              <button onClick={() => { setHighlightedLinkId(linkedLink.id); setInsertShapesTab('links'); setShowInsertShapes(true); }}
+              <button onClick={() => { setHighlightedLinkId(linkedLink.id); setLinksPanelOpen(true); }}
                 className="selection-link-button"
                 data-left={linkX}
                 data-top={linkY}
@@ -1226,6 +1264,58 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               {!canEdit && (
                 <div className="board-readonly-badge">Viewer · read only</div>
               )}
+              <div className="board-actions-card board-brand-menu">
+                <button type="button" className="board-brand" title="Chalkboard" aria-label="Chalkboard">
+                  <ChalkboardLogo className="board-brand-logo" />
+                  <span className="board-brand-name">Chalkboard</span>
+                </button>
+                <div className="room-info-trigger-wrap" ref={roomInfoRef}>
+                  <button
+                    type="button"
+                    className={`header-icon-btn${roomInfoOpen ? ' active' : ''}`}
+                    onClick={() => setRoomInfoOpen((open) => !open)}
+                    title="Room info"
+                    aria-label="Room info"
+                  >
+                    <Menu size={14} />
+                  </button>
+                  {roomInfoOpen && (
+                    <div className="room-info-popover">
+                      <strong className="room-info-popover-title">{roomTitle}</strong>
+                      {roomDescription ? (
+                        <p className="room-info-popover-description">{roomDescription}</p>
+                      ) : (
+                        <p className="room-info-popover-empty">No description yet.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="room-links-trigger-wrap" ref={linksPanelRef}>
+                  <button
+                    type="button"
+                    className={`header-icon-btn${linksPanelOpen ? ' active' : ''}`}
+                    onClick={() => { setLinksPanelOpen(!linksPanelOpen); setHighlightedLinkId(null); }}
+                    title="Links"
+                    aria-label="Links"
+                  >
+                    <Link size={14} />
+                  </button>
+                  {linksPanelOpen && (
+                    <div className="room-links-popover">
+                      <LinksPanel
+                        links={links}
+                        hasSelection={selectedStrokeIds.length > 0}
+                        onNavigateToLink={(link) => { handleNavigateToLink(link); setLinksPanelOpen(false); }}
+                        onCreateLink={handleCreateLink}
+                        onDeleteLink={handleDeleteLink}
+                        onRenameLink={handleRenameLink}
+                        highlightedLinkId={highlightedLinkId}
+                        onClose={() => { setLinksPanelOpen(false); setHighlightedLinkId(null); }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="board-header-actions">
               <div className="board-actions-card board-header-actions-card">
@@ -1287,37 +1377,41 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               >
                 {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               </button>
-              <div className="room-details-menu" ref={roomDetailsRef}>
-                <button
-                  type="button"
-                  className="room-details-trigger"
-                  onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
-                  aria-expanded={roomDetailsOpen}
-                  aria-label={`${onlineHeaderMembers.length} online — open room details`}
-                  title={`${onlineHeaderMembers.length} online`}
-                >
-                  <span className="member-avatar-stack">
-                    {onlineHeaderMembers.slice(0, 4).map((member) => (
-                      <Avatar.Root key={member.userId} className="member-stack-avatar">
-                        <Avatar.Image src={member.avatarUrl || undefined} alt={member.displayName} />
-                        <Avatar.Fallback delayMs={300}>{avatarInitials(member.displayName)}</Avatar.Fallback>
-                      </Avatar.Root>
-                    ))}
-                    {onlineHeaderMembers.length > 4 && (
-                      <span className="member-stack-more">+{onlineHeaderMembers.length - 4}</span>
-                    )}
-                  </span>
-                </button>
-                {roomDetailsOpen && (
-                  <div className="room-details-popover">
-                    <div className="room-details-heading">
-                      <div>
-                        <strong>{roomTitle}</strong>
-                        <span>Room code: {roomId.toUpperCase()}</span>
-                      </div>
-                      <span className={canEdit ? 'room-role-pill room-role-editor' : 'room-role-pill'}>{roleLabel(effectiveRole)}</span>
+              <div className="room-members-trigger-wrap" ref={roomMembersRef}>
+              <button
+                type="button"
+                className={`room-details-trigger${roomDetailsOpen ? ' active' : ''}`}
+                onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
+                aria-expanded={roomDetailsOpen}
+                aria-label={`${onlineHeaderMembers.length} online — open room details`}
+                title={`${onlineHeaderMembers.length} online`}
+              >
+                <span className="member-avatar-stack">
+                  {onlineHeaderMembers.slice(0, 4).map((member) => (
+                    <Avatar.Root key={member.userId} className="member-stack-avatar">
+                      <Avatar.Image src={member.avatarUrl || undefined} alt={member.displayName} />
+                      <Avatar.Fallback delayMs={300}>{avatarInitials(member.displayName)}</Avatar.Fallback>
+                    </Avatar.Root>
+                  ))}
+                  {onlineHeaderMembers.length > 4 && (
+                    <span className="member-stack-more">+{onlineHeaderMembers.length - 4}</span>
+                  )}
+                </span>
+              </button>
+              {roomDetailsOpen && (
+                <div className="room-members-popover" role="dialog" aria-modal="false" aria-label="Members">
+                    <div className="room-info-panel-header">
+                      <h3>Members</h3>
+                      <button
+                        type="button"
+                        className="room-info-panel-close"
+                        onClick={() => { setRoomDetailsOpen(false); setRoleUpdateError(''); }}
+                        aria-label="Close members"
+                      >
+                        <X size={16} />
+                      </button>
                     </div>
-                    {roomDescription && <p className="room-details-description">{roomDescription}</p>}
+                    <div className="room-info-panel-body">
                     {canManageMembers && roomAccessMode === 'approval_required' && (
                       <section className="room-join-requests" aria-labelledby="room-join-requests-heading">
                         <div className="room-details-section-title" id="room-join-requests-heading">
@@ -1431,7 +1525,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                         Close room
                       </button>
                     )}
-                  </div>
+                    </div>
+                    </div>
                 )}
               </div>
               <button

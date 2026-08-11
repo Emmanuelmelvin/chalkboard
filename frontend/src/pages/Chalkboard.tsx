@@ -22,6 +22,8 @@ import {
   Smile,
   Mic,
   MicOff,
+  Radio,
+  RadioOff,
   Share2,
   LogOut,
   UserPlus,
@@ -219,9 +221,21 @@ interface RoomMemberVoiceControlsProps {
   socket: unknown;
   roomId: string;
   voiceEnabled?: boolean;
+  /** Whether the member row is currently online */
+  isOnline: boolean;
+  /** Display name of the member (used in disabled tooltips) */
+  memberName: string;
+  /** Whether the voice call itself is connected */
+  voiceConnected: boolean;
 }
 
-function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, currentUserId, socket, roomId }: RoomMemberVoiceControlsProps) {
+function voiceDisabledReason({ voiceConnected, isOnline, memberName }: RoomMemberVoiceControlsProps): string | null {
+  if (!isOnline) return `${memberName} is offline`;
+  if (!voiceConnected) return 'Voice call is not connected';
+  return null;
+}
+
+function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, currentUserId, socket, roomId, isOnline, memberName, voiceConnected }: RoomMemberVoiceControlsProps) {
   const room = useMaybeRoomContext();
   const participants = useParticipants();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
@@ -255,11 +269,16 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
     });
   };
 
+  const disabledReason = voiceDisabledReason({ voiceConnected, isOnline, memberName, memberUserId, effectiveRole, currentUserId, socket, roomId });
+  const voiceDisabled = Boolean(disabledReason);
+
   if (isMe) {
     if (localParticipant && (isOwner || canSpeak)) {
       return (
         <div className="voice-actions-group">
-          <button type="button" className="voice-action-btn" onClick={toggleMute} title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>{isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />}</button>
+          <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
+            <button type="button" className="voice-action-btn" onClick={toggleMute} disabled={voiceDisabled} title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>{isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />}</button>
+          </span>
           {!isOwner && <button type="button" className="voice-action-btn" onClick={removeUser} title="Leave voice"><LogOut size={14} /></button>}
         </div>
       );
@@ -271,13 +290,17 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
     if (canSpeak) {
       return (
         <div className="voice-actions-group">
-          <button type="button" className="voice-action-btn" onClick={removeUser} title="Remove from voice"><UserX size={14} /></button>
+          <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
+            <button type="button" className="voice-action-btn" onClick={removeUser} disabled={voiceDisabled} title="Remove from voice"><UserX size={14} /></button>
+          </span>
         </div>
       );
     }
     return (
       <div className="voice-actions-group">
-        <button type="button" className="voice-action-btn" onClick={inviteUser} title="Invite to voice"><UserPlus size={14} /></button>
+        <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
+          <button type="button" className="voice-action-btn" onClick={inviteUser} disabled={voiceDisabled} title="Invite to voice"><UserPlus size={14} /></button>
+        </span>
       </div>
     );
   }
@@ -294,13 +317,16 @@ function RoomMemberVoiceControls(props: RoomMemberVoiceControlsProps) {
     const isOwner = props.effectiveRole === 'owner';
 
     if (isOwner && !isMe) {
+      const disabledReason = voiceDisabledReason(props);
       return (
         <div className="voice-actions-group">
-          <button type="button" className="voice-action-btn" title="Invite to voice" onClick={() => {
-            (props.socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId: props.roomId, targetUserId: props.memberUserId }, (res: { ok?: boolean; error?: string }) => {
-              if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
-            });
-          }}><UserPlus size={14} /></button>
+          <span className={`voice-action-wrap${disabledReason ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
+            <button type="button" className="voice-action-btn" title="Invite to voice" disabled={Boolean(disabledReason)} onClick={() => {
+              (props.socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId: props.roomId, targetUserId: props.memberUserId }, (res: { ok?: boolean; error?: string }) => {
+                if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
+              });
+            }}><UserPlus size={14} /></button>
+          </span>
         </div>
       );
     }
@@ -1249,7 +1275,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   title={voiceConnected ? 'Disconnect Voice' : 'Connect Voice'}
                   aria-label={voiceConnected ? 'Disconnect voice' : 'Connect voice'}
                 >
-                  {voiceConnected ? <Mic size={14} /> : <MicOff size={14} />}
+                  {voiceConnected ? <Radio size={14} /> : <RadioOff size={14} />}
                 </button>
               )}
               <button
@@ -1367,6 +1393,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                                 socket={socket}
                                 roomId={roomId}
                                 voiceEnabled={roomQuery.data?.room.voiceEnabled ?? false}
+                                isOnline={isOnline}
+                                memberName={member.displayName}
+                                voiceConnected={voiceConnected}
                               />
                               {canManageMembers && member.role !== 'owner' ? (
                                 <select className="room-member-role-select"

@@ -53,6 +53,10 @@ export interface Stroke {
   clipBox?: Rect;
   /** Original points before a destructive crop — used to restore with Reset Crop */
   originalPoints?: Point[];
+  /** Original closure flag before a destructive crop, so Reset Crop can restore it */
+  originalClosed?: boolean;
+  /** Original path type before a destructive crop, so Reset Crop can restore it */
+  originalPathType?: 'smooth' | 'linear';
 }
 
 /** Represents a link reference to a canvas area */

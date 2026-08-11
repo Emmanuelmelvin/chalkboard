@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PenTool, Eraser, Hand, MousePointer2 } from 'lucide-react';
+import * as HoverCard from '@radix-ui/react-hover-card';
 import ColorPicker from '@/components/tools/ColorPicker';
 import BrushSize from '@/components/tools/BrushSize';
 import BrushIntensity from '@/components/tools/BrushIntensity';
@@ -37,34 +38,36 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   return (
     <div className="bottom-toolbar-container">
       <div className="bottom-toolbar-card">
-        {/* Chalk/Brush wrapper to manage hover/click */}
-        <div
-          className="chalk-tool-wrapper"
-          onMouseEnter={() => {
-            if (activeTool === 'chalk') {
-              setShowChalkSettings(true);
-            }
+        {/* Chalk/Brush settings — opens on hover while chalk is active */}
+        <HoverCard.Root
+          open={showChalkSettings}
+          onOpenChange={(open) => {
+            if (open && activeTool !== 'chalk') return;
+            setShowChalkSettings(open);
           }}
-          onMouseLeave={() => setShowChalkSettings(false)}
+          openDelay={0}
+          closeDelay={100}
         >
-          <button
-            type="button"
-            className={`action-stick ${activeTool === 'chalk' ? 'active' : ''}`}
-            onClick={() => {
-              if (activeTool !== 'chalk') {
-                onToolChange('chalk');
-                setShowChalkSettings(true);
-              } else {
-                setShowChalkSettings((prev) => !prev);
-              }
-            }}
-            title="Chalk (Ctrl+B)"
-          >
-            <PenTool size={14} />
-          </button>
+          <HoverCard.Trigger asChild>
+            <button
+              type="button"
+              className={`action-stick ${activeTool === 'chalk' ? 'active' : ''}`}
+              onClick={() => {
+                if (activeTool !== 'chalk') {
+                  onToolChange('chalk');
+                  setShowChalkSettings(true);
+                } else {
+                  setShowChalkSettings((prev) => !prev);
+                }
+              }}
+              title="Chalk (Ctrl+B)"
+            >
+              <PenTool size={14} />
+            </button>
+          </HoverCard.Trigger>
 
-          {showChalkSettings && activeTool === 'chalk' && (
-            <div className="chalk-settings-flyout">
+          <HoverCard.Portal>
+            <HoverCard.Content className="chalk-settings-flyout" side="top" sideOffset={12} align="center">
               <div className="settings-section">
                 <span className="settings-label">Color</span>
                 <ColorPicker
@@ -84,38 +87,41 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 <span className="settings-label">Intensity</span>
                 <BrushIntensity brushIntensity={brushIntensity} onIntensityChange={onIntensityChange} />
               </div>
-            </div>
-          )}
-        </div>
+              <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
+            </HoverCard.Content>
+          </HoverCard.Portal>
+        </HoverCard.Root>
 
-        {/* Eraser wrapper to manage hover/click */}
-        <div
-          className="chalk-tool-wrapper"
-          onMouseEnter={() => {
-            if (activeTool === 'eraser') {
-              setShowEraserSettings(true);
-            }
+        {/* Eraser settings — opens on hover while eraser is active */}
+        <HoverCard.Root
+          open={showEraserSettings}
+          onOpenChange={(open) => {
+            if (open && activeTool !== 'eraser') return;
+            setShowEraserSettings(open);
           }}
-          onMouseLeave={() => setShowEraserSettings(false)}
+          openDelay={0}
+          closeDelay={100}
         >
-          <button
-            type="button"
-            className={`action-stick ${activeTool === 'eraser' ? 'active' : ''}`}
-            onClick={() => {
-              if (activeTool !== 'eraser') {
-                onToolChange('eraser');
-                setShowEraserSettings(true);
-              } else {
-                setShowEraserSettings((prev) => !prev);
-              }
-            }}
-            title="Eraser (Ctrl+E)"
-          >
-            <Eraser size={14} />
-          </button>
+          <HoverCard.Trigger asChild>
+            <button
+              type="button"
+              className={`action-stick ${activeTool === 'eraser' ? 'active' : ''}`}
+              onClick={() => {
+                if (activeTool !== 'eraser') {
+                  onToolChange('eraser');
+                  setShowEraserSettings(true);
+                } else {
+                  setShowEraserSettings((prev) => !prev);
+                }
+              }}
+              title="Eraser (Ctrl+E)"
+            >
+              <Eraser size={14} />
+            </button>
+          </HoverCard.Trigger>
 
-          {showEraserSettings && activeTool === 'eraser' && (
-            <div className="chalk-settings-flyout eraser-settings-flyout">
+          <HoverCard.Portal>
+            <HoverCard.Content className="chalk-settings-flyout eraser-settings-flyout" side="top" sideOffset={12} align="center">
               <div className="eraser-flyout-header">
                 <span className="eraser-flyout-icon">⬜</span>
                 <span className="eraser-flyout-title">Eraser Size</span>
@@ -182,9 +188,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   />
                 </div>
               </div>
-            </div>
-          )}
-        </div>
+              <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
+            </HoverCard.Content>
+          </HoverCard.Portal>
+        </HoverCard.Root>
 
         <button
           type="button"

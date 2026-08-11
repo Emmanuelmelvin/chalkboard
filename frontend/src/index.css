@@ -36,8 +36,9 @@
 
   /* Fonts */
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-hand: 'Caveat', cursive;
-  --font-sketch: 'Architects Daughter', cursive;
+  /* Keep the canvas UI consistent with the dashboard's Outfit typeface. */
+  --font-hand: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sketch: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* Global Reset */
@@ -648,6 +649,119 @@ body {
   align-items: center;
 }
 
+/* Header action card (top right) — same container pattern as the toolbars */
+.board-header-actions-card .header-icon-btn,
+.board-header-actions-card .participation-action-btn,
+.board-header-actions-card .voice-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.board-header-actions-card .header-icon-btn:hover,
+.board-header-actions-card .header-icon-btn:focus-visible,
+.board-header-actions-card .participation-action-btn:hover,
+.board-header-actions-card .participation-action-btn:focus-visible,
+.board-header-actions-card .voice-action-btn:hover,
+.board-header-actions-card .voice-action-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.09);
+  color: #f1f5f9;
+  outline: none;
+}
+
+.board-header-actions-card .header-exit-btn,
+.board-header-actions-card .header-exit-btn:hover,
+.board-header-actions-card .header-exit-btn:focus-visible {
+  background: #ef4444;
+  color: #fff;
+}
+
+.board-header-actions-card .header-exit-btn:hover,
+.board-header-actions-card .header-exit-btn:focus-visible {
+  background: #dc2626;
+}
+
+/* Room-details trigger becomes the member avatar stack */
+.board-header-actions-card .room-details-trigger {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.board-header-actions-card .room-details-trigger:hover,
+.board-header-actions-card .room-details-trigger:focus-visible {
+  background: rgba(255, 255, 255, 0.09);
+  outline: none;
+}
+
+/* Member avatar stack (Twitter-style overlap) */
+.member-avatar-stack {
+  display: inline-flex;
+  align-items: center;
+}
+
+.member-stack-avatar {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #0c111e;
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.member-stack-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.member-stack-avatar [data-radix-avatar-fallback] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.member-stack-avatar + .member-stack-avatar,
+.member-stack-avatar + .member-stack-more {
+  margin-left: -7px;
+}
+
+.member-stack-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: -7px;
+  border-radius: 50%;
+  border: 2px solid #0c111e;
+  background: #1e293b;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 700;
+}
+
 .board-actions-center {
   position: absolute;
   top: 24px;
@@ -660,8 +774,20 @@ body {
 .board-actions-card {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px;
+  gap: 0;
+  padding: 4px;
+  background: rgba(12, 17, 30, 0.94);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  box-shadow:
+    0 20px 40px -8px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.board-actions-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .board-readonly-badge {
@@ -705,25 +831,6 @@ body {
   line-height: 1.35;
 }
 
-/* Share Panel */
-.share-panel {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 7px;
-}
-
-.room-code-badge {
-  font-family: var(--font-sans);
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 4px 8px;
-  border-radius: 0;
-  font-size: 11px;
-  color: #fff;
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-}
-
 .room-details-menu {
   position: relative;
   z-index: 1200;
@@ -751,14 +858,6 @@ body {
   outline: none;
 }
 
-.room-details-chevron {
-  transition: transform 160ms ease;
-}
-
-.room-details-chevron.open {
-  transform: rotate(180deg);
-}
-
 .room-details-popover {
   position: absolute;
   top: calc(100% + 8px);
@@ -768,7 +867,7 @@ body {
   overflow-y: auto;
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(10, 22, 17, 0.96);
+  background: rgba(12, 17, 30, 0.96);
   color: #f8fafc;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(18px);
@@ -1293,27 +1392,24 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(to bottom, #424242, #212121);
-  color: #e0e0e0;
-  border: 1px solid #111;
-  border-radius: 0;
+  background: transparent;
+  color: #cbd5e1;
+  border: none;
+  border-radius: 7px;
   width: 34px;
   height: 40px;
   cursor: pointer;
-  box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.6);
-  transition: all 0.2s ease;
+  transition: background 0.15s ease, color 0.15s ease;
   gap: 3px;
 }
 
 .action-stick:hover {
-  transform: translateY(-4px);
-  color: #fff;
-  background: linear-gradient(to bottom, #616161, #303030);
-  box-shadow: 1px 5px 8px rgba(0, 0, 0, 0.6);
+  background: rgba(255, 255, 255, 0.09);
+  color: #f1f5f9;
 }
 
 .action-stick:active {
-  transform: translateY(0);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .action-stick span {
@@ -1364,15 +1460,6 @@ body {
 .collaborator-cursor-default .collaborator-avatar {
   border-width: 1.5px;
   border-color: rgba(255, 255, 255, 0.5);
-}
-
-.board-header-actions .btn-icon {
-  padding: 5px;
-}
-
-.board-header-actions .btn-primary {
-  padding: 5px 12px;
-  font-size: 12px;
 }
 
 .collaborator-avatar {
@@ -1945,68 +2032,76 @@ body {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 5px;
-  padding: 4px 7px;
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  gap: 0;
+  padding: 4px;
+  background: rgba(12, 17, 30, 0.94);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  box-shadow:
+    0 20px 40px -8px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   transition: all 0.3s ease;
 }
 
 .bottom-toolbar-card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.7);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 24px 48px -8px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 }
 
 /* Settings flyout for Chalk options */
 .chalk-settings-flyout {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   gap: 10px;
   width: 220px;
   padding: 12px;
-  background: rgba(15, 23, 42, 0.96);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+  background: rgba(12, 17, 30, 0.96);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  box-shadow:
+    0 20px 40px -8px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   z-index: 1100;
   pointer-events: auto;
-  animation: popoverFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes popoverFadeIn {
+.chalk-settings-flyout[data-state='open'] {
+  animation: flyoutFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chalk-settings-flyout[data-state='closed'] {
+  animation: flyoutFadeOut 0.1s ease;
+}
+
+@keyframes flyoutFadeIn {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(8px) scale(0.95);
   }
 
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes flyoutFadeOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
   }
 }
 
 /* Arrow indicator at the bottom of the popover */
-.chalk-settings-flyout::after {
-  content: '';
-  position: absolute;
-  bottom: -5px;
-  left: 50%;
-  transform: translateX(-50%) rotate(45deg);
-  width: 10px;
-  height: 10px;
-  background: rgba(15, 23, 42, 0.96);
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+.chalk-settings-arrow {
+  fill: rgba(12, 17, 30, 0.96);
 }
 
 .settings-section {
@@ -2048,8 +2143,8 @@ body {
 .chalk-settings-flyout .color-swatch {
   width: 20px;
   height: 20px;
-  border-radius: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .chalk-settings-flyout .native-color-picker {
@@ -2137,63 +2232,24 @@ body {
 
 
 /* ═══════════════════════════════════════════════════════
-   SELECTION TOOLBOX  — vertical context-menu panel
+   SELECTION TOOLBOX  — horizontal toolbar above the selection
    ═══════════════════════════════════════════════════════ */
 
-/* Main panel card */
-.sel-toolbox-panel {
-  width: 164px;
+/* Toolbar bar card */
+.sel-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   background: rgba(12, 17, 30, 0.94);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 0;
-  padding: 4px;
+  border-radius: 10px;
   box-shadow:
     0 20px 40px -8px rgba(0, 0, 0, 0.7),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   animation: selPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  display: flex;
-  flex-direction: column;
-  max-height: min(380px, calc(100vh - 24px));
-  overflow: hidden;
-}
-
-/* The menu remains scrollable with a wheel or trackpad, but the native
-   scrollbar is replaced by the familiar dropdown-style arrows. */
-.sel-toolbox-scroll-area {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-}
-
-.sel-toolbox-scroll-area::-webkit-scrollbar {
-  display: none;
-}
-
-.sel-scroll-control {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 20px;
-  padding: 2px;
-  border: none;
-  background: rgba(255, 255, 255, 0.05);
-  color: #94a3b8;
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-
-.sel-scroll-control:hover,
-.sel-scroll-control:focus-visible {
-  background: rgba(255, 255, 255, 0.11);
-  color: #f1f5f9;
-  outline: none;
+  white-space: nowrap;
 }
 
 @keyframes selPanelIn {
@@ -2208,14 +2264,130 @@ body {
   }
 }
 
-/* ── Row (shared base) ── */
+/* ── Icon button ── */
+.sel-bar-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.08s ease;
+}
+
+.sel-bar-btn:hover,
+.sel-bar-btn:focus-visible,
+.sel-bar-btn[data-state='open'] {
+  background: rgba(255, 255, 255, 0.09);
+  color: #f1f5f9;
+}
+
+.sel-bar-btn:active {
+  transform: scale(0.92);
+}
+
+.sel-bar-btn-disabled,
+.sel-bar-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.sel-bar-btn-disabled:hover,
+.sel-bar-btn:disabled:hover,
+.sel-bar-btn:disabled:focus-visible {
+  background: transparent;
+  color: #cbd5e1;
+}
+
+/* Current stroke colour dot pinned to the colour button */
+.sel-bar-color-dot {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(12, 17, 30, 0.9);
+  background: attr(data-color type(<color>), #ffffff);
+  box-shadow: 0 0 4px attr(data-color type(<color>), #ffffff);
+}
+
+/* Rotation badge on the rotate button */
+.sel-bar-badge {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  border-radius: 5px;
+  background: rgba(59, 130, 246, 0.9);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ── Divider ── */
+.sel-bar-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 3px;
+}
+
+/* ── Tooltip ── */
+.sel-tooltip {
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.98);
+  color: #e2e8f0;
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.7);
+  animation: selTooltipIn 0.12s ease-out;
+}
+
+.sel-tooltip .sel-kbd {
+  margin-left: 0;
+}
+
+.sel-tooltip-arrow {
+  fill: rgba(15, 23, 42, 0.98);
+}
+
+@keyframes selTooltipIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Row (shared base, used inside dropdown panels) ── */
 .sel-toolbox-row {
   display: flex;
   align-items: center;
   gap: 7px;
   width: 100%;
   padding: 5px 7px;
-  border-radius: 0;
+  border-radius: 6px;
   cursor: pointer;
   border: none;
   background: transparent;
@@ -2228,48 +2400,12 @@ body {
   user-select: none;
 }
 
-.sel-toolbox-row:hover,
-.sel-row-active {
-  background: rgba(255, 255, 255, 0.07) !important;
-  color: #f1f5f9 !important;
+.sel-toolbox-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #f1f5f9;
 }
 
-/* Icon wrapper */
-.sel-row-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  flex-shrink: 0;
-  color: #94a3b8;
-}
-
-.sel-toolbox-row:hover .sel-row-icon,
-.sel-row-active .sel-row-icon {
-  color: #e2e8f0;
-}
-
-.sel-row-label {
-  flex: 1;
-  font-size: 11.5px;
-  font-weight: 450;
-}
-
-.sel-row-chevron {
-  opacity: 0.45;
-  flex-shrink: 0;
-}
-
-/* Colour dot inside icon */
-.sel-color-dot {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-/* ── Divider ── */
+/* ── Divider (inside panels) ── */
 .sel-divider {
   width: 100%;
   height: 1px;
@@ -2277,31 +2413,12 @@ body {
   margin: 3px 0;
 }
 
-/* ── Danger row (Delete) ── */
-.sel-danger-row {
-  color: #fca5a5 !important;
-}
-
-.sel-danger-row .sel-row-icon {
-  color: #f87171 !important;
-}
-
-.sel-danger-row:hover {
-  background: rgba(239, 68, 68, 0.12) !important;
-}
-
-/* ── Deselect row ── */
-.sel-deselect-row {
-  color: #94a3b8 !important;
-}
-
 /* ── Keyboard hint ── */
 .sel-kbd {
-  margin-left: auto;
   font-size: 8.5px;
   background: rgba(255, 255, 255, 0.05);
   padding: 1px 4px;
-  border-radius: 0;
+  border-radius: 4px;
   color: #64748b;
   border: 1px solid rgba(255, 255, 255, 0.07);
   font-family: var(--font-sans);
@@ -2309,15 +2426,16 @@ body {
 }
 
 /* ════════════════════════════════
-   Sub-panels (Color / Size)
+   Dropdown panels (Color / Size / Dimensions / Rotate / Crop)
    ════════════════════════════════ */
 .sel-subpanel {
-  width: 164px;
+  z-index: 2100;
+  min-width: 172px;
   background: rgba(12, 17, 30, 0.96);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 0;
+  border-radius: 10px;
   padding: 10px 10px 9px;
   box-shadow:
     0 20px 40px -8px rgba(0, 0, 0, 0.7),
@@ -2325,41 +2443,24 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  animation: selSubIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  align-self: flex-start;
-  /* vertical centering inside the flex container done via align-self + margin-top set inline */
 }
 
-/* Place sub-panel to the right of the main panel */
-.sel-subpanel-right {
-  margin-left: 8px;
-  transform-origin: left center;
-}
-
-/* Place sub-panel to the left of the main panel */
-.sel-subpanel-left {
-  margin-right: 8px;
-  transform-origin: right center;
+.sel-subpanel[data-state='open'] {
+  animation: selSubIn 0.13s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes selSubIn {
   from {
     opacity: 0;
-    transform: scale(0.94) translateX(-6px);
   }
 
   to {
     opacity: 1;
-    transform: scale(1) translateX(0);
   }
 }
 
-.sel-subpanel-right+.sel-toolbox-panel~.sel-subpanel {
-  transform-origin: right center;
-}
-
 .sel-subpanel-title {
-  font-family: var(--font-sketch);
+  font-family: var(--font-sans);
   font-size: 10px;
   color: #64748b;
   text-transform: uppercase;
@@ -2375,6 +2476,9 @@ body {
 }
 
 .sel-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -2394,6 +2498,17 @@ body {
   transform: scale(1.14);
 }
 
+.sel-swatch-check {
+  color: #fff;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+
+.sel-swatch-white .sel-swatch-check {
+  color: #1a1a1a;
+  filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.5));
+}
+
 /* ── Size sub-panel: stepper ── */
 .sel-size-stepper {
   display: flex;
@@ -2410,7 +2525,7 @@ body {
   height: 28px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0;
+  border-radius: 8px;
   color: #cbd5e1;
   cursor: pointer;
   outline: none;
@@ -2423,19 +2538,27 @@ body {
 }
 
 .sel-size-preview {
-  flex: 1;
-  height: 42px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 44px;
+  padding: 0 12px;
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 0;
+  border-radius: 8px;
   border: 1px dashed rgba(255, 255, 255, 0.08);
 }
 
+.sel-size-value {
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+}
+
 .sel-size-dot {
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 0;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
   transition: width 0.15s ease, height 0.15s ease;
   min-width: 4px;
   min-height: 4px;
@@ -2448,6 +2571,103 @@ body {
   color: #475569;
   margin: 0;
   text-align: center;
+}
+
+/* ── Radix slider (size / rotation) ── */
+.sel-slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 20px;
+  touch-action: none;
+  user-select: none;
+}
+
+.sel-slider-track {
+  position: relative;
+  flex-grow: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.sel-slider-range {
+  position: absolute;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.6), #3b82f6);
+}
+
+.sel-slider-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid #3b82f6;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  outline: none;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.sel-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.sel-slider-thumb:focus-visible {
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.35);
+}
+
+/* ── Rotate sub-panel: presets + angle slider ── */
+.sel-rotate-presets {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+}
+
+.sel-rotate-preset-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  font-size: 10px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  outline: none;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.08s;
+}
+
+.sel-rotate-preset-btn:hover,
+.sel-rotate-preset-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(96, 165, 250, 0.5);
+}
+
+.sel-rotate-preset-btn:active {
+  transform: scale(0.93);
+}
+
+.sel-rotate-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: -6px;
+  color: #64748b;
+  font-size: 10px;
+  font-family: var(--font-sans);
+}
+
+.sel-rotate-current {
+  color: #60a5fa;
+  font-weight: 600;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2996,10 +3216,6 @@ body {
   width: 20px;
   height: 20px;
   display: block;
-}
-
-.sel-plugin-subpanel {
-  margin-top: 250px;
 }
 
 .insert-plugin-card:disabled {
@@ -4033,15 +4249,6 @@ html[data-theme='light'] .theme-toggle:focus-visible {
   .room-details-popover {
     right: -4px;
     width: min(300px, calc(100vw - 28px));
-  }
-
-  .share-panel {
-    padding: 6px;
-  }
-
-  .room-code-badge {
-    padding: 6px 8px;
-    font-size: 11px;
   }
 
   .board-readonly-badge {

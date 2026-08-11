@@ -155,22 +155,7 @@
   left: attr(data-panel-x px);
   top: attr(data-panel-y px);
   z-index: 2000;
-  display: flex;
-  align-items: flex-start;
-  gap: 0;
   pointer-events: auto;
-}
-
-.selection-toolbox-right {
-  flex-direction: row;
-}
-
-.selection-toolbox-left {
-  flex-direction: row-reverse;
-}
-
-.sel-scroll-control-hidden {
-  visibility: hidden;
 }
 
 .sel-rotation-value {
@@ -184,17 +169,8 @@
   font-size: 11px;
 }
 
-.sel-kbd-crop {
-  margin-right: 8px;
-}
-
 .sel-kbd-auto {
   margin-left: auto;
-}
-
-.sel-action-disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .sel-color-mode-toggle {
@@ -203,13 +179,18 @@
   margin-bottom: 10px;
   padding: 3px;
   background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
 }
 
 .sel-color-mode-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   flex: 1;
   padding: 4px 8px;
   border: none;
-  border-radius: 0;
+  border-radius: 6px;
   background: transparent;
   color: #94a3b8;
   cursor: pointer;
@@ -217,7 +198,11 @@
   transition: all 0.15s;
 }
 
-.sel-color-mode-button.active {
+.sel-color-mode-button:hover {
+  color: #e2e8f0;
+}
+
+.sel-color-mode-button[data-state='on'] {
   background: rgba(59, 130, 246, 0.3);
   color: #60a5fa;
 }
@@ -283,11 +268,6 @@
   height: attr(data-size px);
 }
 
-.sel-size-slider {
-  gap: 8px;
-  margin-top: 8px;
-}
-
 .sel-size-number {
   width: 44px;
 }
@@ -319,12 +299,6 @@
   margin-top: 8px;
 }
 
-.sel-rotate-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .sel-wide-action {
   justify-content: center;
   width: 100%;
@@ -337,15 +311,6 @@
 
 .sel-divider-spaced {
   margin: 4px 0;
-}
-
-.sel-subpanel-end {
-  align-self: flex-end;
-}
-
-.sel-color-dot {
-  background: attr(data-color type(<color>), #ffffff);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3), 0 0 6px attr(data-color type(<color>), #ffffff);
 }
 
 .canvas-note,
@@ -916,65 +881,56 @@
   pointer-events: none;
 }
 
-.trim-toolbar {
+.trim-actions {
   position: absolute;
-  left: attr(data-left px);
-  top: attr(data-top px);
+  left: 50%;
+  bottom: 30px;
   z-index: 152;
   display: flex;
-  align-items: center;
   gap: 14px;
-  padding: 10px 18px;
-  border: 1px solid rgba(59, 130, 246, 0.5);
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-  pointer-events: auto;
   transform: translateX(-50%);
-  white-space: nowrap;
+  pointer-events: auto;
 }
 
-.trim-toolbar-copy {
+.trim-actions button {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.trim-toolbar-title {
-  color: #3b82f6;
-  font: 13px var(--font-sketch);
-  letter-spacing: 0.5px;
-  text-align: left;
-}
-
-.trim-toolbar-hint {
-  color: #94a3b8;
-  font: 10px var(--font-sans);
-}
-
-.trim-toolbar-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.trim-toolbar-actions button {
-  padding: 5px 10px;
-  border-radius: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
   cursor: pointer;
-  font: 11px var(--font-sans);
+  outline: none;
+  transition: color 0.12s ease, transform 0.08s ease, text-shadow 0.12s ease;
+}
+
+.trim-actions button:active {
+  transform: scale(0.9);
 }
 
 .trim-apply-button {
-  border: 1px solid rgba(59, 130, 246, 0.5);
-  background: rgba(59, 130, 246, 0.25);
-  color: #60a5fa;
-  font-weight: 600 !important;
+  color: #4ade80;
+  text-shadow: 0 0 12px rgba(74, 222, 128, 0.45);
+}
+
+.trim-apply-button:hover,
+.trim-apply-button:focus-visible {
+  color: #86efac;
+  transform: scale(1.12);
 }
 
 .trim-cancel-button {
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  color: #f87171;
+  text-shadow: 0 0 12px rgba(248, 113, 113, 0.45);
+}
+
+.trim-cancel-button:hover,
+.trim-cancel-button:focus-visible {
+  color: #fca5a5;
+  transform: scale(1.12);
 }
 
 .selection-link-button {
@@ -1000,7 +956,6 @@
   position: absolute;
   left: attr(data-left px);
   top: attr(data-top px);
-  z-index: 2001;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1029,24 +984,6 @@
 
 .copy-success-icon {
   color: #10b981;
-}
-
-.board-exit-button {
-  height: fit-content;
-  touch-action: manipulation;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-@media (max-width: 768px) {
-  .board-exit-button {
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    position: relative;
-  }
 }
 
 .zoom-control-button {

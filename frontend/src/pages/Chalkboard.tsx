@@ -10,10 +10,7 @@ React,
   useContext,
 } from 'react';
 import {
-  Copy,
   Check,
-  ChevronDown,
-  UsersRound,
   Maximize2,
   Minimize2,
   Minus,
@@ -25,12 +22,13 @@ import {
   Smile,
   Mic,
   MicOff,
-  Phone,
-  PhoneOff,
+  Share2,
   LogOut,
   UserPlus,
   UserX,
+  X,
 } from 'lucide-react';
+import * as Avatar from '@radix-ui/react-avatar';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -52,12 +50,7 @@ import type {
   ChalkboardProps,
   RoomMember,
 } from '@/types';
-import type {
-  PluginManifest,
-  PluginSelectionToolContribution,
-  PluginToolContribution
-} from '@/plugins/types';
-import { filterPluginSelectionTools } from '@/plugins/selection';
+import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
@@ -194,6 +187,16 @@ function RoomMemberAvatar({ userId, name, avatarUrl }: { userId: string; name: s
       className={`room-member-avatar${isSpeaking ? ' collaborator-avatar-speaking' : ''}`}
     />
   );
+}
+
+function avatarInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'C';
 }
 
 const REACTION_EMOJIS = ['👍', '👏', '😂', '😮', '❤️', '🎉'];
@@ -406,12 +409,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   }, [publishedManifests]);
   const publishedTools = useMemo<PluginToolContribution[]>(() => publishedManifests.flatMap((manifest) => manifest.contributes.tools?.map((tool) => ({ ...tool, pluginId: manifest.id, description: tool.description ?? manifest.description })) ?? []), [publishedManifests]);
   const pluginTools = useMemo(() => [...pluginRegistry.getTools(), ...publishedTools], [publishedTools]);
-  const publishedSelectionTools = useMemo<PluginSelectionToolContribution[]>(() => publishedManifests.flatMap((manifest) => manifest.contributes.selectionTools?.map((tool) => ({ ...tool, pluginId: manifest.id, description: tool.description ?? manifest.description })) ?? []), [publishedManifests]);
-  const pluginSelectionTools = useMemo(() => [...pluginRegistry.getSelectionTools(), ...publishedSelectionTools], [publishedSelectionTools]);
-  const selectionToolsForCurrentSelection = useMemo(() => filterPluginSelectionTools(
-    pluginSelectionTools,
-    strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id)),
-  ), [pluginSelectionTools, selectedStrokeIds, strokes]);
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
   const [liveRoomMembers, setLiveRoomMembers] = useState<RoomMember[] | null>(null);
@@ -616,27 +613,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       : [...current, { pluginId }]);
   }, [activateInstalledPlugin, publishedCataloguePlugins, setShowInsertShapes]);
 
-  const runPluginSelectionTool = useCallback((commandId: string) => {
-    const tool = selectionToolsForCurrentSelection.find((candidate) => candidate.command === commandId);
-    if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId);
-    else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId);
-    else if (tool?.pluginId && publishedCataloguePlugins.some((plugin) => plugin.pluginId === tool.pluginId)) {
-      const cataloguePlugin = publishedCataloguePlugins.find((plugin) => plugin.pluginId === tool.pluginId);
-      if (cataloguePlugin?.locked) {
-        // Nothing to run: the bundle was never served. Show the locked modal.
-        openPluginModal(tool.pluginId);
-        return;
-      }
-      setActivePublishedPluginId(tool.pluginId);
-      pendingPublishedCommandRef.current = { pluginId: tool.pluginId, commandId };
-    } else if (tool?.pluginId) {
-
-      void activateInstalledPlugin(tool.pluginId).then(() => pluginRegistry.executeCommand(commandId));
-    } else {
-      void pluginRegistry.executeCommand(commandId);
-    }
-  }, [activateInstalledPlugin, openPluginModal, publishedCataloguePlugins, selectedStrokeIds.length, selectionToolsForCurrentSelection]);
-
   useCanvasRenderer(canvasRef);
 
   useEffect(() => {
@@ -766,6 +742,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       return a.displayName.localeCompare(b.displayName);
     });
   }, [displayedRoomMembers, raisedHands]);
+
+  const onlineHeaderMembers = useMemo(() => {
+    const onlineIds = new Set(Object.values(collaborators).map((collaborator) => collaborator.userId));
+    return displayedRoomMembers.filter((member) => member.userId === userId || onlineIds.has(member.userId));
+  }, [displayedRoomMembers, collaborators, userId]);
 
   const toggleRaisedHand = useCallback(() => {
     socket.emit('hand:raise', { roomId, raised: !isHandRaised }, (response: { ok?: boolean; error?: string }) => {
@@ -1109,20 +1090,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 {[{ left: screenLeft - 5, top: screenTop - 5 }, { left: screenRight - 5, top: screenTop - 5 }, { left: screenLeft - 5, top: screenBottom - 5 }, { left: screenRight - 5, top: screenBottom - 5 }].map((pos, i) => (
                   <div key={i} className="trim-handle" data-left={pos.left} data-top={pos.top} />
                 ))}
-                <div className="trim-toolbar" data-left={(screenLeft + screenRight) / 2} data-top={screenTop - 60}>
-                  <div className="trim-toolbar-copy">
-                    <div className="trim-toolbar-title">CROP MODE</div>
-                    <div className="trim-toolbar-hint">Enter to apply · Esc to cancel</div>
-                  </div>
-                  <div className="trim-toolbar-actions">
-                    <button className="trim-apply-button" onClick={handleApplyTrim}>Apply</button>
-                    <button className="trim-cancel-button" onClick={handleCancelTrim}>Cancel</button>
-                  </div>
+                <div className="trim-actions">
+                  <button className="trim-apply-button" onClick={handleApplyTrim} title="Apply crop (Enter)" aria-label="Apply crop">
+                    <Check size={20} />
+                  </button>
+                  <button className="trim-cancel-button" onClick={handleCancelTrim} title="Cancel crop (Esc)" aria-label="Cancel crop">
+                    <X size={20} />
+                  </button>
                 </div>
               </>
             );
           })()}
-          {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
+          {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && !trimState.active && (() => {
             const linkedLink = links.find(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
             if (!linkedLink) return null;
             const LINK_PADDING = 12;
@@ -1140,7 +1119,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             );
           })()}
 
-          {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
+          {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && !trimState.active && (() => {
             const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
             const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
             const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
@@ -1149,15 +1128,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             // Compute panel position (mirrors SelectionToolbox logic)
             const BOX_SCREEN_LEFT = transformBox.minX * zoom + panOffset.x;
             const BOX_SCREEN_RIGHT = transformBox.maxX * zoom + panOffset.x;
-            const BOX_SCREEN_CENTER_Y = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y;
+            const BOX_SCREEN_TOP = transformBox.minY * zoom + panOffset.y;
+            const BOX_SCREEN_BOTTOM = transformBox.maxY * zoom + panOffset.y;
+            const BOX_SCREEN_CENTER_X = (BOX_SCREEN_LEFT + BOX_SCREEN_RIGHT) / 2;
+            const BOX_SCREEN_CENTER_Y = (BOX_SCREEN_TOP + BOX_SCREEN_BOTTOM) / 2;
 
             return (
               <>
                 {showSelectionToolbox && (
                   <SelectionToolbox
-                    boxScreenLeft={BOX_SCREEN_LEFT}
-                    boxScreenRight={BOX_SCREEN_RIGHT}
-                    boxScreenCenterY={BOX_SCREEN_CENTER_Y}
+                    boxScreenCenterX={BOX_SCREEN_CENTER_X}
+                    boxScreenTop={BOX_SCREEN_TOP}
+                    boxScreenBottom={BOX_SCREEN_BOTTOM}
                     activeColor={actualColor}
                     activeFillColor={actualFillColor}
                     onColorChange={(color) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
@@ -1187,8 +1169,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                     onSetDimensions={(width, height) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const newBox = { minX: box.minX, minY: box.minY, maxX: box.minX + width, maxY: box.minY + height }; const transformed = transformStrokes(selected, box, newBox); const updated = strokes.map(s => { const t = transformed.find(ts => ts.id === s.id); return t ? t : s; }); setStrokes(updated); setTransformBox(newBox); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
                     currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
                     currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
-                    pluginSelectionTools={selectionToolsForCurrentSelection}
-                    onRunPluginSelectionTool={runPluginSelectionTool}
+                    currentSize={selectedStrokes.length > 0 ? selectedStrokes[0].size : brushSize}
                     selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
                 )}
                 {/* ── Selection toolbox toggle button ── */}
@@ -1219,15 +1200,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               {!canEdit && (
                 <div className="board-readonly-badge">Viewer · read only</div>
               )}
-              <Card className="share-panel">
-                <span className="room-code-badge">{roomId.toUpperCase()}</span>
-                <Button variant="icon" onClick={handleCopyLink} title="Copy Invite Link">
-                  {isCopied ? <Check size={14} className="copy-success-icon" /> : <Copy size={14} />}
-                </Button>
-              </Card>
             </div>
             <div className="board-header-actions">
-              <div className="participation-actions">
+              <div className="board-actions-card board-header-actions-card">
+                <div className="participation-actions">
                 {raisedHandCount > 0 && <span className="raised-hand-count" title="Raised hands">✋ {raisedHandCount}</span>}
                 <button
                   type="button"
@@ -1260,7 +1236,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               {effectiveRole === 'owner' && roomQuery.data?.room.voiceEnabled && (
                 <button
                   type="button"
-                  className="voice-action-btn"
+                  className="header-icon-btn"
                   onClick={() => {
                     if (voiceToken && voiceUrl) {
                       setVoiceListening(false);
@@ -1273,29 +1249,38 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   title={voiceConnected ? 'Disconnect Voice' : 'Connect Voice'}
                   aria-label={voiceConnected ? 'Disconnect voice' : 'Connect voice'}
                 >
-                  {voiceConnected ? <Phone size={14} /> : <PhoneOff size={14} />}
+                  {voiceConnected ? <Mic size={14} /> : <MicOff size={14} />}
                 </button>
               )}
-              <Button
-                variant="icon"
-                className="hud-panel fullscreen-toggle"
+              <button
+                type="button"
+                className="header-icon-btn"
                 onClick={() => { void toggleFullscreen(); }}
                 title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
                 aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
               >
                 {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              </Button>
+              </button>
               <div className="room-details-menu" ref={roomDetailsRef}>
                 <button
                   type="button"
                   className="room-details-trigger"
                   onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
                   aria-expanded={roomDetailsOpen}
-                  aria-label="Open room details"
+                  aria-label={`${onlineHeaderMembers.length} online — open room details`}
+                  title={`${onlineHeaderMembers.length} online`}
                 >
-                  <UsersRound size={13} />
-                  <span>{onlineCount}</span>
-                  <ChevronDown size={11} className={roomDetailsOpen ? 'room-details-chevron open' : 'room-details-chevron'} />
+                  <span className="member-avatar-stack">
+                    {onlineHeaderMembers.slice(0, 4).map((member) => (
+                      <Avatar.Root key={member.userId} className="member-stack-avatar">
+                        <Avatar.Image src={member.avatarUrl || undefined} alt={member.displayName} />
+                        <Avatar.Fallback delayMs={300}>{avatarInitials(member.displayName)}</Avatar.Fallback>
+                      </Avatar.Root>
+                    ))}
+                    {onlineHeaderMembers.length > 4 && (
+                      <span className="member-stack-more">+{onlineHeaderMembers.length - 4}</span>
+                    )}
+                  </span>
                 </button>
                 {roomDetailsOpen && (
                   <div className="room-details-popover">
@@ -1420,7 +1405,25 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   </div>
                 )}
               </div>
-              <Button variant="primary" className="hud-panel board-exit-button" onClick={onLeaveRoom}>Exit</Button>
+              <button
+                type="button"
+                className="header-icon-btn"
+                onClick={handleCopyLink}
+                title="Copy Invite Link"
+                aria-label="Copy invite link"
+              >
+                {isCopied ? <Check size={14} className="copy-success-icon" /> : <Share2 size={14} />}
+              </button>
+              <button
+                type="button"
+                className="header-icon-btn header-exit-btn"
+                onClick={onLeaveRoom}
+                title="Exit room"
+                aria-label="Exit room"
+              >
+                <LogOut size={14} />
+              </button>
+              </div>
             </div>
           </div>
 

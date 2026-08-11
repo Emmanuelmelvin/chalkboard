@@ -1220,7 +1220,12 @@ export function startTrim(): CommandResult {
     setStrokes((prev) =>
         prev.map((s) => {
             if (selectedStrokeIds.includes(s.id) && !s.originalPoints) {
-                return { ...s, originalPoints: [...s.points] };
+                return {
+                    ...s,
+                    originalPoints: [...s.points],
+                    originalClosed: s.closed,
+                    originalPathType: s.pathType,
+                };
             }
             return s;
         })
@@ -1319,6 +1324,7 @@ export function resetTrim(): CommandResult {
         socket,
         roomId,
         setStrokes,
+        setSelectedStrokeIds,
         setTransformBox,
         setTrimState,
     } = getBoard();
@@ -1335,20 +1341,51 @@ export function resetTrim(): CommandResult {
         return { ok: false, error: 'no selection' };
     if (!socket) return { ok: false, error: 'no socket connection' };
 
-    const updated = strokes.map((stroke) => {
-        if (selectedStrokeIds.includes(stroke.id) && stroke.originalPoints) {
-            return {
-                ...stroke,
-                points: [...stroke.originalPoints],
-                originalPoints: undefined,
-            };
+    // A crop may split one stroke into several `-crop-` pieces. Reset must merge
+    // every piece back into the single original stroke and restore its geometry.
+    const baseOf = (id: string) => id.split('-crop-')[0];
+    const restoreBases = new Set<string>();
+    strokes.forEach((s) => {
+        if (selectedStrokeIds.includes(s.id) && s.originalPoints) {
+            restoreBases.add(baseOf(s.id));
         }
-        return stroke;
     });
+    if (restoreBases.size === 0)
+        return { ok: false, error: 'selection was not cropped' };
+
+    const updated: Stroke[] = [];
+    const restored = new Map<string, Stroke>();
+    strokes.forEach((s) => {
+        const base = baseOf(s.id);
+        if (restoreBases.has(base) && s.originalPoints) {
+            if (!restored.has(base)) {
+                restored.set(base, {
+                    ...s,
+                    id: base,
+                    points: [...s.originalPoints],
+                    closed: s.originalClosed ?? s.closed,
+                    pathType: s.originalPathType ?? s.pathType,
+                    originalPoints: undefined,
+                    originalClosed: undefined,
+                    originalPathType: undefined,
+                });
+            }
+        } else {
+            updated.push(s);
+        }
+    });
+    restored.forEach((s) => updated.push(s));
     setStrokes(updated);
     socket.emit('undo-stroke', { roomId, strokes: updated });
 
-    const selected = updated.filter((s) => selectedStrokeIds.includes(s.id));
+    const restoredIds = new Set(restored.keys());
+    const newSelectedIds = selectedStrokeIds.map((id) => {
+        const base = baseOf(id);
+        return restoredIds.has(base) ? base : id;
+    });
+    setSelectedStrokeIds(newSelectedIds);
+
+    const selected = updated.filter((s) => newSelectedIds.includes(s.id));
     setTransformBox(getCombinedBoundingBox(selected));
     return { ok: true };
 }

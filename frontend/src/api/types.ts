@@ -412,6 +412,17 @@ export interface AdminMetricPoint {
   v: number | null;
 }
 
+export type MetricCategory = 'overview' | 'api_auth' | 'realtime' | 'monetized' | 'infra';
+export type MetricDisplayType = 'chart' | 'badge';
+
+export interface AdminCapacityInfo {
+  spikeDetected: boolean;
+  peakReqPerMin: number;
+  avgReqPerMin: number;
+  spikeRatio: number;
+  capacityStatus: 'normal' | 'elevated' | 'critical';
+}
+
 /** A labeled metric with its series, for the admin Metrics dashboard. */
 export interface AdminMetricSeries {
   /** Stable key, e.g. `auth.login`. */
@@ -422,6 +433,10 @@ export interface AdminMetricSeries {
   label: string;
   /** `ms` metrics are latency percentiles, rendered as averages. */
   unit: 'count' | 'ms';
+  /** Metric category for tab classification */
+  category: MetricCategory;
+  /** Component rendering hint: full chart vs compact badge */
+  displayType: MetricDisplayType;
   /** Sum over the window for count metrics; average for ms metrics. */
   total: number;
   /** Aligned with `intervals`, oldest first, zero-filled where empty. */
@@ -435,6 +450,7 @@ export interface AdminMetricsResponse {
   range: '24h' | '7d' | '30d';
   interval: string;
   period: { start: string; end: string } | null;
+  capacityInfo?: AdminCapacityInfo;
   error: {
     code: string;
     message: string;

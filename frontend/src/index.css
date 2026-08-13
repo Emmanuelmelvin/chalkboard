@@ -607,7 +607,10 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 24px;
+  /* Matches the bottom-right utility bar's inset from the frame's inner
+     edge (bar: 32px from the viewport edge, frame border: 14px) so all
+     board chrome sits on the same margin line. */
+  padding: 18px;
 }
 
 .hud-panel {
@@ -767,7 +770,7 @@ body {
 
 .board-actions-center {
   position: absolute;
-  top: 24px;
+  top: 18px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
@@ -4399,7 +4402,15 @@ html[data-theme='light'] .theme-toggle:focus-visible {
   }
 
   .hud-layer {
-    padding: 14px;
+    padding: 0;
+  }
+
+  /* The bottom-right utility bar sits 14px from the viewport edge. With the
+     classroom frame thinned to 7px on mobile that is a 7px inset from the
+     frame's inner edge; all other themes keep a 14px frame, so the bar is
+     flush with the slate. Board chrome matches that same inset. */
+  .board-container.room-theme-classroom .hud-layer {
+    padding: 7px;
   }
 
   .chat-widget {
@@ -4415,7 +4426,11 @@ html[data-theme='light'] .theme-toggle:focus-visible {
   }
 
   .board-actions-center {
-    top: 14px;
+    top: 0;
+  }
+
+  .board-container.room-theme-classroom .board-actions-center {
+    top: 7px;
   }
 
   .board-header {

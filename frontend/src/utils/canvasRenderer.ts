@@ -61,23 +61,24 @@ export function drawBoardOnCanvas(
   // zoom, and DPR) so guide lines land exactly on physical pixels instead of
   // aliasing into uneven, "cracked" dashes on high-DPR phones.
   const snapDevice = (v: number) =>
-    Math.round((v * zoom + panOffset.x) * dpr) / (zoom * dpr) - panOffset.x;
+    (Math.round((v * zoom + panOffset.x) * dpr) / dpr - panOffset.x) / zoom;
   const snapYS = (v: number) =>
-    Math.round((v * zoom + panOffset.y) * dpr) / (zoom * dpr) - panOffset.y;
+    (Math.round((v * zoom + panOffset.y) * dpr) / dpr - panOffset.y) / zoom;
   // Draw selection marquee
   if (selectionMarquee) {
     ctx.save();
     ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 2 / zoom;
     ctx.setLineDash([5 / zoom, 5 / zoom]);
-    const minX = snapDevice(selectionMarquee.minX);
-    const minY = snapYS(selectionMarquee.minY);
-    ctx.strokeRect(
-      minX,
-      minY,
-      snapDevice(selectionMarquee.maxX) - minX,
-      snapYS(selectionMarquee.maxY) - minY
-    );
+    const normMinX = Math.min(selectionMarquee.minX, selectionMarquee.maxX);
+    const normMinY = Math.min(selectionMarquee.minY, selectionMarquee.maxY);
+    const normMaxX = Math.max(selectionMarquee.minX, selectionMarquee.maxX);
+    const normMaxY = Math.max(selectionMarquee.minY, selectionMarquee.maxY);
+    const minX = snapDevice(normMinX);
+    const minY = snapYS(normMinY);
+    const maxX = snapDevice(normMaxX);
+    const maxY = snapYS(normMaxY);
+    ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
     ctx.restore();
   }
 

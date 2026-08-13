@@ -1036,8 +1036,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   };
 
   const resetPanZoom = () => {
+    clearSelection();
     setZoom(DEFAULT_ZOOM);
     setPanOffset({ x: 0, y: 0 });
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('link')) {
+      url.searchParams.delete('link');
+      window.history.pushState({}, '', url.toString());
+    }
   };
 
   const requestKickMember = (member: RoomMember, targetSocketId: string) => {

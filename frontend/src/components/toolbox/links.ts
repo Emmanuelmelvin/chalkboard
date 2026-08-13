@@ -126,7 +126,7 @@ export function handleRenameLink(linkId: string, newTag: string): boolean {
  * ```
  */
 export function handleNavigateToLink(link: SavedLink): boolean {
-  const { strokes, zoom, canvas, setPanOffset, setShowInsertShapes } =
+  const { strokes, zoom, canvas, setPanOffset, setShowInsertShapes, clearSelection } =
     getBoard();
 
   const linkedStrokes = strokes.filter((s) => link.strokeIds.includes(s.id));
@@ -135,6 +135,12 @@ export function handleNavigateToLink(link: SavedLink): boolean {
   const box = getCombinedBoundingBox(linkedStrokes);
   if (!box) return false;
   if (!canvas) return false;
+
+  // Drop the current selection before panning. The transform box, rotation,
+  // and highlight all refer to the pre-navigation viewport, and hit-testing
+  // against them after the viewport jumps hijacks the next tap into
+  // move/resize/rotate mode instead of a clean re-selection.
+  clearSelection();
 
   const rect = canvas.getBoundingClientRect();
   const targetCenterX = (box.minX + box.maxX) / 2;

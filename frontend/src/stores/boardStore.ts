@@ -229,6 +229,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       selectedStrokeIds: [],
       transformBox: null,
       selectionRotation: 0,
+      selectionMarquee: null,
     }),
 
   initSession: ({ roomId, socket, userId, canEdit }) =>

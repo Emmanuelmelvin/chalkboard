@@ -143,9 +143,17 @@ export function handleSetZoom(level: number): number {
  * ```
  */
 export function handleResetPanZoom(): void {
-  const { setZoom, setPanOffset } = getBoard();
+  const { setZoom, setPanOffset, clearSelection } = getBoard();
+  clearSelection();
   setZoom(DEFAULT_ZOOM);
   setPanOffset({ x: 0, y: 0 });
+  if (typeof window !== 'undefined') {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('link')) {
+      url.searchParams.delete('link');
+      window.history.pushState({}, '', url.toString());
+    }
+  }
 }
 
 /**

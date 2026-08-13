@@ -521,7 +521,12 @@ export function useCanvasInteraction(
 
       // Use ref to avoid stale closure issues with selectionMarquee
       if (isMarqueeDragging.current) {
-        setSelectionMarquee({ minX: marqueeStartPos.current!.x, minY: marqueeStartPos.current!.y, maxX: pos.x, maxY: pos.y });
+        setSelectionMarquee({
+          minX: Math.min(marqueeStartPos.current!.x, pos.x),
+          minY: Math.min(marqueeStartPos.current!.y, pos.y),
+          maxX: Math.max(marqueeStartPos.current!.x, pos.x),
+          maxY: Math.max(marqueeStartPos.current!.y, pos.y),
+        });
         return;
       }
 

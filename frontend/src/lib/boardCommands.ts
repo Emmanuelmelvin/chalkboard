@@ -1022,7 +1022,7 @@ export function focusLink(linkId: string): CommandResult {
     const link = links.find((l) => l.id === linkId);
     if (!link) return { ok: false, error: `link "${linkId}" not found` };
 
-    const { strokes, zoom, canvas, setPanOffset, setShowInsertShapes } =
+    const { strokes, zoom, canvas, setPanOffset, setShowInsertShapes, clearSelection } =
         getBoard();
 
     const linkedStrokes = strokes.filter((s) => link.strokeIds.includes(s.id));
@@ -1032,6 +1032,8 @@ export function focusLink(linkId: string): CommandResult {
     const box = getCombinedBoundingBox(linkedStrokes);
     if (!box) return { ok: false, error: 'no bounding box for linked strokes' };
     if (!canvas) return { ok: false, error: 'no canvas element available' };
+
+    clearSelection();
 
     const rect = canvas.getBoundingClientRect();
     const targetCenterX = (box.minX + box.maxX) / 2;
@@ -1164,9 +1166,17 @@ export function setZoom(level: number): CommandResult<number> {
  * ```
  */
 export function resetViewport(): CommandResult {
-    const { setZoom, setPanOffset } = getBoard();
+    const { setZoom, setPanOffset, clearSelection } = getBoard();
+    clearSelection();
     setZoom(DEFAULT_ZOOM);
     setPanOffset({ x: 0, y: 0 });
+    if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('link')) {
+            url.searchParams.delete('link');
+            window.history.pushState({}, '', url.toString());
+        }
+    }
     return { ok: true };
 }
 

@@ -60,6 +60,7 @@ export interface BoardState {
   // ── UI helpers used by some tools ──────────────────────────────────────
   showInsertShapes: boolean;
   insertShapesTab: 'shapes' | 'plugins';
+  linksPanelOpen: boolean;
   highlightedLinkId: string | null;
   isCopied: boolean;
   spacePressed: boolean;
@@ -254,6 +255,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       cursorPos: { x: 0, y: 0 },
       showInsertShapes: false,
       insertShapesTab: 'shapes',
+      linksPanelOpen: false,
       highlightedLinkId: null,
       isCopied: false,
       activeTool: 'chalk',

@@ -1109,6 +1109,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
             pluginManifests={pluginManifests}
             onOpenPlugin={openPluginModal}
+            hasSelection={selectedStrokeIds.length > 0}
             onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
             initialTab={insertShapesTab} />
         )}

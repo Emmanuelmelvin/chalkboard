@@ -28,6 +28,8 @@ interface InsertShapesProps {
   onInsertShape: (shape: ShapeType) => void;
   pluginManifests: PluginManifest[];
   onOpenPlugin: (pluginId: string) => void;
+  /** Whether something is currently selected on the canvas (used to gate the tag plugin). */
+  hasSelection: boolean;
   onClose: () => void;
   /** Initial active tab when opening the modal */
   initialTab?: 'shapes' | 'plugins';
@@ -56,6 +58,7 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
   onInsertShape,
   pluginManifests,
   onOpenPlugin,
+  hasSelection,
   onClose,
   initialTab = 'shapes',
 }) => {

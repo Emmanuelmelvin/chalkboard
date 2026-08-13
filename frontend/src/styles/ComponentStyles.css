@@ -443,7 +443,6 @@
   backdrop-filter: blur(12px);
   color: #cbd5e1;
   cursor: pointer;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
   pointer-events: auto;
   transition: all 0.2s ease;
 }
@@ -522,7 +521,6 @@
   backdrop-filter: blur(12px);
   color: #dbeafe;
   cursor: pointer;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
   pointer-events: auto;
   transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
@@ -563,7 +561,6 @@
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 0;
   background: rgba(15, 23, 42, 0.96);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(18px);
   color: #e2e8f0;
   pointer-events: auto;
@@ -699,7 +696,6 @@
   padding: 5px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   background: rgba(15, 23, 42, 0.98);
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.4);
 }
 
 .chat-mention-suggestions button {

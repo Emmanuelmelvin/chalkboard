@@ -299,7 +299,6 @@
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 0;
   background: rgba(15, 23, 42, 0.94);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(18px);
   color: #e2e8f0;
   pointer-events: auto;

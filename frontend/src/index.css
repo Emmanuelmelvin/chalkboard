@@ -351,7 +351,6 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 0;
   background: rgba(15, 23, 42, 0.98);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
   color: #e2e8f0;
 }
 
@@ -619,13 +618,11 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0;
   padding: 12px 18px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
   transition: all 0.3s ease;
 }
 
 .hud-panel:hover {
   border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.7);
 }
 
 /* Header UI */
@@ -787,9 +784,6 @@ body {
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 10px;
-  box-shadow:
-    0 20px 40px -8px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 }
 
 .board-actions-card:hover {
@@ -861,9 +855,6 @@ body {
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 10px;
-  box-shadow:
-    0 20px 40px -8px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -911,9 +902,6 @@ body {
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 10px;
-  box-shadow:
-    0 20px 40px -8px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 }
 
 .room-links-popover .insert-links-content {
@@ -1036,9 +1024,6 @@ body {
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
-  box-shadow:
-    0 20px 40px -8px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   color: #f8fafc;
 }
 
@@ -2908,7 +2893,6 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 0;
   padding: 14px;
-  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.7);
   animation: selPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   max-width: 320px;
   width: 90%;
@@ -3371,7 +3355,6 @@ body {
   flex-direction: column;
   background: rgba(12, 17, 30, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
   color: #e2e8f0;
   pointer-events: auto;
 }

@@ -951,9 +951,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const roleLabel = (role: RoomMember['role']) => role === 'instructor' ? 'Editor' : role === 'viewer' ? 'Viewer' : 'Owner';
 
-  useEffect(() => {
-    setCanvas(canvasRef.current);
-    return () => setCanvas(null);
+  // Register the canvas element in the board store. A callback ref is used
+  // instead of a mount effect because LiveKitRoom renders its children one
+  // commit after this component mounts, so `canvasRef.current` is still null
+  // when mount effects run and the store would never receive the element.
+  const attachCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    canvasRef.current = node;
+    setCanvas(node);
   }, [setCanvas]);
 
   // Auto-apply crop/trim on tool change, and deselect when leaving select tool
@@ -1100,7 +1104,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             </div>
           );
         })}
-        <canvas ref={canvasRef} className={`chalk-canvas chalk-canvas-${activeTool}`}
+        <canvas ref={attachCanvas} className={`chalk-canvas chalk-canvas-${activeTool}`}
           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp} onWheel={handleWheel} />
         <NotesLayer />

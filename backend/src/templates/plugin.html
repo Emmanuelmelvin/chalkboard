@@ -1,0 +1,169 @@
+<!doctype html>
+<!-- subject: {{#if isReview}}Your plugin {{pluginName}} was {{decisionLabel}}{{else}}New plugin submitted: {{pluginName}}{{/if}} -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<title>Plugin: {{pluginName}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background-color:#090909;font-family:'Outfit',Helvetica,Arial,sans-serif;">
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{{#if isReview}}{{decisionLabelSentence}} The review is complete — see the notes below.{{else}}{{developerName}} submitted a new plugin for review.{{/if}}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#090909" style="background-color:#090909;">
+<tr>
+<td align="center" style="padding:40px 16px;background:radial-gradient(circle at 79% 0%, rgba(199,162,88,0.11), transparent 25rem);">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111110" style="width:100%;max-width:600px;background-color:#111110;border:1px solid rgba(245,242,234,0.14);">
+
+<tr>
+<td style="padding:34px 40px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td>
+<table role="presentation" cellpadding="0" cellspacing="0">
+<tr>
+<td style="vertical-align:middle;">
+<img src="cid:logo" alt="Chalkboard" width="31" height="31" style="display:inline-block;border:0;">
+</td>
+<td style="vertical-align:middle;padding-left:10px;">
+<div style="color:#f5f2ea;font-size:14px;font-weight:650;letter-spacing:-0.02em;">Chalkboard</div>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td style="padding:26px 40px 8px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr><td style="border-bottom:1px solid rgba(245,242,234,0.14);font-size:1px;line-height:1px;">&nbsp;</td></tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td style="padding:22px 40px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td>
+<div style="display:table;margin:0 0 16px;color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;line-height:1.5;text-transform:uppercase;"><span style="display:inline-block;width:27px;height:1px;background:currentColor;vertical-align:middle;margin-right:9px;"></span>{{#if isReview}}Plugin review{{else}}Plugin submission{{/if}}</div>
+<h1 style="margin:0;color:#f5f2ea;font-family:Georgia,'Times New Roman',serif;font-size:36px;font-weight:400;letter-spacing:-0.06em;line-height:1;max-width:460px;">{{#if isReview}}{{pluginName}} was <em style="color:#e3c77e;font-style:italic;">{{decisionLabel}}</em>.{{else}}New submission: <em style="color:#e3c77e;font-style:italic;">{{pluginName}}</em>{{/if}}</h1>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td style="padding:26px 40px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td style="color:#a6a29a;font-size:13px;line-height:1.75;">
+{{#if isReview}}
+<p style="margin:0;">Hi {{developerName}}, we finished reviewing <strong style="color:#f5f2ea;font-weight:650;">&#8220;{{pluginName}}&#8221;</strong>. {{decisionLabelSentence}}.</p>
+{{else}}
+<p style="margin:0;">Hi Chidi, <strong style="color:#f5f2ea;font-weight:650;">{{developerName}}</strong> ({{developerEmail}}) just submitted <strong style="color:#f5f2ea;font-weight:650;">&#8220;{{pluginName}}&#8221;</strong> for review.</p>
+{{/if}}
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td style="padding:20px 40px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td style="border:1px solid rgba(245,242,234,0.14);background:rgba(245,242,234,0.025);padding:20px 22px;color:#77736c;font-size:12px;line-height:1.7;">
+{{#if isReview}}
+<p style="margin:0 0 8px;"><strong style="color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;text-transform:uppercase;">Reviewer's notes</strong></p>
+<p style="margin:0;">{{reviewNotes}}</p>
+{{else}}
+<p style="margin:0 0 8px;"><strong style="color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;text-transform:uppercase;">Submission details</strong></p>
+<p style="margin:0 0 4px;">{{pluginName}} &middot; {{developerEmail}}</p>
+<p style="margin:0;">{{pluginDescription}}</p>
+{{/if}}
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td align="left" style="padding:26px 40px 0;">
+<table role="presentation" cellpadding="0" cellspacing="0">
+<tr>
+<td bgcolor="#c7a258" style="background-color:#c7a258;border:1px solid #c7a258;">
+{{#if isReview}}
+<a href="{{pluginsUrl}}" style="display:inline-block;padding:13px 20px;color:#090909;font-size:10px;font-weight:800;letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">View your plugins</a>
+{{else}}
+<a href="{{adminUrl}}" style="display:inline-block;padding:13px 20px;color:#090909;font-size:10px;font-weight:800;letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">Review in admin</a>
+{{/if}}
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td style="padding:26px 40px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td style="border-left:2px solid #e3c77e;background:rgba(199,162,88,0.13);padding:12px 14px;color:#a6a29a;font-size:12px;line-height:1.7;">
+{{#if isReview}}
+<p style="margin:0;">Questions about the review? Reply to this email and we'll talk it through.</p>
+{{else}}
+<p style="margin:0;">The review usually takes a few days. We&#8217;ll email you as soon as there&#8217;s a decision.</p>
+{{/if}}
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td style="padding:30px 40px 24px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td style="color:#a6a29a;font-size:13px;line-height:1.6;">
+<p style="margin:0 0 3px;">— Chidi</p>
+<p style="margin:0;color:#77736c;font-size:11px;">Founder, Chalkboard</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td style="padding:0 40px 26px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr><td style="border-bottom:1px solid rgba(245,242,234,0.14);font-size:1px;line-height:1px;">&nbsp;</td></tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td style="padding:0 40px 36px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td align="center" style="color:#77736c;font-size:10px;line-height:1.7;">
+<p style="margin:0;">You received this email because {{#if isReview}}a plugin you submitted was reviewed{{else}}a plugin was submitted{{/if}} on Chalkboard.</p>
+<p style="margin:6px 0 0;"><a href="https://chalkboard.click" style="color:#77736c;text-decoration:none;">chalkboard.click</a>&nbsp;&nbsp;·&nbsp;&nbsp;<span>A live canvas for shared thinking</span></p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+</table>
+</td>
+</tr>
+</table>
+</body>
+</html>

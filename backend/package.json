@@ -11,6 +11,7 @@
     "test": "node --env-file=.env --import tsx --test \"test/**/*.test.ts\"",
     "backfill:workspaces": "node --env-file=.env --import tsx src/scripts/backfill-workspaces.ts",
     "backfill:seat-addons": "node --env-file=.env --import tsx src/scripts/backfill-seat-addons.ts",
+    "templates:push": "node --env-file=.env src/scripts/sendbyte-templates.mjs",
     "verify": "npm run check && npm run build",
     "db:generate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs migrate"

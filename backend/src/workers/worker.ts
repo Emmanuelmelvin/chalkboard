@@ -4,6 +4,7 @@ import { closeInactiveRooms } from '@/services/infra/cleanup.service';
 import { distributeMonth, previousMonthBounds } from '@/services/billing/developerPool.service';
 import { reconcileExpiredSeatAddOns } from '@/services/billing/billing.service';
 import { reconcileOpenVoiceSessions } from '@/services/rooms/voiceMetering.service';
+import { emailQueueName, sendEmail } from '@/services/emails/emails.service';
 import { sql } from '@/db/client';
 import { closeRedis, initRedis } from '@/services/rooms/roomState.service';
 import { logger } from '@/utils/logger';
@@ -16,6 +17,7 @@ const cleanupJobName = 'room-inactivity-cleanup';
 const voiceReconcileJobName = 'voice-session-reconciliation';
 const poolDistributionJobName = 'developer-pool-distribution';
 const seatExpiryJobName = 'seat-addon-expiry';
+const emailSendJobName = 'send';
 
 /**
  * How often the pool job wakes up. It runs daily rather than monthly because a
@@ -116,11 +118,37 @@ export async function startWorker() {
       seatExpiryJobName,
     });
 
+    // Transactional email: enqueued by the API process at the trigger sites
+    // (signup, first room, plan events, invites, plugin flow) and sent here so
+    // a slow or failing mail provider can never stall an HTTP request. The
+    // jobs carry their own `attempts`/backoff from enqueue time.
+    const emailWorker = new Worker(emailQueueName, async (job) => {
+      logger.info('Email job started', { jobId: job.id, name: job.name });
+      if (job.name === emailSendJobName) {
+        await sendEmail(job.data);
+        return { sent: true };
+      }
+      logger.warn('Unknown email job ignored', { jobId: job.id, name: job.name });
+      return { ignored: true };
+    }, { connection, concurrency: 5 });
+
+    emailWorker.on('completed', (job) => {
+      hit(metricNames.workerJobSucceeded, { job: job?.name });
+      logger.info('Email job completed', { jobId: job.id, name: job.name });
+    });
+    emailWorker.on('failed', (job, error) => {
+      hit(metricNames.workerJobFailed, { job: job?.name });
+      logger.error('Email job failed', { jobId: job?.id, name: job?.name, error });
+      captureException(error, { jobId: job?.id, jobName: job?.name });
+    });
+    logger.info('Email worker started', { queueName: emailQueueName });
+
     let shutdownPromise: Promise<void> | undefined;
     async function shutdown(signal: string) {
       if (shutdownPromise) return shutdownPromise;
       shutdownPromise = (async () => {
         logger.info('Worker graceful shutdown requested', { signal });
+        await emailWorker.close();
         await worker.close();
         await queue.close();
         await closeRedis();

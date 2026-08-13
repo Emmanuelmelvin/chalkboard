@@ -5,6 +5,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { db } from '@/db/client';
 import { users } from '@/db/schema';
 import { getEntitlements, type PlanId } from '@/services/billing/entitlements.service';
+import { enqueueEmail } from '@/services/emails/emails.service';
 import { hit, metricNames } from '@/utils/metrics';
 import { logger } from '@/utils/logger';
 import { env } from '@/config/env';
@@ -81,6 +82,16 @@ export async function upsertGoogleUser(profile) {
     platformRole: shouldPromoteToSuperAdmin ? 'super_admin' : 'user',
   }).returning();
   hit(metricNames.authSignup, { provider: 'google' });
+  void enqueueEmail({
+    template: 'welcome',
+    to: created.email,
+    variables: {
+      displayName: created.displayName,
+      dashboardUrl: `${env.APP_PUBLIC_URL}/dashboard`,
+      isFirstRoom: false,
+    },
+    idempotencyKey: `welcome-${created.id}`,
+  });
   return created;
 }
 

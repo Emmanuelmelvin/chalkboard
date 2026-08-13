@@ -51,6 +51,14 @@ const envSchema = z.object({
   SENTRY_DSN: z.string().url().optional().or(z.literal('')).default(''),
   SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
   SENTRY_RELEASE: z.string().default(''),
+  // Transactional email via SendByte. Leave SENDBYTE_API_KEY empty to disable
+  // sending entirely (jobs enqueue as no-ops and the worker has nothing to do).
+  SENDBYTE_API_KEY: z.string().default(''),
+  SENDBYTE_FROM_EMAIL: z.string().default('hello@chalkboard.click'),
+  SENDBYTE_FROM_NAME: z.string().default('Chalkboard'),
+  // Sender name for internal notifications (e.g. plugin submissions to the
+  // admin inbox). Shares SENDBYTE_FROM_EMAIL as the address.
+  SENDBYTE_FROM_ADMIN_NAME: z.string().default('Chalkboard'),
   // Sentry metrics dashboard (admin console). The token is never exposed to
   // the frontend: the admin API proxies metric series from Sentry instead.
   // The org is addressed by slug in the metrics endpoint (numeric org ids are
@@ -131,6 +139,12 @@ export const billingEnabled = Boolean(env.BACHS_API_KEY && env.BACHS_WEBHOOK_SEC
  * to and the backend has a token to read the data back with.
  */
 export const sentryMetricsEnabled = Boolean(env.SENTRY_DSN && env.SENTRY_API_TOKEN);
+
+/**
+ * Transactional email is live when SendByte has an API key. Without one, the
+ * enqueue helpers become no-ops so local development and CI stay quiet.
+ */
+export const emailSendingEnabled = Boolean(env.SENDBYTE_API_KEY);
 
 
 function isPrivateIpv4(hostname: string) {

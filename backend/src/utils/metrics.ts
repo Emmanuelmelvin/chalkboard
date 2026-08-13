@@ -79,6 +79,13 @@ export const metricNames = {
   pluginReviewed: 'plugin.reviewed',
   pluginPublished: 'plugin.published',
   pluginUsageCount: 'plugin.usage_daily',
+
+  // Transactional email
+  emailEnqueued: 'email.enqueued',
+  emailEnqueueFailed: 'email.enqueue.failed',
+  emailSent: 'email.sent',
+  emailSendFailed: 'email.send.failed',
+  emailSendDuration: 'email.send.duration_ms',
 } as const;
 
 export type MetricName = (typeof metricNames)[keyof typeof metricNames];

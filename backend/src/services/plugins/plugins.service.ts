@@ -16,6 +16,8 @@ import {
   putPluginAsset 
 } from '@/services/plugins/pluginStorage.service';
 import { getEntitlements } from '@/services/billing/entitlements.service';
+import { enqueueEmail } from '@/services/emails/emails.service';
+import { env } from '@/config/env';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 import { hit, metricNames } from '@/utils/metrics';
@@ -338,6 +340,7 @@ export async function submitPluginForReview(pluginId: string, authorId: string) 
     await tx.update(pluginVersions).set({ status: 'in_review', updatedAt: new Date() }).where(eq(pluginVersions.id, latestVersion.id));
   });
   hit(metricNames.pluginSubmitted);
+  void notifyPluginSubmittedEmail(plugin, latestVersion.id);
   return getPluginDetail(pluginId);
 }
 
@@ -358,7 +361,77 @@ export async function reviewPlugin(pluginId: string, reviewerId: string, decisio
     await tx.insert(pluginReviews).values({ pluginId: plugin.id, versionId: latestVersion.id, reviewerId, decision, notes: notes || null });
   });
   hit(metricNames.pluginReviewed, { decision });
+  void notifyPluginReviewDecisionEmail(plugin, latestVersion.id, decision, notes);
   return getPluginDetail(pluginId);
+}
+
+/**
+ * Notify the admin inbox (env.SUPER_ADMIN_EMAIL) that a plugin entered the
+ * review queue. Internal notification, so it goes to the admin-facing sender
+ * name and only fires when an admin inbox is actually configured.
+ */
+async function notifyPluginSubmittedEmail(plugin: typeof plugins.$inferSelect, versionId: string) {
+  if (!env.SUPER_ADMIN_EMAIL) return;
+  const [author] = await db
+    .select({ displayName: users.displayName, email: users.email })
+    .from(users)
+    .where(eq(users.id, plugin.authorId))
+    .limit(1);
+  if (!author) return;
+
+  void enqueueEmail({
+    template: 'plugin',
+    to: env.SUPER_ADMIN_EMAIL,
+    variables: {
+      isReview: false,
+      pluginName: plugin.name,
+      developerName: author.displayName,
+      developerEmail: author.email,
+      pluginDescription: plugin.description,
+      adminUrl: `${env.APP_PUBLIC_URL}/dashboard?tab=developer`,
+    },
+    idempotencyKey: `plugin-submitted-${plugin.id}-${versionId}`,
+  });
+}
+
+const REVIEW_DECISION_LABELS: Record<'approved' | 'rejected' | 'suspended', { label: string; sentence: string }> = {
+  approved: { label: 'approved', sentence: "It's approved and now live in the plugin catalogue" },
+  rejected: { label: 'rejected', sentence: "It wasn't approved this time — the notes below explain what to fix" },
+  suspended: { label: 'suspended', sentence: "It's been suspended and removed from the plugin catalogue" },
+};
+
+/**
+ * Notify the plugin author of a review decision. Suspensions route through
+ * `reviewPlugin` too, so they reach the author with the same template.
+ */
+async function notifyPluginReviewDecisionEmail(
+  plugin: typeof plugins.$inferSelect,
+  versionId: string,
+  decision: 'approved' | 'rejected' | 'suspended',
+  notes?: string,
+) {
+  const [author] = await db
+    .select({ displayName: users.displayName, email: users.email })
+    .from(users)
+    .where(eq(users.id, plugin.authorId))
+    .limit(1);
+  if (!author) return;
+
+  const { label, sentence } = REVIEW_DECISION_LABELS[decision];
+  void enqueueEmail({
+    template: 'plugin',
+    to: author.email,
+    variables: {
+      isReview: true,
+      pluginName: plugin.name,
+      decisionLabel: label,
+      decisionLabelSentence: sentence,
+      reviewNotes: notes || 'No notes were left on this review.',
+      developerName: author.displayName,
+      pluginsUrl: `${env.APP_PUBLIC_URL}/dashboard?tab=developer`,
+    },
+    idempotencyKey: `plugin-review-${plugin.id}-${versionId}-${decision}`,
+  });
 }
 
 export async function publishPlugin(pluginId: string) {

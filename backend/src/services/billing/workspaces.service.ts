@@ -2,7 +2,9 @@ import { and, count, eq, gt, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { db } from '@/db/client';
 import { subscriptions, users, workspaceInvites, workspaceMembers, workspaces } from '@/db/schema';
+import { env } from '@/config/env';
 import { getEntitlements, invalidateEntitlements, planLimits } from '@/services/billing/entitlements.service';
+import { enqueueEmail } from '@/services/emails/emails.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 
@@ -237,6 +239,25 @@ export async function createInvite(userId: string, emailInput: string) {
     .returning({ id: workspaceInvites.id, token: workspaceInvites.token, email: workspaceInvites.email, expiresAt: workspaceInvites.expiresAt });
 
   logger.info('Workspace invite created', { workspaceId: workspace.id, email, invitedById: userId });
+
+  const [inviter] = await db
+    .select({ displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  void enqueueEmail({
+    template: 'workspace-invite',
+    to: email,
+    variables: {
+      inviterName: inviter?.displayName ?? 'Your team',
+      workspaceName: workspace.name,
+      invitedEmail: email,
+      expiresInDays: INVITE_TTL_DAYS,
+      inviteUrl: `${env.APP_PUBLIC_URL}/invite/${invite!.token}`,
+    },
+    idempotencyKey: `workspace-invite-${invite!.id}`,
+  });
+
   return {
     email: invite!.email,
     token: invite!.token,

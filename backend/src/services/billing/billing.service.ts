@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { and, eq, inArray, lt, or } from 'drizzle-orm';
 import { billingEnabled, env } from '@/config/env';
 import { db } from '@/db/client';
-import { billingEvents, checkoutSessions, revenueLedger, seatAddOns, subscriptions, users } from '@/db/schema';
+import { billingEvents, checkoutSessions, revenueLedger, seatAddOns, subscriptions, users, workspaces } from '@/db/schema';
 import {
   cancelSubscription as cancelBachsSubscription,
   createCheckoutSession,
@@ -17,6 +17,7 @@ import {
   type SubscriptionStatus,
 } from '@/services/billing/entitlements.service';
 import { ensureWorkspaceForOwner, invalidateWorkspaceMemberEntitlements } from '@/services/billing/workspaces.service';
+import { enqueueEmail } from '@/services/emails/emails.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 import { add, failed, hit, metricNames } from '@/utils/metrics';
@@ -550,6 +551,82 @@ async function upsertSubscription(data: Record<string, any>, userId: string) {
 }
 
 /**
+ * Queue the plan-upgrade email after a real upgrade (new subscription, or a
+ * plan change). Called from `dispatch` only when the previous row differs, so
+ * renewals and `past_due` transitions stay quiet. The idempotency key is keyed
+ * on the plan, making a retried webhook delivery harmless.
+ */
+async function notifyPlanUpgradeEmail(userId: string, planId: Exclude<PlanId, 'free'>) {
+  const [user] = await db
+    .select({ email: users.email, displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user) return;
+
+  const isTeam = planId === 'team';
+  const planName = isTeam ? 'Team' : 'Pro';
+  const variables: Record<string, unknown> = {
+    displayName: user.displayName,
+    planName,
+    attendeesPerRoom: planLimits[planId].attendeesPerRoom,
+    isTeam,
+    dashboardUrl: `${env.APP_PUBLIC_URL}/dashboard`,
+  };
+
+  if (isTeam) {
+    const [workspace] = await db
+      .select({ name: workspaces.name, seats: subscriptions.seats })
+      .from(workspaces)
+      .innerJoin(subscriptions, eq(subscriptions.userId, userId))
+      .where(eq(workspaces.ownerId, userId))
+      .limit(1);
+    variables.workspaceName = workspace?.name ?? 'Your workspace';
+    variables.seats = workspace?.seats ?? 0;
+    variables.workspaceUrl = `${env.APP_PUBLIC_URL}/dashboard?tab=team`;
+  }
+
+  void enqueueEmail({
+    template: 'plan-upgrade',
+    to: user.email,
+    variables,
+    idempotencyKey: `plan-upgrade-${userId}-${planId}`,
+  });
+}
+
+/**
+ * Queue the payment-failed email. Bachs already retries and sends its own
+ * recovery emails; this one tells the user where to update the card so they
+ * never hear about a decline from us last.
+ */
+async function notifyPaymentFailedEmail(userId: string, eventId: string) {
+  const [user] = await db
+    .select({ email: users.email, displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user) return;
+
+  const [subscription] = await db
+    .select({ planId: subscriptions.planId })
+    .from(subscriptions)
+    .where(eq(subscriptions.userId, userId))
+    .limit(1);
+  const planName = subscription?.planId === 'team' ? 'Team' : 'Pro';
+
+  void enqueueEmail({
+    template: 'payment-failed',
+    to: user.email,
+    variables: {
+      displayName: user.displayName,
+      planName,
+      updateBillingUrl: `${env.APP_PUBLIC_URL}/dashboard?tab=billing`,
+    },
+    idempotencyKey: `payment-failed-${eventId}`,
+  });
+}
+
+/**
  * The total quantity of the user's entitling seat add-on subscriptions.
  *
  * Every seat checkout creates a *new* Bachs subscription on the customer, so
@@ -786,10 +863,24 @@ async function dispatch(event: BachsWebhookEvent) {
       if (isSeatProduct(productIdOf(data))) {
         await applySeatAddOn(data, userId);
       } else {
+        // Capture the pre-update plan so the notification only fires on a
+        // real upgrade (new subscription or plan change), never on renewals
+        // or `past_due` transitions of the same plan.
+        const [priorSubscription] = await db
+          .select({ planId: subscriptions.planId })
+          .from(subscriptions)
+          .where(eq(subscriptions.userId, userId))
+          .limit(1);
         await upsertSubscription(data, userId);
         // The workspace appears the moment Team is entitled. Safe to call
         // unconditionally: it is idempotent and a no-op off Team.
         await ensureWorkspaceForOwner(userId);
+
+        const mapped = planForProduct(productIdOf(data));
+        const status = toSubscriptionStatus(data.status);
+        if (mapped && status && ENTITLING_STATUSES.includes(status) && (!priorSubscription || priorSubscription.planId !== mapped.planId)) {
+          void notifyPlanUpgradeEmail(userId, mapped.planId);
+        }
       }
       // Seated members resolve their plan from this subscription, so every
       // change moves what all of them are entitled to, not just the owner.
@@ -874,6 +965,10 @@ async function dispatch(event: BachsWebhookEvent) {
       // how a card problem becomes a churn event.
       logger.warn('Bachs invoice payment failed', { eventId: event.id });
       hit(metricNames.billingInvoicePaymentFailed);
+      {
+        const userId = await resolveUserId(data);
+        if (userId) void notifyPaymentFailedEmail(userId, event.id);
+      }
       return;
 
     default:

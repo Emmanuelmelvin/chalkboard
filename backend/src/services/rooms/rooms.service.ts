@@ -3,7 +3,9 @@ import { randomBytes } from 'node:crypto';
 import { and, count, desc, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { joinRequests, roomBans, roomMembers, rooms, users } from '@/db/schema';
+import { env } from '@/config/env';
 import { UNLIMITED, getCachedEntitlements, getEntitlements, isWithinLimit } from '@/services/billing/entitlements.service';
+import { enqueueEmail } from '@/services/emails/emails.service';
 import { createVoiceToken } from '@/services/rooms/livekit.service';
 import { deleteRoomState, getLiveRoomUserIds } from '@/services/rooms/realtimeRooms.service';
 import { isVoicePublisher } from '@/services/rooms/roomState.service';
@@ -234,6 +236,25 @@ export async function createRoom(user: any, body: any) {
   hit(metricNames.roomCreated, { outcome: 'created', plan });
 
   logger.info('Created room', { roomId: room.id, slug: room.slug, ownerId: user.id });
+
+  // The owner's first room doubles as the onboarding email: the welcome
+  // template's isFirstRoom branch carries the room link. Count rooms ever
+  // created by this owner; 1 means this is the first one.
+  const [ownedCount] = await db.select({ value: count() }).from(rooms).where(eq(rooms.ownerId, user.id));
+  if (ownedCount?.value === 1) {
+    void enqueueEmail({
+      template: 'welcome',
+      to: user.email,
+      variables: {
+        displayName: user.displayName,
+        isFirstRoom: true,
+        roomName: room.title,
+        roomUrl: `${env.APP_PUBLIC_URL}/room/${room.slug}`,
+      },
+      idempotencyKey: `first-room-${room.id}`,
+    });
+  }
+
   return {
     room: { ...room, passwordHash: undefined, passwordCiphertext: undefined },
     password: generatedPassword,

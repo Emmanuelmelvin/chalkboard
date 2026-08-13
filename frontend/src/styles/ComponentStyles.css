@@ -817,8 +817,28 @@
     overflow-y: auto;
   }
 
-  .chat-panel {
-    max-height: calc(100vh - 110px);
+  /* Mobile chat: the panel keeps its fixed width but stretches for the
+     entire height, from the top of the viewport down to just above the
+     bottom utility bar (which holds the chat toggle). */
+  .board-utility-actions .chat-panel {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    z-index: 3001;
+    height: auto;
+    max-height: none;
+    margin-bottom: 0;
+    border-radius: 12px;
+  }
+
+  /* The bar's backdrop-filter makes it the containing block for fixed
+     descendants, which would trap the chat sheet inside the bar. The bar is
+     ~94% opaque, so dropping the frost effect on mobile is visually
+     negligible but lets the sheet anchor to the viewport. */
+  .board-utility-actions {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

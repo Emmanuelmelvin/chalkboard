@@ -4537,6 +4537,13 @@ html[data-theme='light'] .theme-toggle:focus-visible {
 .reaction-bubble {
   position: absolute;
   bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: reactionFloat 2600ms ease-out forwards;
+}
+
+.reaction-emoji {
   display: grid;
   width: 42px;
   height: 42px;
@@ -4545,7 +4552,23 @@ html[data-theme='light'] .theme-toggle:focus-visible {
   background: rgba(17, 20, 17, 0.78);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
   font-size: 25px;
-  animation: reactionFloat 2600ms ease-out forwards;
+}
+
+.reaction-name {
+  margin-top: 4px;
+  max-width: 110px;
+  overflow: hidden;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(12, 17, 30, 0.9);
+  color: #f1f5f9;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .room-member-hand-badge {

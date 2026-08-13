@@ -1097,7 +1097,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               style={{ right: `${18 + reaction.lane * 58}px` }}
               title={`${memberDisplayNames.get(reaction.userId) ?? 'Someone'} reacted ${reaction.emoji}`}
             >
-              {reaction.emoji}
+              <span className="reaction-emoji">{reaction.emoji}</span>
+              <span className="reaction-name">{memberDisplayNames.get(reaction.userId) ?? 'Someone'}</span>
             </div>
           ))}
         </div>

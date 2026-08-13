@@ -191,6 +191,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
         className="selection-toolbox"
         data-panel-x={barX}
         data-panel-y={barY}
+        style={{ left: barX, top: barY }}
       >
         <div ref={barRef} className="sel-bar" style={{ padding: BAR_PADDING }}>
           {/* ── Color ── */}
@@ -200,7 +201,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
                 <DropdownMenu.Trigger asChild>
                   <button type="button" className="sel-bar-btn" aria-label="Color" title="">
                     <Palette size={16} />
-                    <span className="sel-bar-color-dot" data-color={activeColor} />
+                    <span className="sel-bar-color-dot" data-color={activeColor} style={{ background: activeColor }} />
                   </button>
                 </DropdownMenu.Trigger>
               </Tooltip.Trigger>
@@ -299,6 +300,7 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
                 <div
                   className="sel-size-dot"
                   data-size={Math.min(brushSize * 3, 48)}
+                  style={{ width: Math.min(brushSize * 3, 48), height: Math.min(brushSize * 3, 48) }}
                 />
                 <span className="sel-size-value">{Math.round(brushSize)}</span>
               </div>

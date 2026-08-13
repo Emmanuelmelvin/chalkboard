@@ -1108,7 +1108,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           ))}
         </div>
         {dustPuffs.map((p) => (
-          <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" />
+          <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" style={{ left: p.x - 12, top: p.y - 12, width: 24, height: 24 }} />
         ))}
         {Object.entries(collaborators).map(([id, coll]) => {
           if (coll.role === 'viewer') return null;
@@ -1122,6 +1122,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 className="collaborator-cursor"
                 data-left={x - 24}
                 data-top={y - 24}
+                style={{ left: x - 24, top: y - 24 }}
                 title={`${coll.name}'s cursor`}
                 aria-label={`${coll.name}'s cursor`}
               >
@@ -1129,6 +1130,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 <span
                   className="collaborator-cursor-dot"
                   data-color={coll.color}
+                  style={{ backgroundColor: coll.color }}
                   aria-hidden="true"
                 />
               </div>
@@ -1197,13 +1199,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             const fullBottom = initBox.maxY * zoom + panOffset.y;
             return (
               <>
-                <div className="trim-overlay trim-overlay-top" data-left={fullLeft} data-top={fullTop} data-width={fullRight - fullLeft} data-height={Math.max(0, screenTop - fullTop)} />
-                <div className="trim-overlay trim-overlay-bottom" data-left={fullLeft} data-top={screenBottom} data-width={fullRight - fullLeft} data-height={Math.max(0, fullBottom - screenBottom)} />
-                <div className="trim-overlay trim-overlay-left" data-left={fullLeft} data-top={screenTop} data-width={Math.max(0, screenLeft - fullLeft)} data-height={screenBottom - screenTop} />
-                <div className="trim-overlay trim-overlay-right" data-left={screenRight} data-top={screenTop} data-width={Math.max(0, fullRight - screenRight)} data-height={screenBottom - screenTop} />
-                <div className="trim-selection-box" data-left={screenLeft} data-top={screenTop} data-width={screenRight - screenLeft} data-height={screenBottom - screenTop} />
+                <div className="trim-overlay trim-overlay-top" data-left={fullLeft} data-top={fullTop} data-width={fullRight - fullLeft} data-height={Math.max(0, screenTop - fullTop)} style={{ left: fullLeft, top: fullTop, width: fullRight - fullLeft, height: Math.max(0, screenTop - fullTop) }} />
+                <div className="trim-overlay trim-overlay-bottom" data-left={fullLeft} data-top={screenBottom} data-width={fullRight - fullLeft} data-height={Math.max(0, fullBottom - screenBottom)} style={{ left: fullLeft, top: screenBottom, width: fullRight - fullLeft, height: Math.max(0, fullBottom - screenBottom) }} />
+                <div className="trim-overlay trim-overlay-left" data-left={fullLeft} data-top={screenTop} data-width={Math.max(0, screenLeft - fullLeft)} data-height={screenBottom - screenTop} style={{ left: fullLeft, top: screenTop, width: Math.max(0, screenLeft - fullLeft), height: screenBottom - screenTop }} />
+                <div className="trim-overlay trim-overlay-right" data-left={screenRight} data-top={screenTop} data-width={Math.max(0, fullRight - screenRight)} data-height={screenBottom - screenTop} style={{ left: screenRight, top: screenTop, width: Math.max(0, fullRight - screenRight), height: screenBottom - screenTop }} />
+                <div className="trim-selection-box" data-left={screenLeft} data-top={screenTop} data-width={screenRight - screenLeft} data-height={screenBottom - screenTop} style={{ left: screenLeft, top: screenTop, width: screenRight - screenLeft, height: screenBottom - screenTop }} />
                 {[{ left: screenLeft - 5, top: screenTop - 5 }, { left: screenRight - 5, top: screenTop - 5 }, { left: screenLeft - 5, top: screenBottom - 5 }, { left: screenRight - 5, top: screenBottom - 5 }].map((pos, i) => (
-                  <div key={i} className="trim-handle" data-left={pos.left} data-top={pos.top} />
+                  <div key={i} className="trim-handle" data-left={pos.left} data-top={pos.top} style={{ left: pos.left, top: pos.top }} />
                 ))}
                 <div className="trim-actions">
                   <button className="trim-apply-button" onClick={handleApplyTrim} title="Apply crop (Enter)" aria-label="Apply crop">
@@ -1228,6 +1230,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 className="selection-link-button"
                 data-left={linkX}
                 data-top={linkY}
+                style={{ left: linkX, top: linkY }}
                 title="Click to view linked location">
                 <LinkIcon />
               </button>
@@ -1294,6 +1297,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   className={`selection-toolbox-toggle ${showSelectionToolbox ? 'active' : ''}`}
                   data-left={BOX_SCREEN_RIGHT + 12}
                   data-top={BOX_SCREEN_CENTER_Y - 11}
+                  style={{ left: BOX_SCREEN_RIGHT + 12, top: BOX_SCREEN_CENTER_Y - 11 }}
                 >
                   {showSelectionToolbox ? <EyeOff size={12} /> : <Eye size={12} />}
                 </button>
@@ -1522,7 +1526,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                               avatarUrl={member.avatarUrl || collaborator?.avatarUrl}
                             />
                             {raisedHandUserIds.has(member.userId) && <span className="room-member-hand-badge" title="Hand raised">✋</span>}
-                            <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} />
+                            <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} style={{ backgroundColor: collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b') }} />
                             <div className="room-member-name">
                               <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>
                               <span>{isOnline ? 'Online' : 'Offline'}</span>

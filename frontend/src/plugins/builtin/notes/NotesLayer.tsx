@@ -38,6 +38,17 @@ const NotesLayer: React.FC = () => {
             data-background-color={isTransparent ? 'transparent' : note.noteBackgroundColor}
             data-font-size={(note.fontSize ?? 24) * zoom}
             data-rotation={note.rotation ?? 0}
+            style={{
+              left: center.x * zoom + panOffset.x,
+              top: center.y * zoom + panOffset.y,
+              width: width * zoom,
+              height: height * zoom,
+              padding: padding * zoom,
+              color: note.noteTextColor ?? note.color,
+              backgroundColor: isTransparent ? 'transparent' : note.noteBackgroundColor,
+              fontSize: (note.fontSize ?? 24) * zoom,
+              transform: `translate(-50%, -50%) rotate(${note.rotation ?? 0}deg)`,
+            }}
             className={`canvas-note ${isTransparent ? 'canvas-note-transparent' : ''} ${isSelected ? 'canvas-note-selected' : ''} notes-font-${(note.noteFontFamily ?? 'Arial').toLowerCase().replace(/[^a-z0-9]+/g, '-')} notes-align-${note.textAlign ?? 'left'}`}
             dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(note.noteHtml ?? '') }}
           />

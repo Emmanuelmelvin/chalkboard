@@ -120,7 +120,7 @@ const NotesEditor: React.FC = () => {
   };
 
   return (
-      <section className="plugin-floating-modal notes-editor notes-plugin-modal" data-left={position.x} data-top={position.y} role="dialog" aria-modal="true" aria-label="Notes editor">
+      <section className="plugin-floating-modal notes-editor notes-plugin-modal" data-left={position.x} data-top={position.y} style={{ left: position.x, top: position.y }} role="dialog" aria-modal="true" aria-label="Notes editor">
         <header className="plugin-floating-header notes-editor-header" onPointerDown={handleHeaderPointerDown}>
           <span className="insert-plugin-logo"><PluginIcon pluginId="chalkboard.notes" fallback="N" /></span>
           <div>
@@ -168,6 +168,11 @@ const NotesEditor: React.FC = () => {
           data-font-size={fontSize}
           data-text-color={textColor}
           data-background-color={backgroundTransparent ? 'transparent' : backgroundColor}
+          style={{
+            fontSize: Number(fontSize),
+            color: textColor,
+            backgroundColor: backgroundTransparent ? 'transparent' : backgroundColor,
+          }}
           onInput={syncEditor}
           onKeyDown={(event) => {
             event.stopPropagation();

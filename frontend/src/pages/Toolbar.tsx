@@ -131,6 +131,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   className="eraser-preview-rect"
                   data-width={Math.min(eraserWidth, 200)}
                   data-height={Math.min(eraserHeight, 60)}
+                  style={{ width: Math.min(eraserWidth, 200), height: Math.min(eraserHeight, 60) }}
                 />
               </div>
 

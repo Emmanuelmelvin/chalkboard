@@ -46,7 +46,7 @@ const MatrixGridField: React.FC<{ value: string; onChange: (value: string) => vo
           <button type="button" disabled={(matrix[0]?.length ?? 1) <= 1} onClick={() => update(matrix.map((row) => row.slice(0, -1)))}>− Column</button>
         </div>
       </div>
-      <div className="matrix-grid" data-columns={matrix[0]?.length ?? 1}>
+      <div className="matrix-grid" data-columns={matrix[0]?.length ?? 1} style={{ gridTemplateColumns: `repeat(${matrix[0]?.length ?? 1}, minmax(0, 1fr))` }}>
         {matrix.flatMap((row, rowIndex) => row.map((cell, columnIndex) => (
           <input
             key={`${rowIndex}-${columnIndex}`}
@@ -79,7 +79,7 @@ const StatisticsPreview: React.FC<{ values: Record<string, string>; summaryOnly:
           {rows.slice(0, 10).map((row, index) => {
             const value = Number(row.value);
             const height = Number.isFinite(value) ? Math.max(8, Math.abs(value) / max * 86) : 4;
-            return <div className="statistics-bar-item" key={`${row.label}-${index}`}><div className="statistics-bar" data-height={height} /><small>{row.label || index + 1}</small></div>;
+            return <div className="statistics-bar-item" key={`${row.label}-${index}`}><div className="statistics-bar" data-height={height} style={{ height }} /><small>{row.label || index + 1}</small></div>;
           })}
         </div>
       )}
@@ -289,6 +289,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
 
       data-left={position.x}
       data-top={position.y}
+      style={{ left: position.x, top: position.y }}
       role="dialog"
       aria-modal="true"
       aria-label={`${plugin.name} plugin`}

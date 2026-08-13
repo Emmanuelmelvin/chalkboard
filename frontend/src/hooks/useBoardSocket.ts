@@ -303,6 +303,7 @@ export function useBoardSocket(
           useLoggerStore.getState().notify(errorMessage, 'error', 5000);
           return;
         }
+        if (response.role) setCurrentRole(response.role);
         setOwnerVoiceConnected(response.ownerVoiceConnected === true);
         socket.emit('room:sync', { roomId });
       });

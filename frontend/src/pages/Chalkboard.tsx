@@ -727,6 +727,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     : ownerVoiceConnected;
   const canEdit = effectiveRole !== 'viewer';
   const canManageMembers = effectiveRole === 'owner';
+  const roleReady = Boolean(
+    roomQueryMembers?.length
+    || liveRoomMembers?.length
+    || currentRole !== 'viewer',
+  );
   const joinRequestsQuery = useJoinRequestsQuery(roomId, canManageMembers && roomDetailsOpen && roomAccessMode === 'approval_required');
   const resolveJoinRequestMutation = useResolveJoinRequestMutation();
   const joinRequests = joinRequestsQuery.data?.requests ?? [];
@@ -1147,7 +1152,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         <NotesLayer />
 
         <div className="board-actions-card board-utility-actions">
-          {canEdit && (
+          {roleReady && canEdit && (
             <div className="insert-shapes-trigger-wrap" ref={insertShapesWrapRef}>
               <button
                 onClick={() => setShowInsertShapes(prev => !prev)}
@@ -1211,7 +1216,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               </>
             );
           })()}
-          {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && !trimState.active && (() => {
+          {roleReady && canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && !trimState.active && (() => {
             const linkedLink = links.find(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
             if (!linkedLink) return null;
             const LINK_PADDING = 12;
@@ -1229,7 +1234,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             );
           })()}
 
-          {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && !trimState.active && (() => {
+          {roleReady && canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && !trimState.active && (() => {
             const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
             const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
             const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
@@ -1296,7 +1301,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             );
           })()}
 
-          {canEdit && (
+          {roleReady && canEdit && (
             <div className="board-actions-center">
               <Card className="board-actions-card">
                 <ActionSticks onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
@@ -1307,9 +1312,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
           <div className="board-header">
             <div className="board-header-tools">
-              {!canEdit && (
-                <div className="board-readonly-badge">Viewer · read only</div>
-              )}
               <div className="board-actions-card board-brand-menu">
                 <button type="button" className="board-brand" title="Chalkboard" aria-label="Chalkboard">
                   <ChalkboardLogo className="board-brand-logo" />
@@ -1604,7 +1606,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             <Button variant="icon" className="zoom-control-button zoom-reset-button" onClick={resetPanZoom} title="Reset Pan/Zoom"><Maximize2 size={12} /></Button>
           </div>
 
-          {canEdit && <Toolbar
+          {roleReady && canEdit && <Toolbar
             activeTool={activeTool}
             activeColor={activeColor}
             brushSize={brushSize}

@@ -66,8 +66,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             </button>
           </HoverCard.Trigger>
 
-          <HoverCard.Portal>
-            <HoverCard.Content className="chalk-settings-flyout" side="top" sideOffset={12} align="center">
+          <HoverCard.Content className="chalk-settings-flyout" side="top" sideOffset={12} align="center">
               <div className="settings-section">
                 <span className="settings-label">Color</span>
                 <ColorPicker
@@ -89,7 +88,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               </div>
               <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
             </HoverCard.Content>
-          </HoverCard.Portal>
         </HoverCard.Root>
 
         {/* Eraser settings — opens on hover while eraser is active */}
@@ -120,8 +118,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             </button>
           </HoverCard.Trigger>
 
-          <HoverCard.Portal>
-            <HoverCard.Content className="chalk-settings-flyout eraser-settings-flyout" side="top" sideOffset={12} align="center">
+          <HoverCard.Content className="chalk-settings-flyout eraser-settings-flyout" side="top" sideOffset={12} align="center">
               <div className="eraser-flyout-header">
                 <span className="eraser-flyout-icon">⬜</span>
                 <span className="eraser-flyout-title">Eraser Size</span>
@@ -190,7 +187,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               </div>
               <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
             </HoverCard.Content>
-          </HoverCard.Portal>
         </HoverCard.Root>
 
         <button

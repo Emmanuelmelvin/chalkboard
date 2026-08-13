@@ -57,17 +57,26 @@ export function drawBoardOnCanvas(
   // Rebuilding it from rotated strokes produces an axis-aligned bounding box
   // and rotating that box a second time makes the marquee drift out of alignment.
   const frameBox = transformBox;
+  // Snap a world-space coordinate to whole device pixels (accounting for pan,
+  // zoom, and DPR) so guide lines land exactly on physical pixels instead of
+  // aliasing into uneven, "cracked" dashes on high-DPR phones.
+  const snapDevice = (v: number) =>
+    Math.round((v * zoom + panOffset.x) * dpr) / (zoom * dpr) - panOffset.x;
+  const snapYS = (v: number) =>
+    Math.round((v * zoom + panOffset.y) * dpr) / (zoom * dpr) - panOffset.y;
   // Draw selection marquee
   if (selectionMarquee) {
     ctx.save();
     ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 2 / zoom;
     ctx.setLineDash([5 / zoom, 5 / zoom]);
+    const minX = snapDevice(selectionMarquee.minX);
+    const minY = snapYS(selectionMarquee.minY);
     ctx.strokeRect(
-      selectionMarquee.minX,
-      selectionMarquee.minY,
-      selectionMarquee.maxX - selectionMarquee.minX,
-      selectionMarquee.maxY - selectionMarquee.minY
+      minX,
+      minY,
+      snapDevice(selectionMarquee.maxX) - minX,
+      snapYS(selectionMarquee.maxY) - minY
     );
     ctx.restore();
   }
@@ -89,38 +98,37 @@ export function drawBoardOnCanvas(
     ctx.save();
     ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 2 / zoom;
-    ctx.strokeRect(
-      frameBox.minX,
-      frameBox.minY,
-      frameBox.maxX - frameBox.minX,
-      frameBox.maxY - frameBox.minY
-    );
+    const boxMinX = snapDevice(frameBox.minX);
+    const boxMinY = snapYS(frameBox.minY);
+    const boxMaxX = snapDevice(frameBox.maxX);
+    const boxMaxY = snapYS(frameBox.maxY);
+    ctx.strokeRect(boxMinX, boxMinY, boxMaxX - boxMinX, boxMaxY - boxMinY);
     // Resize Handles (TL, TR, BL, BR)
     ctx.fillStyle = '#fff';
     const hs = 6 / zoom;
 
     // TL
-    ctx.fillRect(frameBox.minX - hs, frameBox.minY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(frameBox.minX - hs, frameBox.minY - hs, hs * 2, hs * 2);
+    ctx.fillRect(boxMinX - hs, boxMinY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(boxMinX - hs, boxMinY - hs, hs * 2, hs * 2);
 
     // TR
-    ctx.fillRect(frameBox.maxX - hs, frameBox.minY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(frameBox.maxX - hs, frameBox.minY - hs, hs * 2, hs * 2);
+    ctx.fillRect(boxMaxX - hs, boxMinY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(boxMaxX - hs, boxMinY - hs, hs * 2, hs * 2);
 
     // BL
-    ctx.fillRect(frameBox.minX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(frameBox.minX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
+    ctx.fillRect(boxMinX - hs, boxMaxY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(boxMinX - hs, boxMaxY - hs, hs * 2, hs * 2);
 
     // BR
-    ctx.fillRect(frameBox.maxX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(frameBox.maxX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
+    ctx.fillRect(boxMaxX - hs, boxMaxY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(boxMaxX - hs, boxMaxY - hs, hs * 2, hs * 2);
 
     ctx.restore();
 
     // Draw rotate handle (circle with arrow below transform box)
     {
-      const centerX = boxCenterX;
-      const rotY = frameBox.maxY + 30 / zoom;
+      const centerX = snapDevice(boxCenterX);
+      const rotY = snapYS(frameBox.maxY + 30 / zoom);
       const rotRadius = 10 / zoom;
 
       ctx.save();

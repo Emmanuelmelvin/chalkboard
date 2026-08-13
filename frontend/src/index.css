@@ -4434,6 +4434,21 @@ html[data-theme='light'] .theme-toggle:focus-visible {
     justify-content: flex-end;
     gap: 6px;
   }
+
+  /* Mobile GPUs rasterize backdrop-filter at low quality, and blurring the
+     tiled noise/gradient slate behind these panels produces banding and
+     tile-seam artifacts ("cracked colors"). The panels are ~94-96% opaque,
+     so dropping the frost effect is visually negligible but removes the
+     artifacts entirely. */
+  .sel-bar,
+  .room-links-popover,
+  .chat-panel,
+  .insert-shapes-panel,
+  .selection-toolbox-toggle,
+  .chalk-settings-flyout {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 @media (max-width: 768px) {

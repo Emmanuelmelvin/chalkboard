@@ -1585,6 +1585,12 @@ body {
 }
 
 /* Action Stick Buttons (Undo, Redo, Clear) */
+.action-sticks {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
 .action-stick {
   display: flex;
   flex-direction: column;
@@ -1608,6 +1614,17 @@ body {
 
 .action-stick:active {
   background: rgba(255, 255, 255, 0.14);
+}
+
+.action-stick.action-stick-clear-arm,
+.action-stick.action-stick-clear-arm:hover {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.action-stick.action-stick-clear-arm:active {
+  background: rgba(239, 68, 68, 0.3);
+  color: #fff;
 }
 
 .action-stick span {
@@ -2872,18 +2889,11 @@ body {
    INSERT SHAPES MODAL
    ═══════════════════════════════════════════════════════ */
 
-.insert-shapes-overlay {
+.insert-shapes-popover {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.3);
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 40;
 }
 
 .insert-shapes-panel {
@@ -2891,11 +2901,11 @@ body {
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 0;
+  border-radius: 10px;
   padding: 14px;
   animation: selPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  max-width: 320px;
-  width: 90%;
+  width: 320px;
+  max-width: calc(100vw - 28px);
   pointer-events: auto;
 }
 
@@ -4404,11 +4414,6 @@ html[data-theme='light'] .theme-toggle:focus-visible {
 
   .hud-layer {
     padding: 14px;
-  }
-
-  .insert-shapes-fab {
-    right: 14px;
-    bottom: 78px;
   }
 
   .chat-widget {

@@ -15,13 +15,14 @@ import {
   Minimize2,
   Minus,
   Plus,
-  Shapes,
+  SquarePlus,
   Eye,
   EyeOff,
   Hand,
   Smile,
   Mic,
   MicOff,
+  WifiOff,
   Radio,
   RadioOff,
   Share2,
@@ -33,6 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import * as Avatar from '@radix-ui/react-avatar';
+import { getApiError, isPlanLimitError } from '@/api/client';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -281,7 +283,7 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
       return (
         <div className="voice-actions-group">
           <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
-            <button type="button" className="voice-action-btn" onClick={toggleMute} disabled={voiceDisabled} title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>{isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />}</button>
+            <button type="button" className="voice-action-btn" onClick={toggleMute} disabled={voiceDisabled} title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>{voiceDisabled ? <WifiOff size={14} /> : (isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />)}</button>
           </span>
           {!isOwner && <button type="button" className="voice-action-btn" onClick={removeUser} title="Leave voice"><LogOut size={14} /></button>}
         </div>
@@ -295,7 +297,7 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
       return (
         <div className="voice-actions-group">
           <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
-            <button type="button" className="voice-action-btn" onClick={removeUser} disabled={voiceDisabled} title="Remove from voice"><UserX size={14} /></button>
+            <button type="button" className="voice-action-btn" onClick={removeUser} disabled={voiceDisabled} title="Remove from voice">{voiceDisabled ? <WifiOff size={14} /> : <UserX size={14} />}</button>
           </span>
         </div>
       );
@@ -303,7 +305,7 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
     return (
       <div className="voice-actions-group">
         <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
-          <button type="button" className="voice-action-btn" onClick={inviteUser} disabled={voiceDisabled} title="Invite to voice"><UserPlus size={14} /></button>
+          <button type="button" className="voice-action-btn" onClick={inviteUser} disabled={voiceDisabled} title="Invite to voice">{voiceDisabled ? <WifiOff size={14} /> : <UserPlus size={14} />}</button>
         </span>
       </div>
     );
@@ -329,7 +331,7 @@ function RoomMemberVoiceControls(props: RoomMemberVoiceControlsProps) {
               (props.socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId: props.roomId, targetUserId: props.memberUserId }, (res: { ok?: boolean; error?: string }) => {
                 if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
               });
-            }}><UserPlus size={14} /></button>
+            }}>{disabledReason ? <WifiOff size={14} /> : <UserPlus size={14} />}</button>
           </span>
         </div>
       );
@@ -480,9 +482,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           } else {
             voiceSwappingRef.current = false;
           }
-        } catch {
+        } catch (error) {
           voiceSwappingRef.current = false;
-          useLoggerStore.getState().notify('Failed to join voice', 'error');
+          const apiError = getApiError(error);
+          useLoggerStore.getState().notify(
+            isPlanLimitError(apiError) ? apiError.message : 'Failed to join voice',
+            'error',
+            isPlanLimitError(apiError) ? 6000 : undefined,
+          );
         }
       };
       void connectVoice();
@@ -505,9 +512,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           } else {
             voiceSwappingRef.current = false;
           }
-        } catch {
+        } catch (error) {
           voiceSwappingRef.current = false;
-          useLoggerStore.getState().notify('Voice access could not be refreshed', 'error');
+          const apiError = getApiError(error);
+          useLoggerStore.getState().notify(
+            isPlanLimitError(apiError) ? apiError.message : 'Voice access could not be refreshed',
+            'error',
+            isPlanLimitError(apiError) ? 6000 : undefined,
+          );
         }
       };
       void refreshVoice();
@@ -569,6 +581,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const linksPanelRef = useRef<HTMLDivElement | null>(null);
   const roomInfoRef = useRef<HTMLDivElement | null>(null);
   const roomMembersRef = useRef<HTMLDivElement | null>(null);
+  const insertShapesWrapRef = useRef<HTMLDivElement | null>(null);
   const [roomInfoOpen, setRoomInfoOpen] = useState(false);
 
   useEffect(() => {
@@ -687,8 +700,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           setVoiceToken(res.token);
           setVoiceUrl(res.url);
         }
-      } catch {
-        if (!cancelled) useLoggerStore.getState().notify('Failed to connect room audio', 'error');
+      } catch (error) {
+        if (!cancelled) {
+          const apiError = getApiError(error);
+          useLoggerStore.getState().notify(
+            isPlanLimitError(apiError) ? apiError.message : 'Failed to connect room audio',
+            'error',
+            isPlanLimitError(apiError) ? 6000 : undefined,
+          );
+        }
       }
     };
     void connectVoiceForListening();
@@ -902,6 +922,22 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   }, [linksPanelOpen, setLinksPanelOpen]);
 
   useEffect(() => {
+    if (!showInsertShapes) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!insertShapesWrapRef.current?.contains(event.target as Node)) setShowInsertShapes(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowInsertShapes(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showInsertShapes, setShowInsertShapes]);
+
+  useEffect(() => {
     if (!roomInfoOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
       if (!roomInfoRef.current?.contains(event.target as Node)) setRoomInfoOpen(false);
@@ -1109,22 +1145,26 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           onPointerCancel={handlePointerUp} onWheel={handleWheel} />
         <NotesLayer />
 
-        {canEdit && showInsertShapes && (
-          <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
-            pluginManifests={pluginManifests}
-            onOpenPlugin={openPluginModal}
-            hasSelection={selectedStrokeIds.length > 0}
-            onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
-            initialTab={insertShapesTab} />
-        )}
-        <div className="board-utility-actions">
-          {canEdit && <button
-            onClick={() => setShowInsertShapes(prev => !prev)}
-            title="Insert Shape (Ctrl+1)"
-            className="insert-shapes-fab"
-          >
-            <Shapes size={18} />
-          </button>}
+        <div className="board-actions-card board-utility-actions">
+          {canEdit && (
+            <div className="insert-shapes-trigger-wrap" ref={insertShapesWrapRef}>
+              <button
+                onClick={() => setShowInsertShapes(prev => !prev)}
+                title="Insert Shape (Ctrl+1)"
+                className={`insert-shapes-fab${showInsertShapes ? ' active' : ''}`}
+              >
+                <SquarePlus size={18} />
+              </button>
+              {showInsertShapes && (
+                <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
+                  pluginManifests={pluginManifests}
+                  onOpenPlugin={openPluginModal}
+                  hasSelection={selectedStrokeIds.length > 0}
+                  onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
+                  initialTab={insertShapesTab} />
+              )}
+            </div>
+          )}
           <ChatPanel
             socket={socket}
             roomId={roomId}

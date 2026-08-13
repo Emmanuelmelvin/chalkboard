@@ -30,6 +30,7 @@ const PLAN_ERROR_MESSAGES: Record<string, string> = {
   room_limit_reached: 'You have reached the number of open rooms your plan allows. Close a room, or upgrade to open another.',
   plan_required: 'This feature is not part of your current plan.',
   seat_limit_reached: 'Your plan has no seats left. Remove a member or revoke a pending invite, or buy more seats.',
+  voice_minutes_exhausted: 'This room is out of voice minutes for the month. Upgrade to keep using room audio.',
 };
 
 /** True when a request failed because of a plan limit rather than a fault. */

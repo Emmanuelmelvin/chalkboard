@@ -72,7 +72,7 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
     return `${plugin.name} ${plugin.description}`.toLowerCase().includes(query);
   });
   return (
-    <div className="insert-shapes-overlay" onClick={onClose}>
+    <div className="insert-shapes-popover">
       <div className="insert-shapes-panel" onClick={(e) => e.stopPropagation()}>
         <div className="insert-shapes-header">
           <h3>Insert</h3>

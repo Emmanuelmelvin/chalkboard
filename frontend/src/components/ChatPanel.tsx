@@ -225,7 +225,7 @@ export default function ChatPanel({
       )}
       <button
         type="button"
-        className="chat-fab"
+        className={`chat-fab${open ? ' active' : ''}`}
         onClick={toggleOpen}
         aria-expanded={open}
         aria-label={open ? 'Close room chat' : 'Open room chat'}

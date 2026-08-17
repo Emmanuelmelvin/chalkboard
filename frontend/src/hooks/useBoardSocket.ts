@@ -366,7 +366,7 @@ export function useBoardSocket(
       setOnlineCount(0);
       previousUsersRef.current = null;
     };
-  }, [socket, roomId, userName, userId, password, userCursorColor, clientSessionId, setStrokes, setRedoStack, setLinks]);
+  }, [socket, roomId, userName, userId, password, userCursorColor, clientSessionId, setStrokes, setRedoStack, setLinks, setSelectedStrokeIds, setSelectionRotation, setTransformBox]);
 
   const clearChatNotifications = useCallback(() => setChatUnreadMentions(0), []);
 

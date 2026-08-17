@@ -317,9 +317,9 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
 }
 
 function RoomMemberVoiceControls(props: RoomMemberVoiceControlsProps) {
+  const room = useMaybeRoomContext();
   if (!props.voiceEnabled) return null;
 
-  const room = useMaybeRoomContext();
   if (!room) {
     const isMe = props.memberUserId === props.currentUserId;
     const isOwner = props.effectiveRole === 'owner';

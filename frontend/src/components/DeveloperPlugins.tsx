@@ -331,8 +331,8 @@ export default function DeveloperPlugins() {
   };
 
   // The initial fetch deliberately owns its loading state.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPlugins();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

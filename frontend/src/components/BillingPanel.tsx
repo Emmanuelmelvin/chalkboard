@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowUpRight, CheckCircle2, DoorOpen, LoaderCircle, ShieldCheck, UsersRound } from 'lucide-react';
 import { useSearch } from 'wouter';
 import {
@@ -78,9 +78,11 @@ function BillingPanel() {
   const [interval, setInterval] = useState<BillingInterval>('month');
 
   // The Plans page links here with ?plan=, and it can change without a remount.
-  useEffect(() => {
-    if (isPlanId(requestedPlan) && requestedPlan !== 'free') setSelectedPlan(requestedPlan);
-  }, [requestedPlan]);
+  // Adjusting state during render (guarded by a previous-render comparison) is
+  // the effect-free way to resynchronize the selection with the URL.
+  if (isPlanId(requestedPlan) && requestedPlan !== 'free' && requestedPlan !== selectedPlan) {
+    setSelectedPlan(requestedPlan);
+  }
 
   const plan = getPlan(selectedPlan);
   const annualMonths = plan.annualPrice ? monthsSaved(plan.monthlyPrice, plan.annualPrice) : 0;

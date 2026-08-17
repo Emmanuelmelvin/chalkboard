@@ -540,6 +540,15 @@ export interface SeatCheckoutResponse {
 
 export type FeedbackCategory = 'bug_report' | 'feature_request' | 'general';
 export type FeedbackStatus = 'new' | 'acknowledged' | 'resolved' | 'closed';
+export type FeedbackSentiment = 'positive' | 'neutral' | 'negative';
+
+/** Reporter profile plus the plan they were on when the feedback was read. */
+export interface FeedbackReporter {
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+  plan: string;
+}
 
 /** A product feedback submission with the reporter's profile joined in. */
 export interface FeedbackSubmission {
@@ -552,7 +561,8 @@ export interface FeedbackSubmission {
   decidedById: string | null;
   createdAt: string;
   decidedAt: string | null;
-  user: { displayName: string; email: string; avatarUrl: string | null };
+  sentiment: FeedbackSentiment;
+  user: FeedbackReporter;
 }
 
 export interface CreateFeedbackRequest {
@@ -596,12 +606,44 @@ export interface RoomSessionFeedbackRecord {
   note: string | null;
   createdAt: string;
   updatedAt: string;
+  sentiment: FeedbackSentiment;
   room: { slug: string; title: string };
-  user: { displayName: string; email: string; avatarUrl: string | null };
+  user: FeedbackReporter;
 }
 
 export interface ListRoomFeedbackResponse {
   feedback: RoomSessionFeedbackRecord[];
+}
+
+export interface FeedbackCategoryStats {
+  total: number;
+  positive: number;
+  neutral: number;
+  negative: number;
+}
+
+/** Aggregates backing the admin console's feedback KPI cards and charts. */
+export interface FeedbackStats {
+  windowDays: number;
+  submissions: {
+    total: number;
+    positive: number;
+    neutral: number;
+    negative: number;
+    positivePct: number;
+  };
+  roomRatings: {
+    count: number;
+    average: number | null;
+    distribution: Record<string, number>;
+  };
+  openCount: number;
+  volume: { date: string; count: number }[];
+  byCategory: Record<FeedbackCategory, FeedbackCategoryStats>;
+}
+
+export interface FeedbackStatsResponse {
+  stats: FeedbackStats;
 }
 
 export interface UpdateFeedbackStatusRequest {

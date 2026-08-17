@@ -7,7 +7,7 @@ import { addAdmin, beginAdminTwoFactorSetup, getAdminSession, listAdminPlugins, 
 import { getAdminMetrics, type AdminMetricsRange } from '@/api/adminMetrics';
 import { cancelSubscription, createPortalSession, getCheckoutStatus, startCheckout, startSeatCheckout } from '@/api/billing';
 import { acceptWorkspaceInvite, createWorkspaceInvite, getWorkspace, leaveWorkspace, removeWorkspaceMember, revokeWorkspaceInvite } from '@/api/workspace';
-import { createFeedback, listAdminFeedback, listAdminRoomFeedback, submitRoomSessionFeedback, updateFeedbackStatus } from '@/api/feedback';
+import { createFeedback, listAdminFeedback, listAdminFeedbackStats, listAdminRoomFeedback, submitRoomSessionFeedback, updateFeedbackStatus } from '@/api/feedback';
 import type { AddAdminRequest, AdminPluginReviewRequest, CreateFeedbackRequest, CreatePluginRequest, CreatePluginVersionRequest, CreateRoomRequest, GoogleSignInRequest, JoinRoomRequest, SeatCheckoutRequest, StartCheckoutRequest, SubmitRoomSessionFeedbackRequest, UpdateFeedbackStatusRequest } from '@/api/types';
 
 export function useCurrentUserQuery(enabled = true) {
@@ -382,6 +382,14 @@ export function useAdminRoomFeedbackQuery(enabled = true) {
   return useQuery({
     queryKey: apiKeys.admin.roomFeedback,
     queryFn: listAdminRoomFeedback,
+    enabled,
+  });
+}
+
+export function useAdminFeedbackStatsQuery(days: 7 | 30 | 90, enabled = true) {
+  return useQuery({
+    queryKey: apiKeys.admin.feedbackStats(days),
+    queryFn: () => listAdminFeedbackStats(days),
     enabled,
   });
 }

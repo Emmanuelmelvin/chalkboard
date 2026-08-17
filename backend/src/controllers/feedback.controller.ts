@@ -1,5 +1,6 @@
 import {
   createFeedbackSubmission,
+  getFeedbackStats,
   listFeedbackSubmissions,
   listRoomSessionFeedback,
   submitRoomSessionFeedback,
@@ -7,6 +8,7 @@ import {
 } from '@/services/feedback/feedback.service';
 import {
   createFeedbackSchema,
+  feedbackStatsQuerySchema,
   listFeedbackQuerySchema,
   roomSessionFeedbackSchema,
   updateFeedbackStatusSchema,
@@ -79,4 +81,17 @@ export async function listRoomFeedbackHandler(c: any) {
     throw new APIError('forbidden', 403);
   }
   return c.json({ feedback: await listRoomSessionFeedback(user.platformRole) });
+}
+
+export async function feedbackStatsHandler(c: any) {
+  const user = c.get('user');
+  if (!user) throw new APIError('unauthorized', 401);
+  if (user.platformRole !== 'admin' && user.platformRole !== 'super_admin') {
+    throw new APIError('forbidden', 403);
+  }
+  const query = feedbackStatsQuerySchema.parse(c.req.query());
+  // The validator only admits 7 / 30 / 90, so this cast is safe.
+  const stats = await getFeedbackStats(query.days as 7 | 30 | 90, user.platformRole);
+  if (!stats) throw new APIError('forbidden', 403);
+  return c.json({ stats });
 }

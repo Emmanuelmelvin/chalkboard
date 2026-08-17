@@ -2,16 +2,24 @@ import { useEffect, useState } from 'react';
 import { LoaderCircle, Star } from 'lucide-react';
 import {
   useAdminFeedbackQuery,
+  useAdminFeedbackStatsQuery,
   useAdminRoomFeedbackQuery,
   useUpdateFeedbackStatusMutation,
 } from '@/api/hooks';
 import { useLoggerStore } from '@/stores/loggerStore';
 import type { FeedbackCategory, FeedbackStatus, FeedbackSubmission, RoomSessionFeedbackRecord } from '@/api/types';
+import AdminFeedbackCharts, { SentimentBadge } from '@/admin/AdminFeedbackCharts';
 
 const CATEGORY_LABELS: Record<FeedbackCategory, string> = {
   bug_report: 'Bug',
   feature_request: 'Feature',
   general: 'General',
+};
+
+const PLAN_LABELS: Record<string, string> = {
+  free: 'Free',
+  pro: 'Pro',
+  team: 'Team',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -33,12 +41,26 @@ function formatDate(value: string) {
 }
 
 function Reporter({ submission }: { submission: FeedbackSubmission | RoomSessionFeedbackRecord }) {
-  const { displayName, email } = submission.user;
+  const { displayName, email, plan } = submission.user;
   return (
     <span className="admin-feedback-reporter" title={email}>
       {displayName}
+      {plan && <em className={`admin-feedback-plan is-${plan}`}>{PLAN_LABELS[plan] ?? plan}</em>}
     </span>
   );
+}
+
+function getCategoryFromUrl(): FeedbackCategory | '' {
+  const value = new URLSearchParams(window.location.search).get('category');
+  return value === 'bug_report' || value === 'feature_request' || value === 'general' ? value : '';
+}
+
+/** Keep ?category= in the URL so the filter survives reloads and back/forward. */
+function setCategoryInUrl(category: FeedbackCategory | '') {
+  const nextUrl = new URL(window.location.href);
+  if (category) nextUrl.searchParams.set('category', category);
+  else nextUrl.searchParams.delete('category');
+  window.history.pushState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
 }
 
 function SubmissionRow({
@@ -61,6 +83,7 @@ function SubmissionRow({
     <div className="admin-feedback-row">
       <div className="admin-feedback-row-head">
         <em className={`admin-status is-${submission.status}`}>{STATUS_LABELS[submission.status]}</em>
+        <SentimentBadge sentiment={submission.sentiment} />
         <span className={`admin-feedback-category is-${submission.category}`}>
           {CATEGORY_LABELS[submission.category]}
         </span>
@@ -85,9 +108,11 @@ function SubmissionRow({
 
 function AdminFeedback() {
   const [statusFilter, setStatusFilter] = useState('new');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<FeedbackCategory | ''>(() => getCategoryFromUrl());
+  const [days, setDays] = useState<7 | 30 | 90>(30);
   const submissionsQuery = useAdminFeedbackQuery(statusFilter || undefined, categoryFilter || undefined);
   const roomFeedbackQuery = useAdminRoomFeedbackQuery();
+  const statsQuery = useAdminFeedbackStatsQuery(days);
   const updateStatus = useUpdateFeedbackStatusMutation();
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -98,7 +123,23 @@ function AdminFeedback() {
     if (roomFeedbackQuery.error) {
       useLoggerStore.getState().notify('Room session feedback could not be loaded.', 'error', 4000);
     }
-  }, [submissionsQuery.error, roomFeedbackQuery.error]);
+    if (statsQuery.error) {
+      useLoggerStore.getState().notify('Feedback stats could not be loaded.', 'error', 4000);
+    }
+  }, [submissionsQuery.error, roomFeedbackQuery.error, statsQuery.error]);
+
+  // Keep the category filter in sync with the URL when the user navigates
+  // back or forward through the admin console's pushState history.
+  useEffect(() => {
+    const handlePopState = () => setCategoryFilter(getCategoryFromUrl());
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleCategoryChange = (category: FeedbackCategory | '') => {
+    setCategoryFilter(category);
+    setCategoryInUrl(category);
+  };
 
   const handleStatusChange = (id: string, status: Exclude<FeedbackStatus, 'new'>) => {
     setBusyId(id);
@@ -122,6 +163,14 @@ function AdminFeedback() {
 
   return (
     <section className="admin-feedback-workspace">
+      <AdminFeedbackCharts
+        stats={statsQuery.data?.stats}
+        loading={statsQuery.isLoading}
+        days={days}
+        onDaysChange={setDays}
+        categoryFilter={categoryFilter}
+        onCategoryFilter={handleCategoryChange}
+      />
       <div className="admin-panel">
         <div className="admin-panel-heading">
           <div>
@@ -135,7 +184,7 @@ function AdminFeedback() {
             <option value="closed">Closed</option>
             <option value="">All statuses</option>
           </select>
-          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+          <select value={categoryFilter} onChange={(event) => handleCategoryChange(event.target.value as FeedbackCategory | '')}>
             <option value="">All categories</option>
             <option value="bug_report">Bug</option>
             <option value="feature_request">Feature</option>
@@ -196,6 +245,7 @@ function AdminFeedback() {
                       />
                     ))}
                   </span>
+                  <SentimentBadge sentiment={item.sentiment} />
                   <strong className="admin-feedback-room">{item.room.title}</strong>
                   <Reporter submission={item} />
                   <time className="admin-feedback-date">{formatDate(item.updatedAt)}</time>

@@ -24,6 +24,7 @@ import { requireAdmin, requireSuperAdmin } from '@/services/auth/adminAuth.servi
 import { adminTwoFactorRateLimit } from '@/middlewares/rateLimit.middleware';
 import { sentryMetricsHandler } from '@/controllers/metrics.controller';
 import {
+  feedbackStatsHandler,
   listFeedbackHandler,
   listRoomFeedbackHandler,
   updateFeedbackStatusHandler,
@@ -68,5 +69,6 @@ adminRouter.get('/metrics', requireAdmin, sentryMetricsHandler);
 // session, like the plugin review routes above.
 adminRouter.use('/feedback/*', requireAdmin);
 adminRouter.get('/feedback', listFeedbackHandler);
+adminRouter.get('/feedback/stats', feedbackStatsHandler);
 adminRouter.get('/feedback/room', listRoomFeedbackHandler);
 adminRouter.patch('/feedback/:id', updateFeedbackStatusHandler);

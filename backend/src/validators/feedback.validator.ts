@@ -19,3 +19,9 @@ export const listFeedbackQuerySchema = z.object({
   status: z.enum(['new', 'acknowledged', 'resolved', 'closed']).optional(),
   category: z.enum(['bug_report', 'feature_request', 'general']).optional(),
 });
+
+export const feedbackStatsQuerySchema = z.object({
+  days: z.coerce.number().int().refine((value) => value === 7 || value === 30 || value === 90, {
+    message: 'days must be one of 7, 30, 90',
+  }).default(30),
+});

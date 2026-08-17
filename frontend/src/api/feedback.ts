@@ -2,6 +2,7 @@ import { apiRequest } from '@/api/client';
 import type {
   CreateFeedbackRequest,
   CreateFeedbackResponse,
+  FeedbackStatsResponse,
   ListFeedbackResponse,
   ListRoomFeedbackResponse,
   SubmitRoomSessionFeedbackRequest,
@@ -35,6 +36,13 @@ export function listAdminFeedback(status?: string, category?: string) {
 
 export function listAdminRoomFeedback() {
   return apiRequest<ListRoomFeedbackResponse>({ url: '/admin/feedback/room', method: 'GET' });
+}
+
+export function listAdminFeedbackStats(days: 7 | 30 | 90) {
+  return apiRequest<FeedbackStatsResponse>({
+    url: `/admin/feedback/stats?days=${days}`,
+    method: 'GET',
+  });
 }
 
 export function updateFeedbackStatus(id: string, input: UpdateFeedbackStatusRequest) {

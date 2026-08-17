@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowLeft,
   ArrowUpRight,
   AudioLines,
-  BookOpen,
   Bot,
   CheckCircle2,
   ChevronRight,
@@ -18,6 +16,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import { Link } from 'wouter';
+import PublicHeader from '@/components/PublicHeader';
 import '@/styles/Docs.css';
 
 const manifestExample = `{
@@ -161,17 +160,7 @@ function Docs() {
 
   return (
     <div className="docs-page">
-      <header className="docs-header">
-        <Link className="docs-brand" href="/">
-          <span className="home-brand-mark">C</span>
-          <span>Chalkboard</span>
-        </Link>
-        <div className="docs-header-actions">
-          <span className="docs-header-label"><BookOpen size={14} /> Plugin documentation</span>
-          <Link className="docs-back-link" href="/guide"><BookOpen size={14} /> User guide</Link>
-          <Link className="docs-back-link" href="/dashboard"><ArrowLeft size={15} /> Open dashboard</Link>
-        </div>
-      </header>
+      <PublicHeader activeRoute="docs" />
 
       <main className="docs-main">
         <section className="docs-hero" aria-labelledby="docs-title">

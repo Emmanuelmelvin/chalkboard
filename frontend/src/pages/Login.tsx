@@ -3,6 +3,7 @@ import { ArrowUpRight, ShieldCheck } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useAuthStore } from '@/stores/authStore';
 import { useGoogleConfigQuery, useGoogleSignInMutation } from '@/api/hooks';
+import PublicHeader from '@/components/PublicHeader';
 import '@/styles/PublicPages.css';
 
 interface GoogleCredentialResponse {
@@ -100,13 +101,7 @@ function Login() {
 
   return (
     <div className="auth-page">
-      <header className="auth-nav">
-        <a className="home-brand" href="/" aria-label="Chalkboard home">
-          <span className="home-brand-mark">C</span>
-          <span>Chalkboard</span>
-        </a>
-        <span className="auth-nav-meta">Private workspace</span>
-      </header>
+      <PublicHeader activeRoute="login" />
 
       <main className="auth-main">
         <section className="auth-intro" aria-labelledby="auth-heading">

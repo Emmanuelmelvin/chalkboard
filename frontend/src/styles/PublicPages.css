@@ -1,6 +1,12 @@
+:root,
 .home-page,
 .lobby-page,
-.lobby-simple-page {
+.lobby-simple-page,
+.plans-page,
+.guide-page,
+.docs-page,
+.auth-page,
+.support-page {
   --public-black: #090909;
   --public-black-soft: #111110;
   --public-ink: #191816;
@@ -106,6 +112,10 @@
 .home-nav-links a:hover,
 .home-nav-links a:focus-visible {
   color: var(--public-white);
+}
+
+.home-nav-links a.is-active {
+  color: var(--public-gold-bright) !important;
 }
 
 .home-nav-cta,
@@ -3126,9 +3136,14 @@ body.dashboard-active #root {
 }
 
 /* Light mode keeps the warm editorial palette while reversing the page surfaces. */
+html[data-theme='light'],
 html[data-theme='light'] .home-page,
 html[data-theme='light'] .lobby-page,
-html[data-theme='light'] .lobby-simple-page {
+html[data-theme='light'] .lobby-simple-page,
+html[data-theme='light'] .plans-page,
+html[data-theme='light'] .guide-page,
+html[data-theme='light'] .docs-page,
+html[data-theme='light'] .support-page {
   --public-black: #f6f3eb;
   --public-black-soft: #ece7dc;
   --public-ink: #292722;

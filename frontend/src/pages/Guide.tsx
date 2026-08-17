@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import {
-  ArrowLeft,
   ArrowUpRight,
   BookOpen,
   CheckCircle2,
@@ -19,6 +18,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Link } from 'wouter';
+import PublicHeader from '@/components/PublicHeader';
 import '@/styles/Guide.css';
 
 const accessModes = [
@@ -97,17 +97,7 @@ function Guide() {
 
   return (
     <div className="guide-page">
-      <header className="guide-header">
-        <Link className="guide-brand" href="/" aria-label="Chalkboard home">
-          <span className="guide-brand-mark">C</span>
-          <span>Chalkboard</span>
-        </Link>
-        <div className="guide-header-actions">
-          <span className="guide-header-label"><BookOpen size={14} /> User guide</span>
-          <Link className="guide-header-link" href="/docs"><ArrowUpRight size={14} /> Developer docs</Link>
-          <Link className="guide-header-link" href="/"><ArrowLeft size={14} /> Home</Link>
-        </div>
-      </header>
+      <PublicHeader activeRoute="guide" />
 
       <main className="guide-main">
         <section className="guide-hero" aria-labelledby="guide-title">

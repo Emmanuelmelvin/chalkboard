@@ -1,6 +1,5 @@
 import { Fragment, useEffect } from 'react';
 import {
-    ArrowLeft,
     ArrowUpRight,
     BadgeCheck,
     CheckCircle2,
@@ -15,6 +14,7 @@ import {
     WalletCards,
 } from 'lucide-react';
 import { Link } from 'wouter';
+import PublicHeader from '@/components/PublicHeader';
 import {
     comparisonGroups,
     developerPayoutThreshold,
@@ -115,17 +115,7 @@ function Plans() {
 
     return (
         <div className="plans-page">
-            <header className="plans-header">
-                <Link className="plans-brand" href="/" aria-label="Chalkboard home">
-                    <span className="plans-brand-mark">C</span>
-                    <span>Chalkboard</span>
-                </Link>
-                <div className="plans-header-actions">
-                    <span className="plans-header-label"><WalletCards size={14} /> Plans</span>
-                    <Link className="plans-header-link" href="/guide"><ArrowUpRight size={14} /> User guide</Link>
-                    <Link className="plans-header-link" href="/"><ArrowLeft size={14} /> Home</Link>
-                </div>
-            </header>
+            <PublicHeader activeRoute="plans" />
 
             <main className="plans-main">
                 <section className="plans-hero" aria-labelledby="plans-title">

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowUpRight, Heart, LoaderCircle } from 'lucide-react';
-import { Link } from 'wouter';
+import PublicHeader from '@/components/PublicHeader';
 import { apiRequest } from '@/api/client';
 import '@/styles/PublicPages.css';
 
@@ -72,12 +72,7 @@ function Support() {
 
   return (
     <div className="home-page support-page">
-      <header className="home-nav">
-        <Link className="home-brand" href="/" aria-label="Chalkboard home">
-          <span className="home-brand-mark">C</span>
-          <span>Chalkboard</span>
-        </Link>
-      </header>
+      <PublicHeader activeRoute="support" />
 
       <main className="support-main">
         <div className="support-card">

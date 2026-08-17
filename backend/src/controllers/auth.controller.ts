@@ -16,7 +16,8 @@ export async function googleAuth(c: any) {
   c.header('Cache-Control', 'no-store');
   try {
     const { idToken } = googleAuthSchema.parse(await c.req.json());
-    const user = await timed(metricNames.authLoginDuration, () => upsertGoogleUser(verifyGoogleIdToken(idToken)), { provider: 'google' });
+    const profile = await verifyGoogleIdToken(idToken);
+    const user = await timed(metricNames.authLoginDuration, () => upsertGoogleUser(profile), { provider: 'google' });
     setAuthSession(c, user.id);
     logger.info('Google auth completed', { userId: user.id, email: user.email });
     return c.json({ user: await toPublicUser(user) });

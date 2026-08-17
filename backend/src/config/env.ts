@@ -73,6 +73,10 @@ const envSchema = z.object({
   BACHS_API_BASE_URL: z.string().url().default('https://sandbox-api.bachs.io'),
   BACHS_API_KEY: z.string().default(''),
   BACHS_WEBHOOK_SECRET: z.string().default(''),
+  // Live Bachs keys for the beta support/donation checkout. Completely
+  // independent of the sandbox billing keys above.
+  BACHS_LIVE_API_BASE_URL: z.string().url().default('https://api.bachs.io'),
+  BACHS_LIVE_API_KEY: z.string().default(''),
   BACHS_WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().positive().default(300),
   BACHS_PRODUCT_PRO_MONTHLY: z.string().default(''),
   BACHS_PRODUCT_PRO_ANNUAL: z.string().default(''),

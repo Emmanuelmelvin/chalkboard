@@ -10,6 +10,8 @@ import Guide from '@/pages/Guide';
 import Lobby from '@/pages/Lobby';
 import Plans from '@/pages/Plans';
 import BillingReturn from '@/pages/BillingReturn';
+import Support from '@/pages/Support';
+import SupportThankYou from '@/pages/SupportThankYou';
 import InviteAccept from '@/pages/InviteAccept';
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
@@ -180,6 +182,14 @@ function App() {
             server does the email matching. */}
         <Route path="/invite/:token">
           <InviteAccept />
+        </Route>
+
+        {/* Public support / donation page — beta only */}
+        <Route path="/support/thank-you">
+          <SupportThankYou />
+        </Route>
+        <Route path="/support">
+          <Support />
         </Route>
 
         {/* Public landing page */}

@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUpRight,
   Check,
+  Heart,
   Layers3,
   Menu,
   MessageCircle,
@@ -185,6 +186,9 @@ function Home() {
               <a className="home-text-link" href="#capabilities">
                 See what is possible <ArrowDown size={16} strokeWidth={1.8} />
               </a>
+              <Link className="home-text-link home-support-link" href="/support">
+                Support Chalkboard <Heart size={15} strokeWidth={1.8} />
+              </Link>
             </div>
             <div className="home-hero-note">
               <span className="home-note-dot" />

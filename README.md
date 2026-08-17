@@ -113,6 +113,7 @@ chalkboard/
 ├── plugin-artifacts/           # Example uploadable plugin ZIPs and source packages
 ├── demo-video/                 # Demo GIF, source frames, and demo generation script
 ├── plugin_implementation.md    # Detailed plugin design and implementation notes
+├── LICENSE                     # Business Source License 1.1 for the core codebase
 ├── package.json                # Root TypeScript development dependency
 └── README.md
 ```
@@ -618,7 +619,9 @@ Change `PORT` for the backend and update the Vite proxy in `frontend/vite.config
 
 ## License
 
-No license file is currently included in this repository. Treat the project as all rights reserved unless the project owner adds a license or gives separate permission to use, modify, or redistribute it.
+The Chalkboard core (the `backend/` and `frontend/` applications and the repository root) is licensed under the [Business Source License 1.1](LICENSE). It is not an open-source license: you may copy, modify, and use the code in non-production settings, and you may make production use of it only as permitted by the Additional Use Grant. In particular, you may not offer the Licensed Work to third parties as a hosted or managed service in competition with Chalkboard's paid offering. Each version converts to the Apache License 2.0 four years after publication.
+
+The example plugin packages under [`plugin-artifacts/`](plugin-artifacts/) are licensed separately under the [MIT License](plugin-artifacts/LICENSE) to encourage community plugin development.
 
 ---
 

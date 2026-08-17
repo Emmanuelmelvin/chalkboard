@@ -16,6 +16,8 @@ import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
 import FeedbackWidget from '@/components/FeedbackWidget';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
+import { markSessionFeedbackPending } from '@/lib/sessionFeedback';
+import type { LeaveRoomOptions } from '@/types';
 import '@/styles/PublicPages.css';
 
 // Initialize a single socket client that can be activated on demand
@@ -93,9 +95,14 @@ function App() {
     setLocation(targetPath);
   };
 
-  const handleLeaveRoom = () => {
+  const handleLeaveRoom = (options?: LeaveRoomOptions) => {
     socket.disconnect();
     setRoomPassword(undefined);
+    if (options?.promptSessionFeedback) {
+      // We are leaving /room/:slug, so ask the dashboard about this session.
+      const slug = location.replace(/^\/room\//, '').split(/[?#]/)[0];
+      if (slug) markSessionFeedbackPending(slug);
+    }
     setLocation('/dashboard?tab=rooms');
   };
 

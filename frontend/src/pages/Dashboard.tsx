@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import { useLocation, useSearch } from 'wouter';
+import { getPlan } from '@/constants/plans';
 import { getRoomThemeLabel, roomThemes, type RoomTheme } from '@/constants/roomThemes';
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
@@ -108,6 +109,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const signOutMutation = useSignOutMutation();
+  const planLabel = profile.plan !== 'free' ? getPlan(profile.plan).name : null;
   const roomsQuery = useRoomsQuery();
   const createRoomMutation = useCreateRoomMutation();
   const deleteRoomMutation = useDeleteRoomMutation();
@@ -712,7 +714,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       <div className="dashboard-page">
       <aside className="dashboard-rail">
         <div className="dashboard-rail-top">
-          <button className="dashboard-brand" type="button" onClick={() => setLocation('/')} aria-label="Chalkboard home"><span className="home-brand-mark">C</span><span>Chalkboard</span></button>
+          <button className="dashboard-brand" type="button" onClick={() => setLocation('/')} aria-label="Chalkboard home"><span className="home-brand-mark">C</span><span>Chalkboard</span>{planLabel && <span className="dashboard-brand-plan">{planLabel}</span>}</button>
         </div>
         <div className="dashboard-rail-rule" />
         <p className="dashboard-rail-label">Workspace</p>

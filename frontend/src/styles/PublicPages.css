@@ -2285,6 +2285,22 @@ body.dashboard-active #root {
   letter-spacing: -0.02em;
 }
 
+.dashboard-brand-plan {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dashboard-muted, rgba(255, 255, 255, 0.6));
+  background: var(--dashboard-line, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--dashboard-line, rgba(255, 255, 255, 0.14));
+  white-space: nowrap;
+}
+
 .dashboard-mobile-menu-button,
 .dashboard-mobile-menu-backdrop,
 .dashboard-mobile-drawer {

@@ -35,7 +35,18 @@ export type EmailJobData = {
 const connection = { url: env.REDIS_URL };
 export const emailQueueName = 'chalkboard-emails';
 
-const emailQueue = new Queue(emailQueueName, { connection });
+/**
+ * The queue is constructed lazily: constructing a BullMQ Queue opens a Redis
+ * connection immediately, and modules that only import the pure helpers
+ * (template subjects, sender resolution) must not touch the network at import
+ * time — the test suites rely on that to stay hermetic.
+ */
+let emailQueue: Queue | null = null;
+
+function getEmailQueue(): Queue {
+  if (!emailQueue) emailQueue = new Queue(emailQueueName, { connection });
+  return emailQueue;
+}
 
 function senderFrom(template: EmailTemplate, variables: Record<string, unknown>) {
   // Internal notifications (plugin submitted to the admin inbox) present as
@@ -80,7 +91,7 @@ export function renderSubject(template: EmailTemplate, variables: Record<string,
 export async function enqueueEmail(job: EmailJobData): Promise<void> {
   if (!emailSendingEnabled) return;
   try {
-    await emailQueue.add('send', job, {
+    await getEmailQueue().add('send', job, {
       attempts: 3,
       backoff: { type: 'exponential', delay: 60_000 },
       removeOnComplete: 100,

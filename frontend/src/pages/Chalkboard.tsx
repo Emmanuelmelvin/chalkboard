@@ -40,8 +40,11 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import SessionFeedbackModal from '@/components/SessionFeedbackModal';
 import LinkIcon from '@/components/svg/LinkIcon';
 import ChalkboardLogo from '@/components/svg/ChalkboardLogo';
+import { getPlan } from '@/constants/plans';
+import { useAuthStore } from '@/stores/authStore';
 import { getCanvasCursor } from '@/components/svg/cursors';
 import {
   getCombinedBoundingBox,
@@ -352,12 +355,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const { profile } = useAuthStore();
+  const planLabel = profile && profile.plan !== 'free' ? getPlan(profile.plan).name : null;
 
   const {
     activeTool, setActiveTool,
     selectedStrokeIds, setSelectedStrokeIds,
     transformBox, setTransformBox,
     selectionRotation, setSelectionRotation,
+    clearSelection,
     activeColor, setActiveColor,
     brushSize, setBrushSize,
     brushIntensity, setBrushIntensity,
@@ -461,6 +467,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [raisedHands, setRaisedHands] = useState<RaisedHand[]>([]);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [activeReactions, setActiveReactions] = useState<ActiveReaction[]>([]);
+  const [exitFeedbackOpen, setExitFeedbackOpen] = useState(false);
   const voiceSwappingRef = useRef(false);
 
   useEffect(() => {
@@ -1326,6 +1333,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 <button type="button" className="board-brand" title="Chalkboard" aria-label="Chalkboard">
                   <ChalkboardLogo className="board-brand-logo" />
                   <span className="board-brand-name">Chalkboard</span>
+                  {planLabel && <span className="board-brand-plan">{planLabel}</span>}
                 </button>
                 <div className="room-info-trigger-wrap" ref={roomInfoRef}>
                   <button
@@ -1599,7 +1607,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               <button
                 type="button"
                 className="header-icon-btn header-exit-btn"
-                onClick={onLeaveRoom}
+                onClick={() => setExitFeedbackOpen(true)}
                 title="Exit room"
                 aria-label="Exit room"
               >
@@ -1681,6 +1689,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             danger
             onCancel={() => setKickPending(null)}
             onConfirm={kickMember}
+          />
+        )}
+        {exitFeedbackOpen && (
+          <SessionFeedbackModal
+            roomSlug={roomId}
+            onDone={() => {
+              setExitFeedbackOpen(false);
+              onLeaveRoom();
+            }}
           />
         )}
       </div>

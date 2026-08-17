@@ -535,3 +535,79 @@ export interface SeatCheckoutResponse {
   checkoutUrl: string;
   reference: string;
 }
+
+// --- Feedback --------------------------------------------------------------
+
+export type FeedbackCategory = 'bug_report' | 'feature_request' | 'general';
+export type FeedbackStatus = 'new' | 'acknowledged' | 'resolved' | 'closed';
+
+/** A product feedback submission with the reporter's profile joined in. */
+export interface FeedbackSubmission {
+  id: string;
+  userId: string;
+  category: FeedbackCategory;
+  message: string;
+  contactEmail: string | null;
+  status: FeedbackStatus;
+  decidedById: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  user: { displayName: string; email: string; avatarUrl: string | null };
+}
+
+export interface CreateFeedbackRequest {
+  category: FeedbackCategory;
+  message: string;
+  contactEmail?: string;
+}
+
+export interface CreateFeedbackResponse {
+  submission: Omit<FeedbackSubmission, 'user'>;
+}
+
+export interface SubmitRoomSessionFeedbackRequest {
+  rating: number;
+  note?: string;
+}
+
+export interface SubmitRoomSessionFeedbackResponse {
+  ok: true;
+  feedback: {
+    id: string;
+    roomId: string;
+    userId: string;
+    rating: number;
+    note: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
+export interface ListFeedbackResponse {
+  submissions: FeedbackSubmission[];
+}
+
+/** End-of-session room rating with room and reporter context, for admins. */
+export interface RoomSessionFeedbackRecord {
+  id: string;
+  roomId: string;
+  userId: string;
+  rating: number;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+  room: { slug: string; title: string };
+  user: { displayName: string; email: string; avatarUrl: string | null };
+}
+
+export interface ListRoomFeedbackResponse {
+  feedback: RoomSessionFeedbackRecord[];
+}
+
+export interface UpdateFeedbackStatusRequest {
+  status: Exclude<FeedbackStatus, 'new'>;
+}
+
+export interface UpdateFeedbackStatusResponse {
+  submission: FeedbackSubmission;
+}

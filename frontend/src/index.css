@@ -4298,6 +4298,90 @@ body {
   box-shadow: 0 0 0 3px rgba(227, 199, 126, 0.14);
 }
 
+/* Dashboard modals follow the light theme. The board variant is deliberately
+   left dark: rooms always force the dark theme regardless of the toggle. */
+html[data-theme='light'] .app-modal-overlay-dashboard {
+  background: rgba(41, 39, 34, 0.4);
+  backdrop-filter: blur(5px);
+}
+
+html[data-theme='light'] .app-modal-dashboard {
+  border-color: rgba(41, 39, 34, 0.2);
+  background: #fffdf7;
+  color: #292722;
+  box-shadow: 0 24px 70px rgba(64, 52, 31, 0.25);
+}
+
+html[data-theme='light'] .app-modal-dashboard h2 {
+  color: #292722;
+}
+
+html[data-theme='light'] .app-modal-dashboard p {
+  color: #6d685f;
+}
+
+html[data-theme='light'] .app-modal-dashboard .app-modal-field-error {
+  color: #b3261e;
+}
+
+html[data-theme='light'] .app-modal-dashboard .app-modal-close {
+  border-color: rgba(41, 39, 34, 0.2);
+  color: #6d685f;
+}
+
+html[data-theme='light'] .app-modal-dashboard .app-modal-close:hover,
+html[data-theme='light'] .app-modal-dashboard .app-modal-close:focus-visible {
+  border-color: #b0873e;
+  color: #946a26;
+}
+
+html[data-theme='light'] .app-modal-dashboard .app-modal-cancel {
+  border-color: rgba(41, 39, 34, 0.24);
+  background: transparent;
+  color: #6d685f;
+}
+
+html[data-theme='light'] .app-modal-dashboard .app-modal-confirm {
+  border-color: #c7a258 !important;
+  background: #c7a258;
+  color: #090909;
+}
+
+html[data-theme='light'] .app-modal-dashboard .app-modal-confirm.is-danger {
+  border-color: #b3261e !important;
+  background: #b3261e;
+  color: #fffdf7;
+}
+
+html[data-theme='light'] .app-modal-dashboard .app-modal-input-group label {
+  color: #6d685f;
+}
+
+html[data-theme='light'] .app-modal-dashboard .app-modal-input {
+  border-color: rgba(41, 39, 34, 0.24);
+  background: #f6f3eb;
+  color: #292722;
+}
+
+html[data-theme='light'] .app-modal-dashboard .app-modal-input:focus {
+  border-color: #b0873e;
+  box-shadow: 0 0 0 3px rgba(176, 135, 62, 0.16);
+}
+
+html[data-theme='light'] .feedback-modal .feedback-select option {
+  background: #fffdf7;
+  color: #292722;
+}
+
+html[data-theme='light'] .app-modal-dashboard .app-modal-confirm:disabled {
+  border-color: #c7a258 !important;
+  background: #c7a258;
+  color: #090909;
+  filter: grayscale(0.5);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .app-modal-confirm:disabled {
   cursor: not-allowed;
   filter: grayscale(0.5);
@@ -4607,5 +4691,148 @@ html[data-theme='light'] .theme-toggle:focus-visible {
   100% {
     opacity: 0;
     transform: translateY(-145px) scale(1.12);
+  }
+}
+
+/* --- Feedback widget ---------------------------------------------------- */
+
+.feedback-widget-launcher {
+  position: fixed;
+  right: 18px;
+  bottom: 22px;
+  z-index: 5000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(12px);
+  color: #f8fafc;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.feedback-widget-launcher:hover,
+.feedback-widget-launcher:focus-visible {
+  border-color: var(--brass-light);
+  background: var(--wood-dark);
+  color: var(--brass-light);
+  transform: translateY(-1px);
+}
+
+.feedback-widget-launcher:focus-visible {
+  outline: 2px solid var(--brass-light);
+  outline-offset: 3px;
+}
+
+html[data-theme='light'] .feedback-widget-launcher {
+  border-color: rgba(87, 73, 46, 0.24);
+  background: rgba(255, 253, 247, 0.94);
+  color: #51472f;
+  box-shadow: 0 8px 22px rgba(64, 52, 31, 0.14);
+}
+
+html[data-theme='light'] .feedback-widget-launcher:hover,
+html[data-theme='light'] .feedback-widget-launcher:focus-visible {
+  border-color: #9d7b3e;
+  background: #f4ead1;
+  color: #694f1e;
+}
+
+.feedback-modal {
+  width: min(460px, 100%);
+}
+
+.feedback-modal .app-modal-input-group {
+  margin-bottom: 16px;
+}
+
+.feedback-select {
+  min-height: 42px;
+  appearance: none;
+}
+
+.feedback-select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.feedback-textarea {
+  min-height: 110px;
+  padding: 10px 11px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* --- Session feedback modal --------------------------------------------- */
+
+.session-feedback-modal {
+  width: min(440px, 100%);
+}
+
+.session-feedback-stars {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 4px 0 20px;
+}
+
+.session-feedback-star {
+  display: inline-grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.32);
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.session-feedback-star:hover {
+  transform: translateY(-2px);
+}
+
+.session-feedback-star.is-selected {
+  border-color: rgba(251, 191, 36, 0.65);
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+
+.session-feedback-rating-label {
+  min-height: 16px;
+  margin: -12px 0 18px;
+  color: #94a3b8;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.session-feedback-note {
+  min-height: 78px;
+  padding: 10px 11px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+@media (max-width: 520px) {
+  .feedback-widget-launcher {
+    right: 12px;
+    bottom: 14px;
+    min-height: 32px;
+    padding: 0 9px;
   }
 }

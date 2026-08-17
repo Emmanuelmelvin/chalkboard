@@ -10,6 +10,7 @@ import {
   KeyRound,
   LoaderCircle,
   LogOut,
+  MessageSquareText,
   ShieldCheck,
   Sparkles,
   UsersRound,
@@ -35,13 +36,14 @@ import type { AdminPlugin, AdminSession, AdminUser } from "@/api/types";
 import AdminCommunity from "@/admin/AdminCommunity";
 import AdminMetrics from "@/admin/AdminMetrics";
 import AdminPluginSandbox from "@/admin/AdminPluginSandbox";
+import AdminFeedback from "@/admin/AdminFeedback";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import "./Admin.css";
 
-type AdminView = "plugins" | "community" | "admins" | "metrics";
+type AdminView = "plugins" | "community" | "admins" | "metrics" | "feedback";
 type TwoFactorMode = "loading" | "setup" | "verify" | "ready" | "forbidden";
 
-const adminViews: AdminView[] = ["plugins", "community", "admins", "metrics"];
+const adminViews: AdminView[] = ["plugins", "community", "admins", "metrics", "feedback"];
 
 function getAdminViewFromUrl(): AdminView {
   const value = new URLSearchParams(window.location.search).get("tab");
@@ -625,6 +627,13 @@ export default function AdminDashboard() {
           >
             <UsersRound size={16} /> Administrators
           </button>
+          <button
+            className={view === "feedback" ? "is-active" : ""}
+            type="button"
+            onClick={() => selectView("feedback")}
+          >
+            <MessageSquareText size={16} /> Feedback
+          </button>
         </nav>
         <div className="admin-sidebar-bottom">
           <div>
@@ -653,7 +662,9 @@ export default function AdminDashboard() {
                   ? "Community"
                   : view === "metrics"
                     ? "Metrics"
-                    : "Administrators"}
+                    : view === "feedback"
+                      ? "Feedback"
+                      : "Administrators"}
             </p>
             <h1>
               {view === "plugins"
@@ -662,7 +673,9 @@ export default function AdminDashboard() {
                   ? "The developer pool."
                   : view === "metrics"
                     ? "What the product is doing."
-                    : "Protect the people who run it."}
+                    : view === "feedback"
+                      ? "Hear what users think."
+                      : "Protect the people who run it."}
             </h1>
           </div>
           <div className="admin-header-user">
@@ -684,6 +697,8 @@ export default function AdminDashboard() {
           <AdminCommunity />
         ) : view === "metrics" ? (
           <AdminMetrics />
+        ) : view === "feedback" ? (
+          <AdminFeedback />
         ) : view === "admins" ? (
           <section className="admin-admin-workspace">
             <div className="admin-panel">

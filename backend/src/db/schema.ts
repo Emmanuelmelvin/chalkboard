@@ -39,6 +39,8 @@ export const billingAuditAction = pgEnum('billing_audit_action', [
   'cancel_subscription', 'refund', 'resync_subscription',
 ]);
 export const payoutStatus = pgEnum('payout_status', ['pending', 'paid', 'failed']);
+export const feedbackCategory = pgEnum('feedback_category', ['bug_report', 'feature_request', 'general']);
+export const feedbackStatus = pgEnum('feedback_status', ['new', 'acknowledged', 'resolved', 'closed']);
 
 
 export const users = pgTable('users', {
@@ -461,5 +463,43 @@ export const seatAddOns = pgTable('seat_add_ons', {
 }, (table) => ({
   userIdx: index('seat_add_ons_user_idx').on(table.userId),
   expiryIdx: index('seat_add_ons_expiry_idx').on(table.cancelAtPeriodEnd, table.currentPeriodEnd),
+}));
+
+/**
+ * In-app product feedback: bug reports, feature requests, and general
+ * messages submitted by signed-in users. Reviewed and triaged by admins
+ * through the admin console.
+ */
+export const feedbackSubmissions = pgTable('feedback_submissions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  category: feedbackCategory('category').default('general').notNull(),
+  message: text('message').notNull(),
+  contactEmail: text('contact_email'),
+  status: feedbackStatus('status').default('new').notNull(),
+  decidedById: uuid('decided_by_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+}, (table) => ({
+  statusIdx: index('feedback_submissions_status_idx').on(table.status),
+  userIdx: index('feedback_submissions_user_idx').on(table.userId),
+}));
+
+/**
+ * End-of-session room feedback: a 1-5 star rating with an optional short
+ * note, one row per user per room. Leaving the same room again updates the
+ * existing row instead of creating another.
+ */
+export const roomSessionFeedback = pgTable('room_session_feedback', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  roomId: uuid('room_id').notNull().references(() => rooms.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  rating: integer('rating').notNull(),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  uniq: uniqueIndex('room_session_feedback_room_user_idx').on(table.roomId, table.userId),
+  roomIdx: index('room_session_feedback_room_idx').on(table.roomId),
 }));
 

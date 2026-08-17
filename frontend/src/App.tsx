@@ -13,6 +13,7 @@ import BillingReturn from '@/pages/BillingReturn';
 import InviteAccept from '@/pages/InviteAccept';
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
+import FeedbackWidget from '@/components/FeedbackWidget';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
 import '@/styles/PublicPages.css';
@@ -69,7 +70,7 @@ function RequireAuth({ children }: { children: (profile: UserProfile) => ReactNo
 
 function App() {
   const [location, setLocation] = useLocation();
-  const { hydrate } = useAuthStore();
+  const { hydrate, status } = useAuthStore();
   const [roomPassword, setRoomPassword] = useState<string | undefined>();
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const isRoomRoute = location.startsWith('/room/');
@@ -101,6 +102,7 @@ function App() {
   return (
     <>
       {!isRoomRoute && <ThemeToggle theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />}
+      {!isRoomRoute && status === 'authenticated' && <FeedbackWidget />}
       <Switch>
         {/* Dynamic room route */}
         <Route path="/room/:roomId">

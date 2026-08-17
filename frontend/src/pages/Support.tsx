@@ -4,9 +4,18 @@ import { Link } from 'wouter';
 import { apiRequest } from '@/api/client';
 import '@/styles/PublicPages.css';
 
-const PRESETS = [5, 10, 25, 50];
 const CURRENCIES = ['USD', 'NGN'] as const;
 type Currency = typeof CURRENCIES[number];
+
+const PRESETS: Record<Currency, number[]> = {
+  USD: [5, 10, 25, 50],
+  NGN: [2000, 5000, 10000, 25000],
+};
+
+const LIMITS: Record<Currency, { min: number; max: number }> = {
+  USD: { min: 1, max: 10000 },
+  NGN: { min: 100, max: 10000000 },
+};
 
 const CURRENCY_SYMBOLS: Record<Currency, string> = {
   USD: '$',
@@ -22,10 +31,17 @@ function Support() {
   // Check for cancelled param
   const cancelled = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('cancelled');
 
+  const handleCurrencyChange = (newCurrency: Currency) => {
+    setCurrency(newCurrency);
+    setAmount('');
+    setError('');
+  };
+
   const handleSubmit = async () => {
     const numAmount = Number(amount);
-    if (!numAmount || numAmount < 1 || numAmount > 10000) {
-      setError('Please enter an amount between 1 and 10,000.');
+    const limit = LIMITS[currency];
+    if (!numAmount || numAmount < limit.min || numAmount > limit.max) {
+      setError(`Please enter an amount between ${limit.min.toLocaleString()} and ${limit.max.toLocaleString()} ${currency}.`);
       return;
     }
 
@@ -38,9 +54,13 @@ function Support() {
         method: 'POST',
         data: { amount: numAmount, currency },
       });
-      window.location.href = data.checkoutUrl;
+      if (data?.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        throw new Error('No checkout URL received.');
+      }
     } catch (err: any) {
-      setError(err?.message || 'Something went wrong. Please try again.');
+      setError(err?.message || 'Unable to create checkout session. Please try again.');
       setLoading(false);
     }
   };
@@ -80,7 +100,7 @@ function Support() {
                 key={c}
                 type="button"
                 className={`support-currency-btn${currency === c ? ' is-active' : ''}`}
-                onClick={() => setCurrency(c)}
+                onClick={() => handleCurrencyChange(c)}
               >
                 {CURRENCY_SYMBOLS[c]} {c}
               </button>
@@ -88,14 +108,14 @@ function Support() {
           </div>
 
           <div className="support-presets">
-            {PRESETS.map((p) => (
+            {PRESETS[currency].map((p) => (
               <button
                 key={p}
                 type="button"
                 className={`support-preset${amount === String(p) ? ' is-active' : ''}`}
                 onClick={() => selectPreset(p)}
               >
-                {CURRENCY_SYMBOLS[currency]}{p}
+                {CURRENCY_SYMBOLS[currency]}{p.toLocaleString()}
               </button>
             ))}
           </div>
@@ -106,10 +126,10 @@ function Support() {
               id="support-amount"
               className="support-input"
               type="number"
-              min="1"
-              max="10000"
+              min={LIMITS[currency].min}
+              max={LIMITS[currency].max}
               step="any"
-              placeholder="Enter amount"
+              placeholder={`Enter amount (${LIMITS[currency].min} - ${LIMITS[currency].max.toLocaleString()})`}
               value={amount}
               onChange={(e) => { setAmount(e.target.value); setError(''); }}
               onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit(); }}

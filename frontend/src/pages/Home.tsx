@@ -183,12 +183,14 @@ function Home() {
               <button className="home-button home-button-gold" type="button" onClick={() => setLocation('/dashboard?tab=rooms')}>
                 Start creating <ArrowUpRight size={18} strokeWidth={1.8} />
               </button>
-              <a className="home-text-link" href="#capabilities">
-                See what is possible <ArrowDown size={16} strokeWidth={1.8} />
-              </a>
-              <Link className="home-text-link home-support-link" href="/support">
-                Support Chalkboard <Heart size={15} strokeWidth={1.8} />
-              </Link>
+              <div className="home-hero-links">
+                <a className="home-text-link" href="#capabilities">
+                  See what is possible <ArrowDown size={16} strokeWidth={1.8} />
+                </a>
+                <Link className="home-text-link home-support-link" href="/support">
+                  Support Chalkboard <Heart size={14} strokeWidth={1.8} />
+                </Link>
+              </div>
             </div>
             <div className="home-hero-note">
               <span className="home-note-dot" />

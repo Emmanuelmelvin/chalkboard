@@ -1,0 +1,5 @@
+# Railpack static-site config for Aeroplane deploys.
+# Serves the Vite build output with SPA fallback so client routes like
+# /room/<code> work on a hard refresh.
+root: dist
+index_fallback: true

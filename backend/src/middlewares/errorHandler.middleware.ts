@@ -23,7 +23,22 @@ export function errorHandler(error: Error, c: Context) {
     return c.json({ error: error.message }, error.status);
   }
 
-  logger.error(`Unhandled request error: ${error.message}`, { stack: error.stack, path: c.req.path });
+  logger.error(`Unhandled request error: ${error.message}`, {
+    stack: error.stack,
+    path: c.req.path,
+    method: c.req.method,
+    cause: errorChain(error),
+  });
   captureException(error, { path: c.req.path, method: c.req.method });
   return c.json({ error: 'internal_server_error' }, 500);
+}
+
+function errorChain(error: Error): string | undefined {
+  const parts: string[] = [];
+  let current: unknown = error;
+  while (current instanceof Error && parts.length < 5) {
+    parts.push(current.message);
+    current = current.cause as Error;
+  }
+  return parts.length > 1 ? parts.join(' | caused by: ') : undefined;
 }

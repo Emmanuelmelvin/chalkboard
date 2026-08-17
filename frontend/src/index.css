@@ -829,6 +829,22 @@ body {
   white-space: nowrap;
 }
 
+.board-brand-plan {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(245, 232, 200, 0.65);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  white-space: nowrap;
+}
+
 .room-info-trigger-wrap {
   position: relative;
   display: flex;
@@ -4373,6 +4389,26 @@ html[data-theme='light'] .feedback-modal .feedback-select option {
   color: #292722;
 }
 
+html[data-theme='light'] .session-feedback-star {
+  border-color: rgba(41, 39, 34, 0.2);
+  background: rgba(41, 39, 34, 0.05);
+  color: rgba(41, 39, 34, 0.3);
+}
+
+html[data-theme='light'] .session-feedback-star.is-selected {
+  border-color: #b0873e;
+  background: rgba(176, 135, 62, 0.12);
+  color: #946a26;
+}
+
+html[data-theme='light'] .session-feedback-rating-label {
+  color: #6d685f;
+}
+
+html[data-theme='light'] .session-feedback-opt-out {
+  color: #6d685f;
+}
+
 html[data-theme='light'] .app-modal-dashboard .app-modal-confirm:disabled {
   border-color: #c7a258 !important;
   background: #c7a258;
@@ -4826,6 +4862,28 @@ html[data-theme='light'] .feedback-widget-launcher:focus-visible {
   padding: 10px 11px;
   resize: vertical;
   line-height: 1.5;
+}
+
+.session-feedback-opt-out {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 18px;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.session-feedback-opt-out input {
+  width: 15px;
+  height: 15px;
+  accent-color: #fbbf24;
+  cursor: pointer;
+}
+
+html[data-theme='light'] .session-feedback-opt-out input {
+  accent-color: #b0873e;
 }
 
 @media (max-width: 520px) {

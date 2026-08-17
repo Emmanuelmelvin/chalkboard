@@ -40,7 +40,6 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
-import SessionFeedbackModal from '@/components/SessionFeedbackModal';
 import LinkIcon from '@/components/svg/LinkIcon';
 import ChalkboardLogo from '@/components/svg/ChalkboardLogo';
 import { getPlan } from '@/constants/plans';
@@ -467,7 +466,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [raisedHands, setRaisedHands] = useState<RaisedHand[]>([]);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [activeReactions, setActiveReactions] = useState<ActiveReaction[]>([]);
-  const [exitFeedbackOpen, setExitFeedbackOpen] = useState(false);
   const voiceSwappingRef = useRef(false);
 
   useEffect(() => {
@@ -1607,7 +1605,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               <button
                 type="button"
                 className="header-icon-btn header-exit-btn"
-                onClick={() => setExitFeedbackOpen(true)}
+                onClick={() => onLeaveRoom({ promptSessionFeedback: true })}
                 title="Exit room"
                 aria-label="Exit room"
               >
@@ -1689,15 +1687,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             danger
             onCancel={() => setKickPending(null)}
             onConfirm={kickMember}
-          />
-        )}
-        {exitFeedbackOpen && (
-          <SessionFeedbackModal
-            roomSlug={roomId}
-            onDone={() => {
-              setExitFeedbackOpen(false);
-              onLeaveRoom();
-            }}
           />
         )}
       </div>

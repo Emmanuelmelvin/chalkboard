@@ -33,6 +33,8 @@ import { getRoomThemeLabel, roomThemes, type RoomTheme } from '@/constants/roomT
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import RoomMembersModal from '@/components/RoomMembersModal';
+import SessionFeedbackModal from '@/components/SessionFeedbackModal';
+import { consumePendingSessionFeedback, hasRatedRoom, isSessionFeedbackOptedOut } from '@/lib/sessionFeedback';
 import DeveloperPlugins from '@/components/DeveloperPlugins';
 import BillingPanel from '@/components/BillingPanel';
 import WorkspacePanel from '@/components/WorkspacePanel';
@@ -137,6 +139,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const activeTab = getTab(search, developerMode);
   const firstName = profile.displayName.trim().split(/\s+/)[0] || 'friend';
   const openRooms = useMemo(() => rooms.filter((room) => room.status === 'open'), [rooms]);
+  const [pendingFeedback, setPendingFeedback] = useState<{ slug: string } | null>(null);
   // The Team tab exists only for the owner of a Team-plan workspace. Members
   // are seated on the same plan, but the workspace admin surface is the
   // owner's alone, and a plan that is not Team has no workspace at all.
@@ -169,6 +172,18 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       document.documentElement.classList.remove('dashboard-active');
       document.body.classList.remove('dashboard-active');
     };
+  }, []);
+
+  // Session feedback: ask about the room the user just left, once per room,
+  // unless they opted out entirely or already rated it.
+  useEffect(() => {
+    const slug = consumePendingSessionFeedback();
+    if (!slug) return;
+    if (isSessionFeedbackOptedOut() || hasRatedRoom(slug)) return;
+    // Mount-time one-shot read of the pending flag; intentional, not a
+    // synchronisation race.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingFeedback({ slug });
   }, []);
 
   useEffect(() => {
@@ -872,6 +887,13 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
             </div>
           )}
         </ConfirmModal>
+      )}
+      {pendingFeedback && (
+        <SessionFeedbackModal
+          roomSlug={pendingFeedback.slug}
+          roomTitle={rooms.find((room) => room.slug === pendingFeedback.slug)?.title}
+          onDone={() => setPendingFeedback(null)}
+        />
       )}
     </>
   );

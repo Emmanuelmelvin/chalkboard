@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
-import type { Point, Stroke } from '@/types';
+import type {
+  Point,
+  Stroke
+} from '@/types';
 
 export type PluginPermission =
   | 'board:read'

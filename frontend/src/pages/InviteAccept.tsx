@@ -1,6 +1,18 @@
-import { useEffect, useState } from 'react';
-import { useLocation, useParams } from 'wouter';
-import { Clock, LoaderCircle, Mail, UsersRound, XCircle } from 'lucide-react';
+import {
+  useEffect,
+  useState
+} from 'react';
+import {
+  useLocation,
+  useParams
+} from 'wouter';
+import {
+  Clock,
+  LoaderCircle,
+  Mail,
+  UsersRound,
+  XCircle
+} from 'lucide-react';
 import { useAcceptWorkspaceInviteMutation } from '@/api/hooks';
 import { getApiError } from '@/api/client';
 import { getWorkspaceInvite } from '@/api/workspace';

@@ -14,12 +14,30 @@
  * an active user gesture.
  */
 
-import { getBoard, type BoardState } from '@/stores/boardStore';
-import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, viewportToCanvas } from '@/lib/zoom';
+import {
+    getBoard,
+    type BoardState
+} from '@/stores/boardStore';
+import {
+    DEFAULT_ZOOM,
+    MAX_ZOOM,
+    MIN_ZOOM,
+    viewportToCanvas
+} from '@/lib/zoom';
 import { useLinksStore } from '@/stores/linksStore';
-import { getCombinedBoundingBox, getSelectionBoundingBox } from '@/lib/geometry';
-import { nestStrokeGroup, restorePreviousStrokeGroup } from '@/lib/grouping';
-import { rotateStrokesTo, transformStrokes, clipStrokeToRect } from '@/lib/strokes';
+import {
+    getCombinedBoundingBox,
+    getSelectionBoundingBox
+} from '@/lib/geometry';
+import {
+    nestStrokeGroup,
+    restorePreviousStrokeGroup
+} from '@/lib/grouping';
+import {
+    rotateStrokesTo,
+    transformStrokes,
+    clipStrokeToRect
+} from '@/lib/strokes';
 import { generateShapeStrokes } from '@/utils/shapes';
 import type { Socket } from 'socket.io-client';
 import type { Stroke, ShapeType, Point, SavedLink } from '@/types';

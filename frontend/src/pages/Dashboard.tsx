@@ -28,21 +28,41 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
-import { useLocation, useSearch } from 'wouter';
+import {
+  useLocation,
+  useSearch
+} from 'wouter';
 import { getPlan } from '@/constants/plans';
-import { getRoomThemeLabel, roomThemes, type RoomTheme } from '@/constants/roomThemes';
+import {
+  getRoomThemeLabel,
+  roomThemes,
+  type RoomTheme
+} from '@/constants/roomThemes';
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import RoomMembersModal from '@/components/RoomMembersModal';
 import SessionFeedbackModal from '@/components/SessionFeedbackModal';
-import { consumePendingSessionFeedback, hasRatedRoom, isSessionFeedbackOptedOut } from '@/lib/sessionFeedback';
+import {
+  consumePendingSessionFeedback,
+  hasRatedRoom,
+  isSessionFeedbackOptedOut
+} from '@/lib/sessionFeedback';
 import DeveloperPlugins from '@/components/DeveloperPlugins';
 import BillingPanel from '@/components/BillingPanel';
 import WorkspacePanel from '@/components/WorkspacePanel';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import type { UserProfile } from '@/stores/authStore';
-import { useCreateRoomMutation, useDeleteRoomMutation, useResetRoomPasswordMutation, useRoomsQuery, useSignOutMutation } from '@/api/hooks';
-import type { RoomAccessMode, RoomSummary } from '@/api/types';
+import {
+  useCreateRoomMutation,
+  useDeleteRoomMutation,
+  useResetRoomPasswordMutation,
+  useRoomsQuery,
+  useSignOutMutation
+} from '@/api/hooks';
+import type {
+  RoomAccessMode,
+  RoomSummary
+} from '@/api/types';
 import '@/styles/PublicPages.css';
 
 type DashboardTab = 'overview' | 'rooms' | 'toolkit' | 'developer' | 'billing' | 'team' | 'profile';
@@ -411,21 +431,21 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                   </button>
                 )}
               </div>
-                {room.accessMode === 'password_protected' && !room.password && roomRole(room) === 'owner' && (
-                  <div className="dashboard-room-password-recovery">
-                    <span>Password unavailable for this older room.</span>
-                    <button
-                      className="dashboard-room-copy-button"
-                      type="button"
-                      onClick={() => { void regenerateRoomPassword(room.slug); }}
-                      disabled={resettingPasswordSlug === room.slug}
-                      title="Generate a new room password"
-                    >
-                      <RefreshCw size={12} className={resettingPasswordSlug === room.slug ? 'is-spinning' : undefined} />
-                      <span>{resettingPasswordSlug === room.slug ? 'Generating' : 'Generate password'}</span>
-                    </button>
-                  </div>
-                )}
+              {room.accessMode === 'password_protected' && !room.password && roomRole(room) === 'owner' && (
+                <div className="dashboard-room-password-recovery">
+                  <span>Password unavailable for this older room.</span>
+                  <button
+                    className="dashboard-room-copy-button"
+                    type="button"
+                    onClick={() => { void regenerateRoomPassword(room.slug); }}
+                    disabled={resettingPasswordSlug === room.slug}
+                    title="Generate a new room password"
+                  >
+                    <RefreshCw size={12} className={resettingPasswordSlug === room.slug ? 'is-spinning' : undefined} />
+                    <span>{resettingPasswordSlug === room.slug ? 'Generating' : 'Generate password'}</span>
+                  </button>
+                </div>
+              )}
               {room.accessMode === 'password_protected' && !room.password && roomRole(room) !== 'owner' && <span className="dashboard-room-password-status">Password protected</span>}
               <div className="dashboard-room-attendance" aria-label="Room attendance summary">
                 <div><span>Members</span><strong>{room.members.length}</strong></div>
@@ -712,104 +732,104 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   return (
     <>
       <div className="dashboard-page">
-      <aside className="dashboard-rail">
-        <div className="dashboard-rail-top">
-          <button className="dashboard-brand" type="button" onClick={() => setLocation('/')} aria-label="Chalkboard home"><span className="home-brand-mark">C</span><span>Chalkboard</span>{planLabel && <span className="dashboard-brand-plan">{planLabel}</span>}</button>
-        </div>
-        <div className="dashboard-rail-rule" />
-        <p className="dashboard-rail-label">Workspace</p>
-        <nav className="dashboard-tabs" aria-label="Dashboard sections">
-          {visibleTabItems.map(({ id, label, icon: Icon }) => (
-            <button className={`dashboard-tab${activeTab === id ? ' is-active' : ''}`} type="button" key={id} onClick={() => selectTab(id)} aria-current={activeTab === id ? 'page' : undefined}>
-              <Icon size={17} strokeWidth={activeTab === id ? 1.9 : 1.5} /><span>{label}</span>{id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
-            </button>
-          ))}
-          {developerMode && <button className="dashboard-tab dashboard-tab-external" type="button" onClick={() => setLocation('/docs')}><BookOpen size={17} strokeWidth={1.5} /><span>Go to docs</span><ArrowUpRight size={13} strokeWidth={1.7} /></button>}
-        </nav>
-        <div className="dashboard-rail-bottom">
-          <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
-          {profile.platformRole !== 'user' && <button className="dashboard-help" type="button" onClick={() => { window.location.href = '/admin'; }}><ShieldCheck size={15} /> Open admin console</button>}
-          <button className="dashboard-help" type="button" onClick={() => setLocation('/guide')}><CircleHelp size={15} /> Read the user guide</button>
-          <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
-        </div>
-      </aside>
-      <main className="dashboard-main">
-        <header className="dashboard-header">
-          <div><p className="dashboard-header-meta">Chalkboard / {tabTitle}</p><h1>{activeTab === 'overview' ? `Good to see you, ${firstName}.` : tabTitle}</h1></div>
-          <div className="dashboard-header-actions">
-            <button className="dashboard-header-room-button" type="button" onClick={() => selectTab('rooms')}><Plus size={15} /> New room</button>
-            <button
-              className="dashboard-mobile-menu-button"
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Open workspace menu"
-              aria-expanded={mobileMenuOpen}
-              aria-controls="dashboard-mobile-drawer"
-            >
-              <Menu size={19} strokeWidth={1.8} />
-              <span>Menu</span>
-            </button>
-            <UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="md" />
+        <aside className="dashboard-rail">
+          <div className="dashboard-rail-top">
+            <button className="dashboard-brand" type="button" onClick={() => setLocation('/')} aria-label="Chalkboard home"><span className="home-brand-mark">C</span><span>Chalkboard</span>{planLabel && <span className="dashboard-brand-plan">{planLabel}</span>}</button>
           </div>
-        </header>
-        <div className="dashboard-content">
-          {activeTab === 'overview' && renderOverview()}
-          {activeTab === 'rooms' && renderRooms()}
-          {activeTab === 'toolkit' && renderToolkit()}
-          {activeTab === 'developer' && <DeveloperPlugins />}
-          {activeTab === 'billing' && <BillingPanel />}
-          {/* Only the owner of a Team workspace reaches this: the rail filters
+          <div className="dashboard-rail-rule" />
+          <p className="dashboard-rail-label">Workspace</p>
+          <nav className="dashboard-tabs" aria-label="Dashboard sections">
+            {visibleTabItems.map(({ id, label, icon: Icon }) => (
+              <button className={`dashboard-tab${activeTab === id ? ' is-active' : ''}`} type="button" key={id} onClick={() => selectTab(id)} aria-current={activeTab === id ? 'page' : undefined}>
+                <Icon size={17} strokeWidth={activeTab === id ? 1.9 : 1.5} /><span>{label}</span>{id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
+              </button>
+            ))}
+            {developerMode && <button className="dashboard-tab dashboard-tab-external" type="button" onClick={() => setLocation('/docs')}><BookOpen size={17} strokeWidth={1.5} /><span>Go to docs</span><ArrowUpRight size={13} strokeWidth={1.7} /></button>}
+          </nav>
+          <div className="dashboard-rail-bottom">
+            <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
+            {profile.platformRole !== 'user' && <button className="dashboard-help" type="button" onClick={() => { window.location.href = '/admin'; }}><ShieldCheck size={15} /> Open admin console</button>}
+            <button className="dashboard-help" type="button" onClick={() => setLocation('/guide')}><CircleHelp size={15} /> Read the user guide</button>
+            <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
+          </div>
+        </aside>
+        <main className="dashboard-main">
+          <header className="dashboard-header">
+            <div><p className="dashboard-header-meta">Chalkboard / {tabTitle}</p><h1>{activeTab === 'overview' ? `Good to see you, ${firstName}.` : tabTitle}</h1></div>
+            <div className="dashboard-header-actions">
+              <button className="dashboard-header-room-button" type="button" onClick={() => selectTab('rooms')}><Plus size={15} /> New room</button>
+              <button
+                className="dashboard-mobile-menu-button"
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="Open workspace menu"
+                aria-expanded={mobileMenuOpen}
+                aria-controls="dashboard-mobile-drawer"
+              >
+                <Menu size={19} strokeWidth={1.8} />
+                <span>Menu</span>
+              </button>
+              <UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="md" />
+            </div>
+          </header>
+          <div className="dashboard-content">
+            {activeTab === 'overview' && renderOverview()}
+            {activeTab === 'rooms' && renderRooms()}
+            {activeTab === 'toolkit' && renderToolkit()}
+            {activeTab === 'developer' && <DeveloperPlugins />}
+            {activeTab === 'billing' && <BillingPanel />}
+            {/* Only the owner of a Team workspace reaches this: the rail filters
               the tab, and the guard effect redirects deep links otherwise. */}
-          {activeTab === 'team' && (isTeamOwner || entitlements.isLoading) && <WorkspacePanel />}
-          {activeTab === 'profile' && renderProfile()}
-          {activeTab !== 'rooms' && error && <p className="dashboard-error dashboard-floating-error" role="alert">{error}</p>}
-        </div>
-      </main>
-      <button
-        className={`dashboard-mobile-menu-backdrop${mobileMenuOpen ? ' is-visible' : ''}`}
-        type="button"
-        onClick={() => setMobileMenuOpen(false)}
-        aria-label="Close workspace menu"
-        tabIndex={mobileMenuOpen ? 0 : -1}
-      />
-      <aside
-        id="dashboard-mobile-drawer"
-        className={`dashboard-mobile-drawer${mobileMenuOpen ? ' is-open' : ''}`}
-        aria-label="Mobile workspace menu"
-        aria-hidden={!mobileMenuOpen}
-      >
-        <div className="dashboard-mobile-drawer-header">
-          <div><p className="dashboard-panel-kicker">Workspace</p><strong>Chalkboard</strong></div>
-          <button className="dashboard-mobile-drawer-close" type="button" onClick={() => setMobileMenuOpen(false)} aria-label="Close workspace menu">
-            <X size={18} strokeWidth={1.8} />
-          </button>
-        </div>
-        <nav className="dashboard-mobile-drawer-nav" aria-label="Workspace sections">
-          {visibleTabItems.map(({ id, label, icon: Icon }) => (
-            <button
-              className={`dashboard-mobile-drawer-tab${activeTab === id ? ' is-active' : ''}`}
-              type="button"
-              key={id}
-              onClick={() => selectTab(id)}
-              aria-current={activeTab === id ? 'page' : undefined}
-            >
-              <Icon size={18} strokeWidth={activeTab === id ? 1.9 : 1.5} />
-              <span>{label}</span>
-              {id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
+            {activeTab === 'team' && (isTeamOwner || entitlements.isLoading) && <WorkspacePanel />}
+            {activeTab === 'profile' && renderProfile()}
+            {activeTab !== 'rooms' && error && <p className="dashboard-error dashboard-floating-error" role="alert">{error}</p>}
+          </div>
+        </main>
+        <button
+          className={`dashboard-mobile-menu-backdrop${mobileMenuOpen ? ' is-visible' : ''}`}
+          type="button"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="Close workspace menu"
+          tabIndex={mobileMenuOpen ? 0 : -1}
+        />
+        <aside
+          id="dashboard-mobile-drawer"
+          className={`dashboard-mobile-drawer${mobileMenuOpen ? ' is-open' : ''}`}
+          aria-label="Mobile workspace menu"
+          aria-hidden={!mobileMenuOpen}
+        >
+          <div className="dashboard-mobile-drawer-header">
+            <div><p className="dashboard-panel-kicker">Workspace</p><strong>Chalkboard</strong></div>
+            <button className="dashboard-mobile-drawer-close" type="button" onClick={() => setMobileMenuOpen(false)} aria-label="Close workspace menu">
+              <X size={18} strokeWidth={1.8} />
             </button>
-          ))}
-          {developerMode && <button className="dashboard-mobile-drawer-tab dashboard-mobile-drawer-tab-external" type="button" onClick={() => { setMobileMenuOpen(false); setLocation('/docs'); }}><BookOpen size={18} strokeWidth={1.5} /><span>Go to docs</span><ArrowUpRight size={14} strokeWidth={1.7} /></button>}
-        </nav>
-        <button className="dashboard-mobile-drawer-new-room" type="button" onClick={() => selectTab('rooms')}>
-          <Plus size={16} strokeWidth={1.9} /> New room
-        </button>
-        <div className="dashboard-mobile-drawer-bottom">
-          <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
-          {profile.platformRole !== 'user' && <button className="dashboard-help" type="button" onClick={() => { window.location.href = '/admin'; }}><ShieldCheck size={15} /> Open admin console</button>}
-          <button className="dashboard-help" type="button" onClick={() => setLocation('/guide')}><CircleHelp size={15} /> Read the user guide</button>
-          <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
-        </div>
-      </aside>
+          </div>
+          <nav className="dashboard-mobile-drawer-nav" aria-label="Workspace sections">
+            {visibleTabItems.map(({ id, label, icon: Icon }) => (
+              <button
+                className={`dashboard-mobile-drawer-tab${activeTab === id ? ' is-active' : ''}`}
+                type="button"
+                key={id}
+                onClick={() => selectTab(id)}
+                aria-current={activeTab === id ? 'page' : undefined}
+              >
+                <Icon size={18} strokeWidth={activeTab === id ? 1.9 : 1.5} />
+                <span>{label}</span>
+                {id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
+              </button>
+            ))}
+            {developerMode && <button className="dashboard-mobile-drawer-tab dashboard-mobile-drawer-tab-external" type="button" onClick={() => { setMobileMenuOpen(false); setLocation('/docs'); }}><BookOpen size={18} strokeWidth={1.5} /><span>Go to docs</span><ArrowUpRight size={14} strokeWidth={1.7} /></button>}
+          </nav>
+          <button className="dashboard-mobile-drawer-new-room" type="button" onClick={() => selectTab('rooms')}>
+            <Plus size={16} strokeWidth={1.9} /> New room
+          </button>
+          <div className="dashboard-mobile-drawer-bottom">
+            <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
+            {profile.platformRole !== 'user' && <button className="dashboard-help" type="button" onClick={() => { window.location.href = '/admin'; }}><ShieldCheck size={15} /> Open admin console</button>}
+            <button className="dashboard-help" type="button" onClick={() => setLocation('/guide')}><CircleHelp size={15} /> Read the user guide</button>
+            <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
+          </div>
+        </aside>
       </div>
       {roomToDelete && (
         <ConfirmModal

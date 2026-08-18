@@ -1,4 +1,8 @@
-import { useRef, useEffect, useCallback } from 'react';
+import {
+  useRef,
+  useEffect,
+  useCallback
+} from 'react';
 import { useBoardStore } from '@/stores/boardStore';
 import { drawBoardOnCanvas } from '@/utils/canvasRenderer';
 
@@ -27,7 +31,7 @@ export function useCanvasRenderer(
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
+
     drawBoardOnCanvas(ctx, canvas.width, canvas.height, dprRef.current, {
       strokes,
       zoom,

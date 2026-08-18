@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Star, X } from 'lucide-react';
+import {
+  Star,
+  X
+} from 'lucide-react';
 import { useSubmitRoomSessionFeedbackMutation } from '@/api/hooks';
 import { useLoggerStore } from '@/stores/loggerStore';
-import { isSessionFeedbackOptedOut, markRoomRated, setSessionFeedbackOptOut } from '@/lib/sessionFeedback';
+import {
+  isSessionFeedbackOptedOut,
+  markRoomRated,
+  setSessionFeedbackOptOut
+} from '@/lib/sessionFeedback';
 
 const RATING_LABELS = ['', 'Not useful', 'Somewhat useful', 'Useful', 'Very useful', 'Excellent'];
 

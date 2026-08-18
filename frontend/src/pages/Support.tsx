@@ -1,5 +1,9 @@
 import { useState } from 'react';
-import { ArrowUpRight, Heart, LoaderCircle } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Heart,
+  LoaderCircle
+} from 'lucide-react';
 import PublicHeader from '@/components/PublicHeader';
 import { apiRequest } from '@/api/client';
 import '@/styles/PublicPages.css';

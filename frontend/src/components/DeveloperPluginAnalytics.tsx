@@ -12,7 +12,10 @@ import {
 } from "recharts";
 import { useMyPluginAnalyticsQuery } from "@/api/hooks";
 import { ApiRequestError } from "@/api/client";
-import type { ManagedPluginAnalytics, ManagedPluginPlan } from "@/api/types";
+import type {
+  ManagedPluginAnalytics,
+  ManagedPluginPlan
+} from "@/api/types";
 
 /**
  * The developer's own analytics for one of their plugins.

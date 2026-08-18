@@ -1,5 +1,13 @@
 import { apiRequest } from '@/api/client';
-import type { CreatePluginRequest, CreatePluginVersionRequest, ManagedPlugin, ManagedPluginAnalytics, ManagedPluginPlan, PluginListResponse, PluginMutationResponse } from '@/api/types';
+import type {
+  CreatePluginRequest,
+  CreatePluginVersionRequest,
+  ManagedPlugin,
+  ManagedPluginAnalytics,
+  ManagedPluginPlan,
+  PluginListResponse,
+  PluginMutationResponse
+} from '@/api/types';
 
 export function getManagedPluginLogo(plugin: Pick<ManagedPlugin, 'logoUrl' | 'logoDataUrl'>) {
   return plugin.logoUrl || plugin.logoDataUrl || null;

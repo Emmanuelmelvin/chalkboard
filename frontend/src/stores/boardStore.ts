@@ -1,7 +1,16 @@
 import { create } from 'zustand';
 import type { Socket } from 'socket.io-client';
-import type { NoteEditorRequest, Point, Rect, Stroke, TrimState } from '@/types';
-import { clampZoom, DEFAULT_ZOOM } from '@/lib/zoom';
+import type {
+  NoteEditorRequest,
+  Point,
+  Rect,
+  Stroke,
+  TrimState
+} from '@/types';
+import {
+  clampZoom,
+  DEFAULT_ZOOM
+} from '@/lib/zoom';
 
 /**
  * Core chalkboard board state shared by the UI and the agent-callable toolbox.
@@ -217,7 +226,7 @@ export const useBoardStore = create<BoardState>((set) => ({
   setSpacePressed: (spacePressed) => set({ spacePressed }),
   setShowSelectionToolbox: (showSelectionToolbox) =>
     set((state) => ({
-        showSelectionToolbox:
+      showSelectionToolbox:
         typeof showSelectionToolbox === 'function'
           ? showSelectionToolbox(state.showSelectionToolbox)
           : showSelectionToolbox,

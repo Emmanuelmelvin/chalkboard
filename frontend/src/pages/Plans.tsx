@@ -1,4 +1,7 @@
-import { Fragment, useEffect } from 'react';
+import {
+    Fragment,
+    useEffect
+} from 'react';
 import {
     ArrowUpRight,
     BadgeCheck,
@@ -245,9 +248,9 @@ function Plans() {
                                                         </p>
                                                     )}
                                                 </>
-                                            ) : plan.id === 'free' ? (                                                <Link className="plans-tier-action" href={isSignedIn ? '/dashboard?tab=rooms' : '/login'}>
-                                                    {isSignedIn ? 'Open dashboard' : 'Start free'}
-                                                </Link>
+                                            ) : plan.id === 'free' ? (<Link className="plans-tier-action" href={isSignedIn ? '/dashboard?tab=rooms' : '/login'}>
+                                                {isSignedIn ? 'Open dashboard' : 'Start free'}
+                                            </Link>
                                             ) : (
                                                 <Link
                                                     className={`plans-tier-action${plan.recommended ? ' is-primary' : ''}`}

@@ -1,5 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { MessageCircle, Send, X } from 'lucide-react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent
+} from 'react';
+import {
+  MessageCircle,
+  Send, X
+} from 'lucide-react';
 import type { Socket } from 'socket.io-client';
 import UserAvatar from '@/components/UserAvatar';
 import type { ChatMessage, RoomMember } from '@/types';

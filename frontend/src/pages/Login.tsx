@@ -1,8 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowUpRight, ShieldCheck } from 'lucide-react';
+import {
+  useEffect,
+  useRef,
+  useState
+} from 'react';
+import {
+  ArrowUpRight,
+  ShieldCheck
+} from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useAuthStore } from '@/stores/authStore';
-import { useGoogleConfigQuery, useGoogleSignInMutation } from '@/api/hooks';
+import {
+  useGoogleConfigQuery,
+  useGoogleSignInMutation
+} from '@/api/hooks';
 import PublicHeader from '@/components/PublicHeader';
 import '@/styles/PublicPages.css';
 

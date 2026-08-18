@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent
+} from 'react';
 import { Eraser, FlaskConical, Play, RotateCcw, X } from 'lucide-react';
 import type { AdminPlugin } from '@/admin/api';
 

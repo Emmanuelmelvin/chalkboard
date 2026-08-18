@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { PenTool, Eraser, Hand, MousePointer2 } from 'lucide-react';
+import {
+  PenTool,
+  Eraser,
+  Hand,
+  MousePointer2
+} from 'lucide-react';
 import * as HoverCard from '@radix-ui/react-hover-card';
 import ColorPicker from '@/components/tools/ColorPicker';
 import BrushSize from '@/components/tools/BrushSize';
@@ -67,27 +72,27 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </HoverCard.Trigger>
 
           <HoverCard.Content className="chalk-settings-flyout" side="top" sideOffset={12} align="center">
-              <div className="settings-section">
-                <span className="settings-label">Color</span>
-                <ColorPicker
-                  activeTool={activeTool}
-                  activeColor={activeColor}
-                  onToolChange={onToolChange}
-                  onColorChange={onColorChange}
-                />
-              </div>
-              <div className="settings-divider" />
-              <div className="settings-section">
-                <span className="settings-label">Size</span>
-                <BrushSize brushSize={brushSize} onBrushSizeChange={onBrushSizeChange} />
-              </div>
-              <div className="settings-divider" />
-              <div className="settings-section">
-                <span className="settings-label">Intensity</span>
-                <BrushIntensity brushIntensity={brushIntensity} onIntensityChange={onIntensityChange} />
-              </div>
-              <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
-            </HoverCard.Content>
+            <div className="settings-section">
+              <span className="settings-label">Color</span>
+              <ColorPicker
+                activeTool={activeTool}
+                activeColor={activeColor}
+                onToolChange={onToolChange}
+                onColorChange={onColorChange}
+              />
+            </div>
+            <div className="settings-divider" />
+            <div className="settings-section">
+              <span className="settings-label">Size</span>
+              <BrushSize brushSize={brushSize} onBrushSizeChange={onBrushSizeChange} />
+            </div>
+            <div className="settings-divider" />
+            <div className="settings-section">
+              <span className="settings-label">Intensity</span>
+              <BrushIntensity brushIntensity={brushIntensity} onIntensityChange={onIntensityChange} />
+            </div>
+            <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
+          </HoverCard.Content>
         </HoverCard.Root>
 
         {/* Eraser settings — opens on hover while eraser is active */}
@@ -119,75 +124,75 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </HoverCard.Trigger>
 
           <HoverCard.Content className="chalk-settings-flyout eraser-settings-flyout" side="top" sideOffset={12} align="center">
-              <div className="eraser-flyout-header">
-                <span className="eraser-flyout-icon">⬜</span>
-                <span className="eraser-flyout-title">Eraser Size</span>
-              </div>
-              <div className="settings-divider" />
+            <div className="eraser-flyout-header">
+              <span className="eraser-flyout-icon">⬜</span>
+              <span className="eraser-flyout-title">Eraser Size</span>
+            </div>
+            <div className="settings-divider" />
 
-              {/* Eraser Preview */}
-              <div className="eraser-preview-area">
-                <div
-                  className="eraser-preview-rect"
-                  data-width={Math.min(eraserWidth, 200)}
-                  data-height={Math.min(eraserHeight, 60)}
-                  style={{ width: Math.min(eraserWidth, 200), height: Math.min(eraserHeight, 60) }}
+            {/* Eraser Preview */}
+            <div className="eraser-preview-area">
+              <div
+                className="eraser-preview-rect"
+                data-width={Math.min(eraserWidth, 200)}
+                data-height={Math.min(eraserHeight, 60)}
+                style={{ width: Math.min(eraserWidth, 200), height: Math.min(eraserHeight, 60) }}
+              />
+            </div>
+
+            <div className="settings-section">
+              <span className="settings-label">Width — {eraserWidth}px</span>
+              <div className="slider-container">
+                <input
+                  type="range"
+                  className="slider-input"
+                  min={10}
+                  max={300}
+                  step={5}
+                  value={eraserWidth}
+                  onChange={(e) => onEraserWidthChange(Number(e.target.value))}
+                />
+                <input
+                  type="number"
+                  className="number-input"
+                  min={10}
+                  max={300}
+                  value={eraserWidth}
+                  onChange={(e) => {
+                    const v = Math.min(300, Math.max(10, Number(e.target.value)));
+                    onEraserWidthChange(v);
+                  }}
                 />
               </div>
-
-              <div className="settings-section">
-                <span className="settings-label">Width — {eraserWidth}px</span>
-                <div className="slider-container">
-                  <input
-                    type="range"
-                    className="slider-input"
-                    min={10}
-                    max={300}
-                    step={5}
-                    value={eraserWidth}
-                    onChange={(e) => onEraserWidthChange(Number(e.target.value))}
-                  />
-                  <input
-                    type="number"
-                    className="number-input"
-                    min={10}
-                    max={300}
-                    value={eraserWidth}
-                    onChange={(e) => {
-                      const v = Math.min(300, Math.max(10, Number(e.target.value)));
-                      onEraserWidthChange(v);
-                    }}
-                  />
-                </div>
+            </div>
+            <div className="settings-divider" />
+            <div className="settings-section">
+              <span className="settings-label">Height — {eraserHeight}px</span>
+              <div className="slider-container">
+                <input
+                  type="range"
+                  className="slider-input"
+                  min={10}
+                  max={200}
+                  step={5}
+                  value={eraserHeight}
+                  onChange={(e) => onEraserHeightChange(Number(e.target.value))}
+                />
+                <input
+                  type="number"
+                  className="number-input"
+                  min={10}
+                  max={200}
+                  value={eraserHeight}
+                  onChange={(e) => {
+                    const v = Math.min(200, Math.max(10, Number(e.target.value)));
+                    onEraserHeightChange(v);
+                  }}
+                />
               </div>
-              <div className="settings-divider" />
-              <div className="settings-section">
-                <span className="settings-label">Height — {eraserHeight}px</span>
-                <div className="slider-container">
-                  <input
-                    type="range"
-                    className="slider-input"
-                    min={10}
-                    max={200}
-                    step={5}
-                    value={eraserHeight}
-                    onChange={(e) => onEraserHeightChange(Number(e.target.value))}
-                  />
-                  <input
-                    type="number"
-                    className="number-input"
-                    min={10}
-                    max={200}
-                    value={eraserHeight}
-                    onChange={(e) => {
-                      const v = Math.min(200, Math.max(10, Number(e.target.value)));
-                      onEraserHeightChange(v);
-                    }}
-                  />
-                </div>
-              </div>
-              <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
-            </HoverCard.Content>
+            </div>
+            <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
+          </HoverCard.Content>
         </HoverCard.Root>
 
         <button

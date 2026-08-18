@@ -1,14 +1,88 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient
+} from '@tanstack/react-query';
 import { apiKeys } from '@/api/keys';
-import { getCurrentUser, getGoogleConfig, signInWithGoogle, signOut } from '@/api/auth';
-import { createRoom, deleteRoom, getRoom, joinRoom, listJoinRequests, listRooms, resetRoomPassword, resolveJoinRequest } from '@/api/rooms';
-import { createPlugin, createPluginVersion, getMyPluginAnalytics, getPluginCataloguePlugin, listMyPlugins, listPluginCatalogue, submitPlugin } from '@/api/plugins';
-import { addAdmin, beginAdminTwoFactorSetup, getAdminSession, listAdminPlugins, listAdmins, logoutAdminTwoFactor, publishAdminPlugin, removeAdmin, removeAdminPluginFromRegistry, reviewAdminPlugin, verifyAdminTwoFactor } from '@/api/admin';
-import { getAdminMetrics, type AdminMetricsRange } from '@/api/adminMetrics';
-import { cancelSubscription, createPortalSession, getCheckoutStatus, startCheckout, startSeatCheckout } from '@/api/billing';
-import { acceptWorkspaceInvite, createWorkspaceInvite, getWorkspace, leaveWorkspace, removeWorkspaceMember, revokeWorkspaceInvite } from '@/api/workspace';
-import { createFeedback, listAdminFeedback, listAdminFeedbackStats, listAdminRoomFeedback, submitRoomSessionFeedback, updateFeedbackStatus } from '@/api/feedback';
-import type { AddAdminRequest, AdminPluginReviewRequest, CreateFeedbackRequest, CreatePluginRequest, CreatePluginVersionRequest, CreateRoomRequest, GoogleSignInRequest, JoinRoomRequest, SeatCheckoutRequest, StartCheckoutRequest, SubmitRoomSessionFeedbackRequest, UpdateFeedbackStatusRequest } from '@/api/types';
+import {
+  getCurrentUser,
+  getGoogleConfig,
+  signInWithGoogle,
+  signOut
+} from '@/api/auth';
+import {
+  createRoom,
+  deleteRoom,
+  getRoom,
+  joinRoom,
+  listJoinRequests,
+  listRooms,
+  resetRoomPassword,
+  resolveJoinRequest
+} from '@/api/rooms';
+import {
+  createPlugin,
+  createPluginVersion,
+  getMyPluginAnalytics,
+  getPluginCataloguePlugin,
+  listMyPlugins,
+  listPluginCatalogue,
+  submitPlugin
+} from '@/api/plugins';
+import {
+  addAdmin,
+  beginAdminTwoFactorSetup,
+  getAdminSession,
+  listAdminPlugins,
+  listAdmins,
+  logoutAdminTwoFactor,
+  publishAdminPlugin,
+  removeAdmin,
+  removeAdminPluginFromRegistry,
+  reviewAdminPlugin,
+  verifyAdminTwoFactor
+} from '@/api/admin';
+import {
+  getAdminMetrics,
+  type AdminMetricsRange
+} from '@/api/adminMetrics';
+import {
+  cancelSubscription,
+  createPortalSession,
+  getCheckoutStatus,
+  startCheckout,
+  startSeatCheckout
+} from '@/api/billing';
+import {
+  acceptWorkspaceInvite,
+  createWorkspaceInvite,
+  getWorkspace,
+  leaveWorkspace,
+  removeWorkspaceMember,
+  revokeWorkspaceInvite
+} from '@/api/workspace';
+import {
+  createFeedback,
+  listAdminFeedback,
+  listAdminFeedbackStats,
+  listAdminRoomFeedback,
+  submitRoomSessionFeedback,
+  updateFeedbackStatus
+} from '@/api/feedback';
+import type {
+  AddAdminRequest,
+  AdminPluginReviewRequest,
+  CreateFeedbackRequest,
+  CreatePluginRequest,
+  CreatePluginVersionRequest,
+  CreateRoomRequest,
+  GoogleSignInRequest,
+  JoinRoomRequest,
+  SeatCheckoutRequest,
+  StartCheckoutRequest,
+  SubmitRoomSessionFeedbackRequest,
+  UpdateFeedbackStatusRequest
+} from '@/api/types';
 
 export function useCurrentUserQuery(enabled = true) {
   return useQuery({ queryKey: apiKeys.auth.me, queryFn: getCurrentUser, enabled });

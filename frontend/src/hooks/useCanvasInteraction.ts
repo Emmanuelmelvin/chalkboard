@@ -1,4 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
+import {
+  useState,
+  useRef,
+  useCallback
+} from 'react';
 import { useBoardStore } from '@/stores/boardStore';
 import {
   boxCenter,
@@ -15,8 +19,15 @@ import {
   hitTestTransformBox,
   handleApplyTrim,
 } from '@/components/toolbox';
-import { clampZoom, viewportToCanvas } from '@/lib/zoom';
-import type { Point, Rect, Stroke } from '@/types';
+import {
+  clampZoom,
+  viewportToCanvas
+} from '@/lib/zoom';
+import type {
+  Point,
+  Rect,
+  Stroke
+} from '@/types';
 
 /**
  * Hook to manage all canvas pointer interactions, drag gestures, local visual effects,

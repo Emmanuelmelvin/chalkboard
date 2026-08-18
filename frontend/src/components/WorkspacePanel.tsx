@@ -1,5 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Check, LoaderCircle, Mail, Minus, Plus, Send, Trash2, UsersRound, X } from 'lucide-react';
+import {
+  Check,
+  LoaderCircle,
+  Mail,
+  Minus,
+  Plus,
+  Send,
+  Trash2,
+  UsersRound,
+  X
+} from 'lucide-react';
 import { useSearch } from 'wouter';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import UserAvatar from '@/components/UserAvatar';
@@ -11,7 +21,10 @@ import {
   useStartSeatCheckoutMutation,
   useWorkspaceQuery,
 } from '@/api/hooks';
-import type { WorkspaceInfo, WorkspaceMemberInfo } from '@/api/types';
+import type {
+  WorkspaceInfo,
+  WorkspaceMemberInfo
+} from '@/api/types';
 import '@/styles/PublicPages.css';
 
 /**

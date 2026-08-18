@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react';
-import { ArrowUpRight, CheckCircle2, DoorOpen, LoaderCircle, ShieldCheck, UsersRound } from 'lucide-react';
+import {
+  ArrowUpRight,
+  CheckCircle2,
+  DoorOpen,
+  LoaderCircle,
+  ShieldCheck,
+  UsersRound
+} from 'lucide-react';
 import { useSearch } from 'wouter';
 import {
   formatLimit,
@@ -10,7 +17,12 @@ import {
   plans,
   type PlanId,
 } from '@/constants/plans';
-import { useCancelSubscriptionMutation, useCreatePortalSessionMutation, useLeaveWorkspaceMutation, useStartCheckoutMutation } from '@/api/hooks';
+import {
+  useCancelSubscriptionMutation,
+  useCreatePortalSessionMutation,
+  useLeaveWorkspaceMutation,
+  useStartCheckoutMutation
+} from '@/api/hooks';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { getApiError } from '@/api/client';
 import ConfirmModal from '@/components/ui/ConfirmModal';

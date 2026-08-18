@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import * as Sentry from '@sentry/react';
-import { getCurrentUser, signOut as signOutRequest } from '@/api/auth';
+import {
+  getCurrentUser,
+  signOut as signOutRequest
+} from '@/api/auth';
 import { apiKeys } from '@/api/keys';
 import { queryClient } from '@/api/queryClient';
 import type { UserProfile } from '@/api/types';

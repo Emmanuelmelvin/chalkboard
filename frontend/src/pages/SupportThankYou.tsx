@@ -1,4 +1,6 @@
-import { useEffect } from 'react';
+import {
+  useEffect
+} from 'react';
 import { Heart } from 'lucide-react';
 import { Link } from 'wouter';
 import PublicHeader from '@/components/PublicHeader';

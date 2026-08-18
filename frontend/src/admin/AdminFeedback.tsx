@@ -7,7 +7,12 @@ import {
   useUpdateFeedbackStatusMutation,
 } from '@/api/hooks';
 import { useLoggerStore } from '@/stores/loggerStore';
-import type { FeedbackCategory, FeedbackStatus, FeedbackSubmission, RoomSessionFeedbackRecord } from '@/api/types';
+import type {
+  FeedbackCategory,
+  FeedbackStatus,
+  FeedbackSubmission,
+  RoomSessionFeedbackRecord
+} from '@/api/types';
 import AdminFeedbackCharts, { SentimentBadge } from '@/admin/AdminFeedbackCharts';
 
 const CATEGORY_LABELS: Record<FeedbackCategory, string> = {

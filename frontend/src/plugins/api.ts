@@ -1,10 +1,16 @@
-import { boxCenter, getSelectionBoundingBox } from '@/lib/geometry';
+import {
+  boxCenter,
+  getSelectionBoundingBox
+} from '@/lib/geometry';
 import { nestStrokeGroup } from '@/lib/grouping';
 import { viewportToCanvas } from '@/lib/zoom';
 import { getBoard } from '@/stores/boardStore';
 import { useLoggerStore } from '@/stores/loggerStore';
 import { pluginRegistry } from '@/plugins/registry';
-import type { ChalkboardPluginAPI, InsertStrokeOptions } from '@/plugins/types';
+import type {
+  ChalkboardPluginAPI,
+  InsertStrokeOptions
+} from '@/plugins/types';
 import type { Stroke } from '@/types';
 
 function getViewportCenter() {

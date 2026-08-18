@@ -1,5 +1,8 @@
 import type { Stroke } from '@/types';
-import type { PluginSelectionTarget, PluginSelectionToolContribution } from '@/plugins/types';
+import type {
+  PluginSelectionTarget,
+  PluginSelectionToolContribution
+} from '@/plugins/types';
 
 const MATH_SET_PLUGIN_ID = 'chalkboard.math-set';
 const LEGACY_VENN_STROKE = /-venn-[abc]$/;

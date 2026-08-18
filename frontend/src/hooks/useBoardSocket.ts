@@ -1,10 +1,24 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback
+} from 'react';
 import { useBoardStore } from '@/stores/boardStore';
-import { useLinksStore, type SavedLink } from '@/stores/linksStore';
+import {
+  useLinksStore,
+  type SavedLink
+} from '@/stores/linksStore';
 import { useLoggerStore } from '@/stores/loggerStore';
 import { getRandomColor } from '@/utils/colors';
 import type { Socket } from 'socket.io-client';
-import type { Point, Stroke, Collaborator, RoomMember, ChatMessage } from '@/types';
+import type {
+  Point,
+  Stroke,
+  Collaborator,
+  RoomMember,
+  ChatMessage
+} from '@/types';
 
 type StrokeStartPayload = Partial<Stroke> & {
   /** Present on live stroke-start relays; full redo payloads also include `id`. */

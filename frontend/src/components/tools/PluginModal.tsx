@@ -6,9 +6,16 @@ import PluginIcon from '@/components/svg/PluginIcons';
 import { MathToolPreview, TagPreview } from '@/components/svg/MathPreviews';
 import { parseMatrixValues, validateMatrixRequest } from '@/plugins/builtin/mathSet/generators';
 import { calculateSummary, parseStatisticRows } from '@/plugins/builtin/statistics/generators';
+import {
+  DEFAULT_NOTE_HTML,
+  noteDraftHasText,
+  type NotesRichTextDraft,
+} from '@/plugins/builtin/notes/draft';
+import NotesRichEditor from '@/plugins/builtin/notes/NotesRichEditor';
 
 const TAG_PLUGIN_ID = 'chalkboard.tag';
 const STATISTICS_PLUGIN_ID = 'chalkboard.statistics';
+const NOTES_PLUGIN_ID = 'chalkboard.notes';
 
 interface DataGridRow {
   label: string;
@@ -214,7 +221,17 @@ const PluginModal: React.FC<PluginModalProps> = ({
   const isTagPlugin = plugin.id === TAG_PLUGIN_ID;
   const isMathSetPlugin = plugin.id === 'chalkboard.math-set';
   const isStatisticsPlugin = plugin.id === STATISTICS_PLUGIN_ID;
+  const isNotesPlugin = plugin.id === NOTES_PLUGIN_ID;
   const [activeToolId, setActiveToolId] = useState<string | null>(isTagPlugin ? tools[0]?.id ?? null : null);
+  const [noteDraft, setNoteDraft] = useState<NotesRichTextDraft>({
+    html: DEFAULT_NOTE_HTML,
+    fontFamily: 'Arial',
+    fontSize: '24',
+    textColor: '#ffffff',
+    backgroundColor: '#fff7d6',
+    backgroundTransparent: true,
+    textAlign: 'left',
+  });
 
   const handleDragMove = useCallback((event: PointerEvent) => {
     if (!dragStart) return;
@@ -276,7 +293,17 @@ const PluginModal: React.FC<PluginModalProps> = ({
   };
 
   const handleSubmit = async (tool: PluginToolContribution) => {
-    await onRunPluginTool(tool.command, getToolFormValues(tool), selectionStrokeIds);
+    const formValues = getToolFormValues(tool);
+    if (isNotesPlugin) {
+      formValues.noteHtml = noteDraft.html;
+      formValues.fontFamily = noteDraft.fontFamily;
+      formValues.fontSize = String(noteDraft.fontSize);
+      formValues.textColor = noteDraft.textColor;
+      formValues.textAlign = noteDraft.textAlign;
+      formValues.backgroundTransparent = String(noteDraft.backgroundTransparent);
+      formValues.backgroundColor = noteDraft.backgroundTransparent ? 'transparent' : noteDraft.backgroundColor;
+    }
+    await onRunPluginTool(tool.command, formValues, selectionStrokeIds);
   };
 
   const applySharedOutputAsTag = (toolId: string) => {
@@ -285,7 +312,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
 
   return (
     <div
-      className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${isMathSetPlugin ? 'math-set-plugin-modal' : ''} ${isStatisticsPlugin ? 'statistics-plugin-modal' : ''} ${locked ? 'plugin-modal-locked' : ''}`}
+      className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${isMathSetPlugin ? 'math-set-plugin-modal' : ''} ${isStatisticsPlugin ? 'statistics-plugin-modal' : ''} ${isNotesPlugin ? 'notes-plugin-modal' : ''} ${locked ? 'plugin-modal-locked' : ''}`}
 
       data-left={position.x}
       data-top={position.y}
@@ -327,9 +354,11 @@ const PluginModal: React.FC<PluginModalProps> = ({
           const matrixError = isMatrixTool ? validateMatrixRequest(values) : null;
           const canSubmit = isTagPlugin
             ? selectedStrokes.length > 0 && tagText.trim().length > 0
-            : isMatrixTool
-              ? !matrixError
-              : !isStatisticsPlugin || hasStatisticValues;
+            : isNotesPlugin
+              ? noteDraftHasText(noteDraft)
+              : isMatrixTool
+                ? !matrixError
+                : !isStatisticsPlugin || hasStatisticValues;
 
           return (
             <div key={tool.id} className="plugin-tool-card">
@@ -353,7 +382,9 @@ const PluginModal: React.FC<PluginModalProps> = ({
               {!isTagPlugin && !isStatisticsPlugin && tool.id !== 'math-set.set-builder' && tool.id !== 'math-set.operation' && <MathToolPreview toolId={tool.id} values={values} />}
               {isStatisticsPlugin && <StatisticsPreview values={values} summaryOnly={tool.command === 'statistics.insertSummary'} />}
 
-              {(tool.formFields ?? []).map((field) => {
+              {isNotesPlugin ? (
+                <NotesRichEditor value={noteDraft} onChange={setNoteDraft} autoFocus />
+              ) : (tool.formFields ?? []).map((field) => {
                 const isMatrixOperationField = ['rowOperation', 'rowTarget', 'rowSource', 'factor'].includes(field.id);
                 if (isMatrixTool && isMatrixOperationField && values.operation !== 'row-operation') return null;
                 return (

@@ -4084,6 +4084,17 @@ body {
   border-color: rgba(59, 130, 246, 0.5);
 }
 
+/* Notes rich editor hosted inside the standard plugin modal (create flow):
+   let the editor area flex and scroll instead of inflating the modal. */
+.plugin-floating-modal.notes-plugin-modal .plugin-tool-card {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.plugin-floating-modal.notes-plugin-modal .notes-editor-content {
+  min-height: 130px;
+}
+
 /* Shared top-right feedback surface; browser alerts are intentionally avoided. */
 .logger-outlet {
   position: fixed;

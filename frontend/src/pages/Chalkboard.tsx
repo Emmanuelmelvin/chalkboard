@@ -77,7 +77,6 @@ import {
 import { getVoiceToken } from '@/api/rooms';
 import NotesLayer from '@/plugins/builtin/notes/NotesLayer';
 import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
-import { NOTES_PLUGIN_ID } from '@/plugins/builtin/notes';
 import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
 import { useLoggerStore } from '@/stores/loggerStore';
@@ -654,16 +653,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       return;
     }
 
-    if (pluginId === NOTES_PLUGIN_ID) {
-      setActivePublishedPluginId(null);
-      void activateInstalledPlugin(NOTES_PLUGIN_ID).then(() => pluginRegistry.executeCommand('notes.create'));
-      return;
-    }
     setActivePublishedPluginId(null);
     setActivePluginModals((current) => current.some((modal) => modal.pluginId === pluginId)
       ? current
       : [...current, { pluginId }]);
-  }, [activateInstalledPlugin, publishedCataloguePlugins, setShowInsertShapes]);
+  }, [publishedCataloguePlugins, setShowInsertShapes]);
 
   useCanvasRenderer(canvasRef);
 

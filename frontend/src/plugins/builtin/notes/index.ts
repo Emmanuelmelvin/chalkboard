@@ -14,12 +14,15 @@ const DEFAULT_NOTE_BACKGROUND = 'transparent';
 
 interface NotesCommitPayload extends PluginCommandPayload {
   noteId?: string;
+  text?: string;
   html?: string;
+  noteHtml?: string;
   plainText?: string;
   fontFamily?: string;
   fontSize?: number;
   textColor?: string;
   backgroundColor?: string;
+  background?: string;
   backgroundTransparent?: boolean;
   textAlign?: 'left' | 'center' | 'right';
 }
@@ -31,6 +34,15 @@ function nextEditorRequest(mode: 'create' | 'edit', noteId?: string, position?: 
     noteId,
     position,
   });
+}
+
+/** Turn plain modal text into minimal safe note HTML (paragraphs with line breaks). */
+function noteHtmlFromPlainText(text: string): string {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return `<p>${escaped.split('\n').join('<br>')}</p>`;
 }
 
 function getSelectionIds(api: ChalkboardPluginAPI, payload?: unknown): string[] {
@@ -49,8 +61,8 @@ function rectanglePoints(center: Point, width: number, height: number) {
   ];
 }
 
-function makeNoteStroke(api: ChalkboardPluginAPI, values: NotesCommitPayload): Stroke | null {
-  const center = getBoard().noteEditorRequest?.position ?? api.board.getViewportCenter();
+function makeNoteStroke(api: ChalkboardPluginAPI, values: NotesCommitPayload, position?: Point): Stroke | null {
+  const center = position ?? getBoard().noteEditorRequest?.position ?? api.board.getViewportCenter();
   if (!center) return null;
 
   const html = sanitizeNoteHtml(values.html ?? '');
@@ -61,7 +73,8 @@ function makeNoteStroke(api: ChalkboardPluginAPI, values: NotesCommitPayload): S
   const height = DEFAULT_NOTE_HEIGHT;
   const fontSize = Math.min(96, Math.max(10, Number(values.fontSize) || DEFAULT_NOTE_FONT_SIZE));
   const textColor = values.textColor || DEFAULT_NOTE_TEXT_COLOR;
-  const backgroundColor = values.backgroundColor || DEFAULT_NOTE_BACKGROUND;
+  const requestedBackground = values.backgroundColor || values.background || DEFAULT_NOTE_BACKGROUND;
+  const backgroundColor = requestedBackground === 'transparent' ? 'transparent' : requestedBackground;
   const backgroundTransparent = values.backgroundTransparent ?? backgroundColor === 'transparent';
 
   return {
@@ -96,10 +109,20 @@ export const notesPlugin: ChalkboardPlugin = {
   manifest: notesManifest,
 
   activate(api) {
-    api.commands.register('notes.create', () => {
-      getBoard().setShowInsertShapes(false);
-      nextEditorRequest('create', undefined, api.board.getViewportCenter() ?? undefined);
-      return true;
+    api.commands.register('notes.create', (payload?: unknown) => {
+      const values = (payload as NotesCommitPayload | undefined) ?? {};
+      const html = sanitizeNoteHtml(values.noteHtml ?? values.html ?? '');
+      const plainText = values.plainText?.trim() || plainTextFromHtml(html).trim() || values.text?.trim() || '';
+      if (!plainText) return false;
+      const note = makeNoteStroke(api, {
+        ...values,
+        html: html || noteHtmlFromPlainText(plainText),
+        plainText,
+      }, api.board.getViewportCenter() ?? undefined);
+      if (!note) return false;
+      const ok = api.board.insertStrokes([note], { select: true, closeInsertPanel: true, pluginId: NOTES_PLUGIN_ID });
+      if (ok) getBoard().setNoteEditorRequest(null);
+      return ok;
     });
 
     api.commands.register('notes.editSelection', (payload?: unknown) => {
@@ -150,7 +173,7 @@ export const notesPlugin: ChalkboardPlugin = {
         return ok;
       }
 
-      const note = makeNoteStroke(api, { ...values, html, plainText });
+      const note = makeNoteStroke(api, { ...values, html, plainText }, request?.position);
       if (!note) return false;
       const ok = api.board.insertStrokes([note], { select: true, closeInsertPanel: true, pluginId: NOTES_PLUGIN_ID });
       if (ok) getBoard().setNoteEditorRequest(null);

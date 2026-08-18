@@ -50,7 +50,11 @@ function getEmailQueue(): Queue {
 
 function senderFrom(template: EmailTemplate, variables: Record<string, unknown>) {
   // Internal notifications (plugin submitted to the admin inbox) present as
-  // the admin name; everything customer-facing uses the regular sender name.
+  // the admin name; the welcome email comes personally from Chidi; and
+  // everything else customer-facing uses the regular sender identity.
+  if (template === 'welcome') {
+    return `${env.SENDBYTE_WELCOME_FROM_NAME} <${env.SENDBYTE_WELCOME_FROM_EMAIL}>`;
+  }
   const adminFacing = template === 'plugin' && variables.isReview === false;
   const name = adminFacing ? env.SENDBYTE_FROM_ADMIN_NAME : env.SENDBYTE_FROM_NAME;
   return `${name} <${env.SENDBYTE_FROM_EMAIL}>`;

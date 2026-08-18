@@ -54,8 +54,12 @@ const envSchema = z.object({
   // Transactional email via SendByte. Leave SENDBYTE_API_KEY empty to disable
   // sending entirely (jobs enqueue as no-ops and the worker has nothing to do).
   SENDBYTE_API_KEY: z.string().default(''),
-  SENDBYTE_FROM_EMAIL: z.string().default('hello@chalkboard.click'),
+  SENDBYTE_FROM_EMAIL: z.string().default('notifications@chalkboard.click'),
   SENDBYTE_FROM_NAME: z.string().default('Chalkboard'),
+  // The welcome email is sent personally from Chidi instead of the generic
+  // notifications identity.
+  SENDBYTE_WELCOME_FROM_EMAIL: z.string().default('chidi@chalkboard.click'),
+  SENDBYTE_WELCOME_FROM_NAME: z.string().default('Chidi from Chalkboard'),
   // Sender name for internal notifications (e.g. plugin submissions to the
   // admin inbox). Shares SENDBYTE_FROM_EMAIL as the address.
   SENDBYTE_FROM_ADMIN_NAME: z.string().default('Chalkboard'),

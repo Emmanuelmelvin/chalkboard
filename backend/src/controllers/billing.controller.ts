@@ -7,11 +7,20 @@ import {
   startCheckout,
   startSeatCheckout,
 } from '@/services/billing/billing.service';
-import { getBillingUsage, getEntitlements } from '@/services/billing/entitlements.service';
-import { getSeatsUsed, getWorkspaceMembership } from '@/services/billing/workspaces.service';
+import {
+  getBillingUsage,
+  getEntitlements
+} from '@/services/billing/entitlements.service';
+import {
+  getSeatsUsed,
+  getWorkspaceMembership
+} from '@/services/billing/workspaces.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
-import { failed, metricNames } from '@/utils/metrics';
+import {
+  failed,
+  metricNames
+} from '@/utils/metrics';
 
 /**
  * The single read model the frontend gates on. Limits are served from the

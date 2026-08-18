@@ -1,8 +1,29 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { and, eq, inArray, lt, or } from 'drizzle-orm';
-import { billingEnabled, env } from '@/config/env';
+import {
+  createHmac,
+  randomBytes,
+  timingSafeEqual
+} from 'node:crypto';
+import {
+  and,
+  eq,
+  inArray,
+  lt,
+  or
+} from 'drizzle-orm';
+import {
+  billingEnabled,
+  env
+} from '@/config/env';
 import { db } from '@/db/client';
-import { billingEvents, checkoutSessions, revenueLedger, seatAddOns, subscriptions, users, workspaces } from '@/db/schema';
+import {
+  billingEvents,
+  checkoutSessions,
+  revenueLedger,
+  seatAddOns,
+  subscriptions,
+  users,
+  workspaces
+} from '@/db/schema';
 import {
   cancelSubscription as cancelBachsSubscription,
   createCheckoutSession,
@@ -16,11 +37,19 @@ import {
   type PlanId,
   type SubscriptionStatus,
 } from '@/services/billing/entitlements.service';
-import { ensureWorkspaceForOwner, invalidateWorkspaceMemberEntitlements } from '@/services/billing/workspaces.service';
+import {
+  ensureWorkspaceForOwner,
+  invalidateWorkspaceMemberEntitlements
+} from '@/services/billing/workspaces.service';
 import { enqueueEmail } from '@/services/emails/emails.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
-import { add, failed, hit, metricNames } from '@/utils/metrics';
+import {
+  add,
+  failed,
+  hit,
+  metricNames
+} from '@/utils/metrics';
 import { isMoneyString } from '@/utils/money';
 import { MAX_SEATS_PER_CHECKOUT, parseSeatQuantity, seatAddOnIsEntitling } from '@/utils/seats';
 
@@ -154,11 +183,11 @@ async function ensureBachsCustomer(user: typeof users.$inferSelect) {
     // Keyed on our user id, so a retry maps to the same Bachs customer.
     `chalkboard-customer-${user.id}`,
   );
-  
+
   await db
-  .update(users)
-  .set({ bachsCustomerId: customer.customer_id, updatedAt: new Date() })
-  .where(eq(users.id, user.id));
+    .update(users)
+    .set({ bachsCustomerId: customer.customer_id, updatedAt: new Date() })
+    .where(eq(users.id, user.id));
   return customer.customer_id;
 }
 
@@ -458,7 +487,7 @@ async function resolveUserId(data: Record<string, any> | undefined): Promise<str
  * customer ID from a different Bachs environment. The caller answers 200,
  * because retrying will not make the row appear.
  */
-class UnresolvableEventError extends Error {}
+class UnresolvableEventError extends Error { }
 
 async function upsertSubscription(data: Record<string, any>, userId: string) {
   const bachsSubscriptionId = subscriptionIdOf(data);
@@ -485,17 +514,17 @@ async function upsertSubscription(data: Record<string, any>, userId: string) {
   // reads; the ledger is what entitlements derive the cap from.
   const [latestAddOn] = mapped.planId === 'team'
     ? await db
-        .select({
-          bachsSubscriptionId: seatAddOns.bachsSubscriptionId,
-          bachsProductId: seatAddOns.bachsProductId,
-        })
-        .from(seatAddOns)
-        .where(and(
-          eq(seatAddOns.userId, userId),
-          inArray(seatAddOns.status, [...ENTITLING_STATUSES]),
-        ))
-        .orderBy(seatAddOns.updatedAt)
-        .limit(1)
+      .select({
+        bachsSubscriptionId: seatAddOns.bachsSubscriptionId,
+        bachsProductId: seatAddOns.bachsProductId,
+      })
+      .from(seatAddOns)
+      .where(and(
+        eq(seatAddOns.userId, userId),
+        inArray(seatAddOns.status, [...ENTITLING_STATUSES]),
+      ))
+      .orderBy(seatAddOns.updatedAt)
+      .limit(1)
     : [];
 
   const values = {
@@ -899,10 +928,10 @@ async function dispatch(event: BachsWebhookEvent) {
       const deletedSubscriptionId = subscriptionIdOf(data);
       const [deletedAddOn] = deletedSubscriptionId
         ? await db
-            .select({ id: seatAddOns.id })
-            .from(seatAddOns)
-            .where(eq(seatAddOns.bachsSubscriptionId, deletedSubscriptionId))
-            .limit(1)
+          .select({ id: seatAddOns.id })
+          .from(seatAddOns)
+          .where(eq(seatAddOns.bachsSubscriptionId, deletedSubscriptionId))
+          .limit(1)
         : [];
 
       if (deletedAddOn) {

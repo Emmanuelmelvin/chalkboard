@@ -1,5 +1,9 @@
 import { existsSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import {
+  dirname,
+  relative,
+  resolve
+} from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -7,14 +11,22 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { api } from '@/routers/api';
 import { sql } from '@/db/client';
-import { initRedis, closeRedis, redis } from '@/services/rooms/roomState.service';
+import {
+  initRedis,
+  closeRedis,
+  redis
+} from '@/services/rooms/roomState.service';
 import { attachSocket } from '@/realtime/socket';
 import { errorHandler } from '@/middlewares/errorHandler.middleware';
 import { requestLogger } from '@/middlewares/requestLogger.middleware';
 import { stopRateLimiterSweeper } from '@/services/infra/rateLimiter.service';
 import { logger } from '@/utils/logger';
 import { initMonitoring } from '@/utils/monitoring';
-import { env, isAllowedCorsOrigin, logBootMode } from '@/config/env';
+import {
+  env,
+  isAllowedCorsOrigin,
+  logBootMode
+} from '@/config/env';
 
 type DependencyStatus = 'up' | 'down';
 const READINESS_TIMEOUT_MS = 2000;

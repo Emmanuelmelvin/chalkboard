@@ -1,6 +1,12 @@
 import { and, count, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { rooms, subscriptions, voiceUsage, workspaceMembers, workspaces } from '@/db/schema';
+import {
+  rooms,
+  subscriptions,
+  voiceUsage,
+  workspaceMembers,
+  workspaces
+} from '@/db/schema';
 import { redis } from '@/services/rooms/roomState.service';
 import { logger } from '@/utils/logger';
 

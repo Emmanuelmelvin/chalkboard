@@ -1,8 +1,15 @@
 import { Queue } from 'bullmq';
 import { SendByte } from '@sendbyte/node';
-import { emailSendingEnabled, env } from '@/config/env';
+import {
+  emailSendingEnabled,
+  env
+} from '@/config/env';
 import { logger } from '@/utils/logger';
-import { hit, metricNames, timed } from '@/utils/metrics';
+import {
+  hit,
+  metricNames,
+  timed
+} from '@/utils/metrics';
 
 /**
  * Transactional email for Chalkboard, sent through SendByte.

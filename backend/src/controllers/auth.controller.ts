@@ -8,7 +8,11 @@ import {
 } from '@/services/auth/auth.service';
 import { googleAuthSchema } from '@/validators/room.validator';
 import { ZodError } from 'zod';
-import { failed, metricNames, timed } from '@/utils/metrics';
+import {
+  failed,
+  metricNames,
+  timed
+} from '@/utils/metrics';
 import { logger } from '@/utils/logger';
 import { env } from '@/config/env';
 

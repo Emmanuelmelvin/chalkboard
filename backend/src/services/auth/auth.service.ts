@@ -1,10 +1,20 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import {
+  createHmac,
+  timingSafeEqual
+} from 'node:crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { eq } from 'drizzle-orm';
-import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import {
+  deleteCookie,
+  getCookie,
+  setCookie
+} from 'hono/cookie';
 import { db } from '@/db/client';
 import { users } from '@/db/schema';
-import { getEntitlements, type PlanId } from '@/services/billing/entitlements.service';
+import {
+  getEntitlements,
+  type PlanId
+} from '@/services/billing/entitlements.service';
 import { enqueueEmail } from '@/services/emails/emails.service';
 import { hit, metricNames } from '@/utils/metrics';
 import { logger } from '@/utils/logger';

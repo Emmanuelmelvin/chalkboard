@@ -14,7 +14,10 @@ import {
   voiceTokenHandler,
 } from '@/controllers/room.controller';
 import { requireAuth } from '@/middlewares/auth.middleware';
-import { inviteJoinRateLimit, roomPasswordRateLimit } from '@/middlewares/rateLimit.middleware';
+import {
+  inviteJoinRateLimit,
+  roomPasswordRateLimit
+} from '@/middlewares/rateLimit.middleware';
 
 export const roomRouter = new Hono();
 

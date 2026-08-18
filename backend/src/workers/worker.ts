@@ -1,15 +1,38 @@
-import { Queue, Worker } from 'bullmq';
-import { env, logBootMode } from '@/config/env';
+import {
+  Queue,
+  Worker
+} from 'bullmq';
+import {
+  env,
+  logBootMode
+} from '@/config/env';
 import { closeInactiveRooms } from '@/services/infra/cleanup.service';
-import { distributeMonth, previousMonthBounds } from '@/services/billing/developerPool.service';
+import {
+  distributeMonth,
+  previousMonthBounds
+} from '@/services/billing/developerPool.service';
 import { reconcileExpiredSeatAddOns } from '@/services/billing/billing.service';
 import { reconcileOpenVoiceSessions } from '@/services/rooms/voiceMetering.service';
-import { emailQueueName, sendEmail } from '@/services/emails/emails.service';
+import {
+  emailQueueName,
+  sendEmail
+} from '@/services/emails/emails.service';
 import { sql } from '@/db/client';
-import { closeRedis, initRedis } from '@/services/rooms/roomState.service';
+import {
+  closeRedis,
+  initRedis
+} from '@/services/rooms/roomState.service';
 import { logger } from '@/utils/logger';
-import { captureException, initMonitoring } from '@/utils/monitoring';
-import { add, hit, metricNames, timed } from '@/utils/metrics';
+import {
+  captureException,
+  initMonitoring
+} from '@/utils/monitoring';
+import {
+  add,
+  hit,
+  metricNames,
+  timed
+} from '@/utils/metrics';
 
 const connection = { url: env.REDIS_URL };
 const queueName = 'chalkboard-background';

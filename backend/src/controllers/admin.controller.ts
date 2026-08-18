@@ -1,10 +1,23 @@
 import { z } from 'zod';
-import { addAdminByEmail, listAdmins, removeAdmin } from '@/services/auth/admins.service';
-import { beginAdminTwoFactorSetup, clearAdminTwoFactorSession, getAdminAccessState, hasAdminTwoFactorSession, requireAdminIdentity, setAdminTwoFactorSession, verifyAdminTwoFactor } from '@/services/auth/adminAuth.service';
+import {
+  addAdminByEmail, listAdmins, removeAdmin
+} from '@/services/auth/admins.service';
+import {
+  beginAdminTwoFactorSetup,
+  clearAdminTwoFactorSession,
+  getAdminAccessState,
+  hasAdminTwoFactorSession,
+  requireAdminIdentity,
+  setAdminTwoFactorSession,
+  verifyAdminTwoFactor
+} from '@/services/auth/adminAuth.service';
 import { APIError } from '@/utils/error';
 
 const twoFactorCodeSchema = z.object({ code: z.string().trim().min(6).max(32) });
-const addAdminSchema = z.object({ email: z.string().trim().email(), role: z.enum(['admin', 'super_admin']).default('admin') });
+const addAdminSchema = z.object({
+  email: z.string().trim().email(),
+  role: z.enum(['admin', 'super_admin']).default('admin')
+});
 
 export async function adminSessionHandler(c: any) {
   await requireAdminIdentity(c, async () => undefined);

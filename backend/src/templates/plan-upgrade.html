@@ -1,197 +1,257 @@
 <!doctype html>
 <!-- subject: {{#if isTeam}}{{workspaceName}} is set up for your team{{else}}Welcome to {{planName}}, {{displayName}}{{/if}} -->
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="supported-color-schemes" content="dark">
-<title>Welcome to {{planName}}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="supported-color-schemes" content="dark">
+    <title>Welcome to {{planName}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
+
 <body style="margin:0;padding:0;background-color:#090909;font-family:'Outfit',Helvetica,Arial,sans-serif;">
-<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{{#if isTeam}}{{workspaceName}} is set up under your Team plan.{{else}}You&#8217;re on {{planName}} now. Bigger rooms, unlimited boards, and more.{{/if}}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#090909" style="background-color:#090909;">
-<tr>
-<td align="center" style="padding:40px 16px;background:radial-gradient(circle at 79% 0%, rgba(199,162,88,0.11), transparent 25rem);">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111110" style="width:100%;max-width:600px;background-color:#111110;border:1px solid rgba(245,242,234,0.14);">
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{{#if isTeam}}{{workspaceName}} is set up under
+        your Team plan.{{else}}You&#8217;re on {{planName}} now. Bigger rooms, unlimited boards, and more.{{/if}}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#090909"
+        style="background-color:#090909;">
+        <tr>
+            <td align="center"
+                style="padding:40px 16px;background:radial-gradient(circle at 79% 0%, rgba(199,162,88,0.11), transparent 25rem);">
+                <table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111110"
+                    style="width:100%;max-width:600px;background-color:#111110;border:1px solid rgba(245,242,234,0.14);">
 
-<tr>
-<td style="padding:34px 40px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td>
-<table role="presentation" cellpadding="0" cellspacing="0">
-<tr>
-<td style="vertical-align:middle;">
-<img src="https://chalkboard.click/favicon.svg" alt="Chalkboard" width="31" height="31" style="display:inline-block;border:0;">
-</td>
-<td style="vertical-align:middle;padding-left:10px;">
-<div style="color:#f5f2ea;font-size:14px;font-weight:650;letter-spacing:-0.02em;">Chalkboard</div>
-</td>
-</tr>
-</table>
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:34px 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td>
+                                        <table role="presentation" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td style="vertical-align:middle;">
+                                                    <img src="https://chalkboard.click/favicon.svg" alt="Chalkboard"
+                                                        width="31" height="31" style="display:inline-block;border:0;">
+                                                </td>
+                                                <td style="vertical-align:middle;padding-left:10px;">
+                                                    <div
+                                                        style="color:#f5f2ea;font-size:14px;font-weight:650;letter-spacing:-0.02em;">
+                                                        Chalkboard</div>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:26px 40px 8px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr><td style="border-bottom:1px solid rgba(245,242,234,0.14);font-size:1px;line-height:1px;">&nbsp;</td></tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:26px 40px 8px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td
+                                        style="border-bottom:1px solid rgba(245,242,234,0.14);font-size:1px;line-height:1px;">
+                                        &nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:22px 40px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td>
-<div style="display:table;margin:0 0 16px;color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;line-height:1.5;text-transform:uppercase;"><span style="display:inline-block;width:27px;height:1px;background:currentColor;vertical-align:middle;margin-right:9px;"></span>{{#if isTeam}}Team workspace{{else}}Upgrade{{/if}}</div>
-<h1 style="margin:0;color:#f5f2ea;font-family:Georgia,'Times New Roman',serif;font-size:36px;font-weight:400;letter-spacing:-0.06em;line-height:1;max-width:460px;">{{#if isTeam}}<em style="color:#e3c77e;font-style:italic;">{{workspaceName}}</em> is set up for your team.{{else}}Welcome to <em style="color:#e3c77e;font-style:italic;">{{planName}}</em>, {{displayName}}.{{/if}}</h1>
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:22px 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td>
+                                        <div
+                                            style="display:table;margin:0 0 16px;color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;line-height:1.5;text-transform:uppercase;">
+                                            <span
+                                                style="display:inline-block;width:27px;height:1px;background:currentColor;vertical-align:middle;margin-right:9px;"></span>{{#if
+                                            isTeam}}Team workspace{{else}}Upgrade{{/if}}
+                                        </div>
+                                        <h1
+                                            style="margin:0;color:#f5f2ea;font-family:Georgia,'Times New Roman',serif;font-size:36px;font-weight:400;letter-spacing:-0.06em;line-height:1;max-width:460px;">
+                                            {{#if isTeam}}<em
+                                                style="color:#e3c77e;font-style:italic;">{{workspaceName}}</em> is set
+                                            up for your team.{{else}}Welcome to <em
+                                                style="color:#e3c77e;font-style:italic;">{{planName}}</em>,
+                                            {{displayName}}.{{/if}}</h1>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:26px 40px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="color:#a6a29a;font-size:13px;line-height:1.75;">
-{{#if isTeam}}
-<p style="margin:0 0 16px;">Your <strong style="color:#f5f2ea;font-weight:650;">{{workspaceName}}</strong> workspace is live under the Team plan, with {{seats}} seats for your people. Everyone you add gets a shared home for boards, rooms, and notes.</p>
-{{else}}
-<p style="margin:0 0 16px;">Your {{planName}} plan is live and everything is unlocked. Here is what changed:</p>
-{{/if}}
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:26px 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="color:#a6a29a;font-size:13px;line-height:1.75;">
+                                        {{#if isTeam}}
+                                        <p style="margin:0 0 16px;">Your <strong
+                                                style="color:#f5f2ea;font-weight:650;">{{workspaceName}}</strong>
+                                            workspace is live under the Team plan, with {{seats}} seats for your people.
+                                            Everyone you add gets a shared home for boards, rooms, and notes.</p>
+                                        {{else}}
+                                        <p style="margin:0 0 16px;">Your {{planName}} plan is live and everything is
+                                            unlocked. Here is what changed:</p>
+                                        {{/if}}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:0 40px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="border:1px solid rgba(245,242,234,0.14);background:rgba(245,242,234,0.025);padding:20px 22px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="padding:0 0 12px;color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;text-transform:uppercase;border-bottom:1px solid rgba(245,242,234,0.12);">What's new on {{planName}}</td>
-</tr>
-<tr>
-<td style="padding:14px 0 0;color:#a6a29a;font-size:13px;line-height:2.1;">
-<span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Unlimited active rooms<br>
-<span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Rooms of up to {{attendeesPerRoom}} people<br>
-<span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Unlimited board retention<br>
-<span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Pro plugins — use and publish them<br>
-<span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Board export and custom branding<br>
-<span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;More voice minutes every month
-</td>
-</tr>
-</table>
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:0 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td
+                                        style="border:1px solid rgba(245,242,234,0.14);background:rgba(245,242,234,0.025);padding:20px 22px;">
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td
+                                                    style="padding:0 0 12px;color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;text-transform:uppercase;border-bottom:1px solid rgba(245,242,234,0.12);">
+                                                    What's new on {{planName}}</td>
+                                            </tr>
+                                            <tr>
+                                                <td
+                                                    style="padding:14px 0 0;color:#a6a29a;font-size:13px;line-height:2.1;">
+                                                    <span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Unlimited
+                                                    active rooms<br>
+                                                    <span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Rooms of up
+                                                    to {{attendeesPerRoom}} people<br>
+                                                    <span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Unlimited
+                                                    board retention<br>
+                                                    <span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Pro plugins
+                                                    — use and publish them<br>
+                                                    <span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Board export
+                                                    and custom branding<br>
+                                                    <span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;More voice
+                                                    minutes every month
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-{{#if isTeam}}
-<tr>
-<td style="padding:16px 40px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="border:1px solid rgba(245,242,234,0.14);background:rgba(245,242,234,0.025);padding:20px 22px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="padding:0 0 12px;color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;text-transform:uppercase;border-bottom:1px solid rgba(245,242,234,0.12);">Your workspace</td>
-</tr>
-<tr>
-<td style="padding:14px 0 0;color:#a6a29a;font-size:13px;line-height:2.1;">
-<span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;{{workspaceName}} — shared boards and rooms<br>
-<span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;{{seats}} seats for your team<br>
-<span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Invite your people and start drawing together
-</td>
-</tr>
-</table>
-</td>
-</tr>
-</table>
-</td>
-</tr>
-{{/if}}
+                    {{#if isTeam}}
+                    <tr>
+                        <td style="padding:16px 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td
+                                        style="border:1px solid rgba(245,242,234,0.14);background:rgba(245,242,234,0.025);padding:20px 22px;">
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td
+                                                    style="padding:0 0 12px;color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;text-transform:uppercase;border-bottom:1px solid rgba(245,242,234,0.12);">
+                                                    Your workspace</td>
+                                            </tr>
+                                            <tr>
+                                                <td
+                                                    style="padding:14px 0 0;color:#a6a29a;font-size:13px;line-height:2.1;">
+                                                    <span
+                                                        style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;{{workspaceName}}
+                                                    — shared boards and rooms<br>
+                                                    <span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;{{seats}}
+                                                    seats for your team<br>
+                                                    <span style="color:#e3c77e;">&#10003;</span>&nbsp;&nbsp;Invite your
+                                                    people and start drawing together
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {{/if}}
 
-<tr>
-<td align="left" style="padding:26px 40px 0;">
-<table role="presentation" cellpadding="0" cellspacing="0">
-<tr>
-<td bgcolor="#c7a258" style="background-color:#c7a258;border:1px solid #c7a258;">
-{{#if isTeam}}
-<a href="{{workspaceUrl}}" style="display:inline-block;padding:13px 20px;color:#090909;font-size:10px;font-weight:800;letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">Open your workspace</a>
-{{else}}
-<a href="{{dashboardUrl}}" style="display:inline-block;padding:13px 20px;color:#090909;font-size:10px;font-weight:800;letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">Open your dashboard</a>
-{{/if}}
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td align="left" style="padding:26px 40px 0;">
+                            <table role="presentation" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td bgcolor="#c7a258" style="background-color:#c7a258;border:1px solid #c7a258;">
+                                        {{#if isTeam}}
+                                        <a href="{{workspaceUrl}}"
+                                            style="display:inline-block;padding:13px 20px;color:#090909;font-size:10px;font-weight:800;letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">Open
+                                            your workspace</a>
+                                        {{else}}
+                                        <a href="{{dashboardUrl}}"
+                                            style="display:inline-block;padding:13px 20px;color:#090909;font-size:10px;font-weight:800;letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">Open
+                                            your dashboard</a>
+                                        {{/if}}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:26px 40px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="border-left:2px solid #e3c77e;background:rgba(199,162,88,0.13);padding:12px 14px;color:#a6a29a;font-size:12px;line-height:1.7;">
-<p style="margin:0;">You can manage your subscription, invoices, and payment method anytime from the billing portal inside your dashboard.</p>
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:26px 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td
+                                        style="border-left:2px solid #e3c77e;background:rgba(199,162,88,0.13);padding:12px 14px;color:#a6a29a;font-size:12px;line-height:1.7;">
+                                        <p style="margin:0;">You can manage your subscription, invoices, and payment
+                                            method anytime from the billing portal inside your dashboard.</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:30px 40px 24px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="color:#a6a29a;font-size:13px;line-height:1.6;">
-<p style="margin:0 0 3px;">— Chidi</p>
-<p style="margin:0;color:#77736c;font-size:11px;">Founder, Chalkboard</p>
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:30px 40px 24px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="color:#a6a29a;font-size:13px;line-height:1.6;">
+                                        <p style="margin:0 0 3px;">— Chidi</p>
+                                        <p style="margin:0;color:#77736c;font-size:11px;">Founder, Chalkboard</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:0 40px 26px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr><td style="border-bottom:1px solid rgba(245,242,234,0.14);font-size:1px;line-height:1px;">&nbsp;</td></tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:0 40px 26px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td
+                                        style="border-bottom:1px solid rgba(245,242,234,0.14);font-size:1px;line-height:1px;">
+                                        &nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:0 40px 36px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td align="center" style="color:#77736c;font-size:10px;line-height:1.7;">
-<p style="margin:0;">You received this email because your {{planName}} plan is active on Chalkboard.</p>
-<p style="margin:6px 0 0;"><a href="https://chalkboard.click" style="color:#77736c;text-decoration:none;">chalkboard.click</a>&nbsp;&nbsp;·&nbsp;&nbsp;<span>A live canvas for shared thinking</span></p>
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:0 40px 36px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td align="center" style="color:#77736c;font-size:10px;line-height:1.7;">
+                                        <p style="margin:0;">You received this email because your {{planName}} plan is
+                                            active on Chalkboard.</p>
+                                        <p style="margin:6px 0 0;"><a href="https://chalkboard.click"
+                                                style="color:#77736c;text-decoration:none;">chalkboard.click</a>&nbsp;&nbsp;·&nbsp;&nbsp;<span>A
+                                                live canvas for shared thinking</span></p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-</table>
-</td>
-</tr>
-</table>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
+
 </html>

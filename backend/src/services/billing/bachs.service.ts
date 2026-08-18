@@ -1,9 +1,17 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import axios, {
+  type AxiosInstance,
+  type AxiosRequestConfig
+} from 'axios';
 
 import { env } from '@/config/env';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
-import { failed, hit, metricNames, timed } from '@/utils/metrics';
+import {
+  failed,
+  hit,
+  metricNames,
+  timed
+} from '@/utils/metrics';
 
 /**
  * A thin typed wrapper over axios for the Bachs API. Deliberately not an SDK:

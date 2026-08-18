@@ -1,6 +1,17 @@
-import { and, desc, eq, gte, inArray } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray
+} from 'drizzle-orm';
 import { db } from '@/db/client';
-import { feedbackSubmissions, roomSessionFeedback, rooms, users } from '@/db/schema';
+import {
+  feedbackSubmissions,
+  roomSessionFeedback,
+  rooms,
+  users
+} from '@/db/schema';
 import { getRoomMembership } from '@/services/rooms/rooms.service';
 import { getCachedEntitlements } from '@/services/billing/entitlements.service';
 import {

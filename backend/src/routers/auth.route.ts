@@ -1,5 +1,10 @@
 import { Hono } from 'hono';
-import { currentUser, googleAuth, googleAuthConfig, logout } from '@/controllers/auth.controller';
+import {
+    currentUser,
+    googleAuth,
+    googleAuthConfig,
+    logout
+} from '@/controllers/auth.controller';
 import { authRateLimit } from '@/middlewares/rateLimit.middleware';
 
 export const authRouter = new Hono();

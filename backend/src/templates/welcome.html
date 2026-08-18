@@ -1,152 +1,206 @@
 <!doctype html>
 <!-- subject: {{#if isFirstRoom}}Your first room is live, {{displayName}}{{else}}Welcome to Chalkboard, {{displayName}}{{/if}} -->
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="supported-color-schemes" content="dark">
-<title>Chalkboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="supported-color-schemes" content="dark">
+    <title>Chalkboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
+
 <body style="margin:0;padding:0;background-color:#090909;font-family:'Outfit',Helvetica,Arial,sans-serif;">
-<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{{#if isFirstRoom}}&#8220;{{roomName}}&#8221; is ready. Share the code and start drawing together.{{else}}Welcome to the board, {{displayName}}. A live canvas for shared thinking.{{/if}}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#090909" style="background-color:#090909;">
-<tr>
-<td align="center" style="padding:40px 16px;background:radial-gradient(circle at 79% 0%, rgba(199,162,88,0.11), transparent 25rem);">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111110" style="width:100%;max-width:600px;background-color:#111110;border:1px solid rgba(245,242,234,0.14);">
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{{#if isFirstRoom}}&#8220;{{roomName}}&#8221;
+        is ready. Share the code and start drawing together.{{else}}Welcome to the board, {{displayName}}. A live canvas
+        for shared thinking.{{/if}}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#090909"
+        style="background-color:#090909;">
+        <tr>
+            <td align="center"
+                style="padding:40px 16px;background:radial-gradient(circle at 79% 0%, rgba(199,162,88,0.11), transparent 25rem);">
+                <table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111110"
+                    style="width:100%;max-width:600px;background-color:#111110;border:1px solid rgba(245,242,234,0.14);">
 
-<tr>
-<td style="padding:34px 40px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td>
-<table role="presentation" cellpadding="0" cellspacing="0">
-<tr>
-<td style="vertical-align:middle;">
-<img src="https://chalkboard.click/favicon.svg" alt="Chalkboard" width="31" height="31" style="display:inline-block;border:0;">
-</td>
-<td style="vertical-align:middle;padding-left:10px;">
-<div style="color:#f5f2ea;font-size:14px;font-weight:650;letter-spacing:-0.02em;">Chalkboard</div>
-</td>
-</tr>
-</table>
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:34px 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td>
+                                        <table role="presentation" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td style="vertical-align:middle;">
+                                                    <img src="https://chalkboard.click/favicon.svg" alt="Chalkboard"
+                                                        width="31" height="31" style="display:inline-block;border:0;">
+                                                </td>
+                                                <td style="vertical-align:middle;padding-left:10px;">
+                                                    <div
+                                                        style="color:#f5f2ea;font-size:14px;font-weight:650;letter-spacing:-0.02em;">
+                                                        Chalkboard</div>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:26px 40px 8px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr><td style="border-bottom:1px solid rgba(245,242,234,0.14);font-size:1px;line-height:1px;">&nbsp;</td></tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:26px 40px 8px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td
+                                        style="border-bottom:1px solid rgba(245,242,234,0.14);font-size:1px;line-height:1px;">
+                                        &nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:22px 40px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td>
-<div style="display:table;margin:0 0 16px;color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;line-height:1.5;text-transform:uppercase;"><span style="display:inline-block;width:27px;height:1px;background:currentColor;vertical-align:middle;margin-right:9px;"></span>{{#if isFirstRoom}}First room{{else}}Welcome{{/if}}</div>
-<h1 style="margin:0;color:#f5f2ea;font-family:Georgia,'Times New Roman',serif;font-size:36px;font-weight:400;letter-spacing:-0.06em;line-height:1;max-width:460px;">{{#if isFirstRoom}}Your first room is <em style="color:#e3c77e;font-style:italic;">live</em>.{{else}}Hello, <em style="color:#e3c77e;font-style:italic;">{{displayName}}</em>.{{/if}}</h1>
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:22px 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td>
+                                        <div
+                                            style="display:table;margin:0 0 16px;color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;line-height:1.5;text-transform:uppercase;">
+                                            <span
+                                                style="display:inline-block;width:27px;height:1px;background:currentColor;vertical-align:middle;margin-right:9px;"></span>{{#if
+                                            isFirstRoom}}First room{{else}}Welcome{{/if}}
+                                        </div>
+                                        <h1
+                                            style="margin:0;color:#f5f2ea;font-family:Georgia,'Times New Roman',serif;font-size:36px;font-weight:400;letter-spacing:-0.06em;line-height:1;max-width:460px;">
+                                            {{#if isFirstRoom}}Your first room is <em
+                                                style="color:#e3c77e;font-style:italic;">live</em>.{{else}}Hello, <em
+                                                style="color:#e3c77e;font-style:italic;">{{displayName}}</em>.{{/if}}
+                                        </h1>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:26px 40px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="color:#a6a29a;font-size:13px;line-height:1.75;">
-{{#if isFirstRoom}}
-<p style="margin:0 0 16px;">Nice one, {{displayName}} — <strong style="color:#f5f2ea;font-weight:650;">&#8220;{{roomName}}&#8221;</strong> is up on the board. Share the room code with the people you want to draw with, and everything they write, sketch, and say lands in the same space in real time.</p>
-{{else}}
-<p style="margin:0 0 16px;">Glad to have you on the board. Chalkboard is a place for unfinished ideas, live collaboration, and clear next steps. Open a room in a few seconds, share the code with the people who make it better, and start drawing the idea together.</p>
-{{/if}}
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:26px 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="color:#a6a29a;font-size:13px;line-height:1.75;">
+                                        {{#if isFirstRoom}}
+                                        <p style="margin:0 0 16px;">Nice one, {{displayName}} — <strong
+                                                style="color:#f5f2ea;font-weight:650;">&#8220;{{roomName}}&#8221;</strong>
+                                            is up on the board. Share the room code with the people you want to draw
+                                            with, and everything they write, sketch, and say lands in the same space in
+                                            real time.</p>
+                                        {{else}}
+                                        <p style="margin:0 0 16px;">Glad to have you on the board. Chalkboard is a place
+                                            for unfinished ideas, live collaboration, and clear next steps. Open a room
+                                            in a few seconds, share the code with the people who make it better, and
+                                            start drawing the idea together.</p>
+                                        {{/if}}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td align="left" style="padding:8px 40px 0;">
-<table role="presentation" cellpadding="0" cellspacing="0">
-<tr>
-<td bgcolor="#c7a258" style="background-color:#c7a258;border:1px solid #c7a258;">
-{{#if isFirstRoom}}
-<a href="{{roomUrl}}" style="display:inline-block;padding:13px 20px;color:#090909;font-size:10px;font-weight:800;letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">Enter your room</a>
-{{else}}
-<a href="{{dashboardUrl}}" style="display:inline-block;padding:13px 20px;color:#090909;font-size:10px;font-weight:800;letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">Open your dashboard</a>
-{{/if}}
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td align="left" style="padding:8px 40px 0;">
+                            <table role="presentation" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td bgcolor="#c7a258" style="background-color:#c7a258;border:1px solid #c7a258;">
+                                        {{#if isFirstRoom}}
+                                        <a href="{{roomUrl}}"
+                                            style="display:inline-block;padding:13px 20px;color:#090909;font-size:10px;font-weight:800;letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">Enter
+                                            your room</a>
+                                        {{else}}
+                                        <a href="{{dashboardUrl}}"
+                                            style="display:inline-block;padding:13px 20px;color:#090909;font-size:10px;font-weight:800;letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">Open
+                                            your dashboard</a>
+                                        {{/if}}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:30px 40px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="border:1px solid rgba(245,242,234,0.14);background:rgba(245,242,234,0.025);padding:20px 22px;color:#77736c;font-size:12px;line-height:1.7;">
-{{#if isFirstRoom}}
-<p style="margin:0 0 8px;"><strong style="color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;text-transform:uppercase;">A few things you can do</strong></p>
-<p style="margin:0;">Draw, add sticky notes, and chat on the same canvas. Rooms on the Free plan hold up to 25 people, and voice keeps the conversation moving when the board gets busy.</p>
-{{else}}
-<p style="margin:0 0 8px;"><strong style="color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;text-transform:uppercase;">Start here</strong></p>
-<p style="margin:0;">Create your first room from the dashboard, share the room code, and let the thinking begin. If you ever get stuck, the <a href="https://chalkboard.click/guide" style="color:#a6a29a;text-decoration:underline;">guide</a> walks you through everything.</p>
-{{/if}}
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:30px 40px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td
+                                        style="border:1px solid rgba(245,242,234,0.14);background:rgba(245,242,234,0.025);padding:20px 22px;color:#77736c;font-size:12px;line-height:1.7;">
+                                        {{#if isFirstRoom}}
+                                        <p style="margin:0 0 8px;"><strong
+                                                style="color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;text-transform:uppercase;">A
+                                                few things you can do</strong></p>
+                                        <p style="margin:0;">Draw, add sticky notes, and chat on the same canvas. Rooms
+                                            on the Free plan hold up to 25 people, and voice keeps the conversation
+                                            moving when the board gets busy.</p>
+                                        {{else}}
+                                        <p style="margin:0 0 8px;"><strong
+                                                style="color:#e3c77e;font-size:9px;font-weight:750;letter-spacing:0.15em;text-transform:uppercase;">Start
+                                                here</strong></p>
+                                        <p style="margin:0;">Create your first room from the dashboard, share the room
+                                            code, and let the thinking begin. If you ever get stuck, the <a
+                                                href="https://chalkboard.click/guide"
+                                                style="color:#a6a29a;text-decoration:underline;">guide</a> walks you
+                                            through everything.</p>
+                                        {{/if}}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:30px 40px 24px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="color:#a6a29a;font-size:13px;line-height:1.6;">
-<p style="margin:0 0 3px;">— Chidi</p>
-<p style="margin:0;color:#77736c;font-size:11px;">Founder, Chalkboard</p>
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:30px 40px 24px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="color:#a6a29a;font-size:13px;line-height:1.6;">
+                                        <p style="margin:0 0 3px;">— Chidi</p>
+                                        <p style="margin:0;color:#77736c;font-size:11px;">Founder, Chalkboard</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:0 40px 26px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr><td style="border-bottom:1px solid rgba(245,242,234,0.14);font-size:1px;line-height:1px;">&nbsp;</td></tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:0 40px 26px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td
+                                        style="border-bottom:1px solid rgba(245,242,234,0.14);font-size:1px;line-height:1px;">
+                                        &nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-<tr>
-<td style="padding:0 40px 36px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td align="center" style="color:#77736c;font-size:10px;line-height:1.7;">
-<p style="margin:0;">You received this email because {{#if isFirstRoom}}you created a room{{else}}you signed up{{/if}} on Chalkboard.</p>
-<p style="margin:6px 0 0;"><a href="https://chalkboard.click" style="color:#77736c;text-decoration:none;">chalkboard.click</a>&nbsp;&nbsp;·&nbsp;&nbsp;<span>A live canvas for shared thinking</span></p>
-</td>
-</tr>
-</table>
-</td>
-</tr>
+                    <tr>
+                        <td style="padding:0 40px 36px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td align="center" style="color:#77736c;font-size:10px;line-height:1.7;">
+                                        <p style="margin:0;">You received this email because {{#if isFirstRoom}}you
+                                            created a room{{else}}you signed up{{/if}} on Chalkboard.</p>
+                                        <p style="margin:6px 0 0;"><a href="https://chalkboard.click"
+                                                style="color:#77736c;text-decoration:none;">chalkboard.click</a>&nbsp;&nbsp;·&nbsp;&nbsp;<span>A
+                                                live canvas for shared thinking</span></p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-</table>
-</td>
-</tr>
-</table>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
+
 </html>

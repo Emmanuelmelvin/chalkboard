@@ -1,4 +1,11 @@
-import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import {
+  and,
+  eq,
+  gte,
+  inArray,
+  lt,
+  sql
+} from 'drizzle-orm';
 import { db } from '@/db/client';
 import {
   developerEarnings,
@@ -10,7 +17,12 @@ import {
 } from '@/db/schema';
 import { ENTITLING_STATUSES } from '@/services/billing/entitlements.service';
 import { logger } from '@/utils/logger';
-import { add, hit, metricNames, record } from '@/utils/metrics';
+import {
+  add,
+  hit,
+  metricNames,
+  record
+} from '@/utils/metrics';
 import {
   allocateByWeight,
   applyRate,

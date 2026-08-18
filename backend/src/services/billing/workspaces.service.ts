@@ -1,9 +1,25 @@
-import { and, count, eq, gt, sql } from 'drizzle-orm';
+import {
+  and,
+  count,
+  eq,
+  gt,
+  sql
+} from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { db } from '@/db/client';
-import { subscriptions, users, workspaceInvites, workspaceMembers, workspaces } from '@/db/schema';
+import {
+  subscriptions,
+  users,
+  workspaceInvites,
+  workspaceMembers,
+  workspaces
+} from '@/db/schema';
 import { env } from '@/config/env';
-import { getEntitlements, invalidateEntitlements, planLimits } from '@/services/billing/entitlements.service';
+import {
+  getEntitlements,
+  invalidateEntitlements,
+  planLimits
+} from '@/services/billing/entitlements.service';
 import { enqueueEmail } from '@/services/emails/emails.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
@@ -86,18 +102,18 @@ export async function getWorkspaceView(userId: string) {
   // roster of not-yet-joined addresses is the owner's admin data, not a member's.
   const pendingInvites = membership.role === 'owner'
     ? await db
-        .select({
-          email: workspaceInvites.email,
-          token: workspaceInvites.token,
-          createdAt: workspaceInvites.createdAt,
-          expiresAt: workspaceInvites.expiresAt,
-        })
-        .from(workspaceInvites)
-        .where(and(
-          eq(workspaceInvites.workspaceId, membership.workspaceId),
-          eq(workspaceInvites.status, 'pending'),
-          gt(workspaceInvites.expiresAt, sql`now()`),
-        ))
+      .select({
+        email: workspaceInvites.email,
+        token: workspaceInvites.token,
+        createdAt: workspaceInvites.createdAt,
+        expiresAt: workspaceInvites.expiresAt,
+      })
+      .from(workspaceInvites)
+      .where(and(
+        eq(workspaceInvites.workspaceId, membership.workspaceId),
+        eq(workspaceInvites.status, 'pending'),
+        gt(workspaceInvites.expiresAt, sql`now()`),
+      ))
     : [];
 
   return {

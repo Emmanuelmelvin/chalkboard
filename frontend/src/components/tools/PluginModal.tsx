@@ -369,7 +369,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
               </div>
               {tool.description && <p>{tool.description}</p>}
 
-              {isTagPlugin && (
+              {plugin.preview && isTagPlugin && (
                 <TagPreview strokes={selectedStrokes} label={tagText} placement={placement} />
               )}
               {isTagPlugin && sharedOutput && (
@@ -377,10 +377,10 @@ const PluginModal: React.FC<PluginModalProps> = ({
                   Use selected symbol <strong>{sharedOutput}</strong>
                 </button>
               )}
-              {!isTagPlugin && !isStatisticsPlugin && tool.id === 'math-set.set-builder' && <SetBuilderPreview values={values} />}
-              {!isTagPlugin && !isStatisticsPlugin && tool.id === 'math-set.operation' && <SetOperationPreview values={values} />}
-              {!isTagPlugin && !isStatisticsPlugin && tool.id !== 'math-set.set-builder' && tool.id !== 'math-set.operation' && <MathToolPreview toolId={tool.id} values={values} />}
-              {isStatisticsPlugin && <StatisticsPreview values={values} summaryOnly={tool.command === 'statistics.insertSummary'} />}
+              {plugin.preview && !isTagPlugin && !isStatisticsPlugin && tool.id === 'math-set.set-builder' && <SetBuilderPreview values={values} />}
+              {plugin.preview && !isTagPlugin && !isStatisticsPlugin && tool.id === 'math-set.operation' && <SetOperationPreview values={values} />}
+              {plugin.preview && !isTagPlugin && !isStatisticsPlugin && tool.id !== 'math-set.set-builder' && tool.id !== 'math-set.operation' && <MathToolPreview toolId={tool.id} values={values} />}
+              {plugin.preview && isStatisticsPlugin && <StatisticsPreview values={values} summaryOnly={tool.command === 'statistics.insertSummary'} />}
 
               {isNotesPlugin ? (
                 <NotesRichEditor value={noteDraft} onChange={setNoteDraft} autoFocus />

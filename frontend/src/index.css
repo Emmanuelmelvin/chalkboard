@@ -348,9 +348,9 @@ body {
   min-width: 420px;
   min-height: 360px;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: 0;
-  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  background: rgba(12, 17, 30, 0.96);
   color: #e2e8f0;
 }
 
@@ -364,7 +364,7 @@ body {
 }
 
 .notes-editor-header {
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
   cursor: move;
   user-select: none;
   touch-action: none;
@@ -377,7 +377,7 @@ body {
 
 .notes-editor-header strong {
   color: #f8fafc;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .notes-editor-header small,
@@ -3358,18 +3358,25 @@ body {
 .plugin-floating-modal {
   position: fixed;
   z-index: 260;
-  width: fit-content;
+  width: 340px;
   min-width: 280px;
   min-height: 200px;
   max-width: min(520px, calc(100vw - 24px));
   max-height: min(520px, calc(100vh - 24px));
-  height: auto;
+  height: 320px;
   resize: both;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: rgba(12, 17, 30, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(12, 17, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow:
+    0 20px 40px -8px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  animation: selPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   color: #e2e8f0;
   pointer-events: auto;
 }
@@ -3378,10 +3385,10 @@ body {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 9px;
-  background: rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 12px;
+  padding: 15px 16px 13px;
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -3391,9 +3398,28 @@ body {
   cursor: grabbing;
 }
 
+.plugin-floating-header strong {
+  color: #f8fafc;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.plugin-floating-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: #93c5fd;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .plugin-floating-body {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 8px;
   padding: 9px;
   overflow-y: auto;

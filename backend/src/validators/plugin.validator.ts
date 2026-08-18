@@ -12,6 +12,7 @@ const manifestSchema = z.object({
   author: z.string().trim().max(160).optional(),
   permissions: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
   contributes: z.record(z.string(), z.unknown()).default({}),
+  preview: z.boolean().optional(),
 }).passthrough();
 
 export const createPluginSchema = z.object({

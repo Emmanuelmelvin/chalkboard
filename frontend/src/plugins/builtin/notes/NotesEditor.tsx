@@ -83,6 +83,7 @@ const NotesEditor: React.FC = () => {
         <header className="plugin-floating-header notes-editor-header" onPointerDown={handleHeaderPointerDown}>
           <span className="insert-plugin-logo"><PluginIcon pluginId="chalkboard.notes" fallback="N" /></span>
           <div>
+            <span className="plugin-floating-kicker">Notes</span>
             <strong>{request.mode === 'edit' ? 'Edit note' : 'New note'}</strong>
             <small>Format your text, then place it on the board.</small>
           </div>

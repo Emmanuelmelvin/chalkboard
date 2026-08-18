@@ -92,6 +92,12 @@ export interface PluginManifest {
    * what the client does with this flag.
    */
   locked?: boolean;
+  /**
+   * True when the plugin opts into a live preview of the inserted object
+   * rendered inside its modal. Undefined means the plugin does not want a
+   * preview; the modal only draws previews for plugins that declare it.
+   */
+  preview?: boolean;
 }
 
 

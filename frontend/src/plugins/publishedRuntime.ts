@@ -142,6 +142,7 @@ export function publishedPluginManifest(plugin: ManagedPlugin): PluginManifest |
     // thing that refuses to hand over the code.
     plan: plugin.plan,
     locked: plugin.locked ?? false,
+    preview: rawManifest.preview === true,
   };
   return manifest;
 

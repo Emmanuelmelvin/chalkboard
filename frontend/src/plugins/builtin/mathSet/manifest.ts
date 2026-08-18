@@ -12,6 +12,7 @@ export const mathSetManifest: PluginManifest = {
   version: '1.0.0',
   description: 'Set theory diagrams, symbols, number lines, coordinate grids, and math teaching templates.',
   author: 'Chalkboard Labs',
+  preview: true,
   permissions: ['board:write', 'selection:write', 'room:sync'],
   contributes: {
     tools: [

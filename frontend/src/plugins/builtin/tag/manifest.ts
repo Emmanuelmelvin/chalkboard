@@ -6,6 +6,7 @@ export const tagManifest: PluginManifest = {
   version: '1.0.0',
   description: 'Adds a label above or below the selected object so it can be identified on the canvas.',
   author: 'Chalkboard Labs',
+  preview: true,
   permissions: ['board:read', 'board:write', 'selection:read', 'selection:write', 'room:sync'],
   contributes: {
     tools: [

@@ -5,8 +5,8 @@ import { plainTextFromHtml, sanitizeNoteHtml } from '@/plugins/builtin/notes/san
 import { notesManifest } from '@/plugins/builtin/notes/manifest';
 
 export const NOTES_PLUGIN_ID = notesManifest.id;
-const DEFAULT_NOTE_WIDTH = 360;
-const DEFAULT_NOTE_HEIGHT = 220;
+export const DEFAULT_NOTE_WIDTH = 360;
+export const DEFAULT_NOTE_HEIGHT = 220;
 const DEFAULT_NOTE_FONT_SIZE = 24;
 const DEFAULT_NOTE_FONT_FAMILY = 'Arial';
 const DEFAULT_NOTE_TEXT_COLOR = '#ffffff';
@@ -34,6 +34,27 @@ function nextEditorRequest(mode: 'create' | 'edit', noteId?: string, position?: 
     noteId,
     position,
   });
+}
+
+/**
+ * Commands arrive in one of two shapes: the modal path wraps field values in
+ * `formValues` (see PluginCommandPayload), while the floating editor passes a
+ * flat payload. Merge both so either caller works.
+ */
+function noteValuesFromPayload(payload?: unknown): NotesCommitPayload {
+  const commandPayload = payload as PluginCommandPayload | undefined;
+  const flat = (payload ?? {}) as NotesCommitPayload;
+  return { ...(commandPayload?.formValues ?? {}), ...flat };
+}
+
+/** Form field booleans travel as strings ("true"/"false") through the modal. */
+function booleanFromAny(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    if (/^(true|1)$/i.test(value)) return true;
+    if (/^(false|0)$/i.test(value)) return false;
+  }
+  return undefined;
 }
 
 /** Turn plain modal text into minimal safe note HTML (paragraphs with line breaks). */
@@ -75,7 +96,7 @@ function makeNoteStroke(api: ChalkboardPluginAPI, values: NotesCommitPayload, po
   const textColor = values.textColor || DEFAULT_NOTE_TEXT_COLOR;
   const requestedBackground = values.backgroundColor || values.background || DEFAULT_NOTE_BACKGROUND;
   const backgroundColor = requestedBackground === 'transparent' ? 'transparent' : requestedBackground;
-  const backgroundTransparent = values.backgroundTransparent ?? backgroundColor === 'transparent';
+  const backgroundTransparent = booleanFromAny(values.backgroundTransparent) ?? backgroundColor === 'transparent';
 
   return {
     id: `${api.board.getUserId()}-note-${Date.now()}`,
@@ -110,7 +131,7 @@ export const notesPlugin: ChalkboardPlugin = {
 
   activate(api) {
     api.commands.register('notes.create', (payload?: unknown) => {
-      const values = (payload as NotesCommitPayload | undefined) ?? {};
+      const values = noteValuesFromPayload(payload);
       const html = sanitizeNoteHtml(values.noteHtml ?? values.html ?? '');
       const plainText = values.plainText?.trim() || plainTextFromHtml(html).trim() || values.text?.trim() || '';
       if (!plainText) return false;
@@ -145,7 +166,7 @@ export const notesPlugin: ChalkboardPlugin = {
     });
 
     api.commands.register('notes.commit', (payload?: unknown) => {
-      const values = (payload ?? {}) as NotesCommitPayload;
+      const values = noteValuesFromPayload(payload);
       const request = getBoard().noteEditorRequest;
       const noteId = values.noteId ?? request?.noteId;
       const html = sanitizeNoteHtml(values.html ?? '');
@@ -160,12 +181,16 @@ export const notesPlugin: ChalkboardPlugin = {
           ...stroke,
           text: plainText,
           noteHtml: html,
+          // Drop stored dimensions so the note layer re-measures the box
+          // against the new text instead of keeping the previous size.
+          noteWidth: undefined,
+          noteHeight: undefined,
           color: values.textColor || stroke.noteTextColor || stroke.color,
           fontSize: Math.min(96, Math.max(10, Number(values.fontSize) || stroke.fontSize || DEFAULT_NOTE_FONT_SIZE)),
           noteFontFamily: values.fontFamily || stroke.noteFontFamily || DEFAULT_NOTE_FONT_FAMILY,
           noteTextColor: values.textColor || stroke.noteTextColor || stroke.color,
           noteBackgroundColor: values.backgroundColor || stroke.noteBackgroundColor || DEFAULT_NOTE_BACKGROUND,
-          noteBackgroundTransparent: values.backgroundTransparent ?? values.backgroundColor === 'transparent',
+          noteBackgroundTransparent: booleanFromAny(values.backgroundTransparent) ?? values.backgroundColor === 'transparent',
           textAlign: values.textAlign || stroke.textAlign || 'left',
         } : stroke);
         const ok = api.board.updateStrokes(updated);

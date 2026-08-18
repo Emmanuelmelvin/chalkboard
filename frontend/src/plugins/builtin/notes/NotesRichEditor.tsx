@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlignCenter, AlignLeft, AlignRight, Bold, Italic, List, ListOrdered,
   Strikethrough, Underline,
@@ -53,11 +53,44 @@ const NotesRichEditor: React.FC<NotesRichEditorProps> = ({
     editorRef.current?.focus();
     document.execCommand(command, false, commandValue);
     sync();
+    refreshFormats();
   };
 
   const preventToolbarBlur = (event: React.MouseEvent) => event.preventDefault();
 
   const set = (patch: Partial<NotesRichTextDraft>) => onChange({ ...value, ...patch });
+
+  const [formats, setFormats] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false,
+    ul: false,
+    ol: false,
+  });
+
+  const refreshFormats = useCallback(() => {
+    setFormats({
+      bold: document.queryCommandState('bold'),
+      italic: document.queryCommandState('italic'),
+      underline: document.queryCommandState('underline'),
+      strike: document.queryCommandState('strikeThrough'),
+      ul: document.queryCommandState('insertUnorderedList'),
+      ol: document.queryCommandState('insertOrderedList'),
+    });
+  }, []);
+
+  useEffect(() => {
+    const content = editorRef.current;
+    document.addEventListener('selectionchange', refreshFormats);
+    content?.addEventListener('keyup', refreshFormats);
+    content?.addEventListener('mouseup', refreshFormats);
+    return () => {
+      document.removeEventListener('selectionchange', refreshFormats);
+      content?.removeEventListener('keyup', refreshFormats);
+      content?.removeEventListener('mouseup', refreshFormats);
+    };
+  }, [refreshFormats]);
 
   return (
     <>
@@ -65,10 +98,10 @@ const NotesRichEditor: React.FC<NotesRichEditorProps> = ({
         const target = event.target as HTMLInputElement;
         if (target.getAttribute('aria-label') === 'Note background color') set({ backgroundTransparent: false });
       }}>
-        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('bold')} title="Bold"><Bold size={15} /></button>
-        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('italic')} title="Italic"><Italic size={15} /></button>
-        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('underline')} title="Underline"><Underline size={15} /></button>
-        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('strikeThrough')} title="Strikethrough"><Strikethrough size={15} /></button>
+        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('bold')} title="Bold" aria-pressed={formats.bold} className={formats.bold ? 'active' : ''}><Bold size={15} /></button>
+        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('italic')} title="Italic" aria-pressed={formats.italic} className={formats.italic ? 'active' : ''}><Italic size={15} /></button>
+        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('underline')} title="Underline" aria-pressed={formats.underline} className={formats.underline ? 'active' : ''}><Underline size={15} /></button>
+        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('strikeThrough')} title="Strikethrough" aria-pressed={formats.strike} className={formats.strike ? 'active' : ''}><Strikethrough size={15} /></button>
         <span className="notes-editor-divider" />
         <select value={value.fontFamily} onChange={(event) => { set({ fontFamily: event.target.value }); execCommand('fontName', event.target.value); }} aria-label="Font family">
           <option value="Arial">Arial</option>
@@ -77,16 +110,28 @@ const NotesRichEditor: React.FC<NotesRichEditorProps> = ({
           <option value="Courier New">Courier New</option>
           <option value="Comic Sans MS">Comic Sans</option>
         </select>
-        <input className="notes-editor-size" type="number" min="10" max="96" value={value.fontSize} onChange={(event) => { set({ fontSize: event.target.value }); execCommand('fontSize', '4'); }} aria-label="Font size" />
+        <select
+          className="notes-editor-size"
+          value={value.fontSize}
+          onChange={(event) => { set({ fontSize: event.target.value }); execCommand('fontSize', '4'); }}
+          aria-label="Font size"
+        >
+          {Array.from({ length: 20 }, (_, index) => index + 1).map((size) => (
+            <option key={size} value={String(size)}>{size}</option>
+          ))}
+          {!(Number(value.fontSize) >= 1 && Number(value.fontSize) <= 20) && (
+            <option value={value.fontSize}>{value.fontSize} ( current)</option>
+          )}
+        </select>
         <label className="notes-color-input" title="Text color"><span>A</span><input type="color" value={value.textColor} onChange={(event) => { set({ textColor: event.target.value }); execCommand('foreColor', event.target.value); }} aria-label="Text color" /></label>
         <label className="notes-color-input" title="Note background"><span className="notes-highlight-icon">●</span><input type="color" value={value.backgroundColor} onChange={(event) => set({ backgroundColor: event.target.value })} aria-label="Note background color" /></label>
         <label className="notes-transparent-toggle"><input type="checkbox" checked={value.backgroundTransparent} onChange={(event) => set({ backgroundTransparent: event.target.checked })} /> Transparent</label>
         <span className="notes-editor-divider" />
-        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('insertUnorderedList')} title="Bulleted list"><List size={15} /></button>
-        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('insertOrderedList')} title="Numbered list"><ListOrdered size={15} /></button>
-        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => { set({ textAlign: 'left' }); execCommand('justifyLeft'); }} title="Align left"><AlignLeft size={15} /></button>
-        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => { set({ textAlign: 'center' }); execCommand('justifyCenter'); }} title="Align center"><AlignCenter size={15} /></button>
-        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => { set({ textAlign: 'right' }); execCommand('justifyRight'); }} title="Align right"><AlignRight size={15} /></button>
+        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('insertUnorderedList')} title="Bulleted list" aria-pressed={formats.ul} className={formats.ul ? 'active' : ''}><List size={15} /></button>
+        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => execCommand('insertOrderedList')} title="Numbered list" aria-pressed={formats.ol} className={formats.ol ? 'active' : ''}><ListOrdered size={15} /></button>
+        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => { set({ textAlign: 'left' }); execCommand('justifyLeft'); }} title="Align left" className={value.textAlign === 'left' ? 'active' : ''}><AlignLeft size={15} /></button>
+        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => { set({ textAlign: 'center' }); execCommand('justifyCenter'); }} title="Align center" className={value.textAlign === 'center' ? 'active' : ''}><AlignCenter size={15} /></button>
+        <button type="button" onMouseDown={preventToolbarBlur} onClick={() => { set({ textAlign: 'right' }); execCommand('justifyRight'); }} title="Align right" className={value.textAlign === 'right' ? 'active' : ''}><AlignRight size={15} /></button>
       </div>
 
       <div

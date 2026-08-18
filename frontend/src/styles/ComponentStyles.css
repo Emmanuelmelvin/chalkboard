@@ -332,6 +332,7 @@
 .notes-editor-content {
   width: auto;
   height: auto;
+  padding: 10px;
 }
 
 .notes-align-left {

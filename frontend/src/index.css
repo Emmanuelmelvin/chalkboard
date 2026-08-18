@@ -410,6 +410,12 @@ body {
   color: #fff;
 }
 
+.notes-editor-toolbar button.active {
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(37, 99, 235, 0.22);
+  color: #fff;
+}
+
 .notes-editor-toolbar {
   display: flex;
   align-items: center;
@@ -442,8 +448,8 @@ body {
 }
 
 .notes-editor-size {
-  width: 48px;
-  padding: 0 4px;
+  width: 64px;
+  padding: 0 5px;
 }
 
 .notes-color-input {

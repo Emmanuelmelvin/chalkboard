@@ -6,6 +6,8 @@ The product deliberately combines the feel of a physical classroom blackboard wi
 
 ![Chalkboard demo](demo-video/chalkboard-demo.gif)
 
+A beta release of Chalkboard is live at [chalkboard.click](https://chalkboard.click).
+
 ## What problem does it solve?
 
 Ideas are often developed across disconnected tools: a video call for conversation, a whiteboard for diagrams, a document for notes, and chat for links. That makes it difficult to keep the discussion, visual thinking, and next steps together.

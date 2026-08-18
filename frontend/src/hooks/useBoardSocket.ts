@@ -94,6 +94,7 @@ export function useBoardSocket(
   const [chatUnreadMentions, setChatUnreadMentions] = useState(0);
   const [userCursorColor] = useState<string>(() => getRandomColor());
   const previousUsersRef = useRef<Map<string, string> | null>(null);
+  const lobbyRedirectHandledRef = useRef(false);
   const [clientSessionId] = useState(() => getClientSessionId());
 
   useEffect(() => {
@@ -295,6 +296,19 @@ export function useBoardSocket(
         clientSessionId,
       }, (response: { ok?: boolean; error?: string; role?: RoomMember['role']; ownerVoiceConnected?: boolean }) => {
         if (!response?.ok) {
+          // A guest who lands directly on /room/:roomId (e.g. from a shared
+          // invite link) has no lobby to present a password or submit an
+          // approval request. Send them there instead of leaving them in the
+          // room with only a toast. The guard keeps a reconnect from bouncing
+          // an already-connected user back to the lobby.
+          const gateError = response?.error === 'bad_password'
+            || response?.error === 'approval_required'
+            || response?.error === 'join_denied';
+          if (gateError && !lobbyRedirectHandledRef.current) {
+            lobbyRedirectHandledRef.current = true;
+            window.location.assign(`/lobby/${encodeURIComponent(roomId)}`);
+            return;
+          }
           const errorMessage = response?.error === 'already_joined'
             ? 'You have already joined this room on another device.'
             : response?.error === 'unauthorized'

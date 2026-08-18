@@ -4,10 +4,12 @@
  * Builds chalkboard-pitch-deck.pptx from the dashboard design system
  * (PublicPages.css): chalk-black background, warm hairline-bordered panels,
  * Georgia serif display with italic gold emphasis, uppercase letter-spaced
- * kickers with a gold dot, numbered rows, and orbit hero art.
+ * kickers with a gold dot, numbered rows, orbit hero art, and product
+ * screenshots from the demo capture.
  *
  * Run: npm install && npm run generate
  */
+import path from 'node:path';
 import pptxgen from 'pptxgenjs';
 
 /* ---------------------------------------------------------------------------
@@ -35,6 +37,20 @@ const FONT_MONO = 'Consolas';
 const PAGE = { w: 13.333, h: 7.5 };
 const M = 0.55; // page margin
 const TOTAL_SLIDES = 11;
+
+// Product captures from the demo. Frames are 960x540 (16:9); the
+// user-supplied screenshots live in ./images and keep their own aspect.
+const IMG = {
+  demoGif: path.join(import.meta.dirname, '..', 'demo-video', 'chalkboard-demo.gif'),
+  frame1: path.join(import.meta.dirname, '..', 'demo-video', 'frames', 'frame-001.png'),
+  frame2: path.join(import.meta.dirname, '..', 'demo-video', 'frames', 'frame-002.png'),
+  frame3: path.join(import.meta.dirname, '..', 'demo-video', 'frames', 'frame-003.png'),
+  frame4: path.join(import.meta.dirname, '..', 'demo-video', 'frames', 'frame-004.png'),
+  boardRoom: path.join(import.meta.dirname, 'images', 'board-room.png'),
+  plansBreakdown: path.join(import.meta.dirname, 'images', 'plans-breakdown.png'),
+  selectedObject: path.join(import.meta.dirname, 'images', 'selected-object-on-canvas.png'),
+  mathPlugins: path.join(import.meta.dirname, 'images', 'using-math-plugins.png'),
+};
 
 const pptx = new pptxgen();
 pptx.defineLayout({ name: 'WIDE', width: PAGE.w, height: PAGE.h });
@@ -115,8 +131,8 @@ function ctaButton(s, x, y, w, label, opts = {}) {
   });
 }
 
-/* Numbered feature rows used by the "rhythm" lists: gold index, bold label,
- * muted trailing description, hairline separator between rows. */
+/* Numbered feature rows: gold index, bold label, muted trailing description,
+ * hairline separator between rows. */
 function numberedRows(s, x, y, w, rows, rowH = 0.62, opts = {}) {
   rows.forEach((row, i) => {
     const ry = y + i * rowH;
@@ -162,6 +178,36 @@ function panelKicker(s, x, y, text) {
     fontFace: FONT_SANS, fontSize: 8, bold: true, charSpacing: 1.5,
     color: C.goldBright, align: 'left', valign: 'middle',
   });
+}
+
+/* Bottom gold-line strip used as a takeaway bar across content slides. */
+function bottomStrip(s, y, runs, opts = {}) {
+  panel(s, M, y, PAGE.w - M * 2, 0.52, { fill: '14171A', line: C.goldLine });
+  s.addText(runs, {
+    x: M + 0.3, y, w: PAGE.w - M * 2 - 0.6, h: 0.52,
+    fontFace: FONT_SANS, fontSize: 10, color: C.muted,
+    align: 'center', valign: 'middle', lineSpacingMultiple: 1.2,
+  });
+}
+
+/* Product screenshot: image with a hairline gold frame and a mono caption
+ * below. Frames and full-screen captures are 16:9; pass opts.aspect for
+ * other aspect ratios (height = width * aspect). */
+function screenshot(s, x, y, w, imagePath, caption, opts = {}) {
+  const h = w * (opts.aspect ?? 9 / 16);
+  s.addImage({ path: imagePath, x, y, w, h });
+  s.addShape('rect', {
+    x, y, w, h,
+    line: { color: opts.line ?? C.goldLine, width: 1.25 },
+  });
+  if (caption) {
+    s.addText(caption.toUpperCase(), {
+      x, y: y + h + 0.09, w, h: 0.18,
+      fontFace: FONT_MONO, fontSize: 7, charSpacing: 1.3, color: C.dim,
+      align: 'center', valign: 'middle',
+    });
+  }
+  return { x, y, w, h };
 }
 
 function orbit(s, x, y, w, h, rotate, color = C.line, width = 1) {
@@ -245,37 +291,30 @@ function slideProblem() {
     { text: 'scattered', options: { italic: true, color: C.goldBright } },
     { text: ' across disconnected tools.', options: {} },
   ]);
-  body(s, 'Conversation happens in the video call, diagrams in a whiteboard app, notes in a document, links in chat. When the meeting ends, the thinking has no shared home.');
+  body(s, 'Conversation happens in the video call, diagrams in a whiteboard app, notes in a document, links in chat.');
 
-  panel(s, M, 3.05, 7.6, 3.45);
-  panelKicker(s, 0.73, 3.28, 'THE USUAL ROOM / FOUR FRAGMENTS');
-  numberedRows(s, 0.75, 3.72, 7.25, [
+  panel(s, M, 2.68, 5.9, 3.6);
+  panelKicker(s, 0.73, 2.9, 'THE USUAL ROOM / FOUR FRAGMENTS');
+  numberedRows(s, 0.75, 3.34, 5.5, [
     { strong: 'Video call', rest: 'the conversation' },
     { strong: 'Whiteboard', rest: 'the diagrams' },
     { strong: 'Document', rest: 'the notes' },
     { strong: 'Chat', rest: 'the links' },
-  ], 0.66);
+  ], 0.72);
 
-  panel(s, 8.4, 3.05, 4.38, 3.45);
-  panelKicker(s, 8.58, 3.28, 'THE COST / AFTER THE MEETING');
+  const shot = screenshot(s, 6.78, 2.68, 6.0, IMG.frame1, 'Demo scene 01 — where the idea starts');
   s.addText([
     { text: 'Where did we ', options: {} },
     { text: 'put that?', options: { italic: true, color: C.goldBright } },
   ], {
-    x: 8.58, y: 3.6, w: 4.05, h: 0.6,
-    fontFace: FONT_SERIF, fontSize: 23, color: C.ink, align: 'left', valign: 'top',
+    x: 6.78, y: shot.y + shot.h + 0.42, w: 6.0, h: 0.5,
+    fontFace: FONT_SERIF, fontSize: 21, color: C.ink, align: 'left', valign: 'top',
   });
-  s.addText('Everyone leaves with a different version of what was decided — and of where the source of truth lives.', {
-    x: 8.58, y: 4.35, w: 4.05, h: 0.75,
-    fontFace: FONT_SANS, fontSize: 10.5, color: C.muted, align: 'left', valign: 'top', lineSpacingMultiple: 1.35,
-  });
-  s.addShape('rect', { x: 8.58, y: 5.25, w: 4.02, h: 0.015, fill: { color: C.line }, line: { color: C.line, width: 0.1 } });
-  s.addText([
-    { text: '3–4', options: { fontFace: FONT_SERIF, fontSize: 34, color: C.goldBright } },
-    { text: '  tools per session\n', options: { fontFace: FONT_SANS, fontSize: 10, color: C.dim, breakLine: true } },
-    { text: '0', options: { fontFace: FONT_SERIF, fontSize: 34, color: C.goldBright } },
-    { text: '  shared home for the idea afterward', options: { fontFace: FONT_SANS, fontSize: 10, color: C.dim } },
-  ], { x: 8.58, y: 5.42, w: 4.02, h: 0.9, align: 'left', valign: 'top' });
+
+  bottomStrip(s, 6.42, [
+    { text: 'THE COST  ', options: { bold: true, color: C.goldBright } },
+    { text: '— everyone leaves with a different version of what was decided. 3–4 tools per session, zero shared homes for the idea afterward.', options: { color: C.muted } },
+  ]);
 
   footer(s, 2);
   s.addNotes('Ideas live across video, whiteboard, docs, and chat. Nothing keeps discussion, visual thinking, and next steps in one place.');
@@ -292,25 +331,24 @@ function slideSolution() {
     { text: 'whole idea', options: { italic: true, color: C.goldBright } },
     { text: ' lives.', options: {} },
   ]);
-  body(s, 'Chalkboard gives a team, classroom, workshop, or study group one shared, persistent canvas. Everyone draws on the same board, sees one another live, and leaves with the thinking still in place.');
+  body(s, 'Chalkboard gives a team, classroom, workshop, or study group one shared, persistent canvas — drawn on together, live.');
 
-  panel(s, M, 3.05, 7.6, 3.45);
-  panelKicker(s, 0.73, 3.28, 'THE ROOM / WHAT IT GIVES YOU');
-  checkRows(s, 0.78, 3.7, 7.15, [
+  panel(s, M, 2.68, 5.9, 3.6);
+  panelKicker(s, 0.73, 2.9, 'THE ROOM / WHAT IT GIVES YOU');
+  checkRows(s, 0.78, 3.34, 5.4, [
     { strong: 'Draw together', rest: 'annotate the same canvas at the same time' },
     { strong: 'See everyone', rest: 'presence, live cursors, names, reactions' },
     { strong: 'Reopen anytime', rest: 'room history reloads for every participant' },
     { strong: 'Control access', rest: 'open, ask-to-join, or password rooms' },
     { strong: 'Extend the board', rest: 'built-in tools and reviewed community plugins' },
-  ], 0.555);
+  ], 0.56);
 
-  panel(s, 8.4, 3.05, 4.38, 3.45);
-  panelKicker(s, 8.58, 3.28, 'A SIMPLE RHYTHM');
-  numberedRows(s, 8.58, 3.72, 4.05, [
-    { strong: 'Open a room', rest: 'give the idea somewhere to go.' },
-    { strong: 'Make it visible', rest: 'draw the thread and add context.' },
-    { strong: 'Move together', rest: 'leave with a clear next step.' },
-  ], 0.78);
+  const shot = screenshot(s, 6.78, 2.68, 6.0, IMG.selectedObject, 'Demo scene — select, move, resize, group, undo');
+
+  bottomStrip(s, 6.42, [
+    { text: 'A SIMPLE RHYTHM  ', options: { bold: true, color: C.goldBright } },
+    { text: '01 open a room · 02 make it visible · 03 move together.', options: { color: C.muted } },
+  ]);
 
   footer(s, 3);
   s.addNotes('One shared, persistent room replaces the fragmented tool chain: draw, explain, react, and leave with the work intact.');
@@ -326,30 +364,26 @@ function slideCanvas() {
     { text: 'Tools that keep the ', options: {} },
     { text: 'thought moving.', options: { italic: true, color: C.goldBright } },
   ]);
-  body(s, 'Freehand chalk with color, size, intensity, and texture — and rigorous editing on top. Every board mutation is synchronized to the room, so collaborators share one result instead of isolated copies.', { h: 0.85 });
+  body(s, 'Freehand chalk with color, size, intensity, and texture — and rigorous editing on top.');
 
-  const cards = [
-    { num: '01', label: 'Freehand chalk', desc: 'Color, size, intensity, and chalk-dust styling for loose, natural strokes.' },
-    { num: '02', label: 'Shapes & systems', desc: 'Lines, arrows, circles, rectangles, polygons, stars, hearts, crosses, diamonds.' },
-    { num: '03', label: 'Notes & links', desc: 'Editable notes and saved links that connect a reference to a spot on the canvas.' },
-    { num: '04', label: 'Select & transform', desc: 'Move, resize, rotate, group, duplicate, trim, cut, copy, paste — plus undo, redo, clear.' },
-  ];
-  const cardW = 5.95;
-  const cardH = 1.7;
-  const gapX = 0.33;
-  const xs = [M, M + cardW + gapX];
-  const ys = [3.15, 3.15 + cardH + 0.26];
-  cards.forEach((card, i) => {
-    const x = xs[i % 2];
-    const y = ys[Math.floor(i / 2)];
-    panel(s, x, y, cardW, cardH);
-    s.addText(card.num, { x: x + 0.3, y: y + 0.24, w: 0.6, h: 0.3, fontFace: FONT_MONO, fontSize: 10, color: C.gold });
-    s.addText(card.label, { x: x + 0.3, y: y + 0.58, w: cardW - 0.6, h: 0.4, fontFace: FONT_SERIF, fontSize: 19, color: C.ink });
-    s.addText(card.desc, { x: x + 0.3, y: y + 1.05, w: cardW - 0.62, h: 0.55, fontFace: FONT_SANS, fontSize: 10, color: C.muted, lineSpacingMultiple: 1.3 });
-  });
+  panel(s, M, 2.68, 5.9, 3.6);
+  panelKicker(s, 0.73, 2.9, 'THE TOOLKIT');
+  numberedRows(s, 0.75, 3.34, 5.5, [
+    { strong: 'Freehand chalk', rest: 'color, size, intensity, chalk-dust styling' },
+    { strong: 'Shapes & systems', rest: 'lines, arrows, circles, polygons, stars, hearts' },
+    { strong: 'Notes & links', rest: 'editable context, saved references to a spot' },
+    { strong: 'Select & transform', rest: 'move, resize, rotate, group, duplicate, trim' },
+  ], 0.72);
+
+  const shot = screenshot(s, 6.78, 2.68, 6.0, IMG.demoGif, 'Live demo — strokes appear for everyone as they are drawn');
+
+  bottomStrip(s, 6.42, [
+    { text: 'SYNCHRONIZED  ', options: { bold: true, color: C.goldBright } },
+    { text: '— every board mutation is shared with the room: undo, redo, clear, and collaborators keep one result, not isolated copies.', options: { color: C.muted } },
+  ]);
 
   footer(s, 4);
-  s.addNotes('The canvas pairs loose chalk drawing with rigorous editing: selection, transforms, grouping, and synchronized undo/redo.');
+  s.addNotes('The canvas pairs loose chalk drawing with rigorous editing: selection, transforms, grouping, and synchronized undo/redo. The animated demo plays in slideshow mode.');
 }
 
 /* ---------------------------------------------------------------------------
@@ -365,36 +399,23 @@ function slideRooms() {
   ]);
   body(s, 'Presence, live cursors, reactions, and raised hands keep the room in sync even when the ideas are not.');
 
-  panel(s, M, 3.05, 7.6, 3.45);
-  panelKicker(s, 0.73, 3.28, 'INSIDE THE ROOM / LIVE');
-  checkRows(s, 0.78, 3.7, 7.15, [
+  panel(s, M, 2.68, 5.9, 3.6);
+  panelKicker(s, 0.73, 2.9, 'INSIDE THE ROOM / LIVE');
+  checkRows(s, 0.78, 3.34, 5.4, [
     { strong: 'Live cursors', rest: 'names and colors, moving in real time' },
     { strong: 'Presence', rest: 'who is here, where, and who is editing' },
-    { strong: 'Reactions & hands', rest: 'lightweight feedback, raised hands, counts' },
-    { strong: 'Voice rooms', rest: 'scoped LiveKit audio for enabled rooms' },
-    { strong: 'Roles', rest: 'owners, instructors, and viewers act in the right scope' },
-    { strong: 'Reconnection', rest: 'presence grace period — no flicker on transient drops' },
+    { strong: 'Reactions & hands', rest: 'lightweight feedback and raised hands' },
+    { strong: 'Voice rooms', rest: 'scoped LiveKit audio when enabled' },
+    { strong: 'Roles', rest: 'owners, instructors, and viewers' },
+    { strong: 'Reconnection', rest: 'presence grace period — no flicker' },
   ], 0.47);
 
-  panel(s, 8.4, 3.05, 4.38, 3.45);
-  panelKicker(s, 8.58, 3.28, 'HOW A ROOM OPENS / ACCESS MODES');
-  numberedRows(s, 8.58, 3.72, 4.05, [
-    { strong: 'Open rooms', rest: 'anyone with the code joins instantly.' },
-    { strong: 'Ask to join', rest: 'the owner reviews each request.' },
-    { strong: 'Password', rest: 'a generated password keeps it private.' },
-  ], 0.66);
-  s.addText('Six room themes — classroom, workshop, brainstorm, meeting, planning, studio.', {
-    x: 8.58, y: 5.85, w: 4.05, h: 0.5,
-    fontFace: FONT_SANS, fontSize: 9.5, color: C.dim, align: 'left', valign: 'top', lineSpacingMultiple: 1.3,
-  });
+  const shot = screenshot(s, 6.78, 2.68, 6.0, IMG.boardRoom, 'The room — live cursors, presence, reactions, roles');
 
-  const stats = [['LIVE', 'cursors & presence'], ['SYNCED', 'strokes & every board edit'], ['SAVED', 'history reloads on join']];
-  const statW = 3.9;
-  stats.forEach(([v, l], i) => {
-    const x = M + i * (statW + 0.27);
-    s.addText(v, { x, y: 6.62, w: statW, h: 0.3, fontFace: FONT_SERIF, fontSize: 15, color: C.goldBright });
-    s.addText(l, { x, y: 6.9, w: statW, h: 0.18, fontFace: FONT_MONO, fontSize: 7, charSpacing: 1.2, color: C.dim });
-  });
+  bottomStrip(s, 6.42, [
+    { text: 'ACCESS  ', options: { bold: true, color: C.goldBright } },
+    { text: 'open rooms · ask-to-join · password-protected — six room themes: classroom, workshop, brainstorm, meeting, planning, studio.', options: { color: C.muted } },
+  ]);
 
   footer(s, 5);
   s.addNotes('Live cursors, presence, reactions, raised hands, voice, roles, and reconnection grace keep the room alive together.');
@@ -454,29 +475,22 @@ function slidePlatform() {
   ]);
   body(s, 'Built-in tools cover the common cases; a reviewed community catalogue covers the rest — without ever leaving the canvas.');
 
-  panel(s, M, 3.05, 7.6, 3.05);
-  panelKicker(s, 0.73, 3.28, 'BUILT-IN TOOLKIT');
-  numberedRows(s, 0.75, 3.72, 7.25, [
+  panel(s, M, 2.68, 5.9, 3.6);
+  panelKicker(s, 0.73, 2.9, 'BUILT-IN TOOLKIT');
+  numberedRows(s, 0.75, 3.34, 5.5, [
     { strong: 'Notes', rest: 'editable text on the board' },
     { strong: 'Tags', rest: 'annotate selected content' },
     { strong: 'Statistics', rest: 'quick computations at the board' },
-    { strong: 'Mathematical Set', rest: 'Venn diagrams, number lines, coordinate grids, set symbols' },
-  ], 0.58);
+    { strong: 'Mathematical Set', rest: 'Venn diagrams, number lines, grids, set symbols' },
+    { strong: 'Example packages', rest: 'Focus Dot, Inscribed Circles — MIT licensed' },
+  ], 0.575);
 
-  panel(s, 8.4, 3.05, 4.38, 3.05);
-  panelKicker(s, 8.58, 3.28, 'DEVELOPER WORKSPACE');
-  checkRows(s, 8.63, 3.7, 3.95, [
-    { strong: 'Manifest', rest: 'identity, version, permissions, commands, tools, entry bundle' },
-    { strong: 'Safe bridge', rest: 'postMessage only — no store, cookies, or socket internals' },
-    { strong: 'Lifecycle', rest: 'draft, version, review, approval, publish' },
-    { strong: 'Reviewed', rest: 'administrators smoke-test every submission' },
-  ], 0.585);
+  const shot = screenshot(s, 6.78, 2.68, 6.0, IMG.mathPlugins, 'Built-in plugins — math sets as real, editable canvas strokes');
 
-  panel(s, M, 6.3, 12.23, 0.55, { fill: '14171A', line: C.goldLine });
-  s.addText([
-    { text: '15% ', options: { fontFace: FONT_SERIF, fontSize: 15, italic: true, color: C.goldBright } },
-    { text: 'of Pro and Team revenue funds the plugin developers whose tools you use.', options: { fontFace: FONT_SANS, fontSize: 10.5, color: C.muted } },
-  ], { x: M + 0.3, y: 6.3, w: 11.6, h: 0.55, align: 'center', valign: 'middle' });
+  bottomStrip(s, 6.42, [
+    { text: 'DEVELOPER WORKSPACE  ', options: { bold: true, color: C.goldBright } },
+    { text: 'manifest + permissions · postMessage bridge · draft → review → publish · 15% of paid revenue funds plugin developers.', options: { color: C.muted } },
+  ]);
 
   footer(s, 7);
   s.addNotes('Built-in toolkit plus a developer workspace with a reviewed publish lifecycle and a 15% revenue share for plugin developers.');
@@ -494,64 +508,62 @@ function slideBusiness() {
   ]);
   body(s, 'A defined Free tier, a Pro tier for work worth keeping, and a Team workspace for whole departments. No participant paywall, ever.');
 
-  const plans = [
+  // The plans page capture is a wide 2.27:1 screenshot (1352x596).
+  screenshot(s, M, 2.68, 7.15, IMG.plansBreakdown, 'The plans page — self-serve checkout', { aspect: 596 / 1352 });
+
+  const tiers = [
     {
       name: 'FREE',
       price: '$0',
       per: 'forever',
-      lines: ['5 active rooms', '25 participants per room', '7-day board retention', '200 voice minutes / month'],
+      lines: '5 rooms · 25 participants · 7-day retention · 200 voice minutes',
       recommended: false,
     },
     {
       name: 'PRO',
       price: '$5',
       per: 'per month · $50 / year',
-      lines: ['Unlimited rooms', '100 participants per room', 'Boards kept indefinitely', 'Full plugin catalogue + publishing', 'PNG / SVG / PDF export', '1,500 voice minutes / month'],
+      lines: 'Unlimited rooms · boards kept forever · full catalogue, export, publishing',
       recommended: true,
     },
     {
       name: 'TEAM',
       price: '$30',
       per: 'per month · $300 / year',
-      lines: ['10 seats in one workspace', '300 participants per room', '10,000 pooled voice minutes', 'Member admin, one invoice', 'Custom branding, priority support'],
+      lines: '10 seats · 300 participants · pooled voice · workspace admin, priority support',
       recommended: false,
     },
   ];
-  const cardW = 3.94;
-  const cardH = 3.15;
-  const gapX = 0.2;
-  plans.forEach((plan, i) => {
-    const x = M + i * (cardW + gapX);
-    const recommended = plan.recommended;
-    panel(s, x, 3.05, cardW, cardH, { line: recommended ? C.goldLine : C.line });
+  const colX = M + 7.15 + 0.35; // 8.05
+  const colW = PAGE.w - M - colX; // 4.73
+  const cardH = 1.1;
+  const cardGap = 0.1;
+  tiers.forEach((tier, i) => {
+    const y = 2.68 + i * (cardH + cardGap);
+    const recommended = tier.recommended;
+    panel(s, colX, y, colW, cardH, { line: recommended ? C.goldLine : C.line });
     if (recommended) {
       s.addText('RECOMMENDED', {
-        x: x + cardW - 1.45, y: 3.05, w: 1.3, h: 0.28,
-        fontFace: FONT_SANS, fontSize: 6.5, bold: true, charSpacing: 1.2, color: C.bg,
+        x: colX + colW - 1.2, y, w: 1.1, h: 0.24,
+        fontFace: FONT_SANS, fontSize: 6, bold: true, charSpacing: 1.1, color: C.bg,
         fill: { color: C.goldBright }, align: 'center', valign: 'middle',
       });
     }
-    s.addText(plan.name, { x: x + 0.28, y: 3.42, w: cardW - 0.56, h: 0.25, fontFace: FONT_MONO, fontSize: 9, bold: true, charSpacing: 1.5, color: C.goldBright });
+    s.addText(tier.name, { x: colX + 0.24, y: y + 0.12, w: colW - 0.48, h: 0.2, fontFace: FONT_MONO, fontSize: 8.5, bold: true, charSpacing: 1.4, color: C.goldBright });
     s.addText([
-      { text: plan.price, options: { fontFace: FONT_SERIF, fontSize: 34, color: C.goldBright } },
-      { text: `  ${plan.per}`, options: { fontFace: FONT_SANS, fontSize: 8.5, color: C.dim } },
-    ], { x: x + 0.28, y: 3.74, w: cardW - 0.56, h: 0.6, align: 'left', valign: 'top' });
-    plan.lines.forEach((line, j) => {
-      const ly = 4.48 + j * 0.285;
-      s.addText([
-        { text: '— ', options: { color: C.gold } },
-        { text: line, options: { color: C.ink } },
-      ], { x: x + 0.28, y: ly, w: cardW - 0.5, h: 0.26, fontFace: FONT_SANS, fontSize: 9.5, color: C.ink, align: 'left', valign: 'top' });
-    });
+      { text: tier.price, options: { fontFace: FONT_SERIF, fontSize: 22, color: C.goldBright } },
+      { text: `  ${tier.per}`, options: { fontFace: FONT_SANS, fontSize: 8, color: C.dim } },
+    ], { x: colX + 0.24, y: y + 0.34, w: colW - 0.48, h: 0.42, align: 'left', valign: 'top' });
+    s.addText(tier.lines, { x: colX + 0.24, y: y + 0.78, w: colW - 0.48, h: 0.28, fontFace: FONT_SANS, fontSize: 8.5, color: C.muted, align: 'left', valign: 'top', lineSpacingMultiple: 1.2 });
   });
 
-  s.addText('Self-serve hosted checkout and subscriptions (card, bank transfer, mobile money) with a customer portal; add-on seats for Team. Includes a 15% developer pool on paid revenue.', {
-    x: M, y: 6.36, w: 12.23, h: 0.5,
-    fontFace: FONT_SANS, fontSize: 9.5, color: C.dim, align: 'left', valign: 'top', lineSpacingMultiple: 1.3,
-  });
+  bottomStrip(s, 6.42, [
+    { text: 'SELF-SERVE  ', options: { bold: true, color: C.goldBright } },
+    { text: 'hosted checkout & customer portal (card, bank transfer, mobile money) · add-on seats for Team · 15% of paid revenue funds plugin developers.', options: { color: C.muted } },
+  ]);
 
   footer(s, 8);
-  s.addNotes('Free / Pro / Team tiers from the pricing constants: retention, rooms, participants, voice minutes, seats, plugins, export, branding, workspace admin, priority support.');
+  s.addNotes('Free / Pro / Team tiers from the pricing constants: retention, rooms, participants, voice minutes, seats, plugins, export, branding, workspace admin, priority support. Screenshot: the /plans page.');
 }
 
 /* ---------------------------------------------------------------------------
@@ -587,11 +599,7 @@ function slideStack() {
     s.addText(desc, { x: x + 0.28, y: y + 0.62, w: chipW - 0.55, h: 0.6, fontFace: FONT_SANS, fontSize: 9.5, color: C.muted, lineSpacingMultiple: 1.3 });
   });
 
-  panel(s, M, 6.12, 12.23, 0.55, { fill: '14171A', line: C.goldLine });
-  s.addText('Development mirrors production: Vite proxies /api and /socket.io to the same backend — one process, one contract.', {
-    x: M + 0.3, y: 6.12, w: 11.6, h: 0.55,
-    fontFace: FONT_SANS, fontSize: 10.5, color: C.muted, align: 'center', valign: 'middle',
-  });
+  bottomStrip(s, 6.12, 'Development mirrors production: Vite proxies /api and /socket.io to the same backend — one process, one contract.');
 
   footer(s, 9);
   s.addNotes('React/TS/Vite, Hono + Socket.IO with Redis adapter, PostgreSQL + Drizzle, Redis + BullMQ, LiveKit voice, Google Identity, R2 plugin storage.');

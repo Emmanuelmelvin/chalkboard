@@ -175,3 +175,11 @@ export const checkoutRateLimit = rateLimit({
   windowMs: env.CHECKOUT_RATE_LIMIT_WINDOW_MS,
   scope: 'user-or-ip',
 });
+
+/** End-of-session room rating submissions. */
+export const feedbackRateLimit = rateLimit({
+  name: 'feedback',
+  max: env.FEEDBACK_RATE_LIMIT_MAX,
+  windowMs: env.FEEDBACK_RATE_LIMIT_WINDOW_MS,
+  scope: 'user-or-ip',
+});

@@ -2807,6 +2807,19 @@ body.dashboard-active #root {
 
 .dashboard-room-list { display: flex; flex-direction: column; margin-top: 25px; }
 .dashboard-room-list-compact { margin-top: 26px; }
+
+.dashboard-room-ratings { margin-top: 22px; padding: 28px; min-width: 0; }
+.dashboard-room-ratings-empty { margin: 20px 0 0; color: var(--dashboard-muted); font-size: 13px; line-height: 1.6; }
+.dashboard-room-ratings-list { display: flex; flex-direction: column; margin-top: 22px; }
+.dashboard-room-rating { display: grid; gap: 5px; padding: 13px 0; border-top: 1px solid var(--dashboard-line); }
+.dashboard-room-rating:first-child { border-top: 0; }
+.dashboard-room-rating-head { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.dashboard-room-rating-head strong { overflow: hidden; min-width: 0; color: var(--dashboard-white); font-size: 13.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-room-rating-head time { margin-left: auto; flex: 0 0 auto; color: var(--dashboard-muted); font-size: 10.5px; letter-spacing: 0.03em; }
+.room-ratings-stars { display: inline-flex; align-items: center; gap: 1px; flex: 0 0 auto; color: rgba(255, 255, 255, 0.18); }
+.room-ratings-stars .is-filled { color: var(--dashboard-gold-bright); }
+.dashboard-room-rating-note { margin: 0; color: var(--dashboard-muted); font-size: 12px; line-height: 1.55; }
+.dashboard-room-rating-reporter { color: var(--dashboard-muted); font-size: 10.5px; letter-spacing: 0.02em; }
 .dashboard-room-row { position: relative; display: flex; min-width: 0; align-items: center; gap: 11px; padding: 9px 0; border: 0; border-top: 1px solid var(--dashboard-line); background: transparent; color: var(--dashboard-white); font-family: inherit; text-align: left; }
 .dashboard-room-row-main { display: flex; min-width: 0; flex: 1; align-items: center; gap: 11px; padding: 5px 0; border: 0; background: transparent; color: inherit; cursor: pointer; font-family: inherit; text-align: left; }
 .dashboard-room-row-main:hover:not(:disabled), .dashboard-room-row-main:focus-visible:not(:disabled) { color: var(--dashboard-gold-bright); }

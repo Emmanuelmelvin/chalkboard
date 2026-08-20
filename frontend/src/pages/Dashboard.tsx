@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Shapes,
   Sparkles,
+  Star,
   Trash2,
   UserRound,
   UsersRound,
@@ -41,6 +42,12 @@ import {
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import RoomMembersModal from '@/components/RoomMembersModal';
+import SessionFeedbackModal from '@/components/SessionFeedbackModal';
+import {
+  consumePendingSessionFeedback,
+  hasRatedRoom,
+  isSessionFeedbackOptedOut
+} from '@/lib/sessionFeedback';
 import DeveloperPlugins from '@/components/DeveloperPlugins';
 import BillingPanel from '@/components/BillingPanel';
 import WorkspacePanel from '@/components/WorkspacePanel';
@@ -49,12 +56,14 @@ import type { UserProfile } from '@/stores/authStore';
 import {
   useCreateRoomMutation,
   useDeleteRoomMutation,
+  useDashboardRoomRatingsQuery,
   useResetRoomPasswordMutation,
   useRoomsQuery,
   useSignOutMutation
 } from '@/api/hooks';
 import type {
   RoomAccessMode,
+  RoomRatingRecord,
   RoomSummary
 } from '@/api/types';
 import '@/styles/PublicPages.css';
@@ -115,6 +124,57 @@ function formatActivity(value: string) {
   return `Last active ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 }
 
+function formatRatingDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function StarRow({ rating }: { rating: number }) {
+  return (
+    <span className="room-ratings-stars" aria-label={`${rating} out of 5 stars`}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <Star key={star} size={13} strokeWidth={1.6} className={star <= rating ? 'is-filled' : ''} aria-hidden="true" />
+      ))}
+    </span>
+  );
+}
+
+function RoomRatingsPanel() {
+  const ratingsQuery = useDashboardRoomRatingsQuery();
+  const ratings = ratingsQuery.data?.feedback ?? [];
+
+  return (
+    <section className="dashboard-panel dashboard-room-ratings">
+      <div className="dashboard-panel-heading">
+        <div>
+          <p className="dashboard-panel-kicker">Room experience</p>
+          <h3>How did your sessions go?</h3>
+        </div>
+      </div>
+      {ratings.length === 0 ? (
+        <p className="dashboard-room-ratings-empty">
+          No ratings yet. When someone leaves one of your rooms they can rate the session, and it will appear here.
+        </p>
+      ) : (
+        <div className="dashboard-room-ratings-list">
+          {ratings.slice(0, 6).map((item: RoomRatingRecord) => (
+            <div className="dashboard-room-rating" key={item.id}>
+              <div className="dashboard-room-rating-head">
+                <strong>{item.room.title}</strong>
+                <StarRow rating={item.rating} />
+                <time dateTime={item.createdAt}>{formatRatingDate(item.createdAt)}</time>
+              </div>
+              {item.note && <p className="dashboard-room-rating-note">{item.note}</p>}
+              <small className="dashboard-room-rating-reporter">{item.reporter.displayName}</small>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function roomRole(room: RoomSummary) {
   return room.role || 'owner';
 }
@@ -155,6 +215,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const activeTab = getTab(search, developerMode);
   const firstName = profile.displayName.trim().split(/\s+/)[0] || 'friend';
   const openRooms = useMemo(() => rooms.filter((room) => room.status === 'open'), [rooms]);
+  const [pendingFeedback, setPendingFeedback] = useState<{ slug: string } | null>(null);
   // The Team tab exists only for the owner of a Team-plan workspace. Members
   // are seated on the same plan, but the workspace admin surface is the
   // owner's alone, and a plan that is not Team has no workspace at all.
@@ -187,6 +248,18 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       document.documentElement.classList.remove('dashboard-active');
       document.body.classList.remove('dashboard-active');
     };
+  }, []);
+
+  // Session feedback: ask about the room the user just left, once per room,
+  // unless they opted out entirely or already rated it.
+  useEffect(() => {
+    const slug = consumePendingSessionFeedback();
+    if (!slug) return;
+    if (isSessionFeedbackOptedOut() || hasRatedRoom(slug)) return;
+    // Mount-time one-shot read of the pending flag; intentional, not a
+    // synchronisation race.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingFeedback({ slug });
   }, []);
 
   useEffect(() => {
@@ -632,6 +705,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           {renderRoomList()}
         </div>
       </section>
+      {rooms.some((room) => room.role === 'owner' || room.role === 'instructor') && <RoomRatingsPanel />}
     </>
   );
 
@@ -890,6 +964,13 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
             </div>
           )}
         </ConfirmModal>
+      )}
+      {pendingFeedback && (
+        <SessionFeedbackModal
+          roomSlug={pendingFeedback.slug}
+          roomTitle={rooms.find((room) => room.slug === pendingFeedback.slug)?.title}
+          onDone={() => setPendingFeedback(null)}
+        />
       )}
     </>
   );

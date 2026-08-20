@@ -61,6 +61,10 @@ import {
   removeWorkspaceMember,
   revokeWorkspaceInvite
 } from '@/api/workspace';
+import {
+  listDashboardRoomRatings,
+  submitRoomSessionFeedback,
+} from '@/api/feedback';
 import type {
   AddAdminRequest,
   AdminPluginReviewRequest,
@@ -70,7 +74,8 @@ import type {
   GoogleSignInRequest,
   JoinRoomRequest,
   SeatCheckoutRequest,
-  StartCheckoutRequest
+  StartCheckoutRequest,
+  SubmitRoomSessionFeedbackRequest,
 } from '@/api/types';
 
 export function useCurrentUserQuery(enabled = true) {
@@ -417,5 +422,22 @@ export function useRemoveAdminMutation() {
   return useMutation({
     mutationFn: (userId: string) => removeAdmin(userId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: apiKeys.admin.admins }),
+  });
+}
+
+export function useSubmitRoomSessionFeedbackMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slug, input }: { slug: string; input: SubmitRoomSessionFeedbackRequest }) =>
+      submitRoomSessionFeedback(slug, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: apiKeys.feedback.dashboard }),
+  });
+}
+
+export function useDashboardRoomRatingsQuery(enabled = true) {
+  return useQuery({
+    queryKey: apiKeys.feedback.dashboard,
+    queryFn: listDashboardRoomRatings,
+    enabled,
   });
 }

@@ -463,3 +463,22 @@ export const seatAddOns = pgTable('seat_add_ons', {
   expiryIdx: index('seat_add_ons_expiry_idx').on(table.cancelAtPeriodEnd, table.currentPeriodEnd),
 }));
 
+/**
+ * End-of-session room ratings: a 1-5 star rating with an optional short note,
+ * one row per user per room. Leaving the same room again updates the existing
+ * row instead of creating another. Ratings are visible to the room's owners
+ * and instructors through the dashboard; UserJot covers product feedback.
+ */
+export const roomSessionFeedback = pgTable('room_session_feedback', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  roomId: uuid('room_id').notNull().references(() => rooms.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  rating: integer('rating').notNull(),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  uniq: uniqueIndex('room_session_feedback_room_user_idx').on(table.roomId, table.userId),
+  roomIdx: index('room_session_feedback_room_idx').on(table.roomId),
+}));
+

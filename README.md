@@ -42,7 +42,8 @@ Chalkboard solves this by providing a shared, persistent room where participants
 - Rooms can be open, approval-required, or password-protected.
 - Rooms have themes such as classroom, workshop, brainstorm, meeting, planning, and studio.
 
-- Users can submit bug reports, feature requests, and general feedback from the in-app widget, which is powered by [UserJot](https://userjot.com) and shows the roadmap and changelog the moment the project is configured.
+- Users can submit bug reports, feature requests, and general feedback from the in-app widget, which is powered by [UserJot](https://userjot.com) and shows the roadmap and changelog the moment the project is configured. Product feedback is triaged in the UserJot dashboard.
+- End-of-session room ratings (1–5 stars) are collected after a participant leaves a room and are shown to the room's owners and instructors in a Room experience panel on the dashboard. These stay in Chalkboard's own database; UserJot covers product feedback, not per-room session ratings.
 
 ### Authentication and access control
 

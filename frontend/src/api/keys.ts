@@ -22,6 +22,9 @@ export const apiKeys = {
     mine: ['workspace'] as const,
     invite: (token: string) => ['workspace', 'invite', token] as const,
   },
+  feedback: {
+    dashboard: ['feedback', 'dashboard'] as const,
+  },
   admin: {
     session: ['admin', 'session'] as const,
 

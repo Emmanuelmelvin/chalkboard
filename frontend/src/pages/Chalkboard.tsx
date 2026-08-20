@@ -1599,7 +1599,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               <button
                 type="button"
                 className="header-icon-btn header-exit-btn"
-                onClick={() => onLeaveRoom()}
+                onClick={() => onLeaveRoom({ promptSessionFeedback: true })}
                 title="Exit room"
                 aria-label="Exit room"
               >

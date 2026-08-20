@@ -535,3 +535,37 @@ export interface SeatCheckoutResponse {
   checkoutUrl: string;
   reference: string;
 }
+
+// --- Room session ratings -------------------------------------------------
+
+export interface SubmitRoomSessionFeedbackRequest {
+  rating: number;
+  note?: string;
+}
+
+export interface SubmitRoomSessionFeedbackResponse {
+  ok: true;
+  feedback: {
+    id: string;
+    roomId: string;
+    userId: string;
+    rating: number;
+    note: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
+/** A room rating surfaced to the room's staff on the dashboard. */
+export interface RoomRatingRecord {
+  id: string;
+  room: { slug: string; title: string };
+  rating: number;
+  note: string | null;
+  reporter: { displayName: string; email: string; avatarUrl: string | null };
+  createdAt: string;
+}
+
+export interface ListDashboardRoomRatingsResponse {
+  feedback: RoomRatingRecord[];
+}

@@ -137,7 +137,7 @@ async function waitForService(service, label, attempts = 60) {
 }
 
 async function deployAndWait(service, label, options = {}) {
-  const { force } = options;
+  const { force, database } = options;
   const { deployments } = await api('GET', `/api/services/${service.id}/deployments`);
   const latest = deployments[0];
   let deploymentId = latest?.id;
@@ -156,24 +156,35 @@ async function deployAndWait(service, label, options = {}) {
     deploymentId = res.deployment.id;
     console.log(`${label}: deployment ${deploymentId} queued`);
   }
+
   for (let i = 0; i < 120; i++) {
     await sleep(5000);
     const { deployments: list } = await api('GET', `/api/services/${service.id}/deployments`);
-    const current = list[0];
-    const { service: currentService } = await api('GET', `/api/services/${service.id}/overview`);
-    // Database services keep their deployment record in "running" while the
-    // service itself becomes active, so the service status is the source of
-    // truth for readiness.
-    if (currentService.status === 'active') {
-      console.log(`${label}: deployed (service active)`);
-      return;
+    const current = list.find((d) => d.id === deploymentId) ?? list[0];
+    if (current?.id === deploymentId) {
+      if (current.status === 'success' || current.status === 'active') {
+        console.log(`${label}: deployment ${deploymentId} ${current.status}`);
+        return;
+      }
+      if (current.status === 'failed' || current.status === 'error' || current.status === 'aborted') {
+        let logs = [];
+        try {
+          ({ logs } = await api('GET', `/api/deployments/${deploymentId}/logs`));
+        } catch {}
+        console.error(`${label}: deployment FAILED (${current.status})`);
+        for (const l of logs.slice(-25)) console.error(`  [${l.stream}] ${l.line}`);
+        throw new Error(`${label} deployment failed`);
+      }
     }
-    if (current.id !== deploymentId) continue;
-    if (current.status === 'failed' || current.status === 'error' || current.status === 'aborted') {
-      const { logs } = await api('GET', `/api/deployments/${deploymentId}/logs`);
-      console.error(`${label}: deployment FAILED (${current.status})`);
-      for (const l of logs.slice(-25)) console.error(`  [${l.stream}] ${l.line}`);
-      throw new Error(`${label} deployment failed`);
+    // Database services keep their deployment record in "running" while the
+    // service itself becomes active, so for those the service status is the
+    // source of truth for readiness.
+    if (database) {
+      const { service: dbService } = await api('GET', `/api/services/${service.id}/overview`);
+      if (dbService.status === 'active') {
+        console.log(`${label}: deployed (service active)`);
+        return;
+      }
     }
   }
   throw new Error(`${label} deployment timed out`);
@@ -212,8 +223,8 @@ async function main() {
   });
 
   console.log('\n— Deploying databases —');
-  await deployAndWait(postgres, 'postgres');
-  await deployAndWait(redis, 'redis');
+  await deployAndWait(postgres, 'postgres', { database: true });
+  await deployAndWait(redis, 'redis', { database: true });
   await waitForService(postgres, 'postgres', 24);
   await waitForService(redis, 'redis', 24);
 
@@ -272,6 +283,24 @@ async function main() {
   }
 
   const apiOverview = await api('GET', `/api/services/${apiService.id}/overview`);
+
+  console.log('\n— Verifying live frontend —');
+  try {
+    const page = await (await fetch(`https://${APP_DOMAIN}`)).text();
+    const placeholder = page.includes('VITE_USERJOT_PROJECT_ID');
+    const hasUserJot = page.includes('cdn.userjot.com');
+    if (placeholder) {
+      console.log(`  ⚠ ${APP_DOMAIN} still contains the VITE_USERJOT_PROJECT_ID placeholder — the build did`);
+      console.log('    not receive frontend env vars (expected until the runtime config endpoint lands).');
+    } else if (hasUserJot) {
+      console.log(`  ✓ ${APP_DOMAIN} serves a UserJot-enabled build`);
+    } else {
+      console.log(`  ✓ ${APP_DOMAIN} serves the new build (UserJot disabled by config)`);
+    }
+  } catch (e) {
+    console.log(`  ? could not verify ${APP_DOMAIN}: ${e.message}`);
+  }
+
   console.log(`
 Done. Backend hostPort on the VPS: ${apiOverview.service.hostPort ?? 'n/a'}
 

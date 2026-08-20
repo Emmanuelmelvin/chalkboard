@@ -1,9 +1,7 @@
 import { MessageSquarePlus } from 'lucide-react';
-import { showUserJotFeedback, userjotEnabled } from '@/lib/userjot';
+import { showUserJotFeedback } from '@/lib/userjot';
 
 function FeedbackWidget() {
-  if (!userjotEnabled) return null;
-
   return (
     <button
       className="feedback-widget-launcher"

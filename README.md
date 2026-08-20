@@ -42,6 +42,8 @@ Chalkboard solves this by providing a shared, persistent room where participants
 - Rooms can be open, approval-required, or password-protected.
 - Rooms have themes such as classroom, workshop, brainstorm, meeting, planning, and studio.
 
+- Users can submit bug reports, feature requests, and general feedback from the in-app widget, which is powered by [UserJot](https://userjot.com) and shows the roadmap and changelog the moment the project is configured.
+
 ### Authentication and access control
 
 - Sign-in uses Google Identity Services.
@@ -398,6 +400,7 @@ The frontend reads the client ID from `/api/auth/google/config` unless `VITE_CLI
 | Variable | Required | Description |
 | --- | --- | --- |
 | `VITE_CLIENT_ID` | No | Optional Vite build-time override for the Google web client ID. Leave it unset when the frontend should read the value from the backend configuration endpoint. |
+| `VITE_USERJOT_PROJECT_ID` | No | UserJot project ID. When set, the build loads the UserJot widget SDK and the Feedback button opens the UserJot widget (`trigger: custom`). Leave it unset to ship without the widget. |
 
 For the first administrator, set `SUPER_ADMIN_EMAIL` to the email address of the Google account that should administer plugins. That account must sign in once, then complete the TOTP setup at `/admin` before admin actions are enabled. Store the generated recovery codes safely.
 

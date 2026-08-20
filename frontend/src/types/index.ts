@@ -145,18 +145,13 @@ export interface ChatMessage {
   createdAt: string;
 }
 
-export interface LeaveRoomOptions {
-  /** Ask for session feedback on the dashboard after leaving. */
-  promptSessionFeedback?: boolean;
-}
-
 export interface ChalkboardProps {
   roomId: string;
   userId: string;
   userName: string;
   socket: Socket;
   roomPassword?: string;
-  onLeaveRoom: (options?: LeaveRoomOptions) => void;
+  onLeaveRoom: () => void;
 }
 
 export interface LobbyProps {

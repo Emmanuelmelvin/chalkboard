@@ -293,75 +293,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .admin-metrics-grid { grid-template-columns: 1fr; }
 }
 
-/* Feedback triage ------------------------------------------------------------ */
-.admin-feedback-workspace { display: grid; gap: 18px; min-width: 0; }
-.admin-feedback-workspace .admin-panel-heading { flex-wrap: wrap; }
-.admin-feedback-workspace .admin-panel-heading select { min-height: 33px; padding: 0 9px; border: 1px solid var(--admin-line); background: var(--admin-panel-deep); color: var(--admin-white); font: inherit; font-size: 10px; font-weight: 650; }
-.admin-feedback-list { display: grid; gap: 10px; }
-.admin-feedback-row { display: flex; flex-direction: column; gap: 9px; padding: 13px 15px; border: 1px solid var(--admin-line); background: var(--admin-panel-deep); }
-.admin-feedback-row-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.admin-feedback-category { padding: 2px 8px; border: 1px solid var(--admin-line); border-radius: 999px; color: var(--admin-muted); font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
-.admin-feedback-category.is-bug_report { border-color: rgba(226, 148, 135, 0.4); color: var(--admin-red); }
-.admin-feedback-category.is-feature_request { border-color: rgba(199, 162, 88, 0.4); color: var(--admin-gold-bright); }
-.admin-feedback-category.is-general { border-color: rgba(120, 170, 220, 0.4); color: #7fb2e8; }
-.admin-feedback-reporter { color: var(--admin-white); font-size: 11.5px; font-weight: 650; }
-.admin-feedback-contact { color: var(--admin-muted); font-size: 10.5px; }
-.admin-feedback-date { margin-left: auto; color: var(--admin-muted); font-size: 9.5px; letter-spacing: 0.03em; }
-.admin-feedback-message { margin: 0; color: var(--admin-muted); font-size: 11.5px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
-.admin-feedback-row .admin-secondary-button { align-self: flex-start; }
-.admin-feedback-stars { display: inline-flex; align-items: center; gap: 2px; color: var(--admin-gold-bright); }
-.admin-feedback-room { color: var(--admin-white); font-size: 11.5px; }
-.admin-feedback-row .admin-status.is-new { border-color: rgba(226, 148, 135, 0.45); color: var(--admin-red); }
-.admin-feedback-row .admin-status.is-acknowledged { border-color: rgba(199, 162, 88, 0.45); color: var(--admin-gold-bright); }
-.admin-feedback-row .admin-status.is-resolved { border-color: rgba(145, 206, 150, 0.45); color: var(--admin-green); }
-.admin-feedback-row .admin-status.is-closed { border-color: var(--admin-line); color: var(--admin-muted); }
-
-/* Feedback KPI cards -------------------------------------------------------- */
-.admin-feedback-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.admin-feedback-kpi { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 14px 15px; border: 1px solid var(--admin-line); background: var(--admin-panel-deep); }
-.admin-feedback-kpi-label { color: var(--admin-muted); font-size: 9px; font-weight: 750; letter-spacing: 0.09em; text-transform: uppercase; }
-.admin-feedback-kpi strong { font-family: Georgia, serif; font-size: 30px; font-weight: 400; letter-spacing: -0.04em; line-height: 1; color: var(--admin-white); }
-.admin-feedback-kpi strong.is-positive { color: var(--admin-green); }
-.admin-feedback-kpi strong.is-neutral { color: var(--admin-gold-bright); }
-.admin-feedback-kpi strong.is-negative { color: var(--admin-red); }
-.admin-feedback-kpi-hint { color: var(--admin-muted); font-size: 9.5px; }
-.admin-feedback-kpi-stars { display: inline-flex; gap: 2px; color: var(--admin-gold-bright); }
-.admin-feedback-spark { width: 100%; height: 42px; margin-top: 2px; }
-
-/* Feedback charts ----------------------------------------------------------- */
-.admin-feedback-charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-.admin-feedback-chart { min-width: 0; padding: 14px 15px; border: 1px solid var(--admin-line); background: var(--admin-panel-deep); }
-.admin-feedback-chart-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: var(--admin-white); font-size: 11px; font-weight: 700; letter-spacing: 0.05em; }
-.admin-range-toggle { display: inline-flex; border: 1px solid var(--admin-line); }
-.admin-range-toggle button { padding: 4px 9px; border: 0; background: transparent; color: var(--admin-muted); font-size: 9px; font-weight: 700; cursor: pointer; }
-.admin-range-toggle button + button { border-left: 1px solid var(--admin-line); }
-.admin-range-toggle button.is-active { background: rgba(199, 162, 88, 0.16); color: var(--admin-gold-bright); }
-.admin-feedback-donut { position: relative; }
-.admin-feedback-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
-.admin-feedback-donut-center strong { color: var(--admin-white); font-family: Georgia, serif; font-size: 26px; font-weight: 400; line-height: 1; }
-.admin-feedback-donut-center span { color: var(--admin-muted); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
-.admin-feedback-bars { width: 100%; height: 190px; }
 .admin-chart-legend { display: flex; flex-wrap: wrap; gap: 10px; padding: 9px 0 3px; color: var(--admin-muted); font-size: 9.5px; letter-spacing: 0.04em; }
 .admin-chart-legend-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid transparent; background: transparent; color: var(--admin-muted); font-size: 9.5px; cursor: pointer; }
 .admin-chart-legend-chip i { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
 .admin-chart-legend-chip b { margin-left: 3px; color: var(--admin-white); font-variant-numeric: tabular-nums; }
 .admin-chart-legend-chip.is-active { border-color: var(--admin-line); color: var(--admin-white); }
-.admin-feedback-filter-note { margin: 0; padding: 9px 13px; border: 1px dashed var(--admin-line); color: var(--admin-muted); font-size: 10px; }
-.admin-feedback-filter-note button { padding: 0; border: 0; background: none; color: var(--admin-gold-bright); font-size: 10px; text-decoration: underline; cursor: pointer; }
-
-/* Sentiment + plan badges --------------------------------------------------- */
-.admin-sentiment { display: inline-flex; padding: 3px 8px; border: 1px solid var(--admin-line); border-radius: 999px; font-size: 8px; font-style: normal; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
-.admin-sentiment.is-positive { border-color: rgba(145, 206, 150, 0.45); color: var(--admin-green); }
-.admin-sentiment.is-neutral { border-color: rgba(199, 162, 88, 0.45); color: var(--admin-gold-bright); }
-.admin-sentiment.is-negative { border-color: rgba(226, 148, 135, 0.45); color: var(--admin-red); }
-.admin-feedback-plan { display: inline-flex; margin-left: 7px; padding: 2px 7px; border: 1px solid var(--admin-line); border-radius: 999px; color: var(--admin-muted); font-size: 8px; font-style: normal; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
-.admin-feedback-plan.is-pro { border-color: rgba(199, 162, 88, 0.5); color: var(--admin-gold-bright); }
-.admin-feedback-plan.is-team { border-color: rgba(120, 170, 220, 0.45); color: #7fb2e8; }
-
-@media (max-width: 900px) {
-  .admin-feedback-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .admin-feedback-charts { grid-template-columns: 1fr; }
-}
-@media (max-width: 520px) {
-  .admin-feedback-kpis { grid-template-columns: 1fr; }
-}

@@ -26,12 +26,6 @@ import {
 } from '@/services/auth/adminAuth.service';
 import { adminTwoFactorRateLimit } from '@/middlewares/rateLimit.middleware';
 import { sentryMetricsHandler } from '@/controllers/metrics.controller';
-import {
-  feedbackStatsHandler,
-  listFeedbackHandler,
-  listRoomFeedbackHandler,
-  updateFeedbackStatusHandler,
-} from '@/controllers/feedback.controller';
 
 export const adminRouter = new Hono();
 
@@ -66,12 +60,3 @@ adminRouter.get('/community/plugins/:pluginId', communityPluginAnalyticsHandler)
 // Sentry metric series for the console, proxied so the API token never leaves
 // the backend. The dashboard itself reports config and token errors as data.
 adminRouter.get('/metrics', requireAdmin, sentryMetricsHandler);
-
-// User feedback triage: product submissions and room session ratings. The
-// list/update handlers are only reachable by an admin role with a live 2FA
-// session, like the plugin review routes above.
-adminRouter.use('/feedback/*', requireAdmin);
-adminRouter.get('/feedback', listFeedbackHandler);
-adminRouter.get('/feedback/stats', feedbackStatsHandler);
-adminRouter.get('/feedback/room', listRoomFeedbackHandler);
-adminRouter.patch('/feedback/:id', updateFeedbackStatusHandler);

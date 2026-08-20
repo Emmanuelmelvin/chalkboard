@@ -28,8 +28,5 @@ export const apiKeys = {
     plugins: (status?: string) => ['admin', 'plugins', status || 'all'] as const,
     admins: ['admin', 'admins'] as const,
     metrics: (range: string) => ['admin', 'metrics', range] as const,
-    feedback: (status?: string, category?: string) => ['admin', 'feedback', status || 'all', category || 'all'] as const,
-    roomFeedback: ['admin', 'feedback', 'room'] as const,
-    feedbackStats: (days: number) => ['admin', 'feedback', 'stats', days] as const,
   },
 } as const;

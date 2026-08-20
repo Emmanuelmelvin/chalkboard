@@ -123,9 +123,6 @@ const envSchema = z.object({
   // Plugin create / version upload / submit.
   PLUGIN_WRITE_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
   PLUGIN_WRITE_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
-  // User feedback submissions (product feedback and room session ratings).
-  FEEDBACK_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
-  FEEDBACK_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(600000),
   // When Redis is unavailable, fall back to per-process counters instead of
   // failing open. Set false to reject traffic outright if that is preferred.
   RATE_LIMIT_FALLBACK_TO_MEMORY: booleanEnv(true),

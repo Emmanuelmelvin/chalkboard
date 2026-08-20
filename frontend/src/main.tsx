@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
 import * as Sentry from '@sentry/react'
 import { queryClient } from '@/api/queryClient'
+import { initUserJot } from '@/lib/userjot'
 import './index.css'
 import './styles/ComponentStyles.css'
 import App from './App.tsx'
@@ -18,6 +19,8 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     integrations: [Sentry.browserTracingIntegration()],
   })
 }
+
+initUserJot();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

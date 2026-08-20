@@ -61,27 +61,16 @@ import {
   removeWorkspaceMember,
   revokeWorkspaceInvite
 } from '@/api/workspace';
-import {
-  createFeedback,
-  listAdminFeedback,
-  listAdminFeedbackStats,
-  listAdminRoomFeedback,
-  submitRoomSessionFeedback,
-  updateFeedbackStatus
-} from '@/api/feedback';
 import type {
   AddAdminRequest,
   AdminPluginReviewRequest,
-  CreateFeedbackRequest,
   CreatePluginRequest,
   CreatePluginVersionRequest,
   CreateRoomRequest,
   GoogleSignInRequest,
   JoinRoomRequest,
   SeatCheckoutRequest,
-  StartCheckoutRequest,
-  SubmitRoomSessionFeedbackRequest,
-  UpdateFeedbackStatusRequest
+  StartCheckoutRequest
 } from '@/api/types';
 
 export function useCurrentUserQuery(enabled = true) {
@@ -428,53 +417,5 @@ export function useRemoveAdminMutation() {
   return useMutation({
     mutationFn: (userId: string) => removeAdmin(userId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: apiKeys.admin.admins }),
-  });
-}
-
-// --- Feedback --------------------------------------------------------------
-
-export function useCreateFeedbackMutation() {
-  return useMutation({ mutationFn: (input: CreateFeedbackRequest) => createFeedback(input) });
-}
-
-export function useSubmitRoomSessionFeedbackMutation() {
-  return useMutation({
-    mutationFn: ({ slug, input }: { slug: string; input: SubmitRoomSessionFeedbackRequest }) =>
-      submitRoomSessionFeedback(slug, input),
-  });
-}
-
-export function useAdminFeedbackQuery(status?: string, category?: string, enabled = true) {
-  return useQuery({
-    queryKey: apiKeys.admin.feedback(status, category),
-    queryFn: () => listAdminFeedback(status, category),
-    enabled,
-  });
-}
-
-export function useAdminRoomFeedbackQuery(enabled = true) {
-  return useQuery({
-    queryKey: apiKeys.admin.roomFeedback,
-    queryFn: listAdminRoomFeedback,
-    enabled,
-  });
-}
-
-export function useAdminFeedbackStatsQuery(days: 7 | 30 | 90, enabled = true) {
-  return useQuery({
-    queryKey: apiKeys.admin.feedbackStats(days),
-    queryFn: () => listAdminFeedbackStats(days),
-    enabled,
-  });
-}
-
-export function useUpdateFeedbackStatusMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateFeedbackStatusRequest }) =>
-      updateFeedbackStatus(id, input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'feedback'] });
-    },
   });
 }

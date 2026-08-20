@@ -25,6 +25,23 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Caveat:wght@400..700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+      // UserJot feedback widget loader. Inert until uj.init() is called; the
+      // script is only appended when VITE_USERJOT_PROJECT_ID is set at build
+      // time, so deployments without the widget skip the request entirely.
+      window.$ujq = window.$ujq || [];
+      window.uj = window.uj || new Proxy({}, {
+        get: (_, method) => (...args) => window.$ujq.push([method, ...args]),
+      });
+      var userjotProjectId = "%VITE_USERJOT_PROJECT_ID%";
+      if (userjotProjectId && userjotProjectId.charAt(0) !== "%") {
+        document.head.appendChild(Object.assign(document.createElement("script"), {
+          src: "https://cdn.userjot.com/sdk/v2/uj.js",
+          type: "module",
+          async: true,
+        }));
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

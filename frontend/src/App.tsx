@@ -18,8 +18,7 @@ import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
 import FeedbackWidget from '@/components/FeedbackWidget';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
-import { markSessionFeedbackPending } from '@/lib/sessionFeedback';
-import type { LeaveRoomOptions } from '@/types';
+import { identifyUserJot } from '@/lib/userjot';
 import '@/styles/PublicPages.css';
 
 // Initialize a single socket client that can be activated on demand
@@ -74,10 +73,18 @@ function RequireAuth({ children }: { children: (profile: UserProfile) => ReactNo
 
 function App() {
   const [location, setLocation] = useLocation();
-  const { hydrate, status } = useAuthStore();
+  const { hydrate, status, profile } = useAuthStore();
   const [roomPassword, setRoomPassword] = useState<string | undefined>();
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const isRoomRoute = location.startsWith('/room/');
+
+  // Tie every signed-in user's feedback actions back to their Chalkboard
+  // profile, and clear it when the session ends. Inert when UserJot is not
+  // configured for this build.
+  useEffect(() => {
+    if (status === 'authenticated' && profile) identifyUserJot(profile);
+    else if (status === 'unauthenticated') identifyUserJot(null);
+  }, [status, profile]);
 
   useEffect(() => {
     const activeTheme = isRoomRoute ? 'dark' : theme;
@@ -97,14 +104,9 @@ function App() {
     setLocation(targetPath);
   };
 
-  const handleLeaveRoom = (options?: LeaveRoomOptions) => {
+  const handleLeaveRoom = () => {
     socket.disconnect();
     setRoomPassword(undefined);
-    if (options?.promptSessionFeedback) {
-      // We are leaving /room/:slug, so ask the dashboard about this session.
-      const slug = location.replace(/^\/room\//, '').split(/[?#]/)[0];
-      if (slug) markSessionFeedbackPending(slug);
-    }
     setLocation('/dashboard?tab=rooms');
   };
 

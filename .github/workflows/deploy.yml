@@ -34,7 +34,7 @@ jobs:
           FRONTEND_ENV_B64: ${{ secrets.FRONTEND_ENV_B64 }}
 
       - name: Deploy api, web, worker to Aeroplane
-        run: node .github/deploy-aeroplane.mjs --force
+        run: node deploy-aeroplane.mjs --force
         env:
           AEROPLANE_URL: ${{ secrets.AEROPLANE_URL }}
           AEROPLANE_API_KEY: ${{ secrets.AEROPLANE_API_KEY }}

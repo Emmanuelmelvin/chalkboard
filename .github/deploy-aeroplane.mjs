@@ -22,22 +22,51 @@ import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const URL_BASE = process.env.AEROPLANE_URL?.replace(/\/$/, '');
-const API_KEY = process.env.AEROPLANE_API_KEY;
-if (!URL_BASE || !API_KEY) {
-  console.error('Set AEROPLANE_URL and AEROPLANE_API_KEY.');
-  process.exit(1);
-}
-
 // Since this script is located in .github/, the project root is one level up
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SCRIPT_DIR, '..');
+
+function parseAllEnv(filePath) {
+  try {
+    const text = readFileSync(filePath, 'utf8');
+    const out = {};
+    for (const raw of text.split('\n')) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      const eq = line.indexOf('=');
+      if (eq < 1) continue;
+      out[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+// Load root .env and backend/.env into process.env if not already set (skip local dev database URLs)
+const rootEnv = parseAllEnv(join(ROOT, '.env'));
+for (const [k, v] of Object.entries(rootEnv)) {
+  if (k === 'DATABASE_URL' || k === 'REDIS_URL') continue;
+  if (process.env[k] === undefined && v !== '') process.env[k] = v;
+}
+const backendEnvRaw = parseAllEnv(join(ROOT, 'backend', '.env'));
+for (const [k, v] of Object.entries(backendEnvRaw)) {
+  if (k === 'DATABASE_URL' || k === 'REDIS_URL') continue;
+  if (process.env[k] === undefined && v !== '') process.env[k] = v;
+}
+
+const URL_BASE = process.env.AEROPLANE_URL?.replace(/\/$/, '');
+const API_KEY = process.env.AEROPLANE_API_KEY;
+if (!URL_BASE || !API_KEY) {
+  console.error('Set AEROPLANE_URL and AEROPLANE_API_KEY in process.env or .env');
+  process.exit(1);
+}
+
 const APP_DOMAIN = process.env.APP_DOMAIN || 'chalkboard.click';
 const REPO = 'Emmanuelmelvin/chalkboard';
 const BRANCH = process.env.AEROPLANE_BRANCH || 'main';
 
 const BACKEND_ENV_ALLOWLIST = new Set([
-  'DATABASE_URL', 'REDIS_URL',
   'GOOGLE_CLIENT_ID', 'PG_POOL_SIZE', 'AUTH_SESSION_SECRET',
   'LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET',
   'SUPER_ADMIN_EMAIL',
@@ -99,23 +128,30 @@ function loadFrontendEnv() {
   return parsed;
 }
 
-async function api(method, path, body) {
-  const res = await fetch(`${URL_BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${API_KEY}`,
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  if (!res.ok) {
-    const msg = data?.error || (typeof data === 'string' ? data : JSON.stringify(data)) || res.statusText;
-    throw new Error(`${method} ${path} -> ${res.status}: ${String(msg).slice(0, 300)}`);
+async function api(method, path, body, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${URL_BASE}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+      if (!res.ok) {
+        const msg = data?.error || (typeof data === 'string' ? data : JSON.stringify(data)) || res.statusText;
+        throw new Error(`${method} ${path} -> ${res.status}: ${String(msg).slice(0, 300)}`);
+      }
+      return data;
+    } catch (err) {
+      if (attempt === retries) throw err;
+      await sleep(1500 * attempt);
+    }
   }
-  return data;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -362,33 +398,8 @@ async function main() {
     console.log('Suggestions:', JSON.stringify(pgSuggestion));
     throw new Error('Could not find database variable suggestions');
   }
-  let databaseUrl = backendSecrets.DATABASE_URL || process.env.DATABASE_URL || pgVar.value;
-  let redisUrl = backendSecrets.REDIS_URL || process.env.REDIS_URL || rdVar.value;
-
-  // Container-to-container communication inside the Aeroplane Docker network
-  // must use the container hostname and internal port (5432/6379), not host ports (like 55432) or 127.0.0.1.
-  if (databaseUrl) {
-    try {
-      const u = new URL(databaseUrl);
-      if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || (u.port && u.port !== '5432')) {
-        u.hostname = 'chalkboard-postgres';
-        u.port = '5432';
-        databaseUrl = u.toString();
-      }
-    } catch {}
-  }
-
-  if (redisUrl) {
-    try {
-      const u = new URL(redisUrl);
-      if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || (u.port && u.port !== '6379')) {
-        u.hostname = 'chalkboard-redis';
-        u.port = '6379';
-        redisUrl = u.toString();
-      }
-    } catch {}
-  }
-
+  const databaseUrl = pgVar.value;
+  const redisUrl = rdVar.value;
   console.log(`DB links: ${databaseUrl ? 'configured' : 'missing'} / ${redisUrl ? 'configured' : 'missing'}\n`);
 
   const commonEnv = [

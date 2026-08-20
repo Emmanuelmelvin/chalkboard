@@ -1,9 +1,7 @@
 import type { UserProfile } from '@/api/types';
 
-const PROJECT_ID = import.meta.env.VITE_USERJOT_PROJECT_ID?.trim();
-
 /** True when the UserJot widget is configured for this build. */
-export const userjotEnabled = Boolean(PROJECT_ID);
+export const userjotProjectId = import.meta.env.VITE_USERJOT_PROJECT_ID?.trim();
 
 type UserJotSection = 'feedback' | 'roadmap' | 'changelog';
 
@@ -21,9 +19,31 @@ declare global {
   }
 }
 
+function ensureUserJotLoaded() {
+  if (typeof window === 'undefined') return;
+
+  window.$ujq = window.$ujq || [];
+  window.uj =
+    window.uj ||
+    new Proxy({} as UserJotApi, {
+      get: (_, method: string) => (...args: unknown[]) => {
+        window.$ujq?.push([method, ...args]);
+      },
+    });
+
+  if (!document.querySelector('script[src="https://cdn.userjot.com/sdk/v2/uj.js"]')) {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.userjot.com/sdk/v2/uj.js';
+    script.type = 'module';
+    script.async = true;
+    document.head.appendChild(script);
+  }
+}
+
 export function initUserJot() {
-  if (!PROJECT_ID) return;
-  window.uj?.init(PROJECT_ID, {
+  if (!userjotProjectId) return;
+  ensureUserJotLoaded();
+  window.uj?.init(userjotProjectId, {
     widget: true,
     trigger: 'custom',
     theme: 'auto',
@@ -32,7 +52,7 @@ export function initUserJot() {
 }
 
 export function identifyUserJot(profile: UserProfile | null) {
-  if (!userjotEnabled) return;
+  if (!userjotProjectId) return;
   if (!profile) {
     window.uj?.logout();
     return;
@@ -48,6 +68,6 @@ export function identifyUserJot(profile: UserProfile | null) {
 }
 
 export function showUserJotFeedback() {
-  if (!userjotEnabled) return;
+  if (!userjotProjectId) return;
   window.uj?.showWidget({ section: 'feedback' });
 }

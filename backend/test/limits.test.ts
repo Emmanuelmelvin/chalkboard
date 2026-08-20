@@ -29,6 +29,7 @@ describe('active room cap on create', () => {
   it('refuses a Free owner somehow over the cap', () => {
     // Reachable if a limit is lowered after rooms already exist. The owner is
     // not asked to close anything, but they cannot open more.
+    //added more tests
     assert.equal(canCreate('free', 7), false);
   });
 

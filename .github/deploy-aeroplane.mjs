@@ -3,14 +3,14 @@
  * Deploy Chalkboard to Aeroplane.
  *
  * Reads AEROPLANE_URL and AEROPLANE_API_KEY from the environment and
- * backend/.env for application secrets, then provisions:
+ * backend/.env (and frontend/.env) for application secrets, then provisions:
  *   - a "chalkboard" project
  *   - Postgres + Redis database services (private)
  *   - web (frontend static site), api (backend), worker services
  *   - the chalkboard.click domain on the web service
  *   - deployments for every service, waiting for each to finish
  *
- * Usage: AEROPLANE_URL=https://pilot.orafi.app AEROPLANE_API_KEY=ap_... node deploy-aeroplane.mjs [--force]
+ * Usage: AEROPLANE_URL=https://pilot.orafi.app AEROPLANE_API_KEY=ap_... node .github/deploy-aeroplane.mjs [--force]
  *
  * Without --force, services whose latest deployment already succeeded are
  * skipped. Pass --force to rebuild everything — this is what the GitHub
@@ -29,12 +29,14 @@ if (!URL_BASE || !API_KEY) {
   process.exit(1);
 }
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)));
-const APP_DOMAIN = 'chalkboard.click';
+// Since this script is located in .github/, the project root is one level up
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(SCRIPT_DIR, '..');
+const APP_DOMAIN = process.env.APP_DOMAIN || 'chalkboard.click';
 const REPO = 'Emmanuelmelvin/chalkboard';
-const BRANCH = 'main';
+const BRANCH = process.env.AEROPLANE_BRANCH || 'main';
 
-const ENV_ALLOWLIST = new Set([
+const BACKEND_ENV_ALLOWLIST = new Set([
   'GOOGLE_CLIENT_ID', 'PG_POOL_SIZE', 'AUTH_SESSION_SECRET',
   'LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET',
   'SUPER_ADMIN_EMAIL',
@@ -50,13 +52,19 @@ const ENV_ALLOWLIST = new Set([
   'SENDBYTE_FROM_ADMIN_NAME',
 ]);
 
-function loadEnvFile() {
-  let text;
+const FRONTEND_ENV_ALLOWLIST = new Set([
+  'VITE_USERJOT_PROJECT_ID',
+  'VITE_GOOGLE_CLIENT_ID',
+  'VITE_LIVEKIT_URL',
+  'VITE_APP_URL',
+]);
+
+function parseEnvFile(filePath, allowlist) {
+  let text = '';
   try {
-    text = readFileSync(join(ROOT, 'backend', '.env'), 'utf8');
+    text = readFileSync(filePath, 'utf8');
   } catch {
-    console.log('Note: backend/.env not found; relying on process environment.');
-    text = '';
+    return {};
   }
   const out = {};
   for (const raw of text.split('\n')) {
@@ -65,14 +73,29 @@ function loadEnvFile() {
     const eq = line.indexOf('=');
     if (eq < 1) continue;
     const key = line.slice(0, eq).trim();
-    if (ENV_ALLOWLIST.has(key)) out[key] = line.slice(eq + 1).trim();
-  }
-  // Allow CI (and the deploy workflow) to supply any allowlisted secret as a
-  // plain environment variable; that takes precedence over the local file.
-  for (const key of ENV_ALLOWLIST) {
-    if (process.env[key] !== undefined && process.env[key] !== '') out[key] = process.env[key];
+    if (allowlist.has(key)) out[key] = line.slice(eq + 1).trim();
   }
   return out;
+}
+
+function loadBackendEnv() {
+  const parsed = parseEnvFile(join(ROOT, 'backend', '.env'), BACKEND_ENV_ALLOWLIST);
+  for (const key of BACKEND_ENV_ALLOWLIST) {
+    if (process.env[key] !== undefined && process.env[key] !== '') {
+      parsed[key] = process.env[key];
+    }
+  }
+  return parsed;
+}
+
+function loadFrontendEnv() {
+  const parsed = parseEnvFile(join(ROOT, 'frontend', '.env'), FRONTEND_ENV_ALLOWLIST);
+  for (const key of FRONTEND_ENV_ALLOWLIST) {
+    if (process.env[key] !== undefined && process.env[key] !== '') {
+      parsed[key] = process.env[key];
+    }
+  }
+  return parsed;
 }
 
 async function api(method, path, body) {
@@ -88,7 +111,8 @@ async function api(method, path, body) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!res.ok) {
-    throw new Error(`${method} ${path} -> ${res.status}: ${data?.error ?? text.slice(0, 300)}`);
+    const msg = data?.error || (typeof data === 'string' ? data : JSON.stringify(data)) || res.statusText;
+    throw new Error(`${method} ${path} -> ${res.status}: ${String(msg).slice(0, 300)}`);
   }
   return data;
 }
@@ -96,38 +120,80 @@ async function api(method, path, body) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function findOrCreateProject() {
-  const { projects } = await api('GET', '/api/projects');
-  const existing = projects.find((p) => p.slug === 'chalkboard');
+  const res = await api('GET', '/api/projects');
+  const projects = Array.isArray(res) ? res : (res?.projects ?? []);
+  
+  const targetId = process.env.AEROPLANE_PROJECT_ID;
+  const targetSlug = process.env.AEROPLANE_PROJECT_SLUG || 'chalkboard';
+
+  const existing = projects.find((p) => 
+    (targetId && p.id === targetId) ||
+    p.slug === targetSlug || 
+    p.name?.toLowerCase() === targetSlug.toLowerCase() ||
+    p.slug?.toLowerCase() === targetSlug.toLowerCase()
+  );
+
   if (existing) {
-    console.log(`Project: found ${existing.id} (${existing.slug})`);
+    console.log(`Project: found ${existing.id} (${existing.slug || existing.name})`);
     return existing;
   }
-  const { project } = await api('POST', '/api/projects', { name: 'Chalkboard', description: 'Chalkboard beta' });
-  console.log(`Project: created ${project.id} (${project.slug})`);
+  const created = await api('POST', '/api/projects', { name: 'Chalkboard', description: 'Chalkboard beta' });
+  const project = created?.project ?? created;
+  console.log(`Project: created ${project.id} (${project.slug || project.name})`);
   return project;
 }
 
 async function existingServices(projectId) {
+  try {
+    const projectRes = await api('GET', `/api/projects/${projectId}`);
+    if (projectRes?.services && Array.isArray(projectRes.services)) return projectRes.services;
+    if (projectRes?.project?.services && Array.isArray(projectRes.project.services)) return projectRes.project.services;
+  } catch {}
+
   const { projects } = await api('GET', '/api/projects');
-  const fresh = projects.find((p) => p.id === projectId);
+  const fresh = projects?.find((p) => p.id === projectId);
   return fresh?.services ?? [];
 }
 
+async function setEnv(service, key, value) {
+  await api('POST', `/api/services/${service.id}/env`, { key, value });
+  console.log(`  env: ${key}=${value.length > 40 ? value.slice(0, 30) + '…' : value}`);
+}
+
+async function syncEnv(service, envList) {
+  if (!envList || !Array.isArray(envList) || envList.length === 0) return;
+  for (const { key, value } of envList) {
+    if (value !== undefined && value !== null) {
+      try {
+        await setEnv(service, key, String(value));
+      } catch (e) {
+        console.warn(`  Warning: failed to set env ${key} on ${service.name}: ${e.message}`);
+      }
+    }
+  }
+}
+
 async function createService(projectId, payload) {
-  const existing = (await existingServices(projectId)).find((s) => s.name === payload.name);
+  const existingList = await existingServices(projectId);
+  const existing = existingList.find((s) => s.name === payload.name);
   if (existing) {
     console.log(`Service: reused ${existing.name} -> ${existing.id} (${existing.status})`);
+    if (payload.env) {
+      await syncEnv(existing, payload.env);
+    }
     return existing;
   }
-  const { service } = await api('POST', `/api/projects/${projectId}/services`, payload);
-  console.log(`Service: created ${payload.name} -> ${service.id} (${service.runtimeMode}, ${service.repoFullName ?? ''})`);
+  const created = await api('POST', `/api/projects/${projectId}/services`, payload);
+  const service = created?.service ?? created;
+  console.log(`Service: created ${payload.name} -> ${service.id} (${service.runtimeMode || ''}, ${service.repoFullName ?? ''})`);
   return service;
 }
 
 async function waitForService(service, label, attempts = 60) {
   for (let i = 0; i < attempts; i++) {
-    const { service: s } = await api('GET', `/api/services/${service.id}/overview`);
-    if (s.status === 'active') {
+    const overview = await api('GET', `/api/services/${service.id}/overview`);
+    const s = overview?.service ?? overview;
+    if (s?.status === 'active') {
       console.log(`${label}: active (hostPort ${s.hostPort ?? 'n/a'})`);
       return s;
     }
@@ -138,67 +204,110 @@ async function waitForService(service, label, attempts = 60) {
 
 async function deployAndWait(service, label, options = {}) {
   const { force, database } = options;
-  const { deployments } = await api('GET', `/api/services/${service.id}/deployments`);
-  const latest = deployments[0];
-  let deploymentId = latest?.id;
-  const inFlight = latest && ['queued', 'running', 'building'].includes(latest.status);
-  if (force && !inFlight) {
-    const res = await api('POST', `/api/services/${service.id}/deployments`);
-    deploymentId = res.deployment.id;
-    console.log(`${label}: deployment ${deploymentId} queued (forced)`);
+  const depRes = await api('GET', `/api/services/${service.id}/deployments`);
+  const deployments = Array.isArray(depRes) ? depRes : (depRes?.deployments ?? []);
+
+  // Sort deployments newest first
+  const sorted = [...deployments].sort((a, b) => {
+    const tA = new Date(a.createdAt || a.created_at || 0).getTime();
+    const tB = new Date(b.createdAt || b.created_at || 0).getTime();
+    return tB - tA;
+  });
+
+  const latest = sorted[0];
+  const inFlight = latest && ['queued', 'running', 'building', 'deploying'].includes(latest.status);
+
+  let deploymentId = null;
+
+  if (force) {
+    if (inFlight) {
+      console.log(`${label}: reusing in-flight deployment ${latest.id} (${latest.status})`);
+      deploymentId = latest.id;
+    } else {
+      const res = await api('POST', `/api/services/${service.id}/deployments`, {
+        branch: BRANCH,
+        force: true,
+      });
+      deploymentId = res?.deployment?.id ?? res?.id ?? res?.deploymentId ?? res?.data?.id;
+      console.log(`${label}: deployment ${deploymentId ?? 'new'} queued (forced)`);
+    }
   } else if (inFlight) {
     console.log(`${label}: reusing in-flight deployment ${latest.id} (${latest.status})`);
-  } else if (latest && ['success', 'active'].includes(latest.status)) {
+    deploymentId = latest.id;
+  } else if (latest && ['success', 'active', 'ready', 'completed'].includes(latest.status)) {
     console.log(`${label}: already deployed (${latest.status})`);
     return;
   } else {
-    const res = await api('POST', `/api/services/${service.id}/deployments`);
-    deploymentId = res.deployment.id;
-    console.log(`${label}: deployment ${deploymentId} queued`);
+    const res = await api('POST', `/api/services/${service.id}/deployments`, {
+      branch: BRANCH,
+    });
+    deploymentId = res?.deployment?.id ?? res?.id ?? res?.deploymentId ?? res?.data?.id;
+    console.log(`${label}: deployment ${deploymentId ?? 'new'} queued`);
   }
 
+  // Poll until the deployment reaches a terminal status
+  const startTime = Date.now();
+  let lastStatus = '';
   for (let i = 0; i < 120; i++) {
     await sleep(5000);
-    const { deployments: list } = await api('GET', `/api/services/${service.id}/deployments`);
-    const current = list.find((d) => d.id === deploymentId) ?? list[0];
-    if (current?.id === deploymentId) {
-      if (current.status === 'success' || current.status === 'active') {
-        console.log(`${label}: deployment ${deploymentId} ${current.status}`);
+    const pollRes = await api('GET', `/api/services/${service.id}/deployments`);
+    const list = Array.isArray(pollRes) ? pollRes : (pollRes?.deployments ?? []);
+    
+    // Find the tracked deployment
+    let current = deploymentId ? list.find((d) => d.id === deploymentId) : null;
+    if (!current && !deploymentId && list.length > 0) {
+      current = list[0];
+      deploymentId = current.id;
+    }
+
+    if (current) {
+      const status = current.status;
+      if (status !== lastStatus || i % 4 === 0) {
+        lastStatus = status;
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+        console.log(`  ${label}: deployment ${current.id} is ${status} (${elapsed}s elapsed)`);
+      }
+
+      if (['success', 'active', 'ready', 'completed'].includes(status)) {
+        console.log(`${label}: deployment ${current.id} finished successfully (${status})`);
         return;
       }
-      if (current.status === 'failed' || current.status === 'error' || current.status === 'aborted') {
+      if (['failed', 'error', 'aborted', 'cancelled'].includes(status)) {
         let logs = [];
         try {
-          ({ logs } = await api('GET', `/api/deployments/${deploymentId}/logs`));
+          const logRes = await api('GET', `/api/deployments/${current.id}/logs`);
+          logs = Array.isArray(logRes) ? logRes : (logRes?.logs ?? []);
         } catch {}
-        console.error(`${label}: deployment FAILED (${current.status})`);
-        for (const l of logs.slice(-25)) console.error(`  [${l.stream}] ${l.line}`);
+        console.error(`${label}: deployment ${current.id} FAILED (${status})`);
+        for (const l of logs.slice(-25)) {
+          console.error(`  [${l.stream || 'log'}] ${l.line || l.message || JSON.stringify(l)}`);
+        }
         throw new Error(`${label} deployment failed`);
       }
     }
+
     // Database services keep their deployment record in "running" while the
     // service itself becomes active, so for those the service status is the
     // source of truth for readiness.
     if (database) {
-      const { service: dbService } = await api('GET', `/api/services/${service.id}/overview`);
-      if (dbService.status === 'active') {
-        console.log(`${label}: deployed (service active)`);
-        return;
-      }
+      try {
+        const overviewRes = await api('GET', `/api/services/${service.id}/overview`);
+        const dbService = overviewRes?.service ?? overviewRes;
+        if (dbService?.status === 'active') {
+          console.log(`${label}: deployed (service active)`);
+          return;
+        }
+      } catch {}
     }
   }
-  throw new Error(`${label} deployment timed out`);
-}
-
-async function setEnv(service, key, value) {
-  await api('POST', `/api/services/${service.id}/env`, { key, value });
-  console.log(`  env: ${key}=${value.length > 40 ? value.slice(0, 30) + '…' : value}`);
+  throw new Error(`${label} deployment timed out after 10 minutes`);
 }
 
 async function main() {
   const force = process.argv.includes('--force');
-  const secrets = loadEnvFile();
-  console.log(`Loaded backend/.env (${Object.keys(secrets).length} allowlisted keys)${force ? ', forcing fresh deployments' : ''}\n`);
+  const backendSecrets = loadBackendEnv();
+  const frontendSecrets = loadFrontendEnv();
+  console.log(`Loaded backend/.env (${Object.keys(backendSecrets).length} allowlisted keys)${force ? ', forcing fresh deployments' : ''}\n`);
 
   const project = await findOrCreateProject();
   const projectId = project.id;
@@ -206,7 +315,7 @@ async function main() {
   const dbPass = randomBytes(18).toString('base64url');
   const redisPass = randomBytes(18).toString('base64url');
 
-  console.log('\n— Creating databases —');
+  console.log('\n— Creating / verifying databases —');
   const postgres = await createService(projectId, {
     name: 'chalkboard-postgres', repoFullName: 'database:postgres', repoUrl: 'database',
     branch: 'main', internalPort: 5432, databasePublicEnabled: false,
@@ -240,7 +349,7 @@ async function main() {
   console.log(`DB links: ${pgVar.key} / ${rdVar.key}\n`);
 
   const commonEnv = [
-    ...Object.entries(secrets).map(([key, value]) => ({ key, value })),
+    ...Object.entries(backendSecrets).map(([key, value]) => ({ key, value })),
     { key: 'DATABASE_URL', value: databaseUrl },
     { key: 'REDIS_URL', value: redisUrl },
     { key: 'NODE_ENV', value: 'production' },
@@ -248,10 +357,15 @@ async function main() {
     { key: 'APP_PUBLIC_URL', value: `https://${APP_DOMAIN}` },
   ];
 
-  console.log('— Creating app services —');
+  const webEnv = [
+    ...Object.entries(frontendSecrets).map(([key, value]) => ({ key, value })),
+    { key: 'APP_PUBLIC_URL', value: `https://${APP_DOMAIN}` },
+  ];
+
+  console.log('— Creating / updating app services —');
   const web = await createService(projectId, {
     name: 'web', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: 'frontend',
-    buildMethod: 'auto', runtimeMode: 'web', internalPort: 80, staticOutput: 'dist',
+    buildMethod: 'auto', runtimeMode: 'web', internalPort: 80, staticOutput: 'dist', env: webEnv,
   });
   const apiService = await createService(projectId, {
     name: 'api', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: 'backend',

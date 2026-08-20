@@ -37,6 +37,7 @@ const REPO = 'Emmanuelmelvin/chalkboard';
 const BRANCH = process.env.AEROPLANE_BRANCH || 'main';
 
 const BACKEND_ENV_ALLOWLIST = new Set([
+  'DATABASE_URL', 'REDIS_URL',
   'GOOGLE_CLIENT_ID', 'PG_POOL_SIZE', 'AUTH_SESSION_SECRET',
   'LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET',
   'SUPER_ADMIN_EMAIL',
@@ -173,12 +174,13 @@ async function syncEnv(service, envList) {
   }
 }
 
-async function createService(projectId, payload) {
+async function createService(projectId, payload, options = {}) {
   const existingList = await existingServices(projectId);
   const existing = existingList.find((s) => s.name === payload.name);
   if (existing) {
     console.log(`Service: reused ${existing.name} -> ${existing.id} (${existing.status})`);
-    if (payload.env) {
+    // Do NOT overwrite database service passwords on existing databases
+    if (payload.env && !options.isDatabase) {
       await syncEnv(existing, payload.env);
     }
     return existing;
@@ -340,12 +342,12 @@ async function main() {
       { key: 'POSTGRES_USER', value: 'chalkboard' },
       { key: 'POSTGRES_PASSWORD', value: dbPass },
     ],
-  });
+  }, { isDatabase: true });
   const redis = await createService(projectId, {
     name: 'chalkboard-redis', repoFullName: 'database:redis', repoUrl: 'database',
     branch: 'main', internalPort: 6379, databasePublicEnabled: false,
     env: [{ key: 'REDIS_PASSWORD', value: redisPass }],
-  });
+  }, { isDatabase: true });
 
   console.log('\n— Deploying databases —');
   await deployAndWait(postgres, 'postgres', { database: true });
@@ -360,9 +362,9 @@ async function main() {
     console.log('Suggestions:', JSON.stringify(pgSuggestion));
     throw new Error('Could not find database variable suggestions');
   }
-  const databaseUrl = pgVar.value;
-  const redisUrl = rdVar.value;
-  console.log(`DB links: ${pgVar.key} / ${rdVar.key}\n`);
+  const databaseUrl = backendSecrets.DATABASE_URL || process.env.DATABASE_URL || pgVar.value;
+  const redisUrl = backendSecrets.REDIS_URL || process.env.REDIS_URL || rdVar.value;
+  console.log(`DB links: ${databaseUrl ? 'configured' : 'missing'} / ${redisUrl ? 'configured' : 'missing'}\n`);
 
   const commonEnv = [
     ...Object.entries(backendSecrets).map(([key, value]) => ({ key, value })),

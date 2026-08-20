@@ -1,7 +1,11 @@
 import type { UserProfile } from '@/api/types';
 
-/** True when the UserJot widget is configured for this build. */
-export const userjotProjectId = import.meta.env.VITE_USERJOT_PROJECT_ID?.trim();
+const DEFAULT_PROJECT_ID = 'cmszx1zk11f990io8xrmoef1t';
+
+export const userjotProjectId =
+  import.meta.env.VITE_USERJOT_PROJECT_ID?.trim() || DEFAULT_PROJECT_ID;
+
+export const userjotEnabled = Boolean(userjotProjectId);
 
 type UserJotSection = 'feedback' | 'roadmap' | 'changelog';
 

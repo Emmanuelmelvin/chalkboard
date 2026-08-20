@@ -10,7 +10,11 @@
  *   - the chalkboard.click domain on the web service
  *   - deployments for every service, waiting for each to finish
  *
- * Usage: AEROPLANE_URL=https://pilot.orafi.app AEROPLANE_API_KEY=ap_... node deploy-aeroplane.mjs
+ * Usage: AEROPLANE_URL=https://pilot.orafi.app AEROPLANE_API_KEY=ap_... node deploy-aeroplane.mjs [--force]
+ *
+ * Without --force, services whose latest deployment already succeeded are
+ * skipped. Pass --force to rebuild everything — this is what the GitHub
+ * Actions deploy workflow (push to main) uses.
  */
 
 import { readFileSync } from 'node:fs';
@@ -47,7 +51,13 @@ const ENV_ALLOWLIST = new Set([
 ]);
 
 function loadEnvFile() {
-  const text = readFileSync(join(ROOT, 'backend', '.env'), 'utf8');
+  let text;
+  try {
+    text = readFileSync(join(ROOT, 'backend', '.env'), 'utf8');
+  } catch {
+    console.log('Note: backend/.env not found; relying on process environment.');
+    text = '';
+  }
   const out = {};
   for (const raw of text.split('\n')) {
     const line = raw.trim();
@@ -55,8 +65,12 @@ function loadEnvFile() {
     const eq = line.indexOf('=');
     if (eq < 1) continue;
     const key = line.slice(0, eq).trim();
-    if (!ENV_ALLOWLIST.has(key)) continue;
-    out[key] = line.slice(eq + 1).trim();
+    if (ENV_ALLOWLIST.has(key)) out[key] = line.slice(eq + 1).trim();
+  }
+  // Allow CI (and the deploy workflow) to supply any allowlisted secret as a
+  // plain environment variable; that takes precedence over the local file.
+  for (const key of ENV_ALLOWLIST) {
+    if (process.env[key] !== undefined && process.env[key] !== '') out[key] = process.env[key];
   }
   return out;
 }
@@ -122,11 +136,17 @@ async function waitForService(service, label, attempts = 60) {
   throw new Error(`${label} did not become active in time`);
 }
 
-async function deployAndWait(service, label) {
+async function deployAndWait(service, label, options = {}) {
+  const { force } = options;
   const { deployments } = await api('GET', `/api/services/${service.id}/deployments`);
   const latest = deployments[0];
   let deploymentId = latest?.id;
-  if (latest && ['queued', 'running', 'building'].includes(latest.status)) {
+  const inFlight = latest && ['queued', 'running', 'building'].includes(latest.status);
+  if (force && !inFlight) {
+    const res = await api('POST', `/api/services/${service.id}/deployments`);
+    deploymentId = res.deployment.id;
+    console.log(`${label}: deployment ${deploymentId} queued (forced)`);
+  } else if (inFlight) {
     console.log(`${label}: reusing in-flight deployment ${latest.id} (${latest.status})`);
   } else if (latest && ['success', 'active'].includes(latest.status)) {
     console.log(`${label}: already deployed (${latest.status})`);
@@ -165,8 +185,9 @@ async function setEnv(service, key, value) {
 }
 
 async function main() {
+  const force = process.argv.includes('--force');
   const secrets = loadEnvFile();
-  console.log('Loaded backend/.env\n');
+  console.log(`Loaded backend/.env (${Object.keys(secrets).length} allowlisted keys)${force ? ', forcing fresh deployments' : ''}\n`);
 
   const project = await findOrCreateProject();
   const projectId = project.id;
@@ -232,9 +253,9 @@ async function main() {
   });
 
   console.log('\n— Deploying app services —');
-  await deployAndWait(apiService, 'api');
-  await deployAndWait(web, 'web');
-  await deployAndWait(worker, 'worker');
+  await deployAndWait(apiService, 'api', { force });
+  await deployAndWait(web, 'web', { force });
+  await deployAndWait(worker, 'worker', { force });
 
   console.log('\n— Domain —');
   try {

@@ -147,6 +147,7 @@ export async function startServer() {
 
     return shutdownPromise;
   }
+  //changes made.
 
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
   process.once('SIGINT', () => void shutdown('SIGINT'));

@@ -1,4 +1,5 @@
 // Custom function to convert hex color to rgba for transparency
+//changes made
 export function addAlpha(hex: string, alpha: number): string {
   let c = hex.substring(1);
   if (c.length === 3) {

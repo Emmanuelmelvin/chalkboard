@@ -4,7 +4,6 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
-#second stage built.
 FROM nginx:alpine
 ENV BACKEND_URL=http://api:3001
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template

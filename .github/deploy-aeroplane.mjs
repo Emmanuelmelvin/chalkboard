@@ -362,8 +362,33 @@ async function main() {
     console.log('Suggestions:', JSON.stringify(pgSuggestion));
     throw new Error('Could not find database variable suggestions');
   }
-  const databaseUrl = backendSecrets.DATABASE_URL || process.env.DATABASE_URL || pgVar.value;
-  const redisUrl = backendSecrets.REDIS_URL || process.env.REDIS_URL || rdVar.value;
+  let databaseUrl = backendSecrets.DATABASE_URL || process.env.DATABASE_URL || pgVar.value;
+  let redisUrl = backendSecrets.REDIS_URL || process.env.REDIS_URL || rdVar.value;
+
+  // Container-to-container communication inside the Aeroplane Docker network
+  // must use the container hostname and internal port (5432/6379), not host ports (like 55432) or 127.0.0.1.
+  if (databaseUrl) {
+    try {
+      const u = new URL(databaseUrl);
+      if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || (u.port && u.port !== '5432')) {
+        u.hostname = 'chalkboard-postgres';
+        u.port = '5432';
+        databaseUrl = u.toString();
+      }
+    } catch {}
+  }
+
+  if (redisUrl) {
+    try {
+      const u = new URL(redisUrl);
+      if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || (u.port && u.port !== '6379')) {
+        u.hostname = 'chalkboard-redis';
+        u.port = '6379';
+        redisUrl = u.toString();
+      }
+    } catch {}
+  }
+
   console.log(`DB links: ${databaseUrl ? 'configured' : 'missing'} / ${redisUrl ? 'configured' : 'missing'}\n`);
 
   const commonEnv = [

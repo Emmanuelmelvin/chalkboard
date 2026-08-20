@@ -215,13 +215,18 @@ async function deployAndWait(service, label, options = {}) {
   });
 
   const latest = sorted[0];
-  const inFlight = latest && ['queued', 'running', 'building', 'deploying'].includes(latest.status);
+  const previousLatestId = latest?.id;
+
+  // In Aeroplane, 'running', 'active', 'success' means the deployment has finished and is serving.
+  // 'building', 'queued', 'deploying', 'pending' means a build/deploy is actively in progress.
+  const isBuilding = latest && ['queued', 'building', 'deploying', 'pending', 'preparing'].includes(latest.status);
+  const isLive = latest && ['running', 'active', 'success', 'ready', 'completed', 'healthy'].includes(latest.status);
 
   let deploymentId = null;
 
   if (force) {
-    if (inFlight) {
-      console.log(`${label}: reusing in-flight deployment ${latest.id} (${latest.status})`);
+    if (isBuilding) {
+      console.log(`${label}: build already in progress on deployment ${latest.id} (${latest.status}), tracking it...`);
       deploymentId = latest.id;
     } else {
       const res = await api('POST', `/api/services/${service.id}/deployments`, {
@@ -229,12 +234,12 @@ async function deployAndWait(service, label, options = {}) {
         force: true,
       });
       deploymentId = res?.deployment?.id ?? res?.id ?? res?.deploymentId ?? res?.data?.id;
-      console.log(`${label}: deployment ${deploymentId ?? 'new'} queued (forced)`);
+      console.log(`${label}: fresh deployment ${deploymentId ?? 'new'} queued (forced)`);
     }
-  } else if (inFlight) {
-    console.log(`${label}: reusing in-flight deployment ${latest.id} (${latest.status})`);
+  } else if (isBuilding) {
+    console.log(`${label}: tracking in-flight deployment ${latest.id} (${latest.status})`);
     deploymentId = latest.id;
-  } else if (latest && ['success', 'active', 'ready', 'completed'].includes(latest.status)) {
+  } else if (isLive) {
     console.log(`${label}: already deployed (${latest.status})`);
     return;
   } else {
@@ -245,7 +250,7 @@ async function deployAndWait(service, label, options = {}) {
     console.log(`${label}: deployment ${deploymentId ?? 'new'} queued`);
   }
 
-  // Poll until the deployment reaches a terminal status
+  // Poll until the new deployment reaches a terminal status
   const startTime = Date.now();
   let lastStatus = '';
   for (let i = 0; i < 120; i++) {
@@ -253,14 +258,24 @@ async function deployAndWait(service, label, options = {}) {
     const pollRes = await api('GET', `/api/services/${service.id}/deployments`);
     const list = Array.isArray(pollRes) ? pollRes : (pollRes?.deployments ?? []);
     
-    // Find the tracked deployment
-    let current = deploymentId ? list.find((d) => d.id === deploymentId) : null;
-    if (!current && !deploymentId && list.length > 0) {
-      current = list[0];
-      deploymentId = current.id;
-    }
+    // Sort poll list newest first
+    const pollSorted = [...list].sort((a, b) => {
+      const tA = new Date(a.createdAt || a.created_at || 0).getTime();
+      const tB = new Date(b.createdAt || b.created_at || 0).getTime();
+      return tB - tA;
+    });
+
+    // Find the tracked deployment. If deploymentId wasn't returned in the POST response,
+    // look for a new deployment whose ID is not previousLatestId, or fallback to the newest item.
+    let current = deploymentId
+      ? pollSorted.find((d) => d.id === deploymentId)
+      : pollSorted.find((d) => d.id !== previousLatestId) ?? pollSorted[0];
 
     if (current) {
+      if (!deploymentId) {
+        deploymentId = current.id;
+      }
+
       const status = current.status;
       if (status !== lastStatus || i % 4 === 0) {
         lastStatus = status;
@@ -268,11 +283,12 @@ async function deployAndWait(service, label, options = {}) {
         console.log(`  ${label}: deployment ${current.id} is ${status} (${elapsed}s elapsed)`);
       }
 
-      if (['success', 'active', 'ready', 'completed'].includes(status)) {
+      // Live / ready states indicating deployment completion
+      if (['running', 'active', 'success', 'ready', 'completed', 'healthy'].includes(status)) {
         console.log(`${label}: deployment ${current.id} finished successfully (${status})`);
         return;
       }
-      if (['failed', 'error', 'aborted', 'cancelled'].includes(status)) {
+      if (['failed', 'error', 'aborted', 'cancelled', 'crashed'].includes(status)) {
         let logs = [];
         try {
           const logRes = await api('GET', `/api/deployments/${current.id}/logs`);
@@ -293,7 +309,7 @@ async function deployAndWait(service, label, options = {}) {
       try {
         const overviewRes = await api('GET', `/api/services/${service.id}/overview`);
         const dbService = overviewRes?.service ?? overviewRes;
-        if (dbService?.status === 'active') {
+        if (dbService?.status === 'active' || dbService?.status === 'running') {
           console.log(`${label}: deployed (service active)`);
           return;
         }

@@ -15,7 +15,6 @@ import {
   UsersRound,
   WalletCards,
   XCircle,
-  Activity,
 } from "lucide-react";
 import { listAdminPlugins } from "@/api/admin";
 import { apiKeys } from "@/api/keys";
@@ -33,15 +32,14 @@ import {
 } from "@/api/hooks";
 import type { AdminPlugin, AdminSession, AdminUser } from "@/api/types";
 import AdminCommunity from "@/admin/AdminCommunity";
-import AdminMetrics from "@/admin/AdminMetrics";
 import AdminPluginSandbox from "@/admin/AdminPluginSandbox";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import "./Admin.css";
 
-type AdminView = "plugins" | "community" | "admins" | "metrics";
+type AdminView = "plugins" | "community" | "admins";
 type TwoFactorMode = "loading" | "setup" | "verify" | "ready" | "forbidden";
 
-const adminViews: AdminView[] = ["plugins", "community", "admins", "metrics"];
+const adminViews: AdminView[] = ["plugins", "community", "admins"];
 
 function getAdminViewFromUrl(): AdminView {
   const value = new URLSearchParams(window.location.search).get("tab");
@@ -612,13 +610,6 @@ export default function AdminDashboard() {
             <WalletCards size={16} /> Community
           </button>
           <button
-            className={view === "metrics" ? "is-active" : ""}
-            type="button"
-            onClick={() => selectView("metrics")}
-          >
-            <Activity size={16} /> Metrics
-          </button>
-          <button
             className={view === "admins" ? "is-active" : ""}
             type="button"
             onClick={() => selectView("admins")}
@@ -651,18 +642,14 @@ export default function AdminDashboard() {
                 ? "Plugin review"
                 : view === "community"
                   ? "Community"
-                  : view === "metrics"
-                    ? "Metrics"
-                    : "Administrators"}
+                  : "Administrators"}
             </p>
             <h1>
               {view === "plugins"
                 ? "Review the next tool."
                 : view === "community"
                   ? "The developer pool."
-                  : view === "metrics"
-                    ? "What the product is doing."
-                    : "Protect the people who run it."}
+                  : "Protect the people who run it."}
             </h1>
           </div>
           <div className="admin-header-user">
@@ -682,8 +669,6 @@ export default function AdminDashboard() {
         </header>
         {view === "community" ? (
           <AdminCommunity />
-        ) : view === "metrics" ? (
-          <AdminMetrics />
         ) : view === "admins" ? (
           <section className="admin-admin-workspace">
             <div className="admin-panel">

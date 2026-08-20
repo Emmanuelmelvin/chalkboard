@@ -63,15 +63,6 @@ const envSchema = z.object({
   // Sender name for internal notifications (e.g. plugin submissions to the
   // admin inbox). Shares SENDBYTE_FROM_EMAIL as the address.
   SENDBYTE_FROM_ADMIN_NAME: z.string().default('Chalkboard'),
-  // Sentry metrics dashboard (admin console). The token is never exposed to
-  // the frontend: the admin API proxies metric series from Sentry instead.
-  // The org is addressed by slug in the metrics endpoint (numeric org ids are
-  // rejected and the DSN does not carry the slug); the project id falls back
-  // to SENTRY_DSN when SENTRY_PROJECT_ID is blank.
-  SENTRY_API_TOKEN: z.string().default(''),
-  SENTRY_API_BASE_URL: z.string().url().default('https://us.sentry.io'),
-  SENTRY_ORG_ID: z.string().default(''),
-  SENTRY_PROJECT_ID: z.string().default(''),
   // Billing. Leave BACHS_API_KEY empty to run with billing disabled: every
   // user then resolves to the Free plan and the checkout routes return 503.
   BACHS_API_BASE_URL: z.string().url().default('https://sandbox-api.bachs.io'),
@@ -146,12 +137,6 @@ export const corsOrigins = env.CORS_ORIGIN.split(',').map((origin) => origin.tri
 export const billingEnabled = Boolean(env.BACHS_API_KEY && env.BACHS_WEBHOOK_SECRET);
 
 /**
- * The admin Sentry metrics dashboard is live when the SDK has a DSN to report
- * to and the backend has a token to read the data back with.
- */
-export const sentryMetricsEnabled = Boolean(env.SENTRY_DSN && env.SENTRY_API_TOKEN);
-
-/**
  * Transactional email is live when SendByte has an API key. Without one, the
  * enqueue helpers become no-ops so local development and CI stay quiet.
  */
@@ -190,7 +175,6 @@ export function logBootMode() {
     processType: env.PROCESS_TYPE,
     nodeEnv: env.NODE_ENV,
     errorMonitoring: env.SENTRY_DSN ? 'sentry' : 'disabled',
-    sentryMetrics: sentryMetricsEnabled ? 'sentry-api' : 'disabled',
     billing: billingEnabled ? 'bachs' : 'disabled',
     trustedProxyHops: env.TRUSTED_PROXY_HOP_COUNT,
   });

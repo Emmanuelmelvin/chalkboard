@@ -30,6 +30,5 @@ export const apiKeys = {
 
     plugins: (status?: string) => ['admin', 'plugins', status || 'all'] as const,
     admins: ['admin', 'admins'] as const,
-    metrics: (range: string) => ['admin', 'metrics', range] as const,
   },
 } as const;

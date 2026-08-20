@@ -264,35 +264,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .admin-sandbox-footer { flex-direction: column; align-items: flex-start; }
 }
 
-/* Sentry metrics dashboard ---------------------------------------------------- */
-.admin-metrics-workspace { min-width: 0; }
-.admin-metrics-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
-.admin-metrics-ranges { display: inline-flex; border: 1px solid var(--admin-line); background: var(--admin-panel); }
-.admin-metrics-ranges button { min-height: 33px; padding: 0 13px; border: 0; background: transparent; color: var(--admin-muted); font: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
-.admin-metrics-ranges button + button { border-left: 1px solid var(--admin-line); }
-.admin-metrics-ranges button:hover { color: var(--admin-white); }
-.admin-metrics-ranges button.is-active { background: var(--admin-panel-deep); color: var(--admin-gold-bright); }
-.admin-metrics-refresh { display: inline-flex; align-items: center; gap: 6px; min-height: 33px; padding: 0 11px; border: 1px solid var(--admin-line); background: var(--admin-panel); color: var(--admin-gold-bright); font: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
-.admin-metrics-refresh:hover:not(:disabled) { border-color: var(--admin-gold); color: var(--admin-white); }
-.admin-metrics-refresh:disabled { cursor: wait; opacity: 0.7; }
-.admin-metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.admin-metric-card { min-width: 0; padding: 19px 21px 9px; border: 1px solid var(--admin-line); background: var(--admin-panel); }
-.admin-metric-card-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 12px; }
-.admin-metric-card-heading span { color: var(--admin-muted); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; }
-.admin-metric-card-heading strong { grid-row: span 2; color: var(--admin-gold-bright); font-family: Georgia, serif; font-size: 26px; font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.04em; }
-.admin-metric-card-heading small { color: var(--admin-muted); font-size: 8.5px; letter-spacing: 0.09em; text-transform: uppercase; }
-.admin-metric-card .admin-chart { margin: 12px 0 0; padding: 10px 0 2px; border-top: 1px solid var(--admin-line); border-bottom: 0; }
-.admin-metric-chart-empty { display: grid; min-height: 128px; place-items: center; margin: 14px 0 0; color: var(--admin-muted); font-size: 10.5px; }
-.admin-metrics-error { display: flex; gap: 14px; max-width: 760px; padding: 18px 20px; border: 1px solid var(--admin-red); background: rgba(226, 148, 135, 0.07); }
-.admin-metrics-error svg { flex-shrink: 0; margin-top: 2px; color: var(--admin-red); }
-.admin-metrics-error strong { display: block; color: var(--admin-white); font-size: 12px; }
-.admin-metrics-error span { display: block; margin-top: 5px; color: var(--admin-muted); font-size: 11px; line-height: 1.6; }
-.admin-metrics-error code { display: inline-block; margin-top: 8px; color: var(--admin-gold-bright); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9.5px; }
-
-@media (max-width: 760px) {
-  .admin-metrics-grid { grid-template-columns: 1fr; }
-}
-
 .admin-chart-legend { display: flex; flex-wrap: wrap; gap: 10px; padding: 9px 0 3px; color: var(--admin-muted); font-size: 9.5px; letter-spacing: 0.04em; }
 .admin-chart-legend-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid transparent; background: transparent; color: var(--admin-muted); font-size: 9.5px; cursor: pointer; }
 .admin-chart-legend-chip i { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }

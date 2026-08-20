@@ -25,7 +25,6 @@ import {
   requireSuperAdmin
 } from '@/services/auth/adminAuth.service';
 import { adminTwoFactorRateLimit } from '@/middlewares/rateLimit.middleware';
-import { sentryMetricsHandler } from '@/controllers/metrics.controller';
 
 export const adminRouter = new Hono();
 
@@ -56,7 +55,3 @@ adminRouter.use('/community/*', requireAdmin);
 adminRouter.get('/community/pool', communityPoolSummaryHandler);
 adminRouter.get('/community/plugins', communityProPluginsHandler);
 adminRouter.get('/community/plugins/:pluginId', communityPluginAnalyticsHandler);
-
-// Sentry metric series for the console, proxied so the API token never leaves
-// the backend. The dashboard itself reports config and token errors as data.
-adminRouter.get('/metrics', requireAdmin, sentryMetricsHandler);

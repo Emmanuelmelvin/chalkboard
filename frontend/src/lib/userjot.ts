@@ -47,31 +47,48 @@ function ensureUserJotLoaded() {
 export function initUserJot() {
   if (!userjotProjectId) return;
   ensureUserJotLoaded();
-  window.uj?.init(userjotProjectId, {
-    widget: true,
-    trigger: 'custom',
-    theme: 'auto',
-    position: 'right',
-  });
+  try {
+    window.uj?.init(userjotProjectId, {
+      widget: true,
+      trigger: 'custom',
+      theme: 'auto',
+      position: 'right',
+    });
+  } catch {
+    // Keep the app usable if the third-party SDK fails to initialize.
+  }
 }
 
 export function identifyUserJot(profile: UserProfile | null) {
   if (!userjotProjectId) return;
   if (!profile) {
-    window.uj?.logout();
+    try {
+      window.uj?.logout();
+    } catch {
+      // Ignore UserJot errors for signed-out sessions.
+    }
     return;
   }
-  const [firstName = profile.displayName, ...rest] = profile.displayName.trim().split(/\s+/);
-  window.uj?.identify({
-    id: profile.id,
-    email: profile.email,
-    firstName,
-    lastName: rest.join(' ') || undefined,
-    avatar: profile.avatarUrl ?? undefined,
-  });
+  const displayName = profile.displayName?.trim() || profile.email || '';
+  const [firstName = displayName, ...rest] = displayName.split(/\s+/);
+  try {
+    window.uj?.identify({
+      id: profile.id,
+      email: profile.email,
+      firstName,
+      lastName: rest.join(' ') || undefined,
+      avatar: profile.avatarUrl ?? undefined,
+    });
+  } catch {
+    // Keep auth flows resilient if the SDK rejects identify payloads.
+  }
 }
 
 export function showUserJotFeedback() {
   if (!userjotProjectId) return;
-  window.uj?.showWidget({ section: 'feedback' });
+  try {
+    window.uj?.showWidget({ section: 'feedback' });
+  } catch {
+    // Ignore SDK errors so UI interactions do not crash the app.
+  }
 }

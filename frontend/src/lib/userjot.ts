@@ -61,14 +61,7 @@ export function initUserJot() {
 
 export function identifyUserJot(profile: UserProfile | null) {
   if (!userjotProjectId) return;
-  if (!profile) {
-    try {
-      window.uj?.logout();
-    } catch {
-      // Ignore UserJot errors for signed-out sessions.
-    }
-    return;
-  }
+  if (!profile) return;
   const displayName = profile.displayName?.trim() || profile.email || '';
   const [firstName = displayName, ...rest] = displayName.split(/\s+/);
   try {

@@ -225,16 +225,20 @@ async function createService(projectId, payload, options = {}) {
     // Auto-migrate monorepo services from sub-dir context (rootDir: 'backend'/'frontend')
     // to repo-root context so `shared/` is included in the Docker build.
     const needsUpdate =
-      (payload.rootDir !== undefined && existing.rootDir !== payload.rootDir) ||
-      (payload.dockerfile !== undefined && existing.dockerfile !== payload.dockerfile) ||
-      (payload.dockerfilePath !== undefined && existing.dockerfilePath !== payload.dockerfilePath) ||
-      (payload.staticOutput !== undefined && existing.staticOutput !== payload.staticOutput);
+      (payload.rootDir !== undefined && (existing.rootDir ?? '') !== (payload.rootDir ?? '')) ||
+      (payload.dockerfile !== undefined && (existing.dockerfile ?? '') !== (payload.dockerfile ?? '')) ||
+      (payload.dockerfilePath !== undefined && (existing.dockerfilePath ?? '') !== (payload.dockerfilePath ?? '')) ||
+      (payload.staticOutput !== undefined && existing.staticOutput !== payload.staticOutput) ||
+      (payload.installCommand !== undefined && existing.installCommand !== payload.installCommand) ||
+      (payload.buildCommand !== undefined && existing.buildCommand !== payload.buildCommand);
     if (needsUpdate) {
       const updatePayload = {};
       if (payload.rootDir !== undefined) updatePayload.rootDir = payload.rootDir;
       if (payload.dockerfile !== undefined) updatePayload.dockerfile = payload.dockerfile;
       if (payload.dockerfilePath !== undefined) updatePayload.dockerfilePath = payload.dockerfilePath;
       if (payload.staticOutput !== undefined) updatePayload.staticOutput = payload.staticOutput;
+      if (payload.installCommand !== undefined) updatePayload.installCommand = payload.installCommand;
+      if (payload.buildCommand !== undefined) updatePayload.buildCommand = payload.buildCommand;
       // Aeroplane has used both `dockerfile` and `dockerfilePath` across versions — send both
       if (payload.dockerfile && !updatePayload.dockerfilePath) updatePayload.dockerfilePath = payload.dockerfile;
       if (payload.dockerfilePath && !updatePayload.dockerfile) updatePayload.dockerfile = payload.dockerfilePath;
@@ -467,9 +471,11 @@ async function main() {
 
   console.log('— Creating / updating app services —');
   const web = await createService(projectId, {
-    name: 'web', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: 'frontend',
+    name: 'web', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: '',
     dockerfile: '', dockerfilePath: '',
-    buildMethod: 'auto', runtimeMode: 'web', internalPort: 80, staticOutput: 'dist', env: webEnv,
+    installCommand: 'npm ci --prefix frontend',
+    buildCommand: 'npm run build --prefix frontend',
+    buildMethod: 'auto', runtimeMode: 'web', internalPort: 80, staticOutput: 'frontend/dist', env: webEnv,
   });
   const apiService = await createService(projectId, {
     name: 'api', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: '',

@@ -29,8 +29,8 @@ export interface Entitlements {
 }
 
 type BooleanCapability = {
-  [K in keyof PlanLimits]: PlanLimits[K] extends boolean ? K : never;
-}[keyof PlanLimits];
+  [K in keyof PlanLimits & string]: PlanLimits[K] extends boolean ? K : never;
+}[keyof PlanLimits & string];
 
 type MeteredLimit = 'activeRooms' | 'voiceMinutesPerMonth';
 

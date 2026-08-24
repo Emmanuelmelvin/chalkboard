@@ -473,7 +473,7 @@ async function main() {
   const web = await createService(projectId, {
     name: 'web', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: '',
     dockerfile: '', dockerfilePath: '',
-    installCommand: 'npm ci --prefix frontend',
+    installCommand: 'npm ci --prefix frontend --include=dev',
     buildCommand: 'npm run build --prefix frontend',
     buildMethod: 'auto', runtimeMode: 'web', internalPort: 80, staticOutput: 'frontend/dist', env: webEnv,
   });

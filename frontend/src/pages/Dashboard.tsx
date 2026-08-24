@@ -195,7 +195,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [roomAccessMode, setRoomAccessMode] = useState<RoomAccessMode>('password_protected');
   const [defaultMemberRole, setDefaultMemberRole] = useState<'instructor' | 'viewer'>('instructor');
   const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
-  const [roomVoiceEnabled, setRoomVoiceEnabled] = useState(false);
+  const [roomMediaMode, setRoomMediaMode] = useState<'none' | 'audio' | 'video'>('none');
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -362,7 +362,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
         accessMode: roomAccessMode,
         defaultRole: defaultMemberRole,
         theme: roomTheme,
-        voiceEnabled: roomVoiceEnabled,
+        voiceEnabled: roomMediaMode !== 'none',
       });
       setCreatedRoomInvite({
         slug: payload.room.slug,
@@ -676,18 +676,42 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                 ))}
               </div>
             </fieldset>
-            <fieldset className="dashboard-voice-fieldset">
-              <label className="dashboard-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={roomVoiceEnabled}
-                  onChange={(e) => setRoomVoiceEnabled(e.target.checked)}
-                />
-                <span>
-                  <strong>Enable voice chat</strong>
-                  <small>Add live audio to this room.</small>
-                </span>
-              </label>
+            <fieldset className="dashboard-access-fieldset">
+              <legend>Media & Calling</legend>
+              <div className="dashboard-access-grid">
+                <label className={`dashboard-access-option${roomMediaMode === 'none' ? ' is-selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="room-media"
+                    value="none"
+                    checked={roomMediaMode === 'none'}
+                    onChange={() => setRoomMediaMode('none')}
+                  />
+                  <span><strong>Canvas only</strong><small>No live audio or video calling.</small></span>
+                </label>
+
+                <label className={`dashboard-access-option${roomMediaMode === 'audio' ? ' is-selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="room-media"
+                    value="audio"
+                    checked={roomMediaMode === 'audio'}
+                    onChange={() => setRoomMediaMode('audio')}
+                  />
+                  <span><strong>Audio only</strong><small>Live voice chat for discussions.</small></span>
+                </label>
+
+                <label className={`dashboard-access-option${roomMediaMode === 'video' ? ' is-selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="room-media"
+                    value="video"
+                    checked={roomMediaMode === 'video'}
+                    onChange={() => setRoomMediaMode('video')}
+                  />
+                  <span><strong>Video & Audio</strong><small>Webcams & screen sharing.</small></span>
+                </label>
+              </div>
             </fieldset>
             <button className="dashboard-button dashboard-button-dark" type="submit" disabled={loading}>
               <Plus size={15} strokeWidth={2} /> {loading ? 'Creating room…' : 'Create a new room'}

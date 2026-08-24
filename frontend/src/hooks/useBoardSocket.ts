@@ -165,7 +165,7 @@ export function useBoardSocket(
               avatarUrl: user.avatarUrl,
               color: user.color,
               role: user.role,
-              cursor: prev[sid]?.cursor,
+              cursor: user.role === 'viewer' ? undefined : prev[sid]?.cursor,
             };
           }
         });
@@ -277,7 +277,7 @@ export function useBoardSocket(
 
     const handleCursorMove = ({ userId, cursor }: { userId: string; cursor: Point }) => {
       setCollaborators((prev) => {
-        if (!prev[userId]) return prev;
+        if (!prev[userId] || prev[userId].role === 'viewer') return prev;
         return {
           ...prev,
           [userId]: {

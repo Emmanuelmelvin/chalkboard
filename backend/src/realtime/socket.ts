@@ -472,8 +472,9 @@ async function handleMemberRoleUpdate(io: Server, socket: any, payload: unknown,
     return;
   }
 
-  const targetSocket = [...io.sockets.sockets.values()].find((candidate: any) => candidate.data.user?.id === data.targetUserId);
-  if (targetSocket) {
+  const targetSockets = [...io.sockets.sockets.values()].filter((candidate: any) => candidate.data?.user?.id === data.targetUserId);
+  for (const targetSocket of targetSockets) {
+    targetSocket.data.roomRole = data.role;
     const targetMeta = getSocketMeta(targetSocket.id);
     if (targetMeta?.roomId === data.roomId) setSocketMeta(targetSocket.id, { ...targetMeta, role: data.role });
     const targetPresence = getRoomUsers(data.roomId).get(targetSocket.id);

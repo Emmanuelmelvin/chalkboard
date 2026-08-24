@@ -6,7 +6,6 @@ React,
   useMemo,
   useState,
   useCallback,
-  createContext,
   useContext,
 } from 'react';
 import {
@@ -24,8 +23,6 @@ import {
   MicOff,
   Video,
   VideoOff,
-  Monitor,
-  MonitorOff,
   WifiOff,
   Radio,
   RadioOff,
@@ -43,6 +40,8 @@ import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import UserAvatar from '@/components/UserAvatar';
+import CollaboratorCursor from '@/components/CollaboratorCursor';
+import { SpeakingParticipantsContext } from '@/contexts/SpeakingParticipantsContext';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import LinkIcon from '@/components/svg/LinkIcon';
 import ChalkboardLogo from '@/components/svg/ChalkboardLogo';
@@ -137,8 +136,6 @@ import {
 
 const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
 
-const SpeakingParticipantsContext = createContext<ReadonlySet<string>>(new Set());
-
 function VoiceAudioStarter() {
   const room = useMaybeRoomContext();
 
@@ -175,19 +172,6 @@ function SpeakingParticipantsProvider({ children }: { children: React.ReactNode 
     <SpeakingParticipantsContext.Provider value={speakingIdentities}>
       {children}
     </SpeakingParticipantsContext.Provider>
-  );
-}
-
-function CollaboratorAvatar({ userId, name, avatarUrl }: { userId: string; name: string; avatarUrl?: string | null }) {
-  const speakingIdentities = useContext(SpeakingParticipantsContext);
-  const isSpeaking = speakingIdentities.has(userId);
-  return (
-    <UserAvatar
-      name={name}
-      avatarUrl={avatarUrl}
-      size="sm"
-      className={`collaborator-avatar${isSpeaking ? ' collaborator-avatar-speaking' : ''}`}
-    />
   );
 }
 
@@ -249,30 +233,15 @@ function RoomHeaderMediaControls({
 }) {
   const room = useMaybeRoomContext();
   const {
-    isMicrophoneEnabled,
     isCameraEnabled,
-    isScreenShareEnabled,
     canPublish,
-    toggleMicrophone,
     toggleCamera,
-    toggleScreenShare,
   } = useMediaControls();
 
   if (!voiceConnected || !room) return null;
 
   return (
     <div className="room-media-header-controls">
-      <button
-        type="button"
-        className={`voice-action-btn header-media-btn${isMicrophoneEnabled ? ' is-active' : ''}`}
-        onClick={toggleMicrophone}
-        disabled={!canPublish}
-        title={!canPublish ? 'Microphone is disabled for listeners' : (isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone')}
-        aria-label={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
-      >
-        {isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />}
-      </button>
-
       <button
         type="button"
         className={`voice-action-btn header-media-btn${isCameraEnabled ? ' is-active' : ''}`}
@@ -283,19 +252,62 @@ function RoomHeaderMediaControls({
       >
         {isCameraEnabled ? <Video size={14} /> : <VideoOff size={14} />}
       </button>
-
-      <button
-        type="button"
-        className={`voice-action-btn header-media-btn screen-share-header-btn${isScreenShareEnabled ? ' is-active' : ''}`}
-        onClick={toggleScreenShare}
-        disabled={!canPublish}
-        title={!canPublish ? 'Screen share is disabled for listeners' : (isScreenShareEnabled ? 'Stop sharing screen' : 'Share screen')}
-        aria-label={isScreenShareEnabled ? 'Stop sharing screen' : 'Share screen'}
-      >
-        {isScreenShareEnabled ? <Monitor size={14} /> : <MonitorOff size={14} />}
-      </button>
     </div>
   );
+}
+
+function VoiceRoleSync({
+  effectiveRole,
+  roomId,
+  setVoiceToken,
+  setVoiceUrl,
+  voiceSwappingRef,
+}: {
+  effectiveRole: string;
+  roomId: string;
+  setVoiceToken: (token: string) => void;
+  setVoiceUrl: (token: string) => void;
+  voiceSwappingRef: React.MutableRefObject<boolean>;
+}) {
+  const { localParticipant } = useLocalParticipant();
+  const prevRoleRef = useRef(effectiveRole);
+
+  useEffect(() => {
+    const prevRole = prevRoleRef.current;
+    prevRoleRef.current = effectiveRole;
+    if (prevRole === effectiveRole) return;
+
+    if (effectiveRole === 'viewer') {
+      // User was demoted to Viewer: unpublish camera, mic, and screen share immediately
+      void localParticipant?.setCameraEnabled(false).catch(() => {});
+      void localParticipant?.setMicrophoneEnabled(false).catch(() => {});
+      void localParticipant?.setScreenShareEnabled(false).catch(() => {});
+
+      // Refresh token with viewer permissions
+      voiceSwappingRef.current = true;
+      void getVoiceToken(roomId).then((res) => {
+        if (res.token && res.url) {
+          setVoiceToken(res.token);
+          setVoiceUrl(res.url);
+        }
+      }).finally(() => {
+        voiceSwappingRef.current = false;
+      });
+    } else if (effectiveRole === 'instructor') {
+      // User was promoted to Editor: refresh token so publishing is immediately enabled
+      voiceSwappingRef.current = true;
+      void getVoiceToken(roomId).then((res) => {
+        if (res.token && res.url) {
+          setVoiceToken(res.token);
+          setVoiceUrl(res.url);
+        }
+      }).finally(() => {
+        voiceSwappingRef.current = false;
+      });
+    }
+  }, [effectiveRole, localParticipant, roomId, setVoiceToken, setVoiceUrl, voiceSwappingRef]);
+
+  return null;
 }
 
 function voiceDisabledReason({ voiceConnected, isOnline, memberName }: RoomMemberVoiceControlsProps): string | null {
@@ -360,7 +372,7 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
       return (
         <div className="voice-actions-group">
           <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
-            <button type="button" className="voice-action-btn" onClick={removeUser} disabled={voiceDisabled} title="Remove from voice">{voiceDisabled ? <WifiOff size={14} /> : <UserX size={14} />}</button>
+            <button type="button" className="voice-action-btn" onClick={removeUser} disabled={voiceDisabled} title="Remove from video & voice">{voiceDisabled ? <WifiOff size={14} /> : <UserX size={14} />}</button>
           </span>
         </div>
       );
@@ -368,7 +380,7 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
     return (
       <div className="voice-actions-group">
         <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
-          <button type="button" className="voice-action-btn" onClick={inviteUser} disabled={voiceDisabled} title="Invite to voice">{voiceDisabled ? <WifiOff size={14} /> : <UserPlus size={14} />}</button>
+          <button type="button" className="voice-action-btn" onClick={inviteUser} disabled={voiceDisabled} title="Invite to video & voice">{voiceDisabled ? <WifiOff size={14} /> : <UserPlus size={14} />}</button>
         </span>
       </div>
     );
@@ -390,7 +402,7 @@ function RoomMemberVoiceControls(props: RoomMemberVoiceControlsProps) {
       return (
         <div className="voice-actions-group">
           <span className={`voice-action-wrap${disabledReason ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
-            <button type="button" className="voice-action-btn" title="Invite to voice" disabled={Boolean(disabledReason)} onClick={() => {
+            <button type="button" className="voice-action-btn" title="Invite to video & voice" disabled={Boolean(disabledReason)} onClick={() => {
               (props.socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId: props.roomId, targetUserId: props.memberUserId }, (res: { ok?: boolean; error?: string }) => {
                 if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
               });
@@ -524,6 +536,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [voiceToken, setVoiceToken] = useState('');
   const [voiceUrl, setVoiceUrl] = useState('');
   const [voiceListening, setVoiceListening] = useState(true);
+  const hasVoiceCredentials = Boolean(voiceToken && voiceUrl);
   const [raisedHands, setRaisedHands] = useState<RaisedHand[]>([]);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [activeReactions, setActiveReactions] = useState<ActiveReaction[]>([]);
@@ -533,7 +546,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     if (!socket) return;
     const handleVoiceInvited = (data: { roomId: string }) => {
       if (data.roomId !== roomId) return;
-      useLoggerStore.getState().notify('You have been added to voice. Unmute your microphone when you are ready.', 'success');
+      useLoggerStore.getState().notify('You have been added to video and voice. You can now turn on your camera and microphone.', 'success');
       // Clear existing token to force LiveKit to disconnect before
       // reconnecting with the new (speaker-enabled) token.
       voiceSwappingRef.current = true;
@@ -552,7 +565,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           voiceSwappingRef.current = false;
           const apiError = getApiError(error);
           useLoggerStore.getState().notify(
-            isPlanLimitError(apiError) ? apiError.message : 'Failed to join voice',
+            isPlanLimitError(apiError) ? apiError.message : 'Failed to join media session',
             'error',
             isPlanLimitError(apiError) ? 6000 : undefined,
           );
@@ -563,7 +576,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
     const handleVoiceRemoved = (data: { roomId: string }) => {
       if (data.roomId !== roomId) return;
-      useLoggerStore.getState().notify('Speaking access was removed. You can still hear the room.', 'info');
+      useLoggerStore.getState().notify('Video and speaking access was removed. You can still view and hear the room.', 'info');
       // Clear existing token to force LiveKit to disconnect before
       // reconnecting with the new (listener-only) token.
       voiceSwappingRef.current = true;
@@ -582,7 +595,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           voiceSwappingRef.current = false;
           const apiError = getApiError(error);
           useLoggerStore.getState().notify(
-            isPlanLimitError(apiError) ? apiError.message : 'Voice access could not be refreshed',
+            isPlanLimitError(apiError) ? apiError.message : 'Media access could not be refreshed',
             'error',
             isPlanLimitError(apiError) ? 6000 : undefined,
           );
@@ -594,7 +607,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const handleVoiceSpeakerAdded = (data: { roomId: string; targetUserId: string; displayName?: string }) => {
       if (data.roomId !== roomId || data.targetUserId === userId) return;
       const displayName = data.displayName?.trim() || 'A room member';
-      useLoggerStore.getState().notify(`${displayName} can now speak in voice`, 'success');
+      useLoggerStore.getState().notify(`${displayName} can now share video and voice`, 'success');
     };
 
     socket.on('voice:invited', handleVoiceInvited);
@@ -1177,44 +1190,51 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         {dustPuffs.map((p) => (
           <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" style={{ left: p.x - 12, top: p.y - 12, width: 24, height: 24 }} />
         ))}
+        {/* Render active collaborator cursors with select pointer icon + avatar badge */}
         {Object.entries(collaborators).map(([id, coll]) => {
-          if (coll.role === 'viewer') return null;
+          const effectiveCollRole = roomMembers.find((m) => m.userId === coll.userId)?.role ?? coll.role;
+          if (effectiveCollRole === 'viewer' || coll.role === 'viewer') return null;
           if (coll.cursor) {
-            const x = coll.cursor.x * zoom + panOffset.x + 24;
-            const y = coll.cursor.y * zoom + panOffset.y + 24;
-            if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null;
+            const x = coll.cursor.x * zoom + panOffset.x;
+            const y = coll.cursor.y * zoom + panOffset.y;
+            if (x < -100 || y < -100 || x > window.innerWidth + 100 || y > window.innerHeight + 100) return null;
             return (
-              <div
+              <CollaboratorCursor
                 key={id}
-                className="collaborator-cursor"
-                data-left={x - 24}
-                data-top={y - 24}
-                style={{ left: x - 24, top: y - 24 }}
-                title={`${coll.name}'s cursor`}
-                aria-label={`${coll.name}'s cursor`}
-              >
-                <CollaboratorAvatar userId={coll.userId} name={coll.name} avatarUrl={coll.avatarUrl} />
-                <span
-                  className="collaborator-cursor-dot"
-                  data-color={coll.color}
-                  style={{ backgroundColor: coll.color }}
-                  aria-hidden="true"
-                />
-              </div>
+                id={id}
+                collaborator={{ ...coll, role: effectiveCollRole }}
+                x={x}
+                y={y}
+              />
             );
           }
-          // Show avatar at a default position for users who can draw but haven't moved their cursor yet
+          return null;
+        })}
+        {/* Render docked collaborator presence for users without cursor coordinates */}
+        {(() => {
+          const defaultCollaborators = Object.entries(collaborators).filter(
+            ([, coll]) => {
+              const effectiveCollRole = roomMembers.find((m) => m.userId === coll.userId)?.role ?? coll.role;
+              return effectiveCollRole !== 'viewer' && coll.role !== 'viewer' && !coll.cursor;
+            }
+          );
+          if (defaultCollaborators.length === 0) return null;
           return (
-            <div
-              key={id}
-              className="collaborator-cursor collaborator-cursor-default"
-              title={`${coll.name}`}
-              aria-label={`${coll.name}`}
-            >
-              <CollaboratorAvatar userId={coll.userId} name={coll.name} avatarUrl={coll.avatarUrl} />
+            <div className="collaborator-dock-container">
+              {defaultCollaborators.map(([id, coll]) => {
+                const effectiveCollRole = roomMembers.find((m) => m.userId === coll.userId)?.role ?? coll.role;
+                return (
+                  <CollaboratorCursor
+                    key={id}
+                    id={id}
+                    collaborator={{ ...coll, role: effectiveCollRole }}
+                    isDefaultPosition
+                  />
+                );
+              })}
             </div>
           );
-        })}
+        })()}
         <canvas ref={attachCanvas} className={`chalk-canvas chalk-canvas-${activeTool}`}
           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp} onWheel={handleWheel} />
@@ -1746,11 +1766,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             onConfirm={kickMember}
           />
         )}
+        {hasVoiceCredentials && <VideoStage members={roomMembers} />}
       </div>
     </>
   );
-
-  const hasVoiceCredentials = Boolean(voiceToken && voiceUrl);
 
   return (
     <LiveKitRoom
@@ -1777,9 +1796,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       }}
     >
       <VoiceAudioStarter />
+      <VoiceRoleSync
+        effectiveRole={effectiveRole}
+        roomId={roomId}
+        setVoiceToken={setVoiceToken}
+        setVoiceUrl={setVoiceUrl}
+        voiceSwappingRef={voiceSwappingRef}
+      />
       <SpeakingParticipantsProvider>
         {mainContent}
-        {hasVoiceCredentials && <VideoStage />}
       </SpeakingParticipantsProvider>
       {hasVoiceCredentials && <RoomAudioRenderer />}
     </LiveKitRoom>

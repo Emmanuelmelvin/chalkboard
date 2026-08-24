@@ -3,13 +3,13 @@ import { Track } from 'livekit-client';
 import { useTracks } from '@livekit/components-react';
 import type { TrackReference } from '@livekit/components-core';
 import type { RoomMember } from '@/types';
+import * as Dialog from '@radix-ui/react-dialog';
 import {
-  ChevronDown,
-  ChevronUp,
   Video,
   Minimize2,
   X,
   Move,
+  Pin,
 } from 'lucide-react';
 import ParticipantVideoTile from './ParticipantVideoTile';
 import ScreenShareViewer from './ScreenShareViewer';
@@ -93,6 +93,8 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
   // Drag handlers for desktop / floating widget
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // If a participant is pinned, lock position in place and disable dragging!
+      if (pinnedIdentity) return;
       // Don't drag if clicking buttons
       if ((e.target as HTMLElement).closest('button, select, input, a')) return;
       isDraggingRef.current = true;
@@ -111,7 +113,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
 
       (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     },
-    [position],
+    [position, pinnedIdentity],
   );
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -142,24 +144,19 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
         <button
           type="button"
           className="video-minimized-pill"
-          style={{
-            pointerEvents: 'auto',
-            left: position ? `${position.x}px` : undefined,
-            top: position ? `${position.y}px` : undefined,
-          }}
+          style={{ pointerEvents: 'auto' }}
           onClick={() => setMode(isMobile ? 'bubble' : 'docked')}
-          title="Restore video stage"
-          aria-label="Restore video stage"
+          title="Open video stage"
+          aria-label={`Open video stage (${totalVideoCount} videos)`}
         >
           <Video size={13} />
           <span>{totalVideoCount} {totalVideoCount === 1 ? 'video' : 'videos'}</span>
-          <ChevronUp size={13} />
         </button>
       </div>
     );
   }
 
-  // MOBILE BUBBLE MODE (Draggable floating PiP on mobile)
+  // MOBILE BUBBLE MODE (Draggable floating PiP on mobile with Radix Dialog sheet)
   if (isMobile && mode === 'bubble') {
     return (
       <div className="video-stage-root" style={{ pointerEvents: 'none' }}>
@@ -196,54 +193,58 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
           )}
         </div>
 
-        {/* Mobile Expanded Sheet */}
-        {mobileExpanded && (
-          <div className="mobile-video-sheet-overlay" style={{ pointerEvents: 'auto' }}>
-            <div className="mobile-video-sheet">
-              <div className="mobile-video-sheet-header">
-                <div className="mobile-video-sheet-title">
-                  <Video size={15} />
-                  <span>Room Video ({totalVideoCount})</span>
+        {/* Mobile Expanded Sheet using Radix Dialog */}
+        <Dialog.Root open={mobileExpanded} onOpenChange={setMobileExpanded}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="mobile-video-sheet-overlay" style={{ pointerEvents: 'auto' }}>
+              <Dialog.Content className="mobile-video-sheet" aria-describedby={undefined}>
+                <div className="mobile-video-sheet-header">
+                  <Dialog.Title className="mobile-video-sheet-title">
+                    <Video size={15} />
+                    <span>Room Video ({totalVideoCount})</span>
+                  </Dialog.Title>
+                  <div className="mobile-video-sheet-actions">
+                    <Dialog.Close asChild>
+                      <button
+                        type="button"
+                        className="mobile-sheet-action-btn"
+                        title="Close to bubble"
+                        aria-label="Close to bubble"
+                      >
+                        <X size={16} />
+                      </button>
+                    </Dialog.Close>
+                  </div>
                 </div>
-                <div className="mobile-video-sheet-actions">
-                  <button
-                    type="button"
-                    className="mobile-sheet-action-btn"
-                    onClick={() => setMobileExpanded(false)}
-                    title="Minimize to bubble"
-                    aria-label="Minimize to bubble"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
 
-              {/* Screen shares first */}
-              {screenShareTracks.map((trackRef) => (
-                <ScreenShareViewer
-                  key={trackRef.publication?.trackSid || trackRef.participant.identity}
-                  trackRef={trackRef}
-                />
-              ))}
-
-              {/* Cameras grid */}
-              <div className="mobile-video-grid">
-                {cameraTracks.map((trackRef) => (
-                  <ParticipantVideoTile
+                {/* Screen shares first */}
+                {screenShareTracks.map((trackRef) => (
+                  <ScreenShareViewer
                     key={trackRef.publication?.trackSid || trackRef.participant.identity}
                     trackRef={trackRef}
-                    isPinned={pinnedIdentity === trackRef.participant.identity}
-                    onTogglePin={() =>
-                      setPinnedIdentity((current) =>
-                        current === trackRef.participant.identity ? null : trackRef.participant.identity,
-                      )
-                    }
                   />
                 ))}
-              </div>
-            </div>
-          </div>
-        )}
+
+                {/* Cameras grid */}
+                <div className="mobile-video-grid">
+                  {cameraTracks.map((trackRef) => (
+                    <ParticipantVideoTile
+                      key={trackRef.publication?.trackSid || trackRef.participant.identity}
+                      trackRef={trackRef}
+                      role={getMemberRole(trackRef.participant.identity)}
+                      isPinned={pinnedIdentity === trackRef.participant.identity}
+                      onTogglePin={() =>
+                        setPinnedIdentity((current) =>
+                          current === trackRef.participant.identity ? null : trackRef.participant.identity,
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              </Dialog.Content>
+            </Dialog.Overlay>
+          </Dialog.Portal>
+        </Dialog.Root>
       </div>
     );
   }
@@ -261,15 +262,20 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
       >
         {/* Stage Header / Drag Handle */}
         <div
-          className="video-stage-header"
+          className={`video-stage-header${pinnedIdentity ? ' is-locked' : ''}`}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          title={pinnedIdentity ? 'Pinned in place (unpin video to move)' : 'Drag to reposition'}
         >
           <div className="video-stage-handle">
-            <Move size={12} className="drag-handle-icon" />
+            {pinnedIdentity ? (
+              <Pin size={12} className="drag-handle-icon pinned-icon" />
+            ) : (
+              <Move size={12} className="drag-handle-icon" />
+            )}
             <span className="video-stage-title">
-              Video ({cameraTracks.length})
+              Video ({cameraTracks.length}) {pinnedIdentity ? '• Pinned' : ''}
             </span>
           </div>
 
@@ -288,11 +294,14 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
             <button
               type="button"
               className="video-stage-btn"
-              onClick={() => setMode('minimized')}
-              title="Minimize video stage"
-              aria-label="Minimize video stage"
+              onClick={() => {
+                setPosition(null);
+                setMode('minimized');
+              }}
+              title="Close video stage (minimize to pill)"
+              aria-label="Close video stage"
             >
-              <ChevronDown size={13} />
+              <X size={14} />
             </button>
           </div>
         </div>
@@ -313,13 +322,14 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
         {cameraTracks.length > 0 && (
           <div
             className={`video-tiles-container${
-              cameraTracks.length > 2 ? ' multi-tile' : ''
+              cameraTracks.length > 1 ? ' multi-tile' : ''
             }`}
           >
             {cameraTracks.map((trackRef) => (
               <ParticipantVideoTile
                 key={trackRef.publication?.trackSid || trackRef.participant.identity}
                 trackRef={trackRef}
+                role={getMemberRole(trackRef.participant.identity)}
                 isPinned={pinnedIdentity === trackRef.participant.identity}
                 onTogglePin={() =>
                   setPinnedIdentity((current) =>

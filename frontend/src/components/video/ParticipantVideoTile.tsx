@@ -12,6 +12,8 @@ export interface ParticipantVideoTileProps {
   role?: string;
   className?: string;
   style?: React.CSSProperties;
+  isFilmstrip?: boolean;
+  onClick?: () => void;
 }
 
 export const ParticipantVideoTile: React.FC<ParticipantVideoTileProps> = ({
@@ -21,6 +23,8 @@ export const ParticipantVideoTile: React.FC<ParticipantVideoTileProps> = ({
   role,
   className = '',
   style,
+  isFilmstrip = false,
+  onClick,
 }) => {
   const { participant } = trackRef;
   const isLocal = participant.isLocal;
@@ -53,6 +57,38 @@ export const ParticipantVideoTile: React.FC<ParticipantVideoTileProps> = ({
     },
     [isLocal, toggleScreenShare],
   );
+
+  if (isFilmstrip) {
+    return (
+      <div
+        className={`video-filmstrip-tile${isSpeaking ? ' is-speaking' : ''}${isPinned ? ' is-pinned' : ''} ${className}`}
+        style={style}
+        onClick={onClick}
+        role="button"
+        tabIndex={0}
+        title={`Click to spotlight ${displayName}`}
+        aria-label={`Spotlight ${displayName}`}
+      >
+        {!isVideoMuted ? (
+          <VideoTrack
+            trackRef={trackRef}
+            className={`video-track-element${isLocal ? ' mirror-video' : ''}`}
+          />
+        ) : (
+          <div className="video-tile-fallback">
+            <UserAvatar name={participant.name || 'Participant'} size="sm" />
+          </div>
+        )}
+
+        <div className="video-filmstrip-info">
+          {role === 'owner' && <span className="filmstrip-role-dot role-owner" title="Owner" />}
+          {role === 'instructor' && <span className="filmstrip-role-dot role-instructor" title="Instructor" />}
+          <span className="filmstrip-name">{displayName}</span>
+          {isMicMuted && <MicOff size={10} className="filmstrip-mic-muted" />}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -10,6 +10,8 @@ import {
   X,
   Move,
   Pin,
+  LayoutGrid,
+  Square,
 } from 'lucide-react';
 import ParticipantVideoTile from './ParticipantVideoTile';
 import ScreenShareViewer from './ScreenShareViewer';
@@ -20,6 +22,7 @@ export interface VideoStageProps {
 }
 
 type StageMode = 'docked' | 'bubble' | 'minimized';
+type LayoutMode = 'spotlight' | 'grid';
 
 export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className = '' }) => {
   // Query all active camera and screen share tracks
@@ -45,6 +48,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
   });
 
   const [mode, setMode] = useState<StageMode>(() => (isMobile ? 'bubble' : 'docked'));
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('spotlight');
   const [mobileExpanded, setMobileExpanded] = useState<boolean>(false);
   const [pinnedIdentity, setPinnedIdentity] = useState<string | null>(null);
 
@@ -82,6 +86,14 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
     return cameraTracks.find((t) => !t.participant.isLocal) || cameraTracks[0];
   }, [cameraTracks, pinnedIdentity]);
 
+  // Remaining camera tracks for the filmstrip
+  const filmstripTracks = useMemo(() => {
+    if (!activeSpeakerTrack) return [];
+    return cameraTracks.filter(
+      (t) => t.participant.identity !== activeSpeakerTrack.participant.identity,
+    );
+  }, [cameraTracks, activeSpeakerTrack]);
+
   const getMemberRole = useCallback(
     (identity: string) => {
       const member = members.find((m) => m.userId === identity);
@@ -89,6 +101,15 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
     },
     [members],
   );
+
+  // Dynamic layout class based on video count and layout mode
+  const dockLayoutClass = useMemo(() => {
+    if (screenShareTracks.length > 0) return 'has-screenshare';
+    if (cameraTracks.length <= 1) return 'size-solo';
+    if (layoutMode === 'spotlight') return 'layout-spotlight';
+    if (cameraTracks.length === 2) return 'layout-grid-2';
+    return 'layout-grid-multi';
+  }, [screenShareTracks.length, cameraTracks.length, layoutMode]);
 
   // Drag handlers for desktop / floating widget
   const handlePointerDown = useCallback(
@@ -102,7 +123,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
       const clientY = e.clientY;
 
       const currentX = position?.x ?? (window.innerWidth - 240);
-      const currentY = position?.y ?? 70;
+      const currentY = position?.y ?? 84;
 
       dragStartRef.current = {
         x: clientX,
@@ -122,7 +143,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
     const deltaY = e.clientY - dragStartRef.current.y;
 
     const newX = Math.max(10, Math.min(window.innerWidth - 120, dragStartRef.current.posX + deltaX));
-    const newY = Math.max(60, Math.min(window.innerHeight - 80, dragStartRef.current.posY + deltaY));
+    const newY = Math.max(74, Math.min(window.innerHeight - 80, dragStartRef.current.posY + deltaY));
 
     setPosition({ x: newX, y: newY });
   }, []);
@@ -253,7 +274,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
   return (
     <div className={`video-stage-root ${className}`} style={{ pointerEvents: 'none' }}>
       <div
-        className="video-stage-card"
+        className={`video-stage-card ${dockLayoutClass}`}
         style={{
           pointerEvents: 'auto',
           left: position ? `${position.x}px` : undefined,
@@ -280,6 +301,29 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
           </div>
 
           <div className="video-stage-controls">
+            {/* 1-Click Layout Mode Switcher (Spotlight vs Grid) */}
+            {cameraTracks.length > 1 && (
+              <button
+                type="button"
+                className="video-stage-btn"
+                onClick={() =>
+                  setLayoutMode((curr) => (curr === 'spotlight' ? 'grid' : 'spotlight'))
+                }
+                title={
+                  layoutMode === 'spotlight'
+                    ? 'Switch to Grid view'
+                    : 'Switch to Spotlight view'
+                }
+                aria-label={
+                  layoutMode === 'spotlight'
+                    ? 'Switch to Grid view'
+                    : 'Switch to Spotlight view'
+                }
+              >
+                {layoutMode === 'spotlight' ? <LayoutGrid size={13} /> : <Square size={13} />}
+              </button>
+            )}
+
             {isMobile && (
               <button
                 type="button"
@@ -291,6 +335,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
                 <Minimize2 size={12} />
               </button>
             )}
+
             <button
               type="button"
               className="video-stage-btn"
@@ -318,27 +363,78 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
           </div>
         )}
 
-        {/* Camera tiles strip / grid */}
+        {/* Camera Views: Spotlight + Filmstrip vs Adaptive Grid */}
         {cameraTracks.length > 0 && (
-          <div
-            className={`video-tiles-container${
-              cameraTracks.length > 1 ? ' multi-tile' : ''
-            }`}
-          >
-            {cameraTracks.map((trackRef) => (
-              <ParticipantVideoTile
-                key={trackRef.publication?.trackSid || trackRef.participant.identity}
-                trackRef={trackRef}
-                role={getMemberRole(trackRef.participant.identity)}
-                isPinned={pinnedIdentity === trackRef.participant.identity}
-                onTogglePin={() =>
-                  setPinnedIdentity((current) =>
-                    current === trackRef.participant.identity ? null : trackRef.participant.identity,
-                  )
-                }
-              />
-            ))}
-          </div>
+          <>
+            {layoutMode === 'spotlight' && cameraTracks.length > 1 ? (
+              <div className="video-spotlight-container">
+                {/* Spotlight Main Tile */}
+                {activeSpeakerTrack && (
+                  <div className="video-spotlight-main">
+                    <ParticipantVideoTile
+                      key={
+                        activeSpeakerTrack.publication?.trackSid ||
+                        activeSpeakerTrack.participant.identity
+                      }
+                      trackRef={activeSpeakerTrack}
+                      role={getMemberRole(activeSpeakerTrack.participant.identity)}
+                      isPinned={pinnedIdentity === activeSpeakerTrack.participant.identity}
+                      onTogglePin={() =>
+                        setPinnedIdentity((current) =>
+                          current === activeSpeakerTrack.participant.identity
+                            ? null
+                            : activeSpeakerTrack.participant.identity,
+                        )
+                      }
+                    />
+                  </div>
+                )}
+
+                {/* Horizontal Filmstrip */}
+                {filmstripTracks.length > 0 && (
+                  <div className="video-filmstrip-strip">
+                    {filmstripTracks.map((trackRef) => (
+                      <ParticipantVideoTile
+                        key={trackRef.publication?.trackSid || trackRef.participant.identity}
+                        trackRef={trackRef}
+                        role={getMemberRole(trackRef.participant.identity)}
+                        isPinned={pinnedIdentity === trackRef.participant.identity}
+                        isFilmstrip={true}
+                        onClick={() => setPinnedIdentity(trackRef.participant.identity)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Grid Layout */
+              <div
+                className={`video-tiles-container ${
+                  cameraTracks.length === 1
+                    ? 'single-tile'
+                    : cameraTracks.length === 2
+                    ? 'two-tiles'
+                    : 'multi-tile'
+                }`}
+              >
+                {cameraTracks.map((trackRef) => (
+                  <ParticipantVideoTile
+                    key={trackRef.publication?.trackSid || trackRef.participant.identity}
+                    trackRef={trackRef}
+                    role={getMemberRole(trackRef.participant.identity)}
+                    isPinned={pinnedIdentity === trackRef.participant.identity}
+                    onTogglePin={() =>
+                      setPinnedIdentity((current) =>
+                        current === trackRef.participant.identity
+                          ? null
+                          : trackRef.participant.identity,
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

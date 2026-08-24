@@ -3,6 +3,7 @@ import { sentryVitePlugin } from '@sentry/vite-plugin'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import fs from 'fs'
 
 let release = process.env.VITE_SENTRY_RELEASE || process.env.SENTRY_RELEASE
 if (!release) {
@@ -31,12 +32,16 @@ const sentryPlugins =
     : []
 
 // https://vite.dev/config/
+const sharedDir = fs.existsSync(path.resolve(__dirname, '../shared'))
+  ? path.resolve(__dirname, '../shared')
+  : path.resolve(__dirname, './src/shared');
+
 export default defineConfig({
   plugins: [react(), ...sentryPlugins],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@shared': path.resolve(__dirname, '../shared'),
+      '@shared': sharedDir,
     },
   },
   server: {

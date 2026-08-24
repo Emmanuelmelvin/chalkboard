@@ -1,16 +1,38 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
 import type { ApiErrorResponse } from '@/api/types';
 
-const backendUrl = (
-  // Preferred for static hosting on chalkboard.click -> api.chalkboard.click
-  (import.meta.env.VITE_BACKEND_URL as string | undefined) ||
-  (import.meta.env.VITE_API_URL as string | undefined) ||
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
-  ''
-).replace(/\/$/, '');
+/**
+ * Resolves the HTTP API base URL for Axios.
+ * - If VITE_API_URL is unset, empty, or '/api', returns '/api' for local dev proxy.
+ * - If VITE_API_URL is 'api.chalkboard.click' or 'https://api.chalkboard.click', returns 'https://api.chalkboard.click/api'.
+ */
+export function resolveApiUrl(raw?: string): string {
+  const trimmed = raw?.trim() || '';
+  if (!trimmed || trimmed === '/api') return '/api';
+  const withProto = trimmed.startsWith('http://') || trimmed.startsWith('https://')
+    ? trimmed
+    : `https://${trimmed}`;
+  const clean = withProto.replace(/\/+$/, '');
+  return clean.endsWith('/api') ? clean : `${clean}/api`;
+}
+
+/**
+ * Resolves the Socket.IO server URL.
+ * - If VITE_API_URL is unset, empty, or '/api', returns undefined (same-origin / dev proxy).
+ * - If VITE_API_URL is 'api.chalkboard.click' or 'https://api.chalkboard.click', returns 'https://api.chalkboard.click'.
+ */
+export function resolveSocketUrl(raw?: string): string | undefined {
+  const trimmed = raw?.trim() || '';
+  if (!trimmed || trimmed === '/api') return undefined;
+  const withProto = trimmed.startsWith('http://') || trimmed.startsWith('https://')
+    ? trimmed
+    : `https://${trimmed}`;
+  const clean = withProto.replace(/\/+$/, '');
+  return clean.endsWith('/api') ? clean.slice(0, -4) : clean;
+}
 
 export const apiClient = axios.create({
-  baseURL: backendUrl ? `${backendUrl}/api` : '/api',
+  baseURL: resolveApiUrl(import.meta.env.VITE_API_URL),
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });

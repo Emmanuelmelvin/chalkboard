@@ -63,8 +63,9 @@ function Support() {
       } else {
         throw new Error('No checkout URL received.');
       }
-    } catch (err: any) {
-      setError(err?.message || 'Unable to create checkout session. Please try again.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to create checkout session. Please try again.';
+      setError(message);
       setLoading(false);
     }
   };

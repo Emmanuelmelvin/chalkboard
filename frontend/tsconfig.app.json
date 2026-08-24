@@ -18,10 +18,12 @@
         "./src/*"
       ],
       "@shared/*": [
-        "../shared/*"
+        "../shared/*",
+        "./src/shared/*"
       ],
       "@shared": [
-        "../shared"
+        "../shared",
+        "./src/shared"
       ]
     },
     /* Bundler mode */

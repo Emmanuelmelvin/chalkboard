@@ -20,16 +20,13 @@ import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
 import { identifyUserJot } from '@/lib/userjot';
 import { markSessionFeedbackPending } from '@/lib/sessionFeedback';
+import { resolveSocketUrl } from '@/api/client';
 import type { LeaveRoomOptions } from '@/types';
 import '@/styles/PublicPages.css';
 
 // In production the frontend is static on chalkboard.click and the API is on
-// api.chalkboard.click — allow the backend host to be overridden at build time.
-const socketBackendUrl =
-  (import.meta.env.VITE_BACKEND_URL as string | undefined) ||
-  (import.meta.env.VITE_API_URL as string | undefined) ||
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
-  undefined;
+// api.chalkboard.click — VITE_API_URL configures the target backend.
+const socketBackendUrl = resolveSocketUrl(import.meta.env.VITE_API_URL);
 
 // Initialize a single socket client that can be activated on demand
 const socket: Socket = io(socketBackendUrl, {

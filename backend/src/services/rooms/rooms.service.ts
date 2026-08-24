@@ -695,10 +695,9 @@ export async function createRoomVoiceToken(slug: string, user: any) {
     return { error: 'voice_minutes_exhausted' };
   }
 
-  // Listening is granted to every accepted room member. Publishing is a
-  // separate permission: only the owner or an explicitly invited member may
-  // receive a token that can publish microphone audio.
-  const canPublish = authorization.role === 'owner' || await isVoicePublisher(slug, user.id);
+  // Listening is granted to every accepted room member. Publishing is
+  // granted to the owner, instructors (editors), and explicitly invited members.
+  const canPublish = authorization.role === 'owner' || authorization.role === 'instructor' || await isVoicePublisher(slug, user.id);
 
   // Opened before the token is minted so a participant who connects and then
   // vanishes is still measured; the reconciliation pass closes what a

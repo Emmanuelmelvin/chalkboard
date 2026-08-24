@@ -22,6 +22,10 @@ import {
   Smile,
   Mic,
   MicOff,
+  Video,
+  VideoOff,
+  Monitor,
+  MonitorOff,
   WifiOff,
   Radio,
   RadioOff,
@@ -75,6 +79,8 @@ import {
   useMaybeRoomContext,
 } from '@livekit/components-react';
 import { getVoiceToken } from '@/api/rooms';
+import VideoStage from '@/components/video/VideoStage';
+import { useMediaControls } from '@/hooks/useMediaControls';
 import NotesLayer from '@/plugins/builtin/notes/NotesLayer';
 import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
 import { useLinksStore } from '@/stores/linksStore';
@@ -234,6 +240,62 @@ interface RoomMemberVoiceControlsProps {
   memberName: string;
   /** Whether the voice call itself is connected */
   voiceConnected: boolean;
+}
+
+function RoomHeaderMediaControls({
+  voiceConnected,
+}: {
+  voiceConnected: boolean;
+}) {
+  const room = useMaybeRoomContext();
+  const {
+    isMicrophoneEnabled,
+    isCameraEnabled,
+    isScreenShareEnabled,
+    canPublish,
+    toggleMicrophone,
+    toggleCamera,
+    toggleScreenShare,
+  } = useMediaControls();
+
+  if (!voiceConnected || !room) return null;
+
+  return (
+    <div className="room-media-header-controls">
+      <button
+        type="button"
+        className={`voice-action-btn header-media-btn${isMicrophoneEnabled ? ' is-active' : ''}`}
+        onClick={toggleMicrophone}
+        disabled={!canPublish}
+        title={!canPublish ? 'Microphone is disabled for listeners' : (isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone')}
+        aria-label={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
+      >
+        {isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />}
+      </button>
+
+      <button
+        type="button"
+        className={`voice-action-btn header-media-btn${isCameraEnabled ? ' is-active' : ''}`}
+        onClick={toggleCamera}
+        disabled={!canPublish}
+        title={!canPublish ? 'Camera is disabled for listeners' : (isCameraEnabled ? 'Turn off camera' : 'Turn on camera')}
+        aria-label={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+      >
+        {isCameraEnabled ? <Video size={14} /> : <VideoOff size={14} />}
+      </button>
+
+      <button
+        type="button"
+        className={`voice-action-btn header-media-btn screen-share-header-btn${isScreenShareEnabled ? ' is-active' : ''}`}
+        onClick={toggleScreenShare}
+        disabled={!canPublish}
+        title={!canPublish ? 'Screen share is disabled for listeners' : (isScreenShareEnabled ? 'Stop sharing screen' : 'Share screen')}
+        aria-label={isScreenShareEnabled ? 'Stop sharing screen' : 'Share screen'}
+      >
+        {isScreenShareEnabled ? <Monitor size={14} /> : <MonitorOff size={14} />}
+      </button>
+    </div>
+  );
 }
 
 function voiceDisabledReason({ voiceConnected, isOnline, memberName }: RoomMemberVoiceControlsProps): string | null {
@@ -1407,6 +1469,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   )}
                 </div>
               </div>
+              <RoomHeaderMediaControls voiceConnected={voiceConnected} />
               {effectiveRole === 'owner' && roomQuery.data?.room.voiceEnabled && (
                 <button
                   type="button"
@@ -1691,9 +1754,9 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   return (
     <LiveKitRoom
-      video={false}
-      // Join with playback enabled, but request the microphone only when the
-      // user explicitly presses Unmute. This also keeps viewer tokens
+      video={true}
+      // Join with playback enabled, but request media only when the
+      // user explicitly presses Unmute or starts camera. This also keeps viewer tokens
       // (which intentionally cannot publish) from failing on join.
       audio={false}
       token={voiceToken || undefined}
@@ -1710,12 +1773,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         setVoiceUrl('');
       }}
       onError={() => {
-        useLoggerStore.getState().notify('Voice connection error', 'error');
+        useLoggerStore.getState().notify('Voice/video connection error', 'error');
       }}
     >
       <VoiceAudioStarter />
       <SpeakingParticipantsProvider>
         {mainContent}
+        {hasVoiceCredentials && <VideoStage />}
       </SpeakingParticipantsProvider>
       {hasVoiceCredentials && <RoomAudioRenderer />}
     </LiveKitRoom>

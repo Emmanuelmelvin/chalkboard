@@ -214,11 +214,49 @@ async function createService(projectId, payload, options = {}) {
   const existingList = await existingServices(projectId);
   const existing = existingList.find((s) => s.name === payload.name);
   if (existing) {
-    console.log(`Service: reused ${existing.name} -> ${existing.id} (${existing.status})`);
-    // Do NOT overwrite database service passwords on existing databases
+    // Sync env for app services
     if (payload.env && !options.isDatabase) {
       await syncEnv(existing, payload.env);
     }
+    // Auto-migrate monorepo services from sub-dir context (rootDir: 'backend'/'frontend')
+    // to repo-root context so `shared/` is included in the Docker build.
+    const needsUpdate =
+      (payload.rootDir !== undefined && existing.rootDir !== payload.rootDir) ||
+      (payload.dockerfile !== undefined && existing.dockerfile !== payload.dockerfile) ||
+      (payload.dockerfilePath !== undefined && existing.dockerfilePath !== payload.dockerfilePath) ||
+      (payload.staticOutput !== undefined && existing.staticOutput !== payload.staticOutput);
+    if (needsUpdate) {
+      const updatePayload = {};
+      if (payload.rootDir !== undefined) updatePayload.rootDir = payload.rootDir;
+      if (payload.dockerfile !== undefined) updatePayload.dockerfile = payload.dockerfile;
+      if (payload.dockerfilePath !== undefined) updatePayload.dockerfilePath = payload.dockerfilePath;
+      if (payload.staticOutput !== undefined) updatePayload.staticOutput = payload.staticOutput;
+      // Aeroplane has used both `dockerfile` and `dockerfilePath` across versions — send both
+      if (payload.dockerfile && !updatePayload.dockerfilePath) updatePayload.dockerfilePath = payload.dockerfile;
+      if (payload.dockerfilePath && !updatePayload.dockerfile) updatePayload.dockerfile = payload.dockerfilePath;
+      console.log(`Service: updating ${existing.name} ${JSON.stringify({ from: { rootDir: existing.rootDir, dockerfile: existing.dockerfile || existing.dockerfilePath }, to: updatePayload })}`);
+      let updated = null;
+      for (const method of ['PATCH', 'PUT', 'POST']) {
+        for (const path of [`/api/services/${existing.id}`, `/api/services/${existing.id}/config`, `/api/projects/${projectId}/services/${existing.id}`]) {
+          try {
+            updated = await api(method, path, updatePayload);
+            console.log(`  -> updated via ${method} ${path}`);
+            break;
+          } catch {}
+        }
+        if (updated) break;
+      }
+      if (!updated) {
+        console.warn(`  Warning: could not update ${existing.name} via API — if deploy still uses old rootDir, delete/recreate the service in the Aeroplane dashboard (rootDir should be '' and dockerfile backend/Dockerfile or frontend/Dockerfile).`);
+      } else {
+        // Refresh service record
+        try {
+          const overview = await api('GET', `/api/services/${existing.id}/overview`);
+          return overview?.service ?? overview ?? existing;
+        } catch {}
+      }
+    }
+    console.log(`Service: reused ${existing.name} -> ${existing.id} (${existing.status})`);
     return existing;
   }
   const created = await api('POST', `/api/projects/${projectId}/services`, payload);
@@ -417,16 +455,22 @@ async function main() {
   ];
 
   console.log('— Creating / updating app services —');
+  // NOTE: rootDir='' (repo root) + dockerfile so the Docker context includes `shared/`.
+  // `backend/tsconfig.json:13` and `frontend/vite.config.ts:39` both resolve `@shared -> ../shared`,
+  // which is `/app/shared` inside the image when WORKDIR is `/app/backend` or `/app/frontend`.
   const web = await createService(projectId, {
-    name: 'web', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: 'frontend',
-    buildMethod: 'auto', runtimeMode: 'web', internalPort: 80, staticOutput: 'dist', env: webEnv,
+    name: 'web', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: '',
+    dockerfile: 'frontend/Dockerfile', dockerfilePath: 'frontend/Dockerfile',
+    buildMethod: 'auto', runtimeMode: 'web', internalPort: 80, staticOutput: 'frontend/dist', env: webEnv,
   });
   const apiService = await createService(projectId, {
-    name: 'api', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: 'backend',
+    name: 'api', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: '',
+    dockerfile: 'backend/Dockerfile', dockerfilePath: 'backend/Dockerfile',
     buildMethod: 'auto', runtimeMode: 'web', internalPort: 3001, env: commonEnv,
   });
   const worker = await createService(projectId, {
-    name: 'worker', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: 'backend',
+    name: 'worker', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: '',
+    dockerfile: 'backend/Dockerfile', dockerfilePath: 'backend/Dockerfile',
     buildMethod: 'auto', runtimeMode: 'worker',
     env: [...commonEnv, { key: 'PROCESS_TYPE', value: 'worker' }],
   });

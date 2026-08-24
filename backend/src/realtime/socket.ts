@@ -7,7 +7,8 @@ import {
   getRaisedHands,
   isVoiceOwnerConnected,
   setVoiceOwnerConnected,
-  setVoicePublisher
+  setVoicePublisher,
+  setVoiceBlocked
 } from '@/services/rooms/roomState.service';
 import {
   assertRoomJoinAllowed,
@@ -649,7 +650,13 @@ async function handleVoiceMembershipAction(
     return;
   }
 
-  await setVoicePublisher(data.roomId, data.targetUserId, event === 'voice:invite');
+  if (event === 'voice:invite') {
+    await setVoiceBlocked(data.roomId, data.targetUserId, false);
+    await setVoicePublisher(data.roomId, data.targetUserId, true);
+  } else {
+    await setVoicePublisher(data.roomId, data.targetUserId, false);
+    await setVoiceBlocked(data.roomId, data.targetUserId, true);
+  }
   hit(metricNames.voiceMembership, { action: event === 'voice:invite' ? 'invite' : 'remove' });
 
   // Leaving voice stops the meter now rather than waiting for the socket to

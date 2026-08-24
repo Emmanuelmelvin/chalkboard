@@ -53,8 +53,8 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
         isDefaultPosition
           ? undefined
           : {
-              left: x,
-              top: y,
+              transform: `translate3d(${x}px, ${y}px, 0)`,
+              willChange: 'transform',
             }
       }
       aria-label={`${collaborator.name}'s cursor`}

@@ -1773,10 +1773,10 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   return (
     <LiveKitRoom
-      video={true}
+      video={false}
       // Join with playback enabled, but request media only when the
       // user explicitly presses Unmute or starts camera. This also keeps viewer tokens
-      // (which intentionally cannot publish) from failing on join.
+      // (which intentionally cannot publish) from failing on join or reconnect.
       audio={false}
       token={voiceToken || undefined}
       serverUrl={voiceUrl || undefined}

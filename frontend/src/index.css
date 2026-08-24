@@ -1665,9 +1665,12 @@ body {
 /* Real-Time Collaborator Cursors & Presence */
 .collaborator-cursor {
   position: absolute;
+  top: 0;
+  left: 0;
   pointer-events: none;
   z-index: 1000;
-  transition: left 0.08s linear, top 0.08s linear;
+  transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
   display: inline-flex;
   align-items: flex-start;
 }
@@ -5418,19 +5421,18 @@ html[data-theme='light'] .session-feedback-opt-out input {
 
 .video-filmstrip-info {
   position: absolute;
-  bottom: 2px;
-  left: 2px;
-  right: 2px;
+  bottom: 3px;
+  left: 4px;
+  right: 4px;
   display: flex;
   align-items: center;
   gap: 3px;
-  padding: 1px 4px;
-  background: rgba(12, 17, 30, 0.85);
-  backdrop-filter: blur(4px);
-  border-radius: 3px;
-  font-size: 9px;
-  font-weight: 500;
-  color: #f1f5f9;
+  padding: 0;
+  background: transparent;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.85);
   pointer-events: none;
   z-index: 2;
 }
@@ -5640,20 +5642,18 @@ html[data-theme='light'] .session-feedback-opt-out input {
 
 .video-tile-info {
   position: absolute;
-  bottom: 4px;
-  left: 4px;
-  right: 4px;
+  bottom: 5px;
+  left: 6px;
+  right: 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 6px;
-  background: rgba(12, 17, 30, 0.75);
-  backdrop-filter: blur(6px);
-  border-radius: 4px;
-  font-size: 10.5px;
-  font-weight: 500;
-  color: #f1f5f9;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  padding: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.85);
   pointer-events: none;
   z-index: 2;
 }

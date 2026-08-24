@@ -87,7 +87,29 @@ export function useCanvasInteraction(
   const activeStrokeRef = useRef<Stroke | null>(null);
   const activeTouchPoints = useRef(new Map<number, Point>());
   const pinchStart = useRef<{ distance: number; zoom: number; canvasPoint: Point } | null>(null);
+  const lastCursorEmitRef = useRef<number>(0);
+  const pendingCursorEmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const MARQUEE_THRESHOLD = 5; // screen pixels before marquee appears
+
+  const emitCursorMove = useCallback((pos: Point) => {
+    if (!socket || !canEdit) return;
+    const now = performance.now();
+    const elapsed = now - lastCursorEmitRef.current;
+    if (elapsed > 35) {
+      lastCursorEmitRef.current = now;
+      if (pendingCursorEmitRef.current) {
+        clearTimeout(pendingCursorEmitRef.current);
+        pendingCursorEmitRef.current = null;
+      }
+      socket.emit('cursor-move', { roomId, cursor: pos });
+    } else if (!pendingCursorEmitRef.current) {
+      pendingCursorEmitRef.current = setTimeout(() => {
+        pendingCursorEmitRef.current = null;
+        lastCursorEmitRef.current = performance.now();
+        socket.emit('cursor-move', { roomId, cursor: pos });
+      }, 35 - elapsed);
+    }
+  }, [socket, canEdit, roomId]);
 
   // Screen to Canvas coordinate conversion
   const screenToCanvas = useCallback(
@@ -162,7 +184,7 @@ export function useCanvasInteraction(
     cursorPosRef.current = pos;
     setCursorPos(pos);
 
-    socket?.emit('cursor-move', { roomId, cursor: pos });
+    emitCursorMove(pos);
 
     if (!isDrawing || !currentStrokeId.current) return;
 
@@ -186,7 +208,7 @@ export function useCanvasInteraction(
       strokeId: currentStrokeId.current,
       point: pos,
     });
-  }, [isDrawing, activeTool, roomId, socket, screenToCanvas, setCursorPos, setStrokes, triggerDustPuff, canvasRef]);
+  }, [isDrawing, activeTool, roomId, socket, screenToCanvas, setCursorPos, setStrokes, triggerDustPuff, canvasRef, emitCursorMove]);
 
   const stopDrawing = useCallback(() => {
     if (!isDrawing) return;

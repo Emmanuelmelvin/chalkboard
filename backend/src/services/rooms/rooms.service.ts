@@ -8,7 +8,7 @@ import { UNLIMITED, getCachedEntitlements, getEntitlements, isWithinLimit } from
 import { enqueueEmail } from '@/services/emails/emails.service';
 import { createVoiceToken } from '@/services/rooms/livekit.service';
 import { deleteRoomState, getLiveRoomUserIds } from '@/services/rooms/realtimeRooms.service';
-import { isVoicePublisher } from '@/services/rooms/roomState.service';
+import { isVoicePublisher, isVoiceBlocked } from '@/services/rooms/roomState.service';
 import { ownerHasVoiceHeadroom, startVoiceSession } from '@/services/rooms/voiceMetering.service';
 import { decryptRoomPassword, encryptRoomPassword } from '@/services/rooms/roomPasswords.service';
 import { APIError } from '@/utils/error';
@@ -696,8 +696,14 @@ export async function createRoomVoiceToken(slug: string, user: any) {
   }
 
   // Listening is granted to every accepted room member. Publishing is
-  // granted to the owner, instructors (editors), and explicitly invited members.
-  const canPublish = authorization.role === 'owner' || authorization.role === 'instructor' || await isVoicePublisher(slug, user.id);
+  // granted to the owner, instructors (editors), and explicitly invited members,
+  // unless explicitly removed or blocked from publishing.
+  const isBlocked = await isVoiceBlocked(slug, user.id);
+  const canPublish = !isBlocked && (
+    authorization.role === 'owner' ||
+    authorization.role === 'instructor' ||
+    await isVoicePublisher(slug, user.id)
+  );
 
   // Opened before the token is minted so a participant who connects and then
   // vanishes is still measured; the reconciliation pass closes what a

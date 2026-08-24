@@ -47,6 +47,39 @@ export async function isVoicePublisher(roomId: string, userId: string): Promise<
   }
 }
 
+export async function setVoiceBlocked(roomId: string, userId: string, blocked: boolean): Promise<void> {
+  const client = requireRedis();
+  const key = `room:${roomId}:voice-blocked`;
+  try {
+    if (blocked) await client.sAdd(key, userId);
+    else await client.sRem(key, userId);
+  } catch (error) {
+    logger.error('Redis setVoiceBlocked failed', {
+      roomId,
+      userId,
+      blocked,
+      redisStatus,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+export async function isVoiceBlocked(roomId: string, userId: string): Promise<boolean> {
+  const client = requireRedis();
+  try {
+    return Boolean(await client.sIsMember(`room:${roomId}:voice-blocked`, userId));
+  } catch (error) {
+    logger.error('Redis isVoiceBlocked failed', {
+      roomId,
+      userId,
+      redisStatus,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
 export async function setVoiceOwnerConnected(roomId: string, connected: boolean): Promise<void> {
   const client = requireRedis();
   const key = `room:${roomId}:voice-owner-connected`;

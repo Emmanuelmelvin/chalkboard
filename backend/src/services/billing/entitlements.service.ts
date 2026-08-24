@@ -7,19 +7,29 @@ import {
   workspaceMembers,
   workspaces
 } from '@/db/schema';
-import { redis } from '@/services/rooms/roomState.service';
+import { redis, isRedisReady, getRedisStatus } from '@/config/redis';
 import { logger } from '@/utils/logger';
 
 /**
- * The authoritative copy of the plan limits.
+ * Entitlement resolution — server-side enforcement.
  *
- * `frontend/src/constants/plans.ts` holds a second copy for rendering the
- * pricing page. This file is the one that decides what a request is allowed to
- * do; a client can edit anything it is given. `backend/test/entitlements.test.ts`
- * asserts the two tables match so they cannot silently diverge.
+ * Numeric limits come from the single source of truth in `shared/plans.ts`.
+ * That module is imported by both this service and the frontend pricing page
+ * (`frontend/src/constants/plans.ts`), so the two sides cannot silently drift:
+ * a display lag on the client is the worst case, never an enforcement hole.
+ * `backend/test/entitlements.test.ts` asserts the three copies (shared,
+ * backend re-export, frontend re-export) stay identical as a second line of
+ * defence.
  */
 
-export type PlanId = 'free' | 'pro' | 'team';
+import { UNLIMITED, defaultPlanId, planLimits } from '@shared/plans';
+import type { PlanId, PlanLimits } from '@shared/plans';
+
+// Re-export the shared authoritative symbols so existing imports from this
+// module (`@/services/billing/entitlements.service.ts`) keep working without
+// a codemod. New code may also import directly from `@shared/plans`.
+export { UNLIMITED, defaultPlanId, planLimits };
+export type { PlanId, PlanLimits };
 
 /** Mirrors the `subscription_status` enum, which mirrors Bachs exactly. */
 export type SubscriptionStatus =
@@ -32,78 +42,6 @@ export type SubscriptionStatus =
 
 /** `none` covers a user who has never had a subscription row. */
 export type EntitlementStatus = SubscriptionStatus | 'none';
-
-/** Sentinel for a limit that is not capped on a given plan. */
-export const UNLIMITED = -1;
-
-export interface PlanLimits {
-  /** Concurrent open rooms an owner may hold. */
-  activeRooms: number;
-  /** Maximum simultaneous participants in one room. */
-  attendeesPerRoom: number;
-  /** Days a board is kept after its last activity. */
-  retentionDays: number;
-  /** LiveKit voice minutes included each billing period. */
-  voiceMinutesPerMonth: number;
-  /** Seats included in the subscription. */
-  seats: number;
-  /** Access to plugins published on the `pro` plugin plan. */
-  proPlugins: boolean;
-  /** Permission to publish plugins to the catalogue. */
-  publishPlugins: boolean;
-  /** Board export to PNG, SVG, and PDF. */
-  boardExport: boolean;
-  /** Room logo and colour customisation. */
-  customBranding: boolean;
-  /** Shared workspace, org billing, and member administration. */
-  workspaceAdmin: boolean;
-  /** Prioritised support queue. */
-  prioritySupport: boolean;
-}
-
-export const planLimits: Record<PlanId, PlanLimits> = {
-  free: {
-    activeRooms: 5,
-    attendeesPerRoom: 25,
-    retentionDays: 7,
-    voiceMinutesPerMonth: 200,
-    seats: 1,
-    proPlugins: false,
-    publishPlugins: false,
-    boardExport: false,
-    customBranding: false,
-    workspaceAdmin: false,
-    prioritySupport: false,
-  },
-  pro: {
-    activeRooms: UNLIMITED,
-    attendeesPerRoom: 100,
-    retentionDays: UNLIMITED,
-    voiceMinutesPerMonth: 1500,
-    seats: 1,
-    proPlugins: true,
-    publishPlugins: true,
-    boardExport: true,
-    customBranding: true,
-    workspaceAdmin: false,
-    prioritySupport: false,
-  },
-  team: {
-    activeRooms: UNLIMITED,
-    attendeesPerRoom: 300,
-    retentionDays: UNLIMITED,
-    voiceMinutesPerMonth: 10000,
-    seats: 10,
-    proPlugins: true,
-    publishPlugins: true,
-    boardExport: true,
-    customBranding: true,
-    workspaceAdmin: true,
-    prioritySupport: true,
-  },
-};
-
-export const defaultPlanId: PlanId = 'free';
 
 /**
  * Statuses that keep paid access.
@@ -266,7 +204,13 @@ function cacheKey(userId: string) {
  */
 export async function getCachedEntitlements(userId?: string): Promise<Entitlements> {
   if (!userId) return freeEntitlements();
-  if (!redis) return getEntitlements(userId);
+  if (!isRedisReady()) {
+    logger.warn('Redis not ready for entitlement cache, falling back to DB', {
+      redisStatus: getRedisStatus(),
+      userId,
+    });
+    return getEntitlements(userId);
+  }
 
   try {
     const cached = await redis.get(cacheKey(userId));
@@ -299,22 +243,30 @@ export async function getCachedEntitlements(userId?: string): Promise<Entitlemen
   }
 
   const entitlements = await getEntitlements(userId);
-  try {
-    await redis.set(
-      cacheKey(userId),
-      JSON.stringify({
-        plan: entitlements.plan,
-        status: entitlements.status,
-        currentPeriodEnd: entitlements.currentPeriodEnd?.toISOString() ?? null,
-        cancelAtPeriodEnd: entitlements.cancelAtPeriodEnd,
-        seats: entitlements.limits.seats,
-      }),
-      { EX: CACHE_TTL_SECONDS },
-    );
-  } catch (error) {
-    logger.warn('Entitlement cache write failed', {
+  if (isRedisReady()) {
+    try {
+      await redis.set(
+        cacheKey(userId),
+        JSON.stringify({
+          plan: entitlements.plan,
+          status: entitlements.status,
+          currentPeriodEnd: entitlements.currentPeriodEnd?.toISOString() ?? null,
+          cancelAtPeriodEnd: entitlements.cancelAtPeriodEnd,
+          seats: entitlements.limits.seats,
+        }),
+        { EX: CACHE_TTL_SECONDS },
+      );
+    } catch (error) {
+      logger.warn('Entitlement cache write failed', {
+        redisStatus: getRedisStatus(),
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } else {
+    logger.warn('Skipping entitlement cache write, Redis not ready', {
+      redisStatus: getRedisStatus(),
       userId,
-      error: error instanceof Error ? error.message : String(error),
     });
   }
   return entitlements;
@@ -322,7 +274,13 @@ export async function getCachedEntitlements(userId?: string): Promise<Entitlemen
 
 /** Invalidate on every webhook that changes a subscription. */
 export async function invalidateEntitlements(userId: string) {
-  if (!redis) return;
+  if (!isRedisReady()) {
+    logger.warn('Skipping entitlement cache invalidation, Redis not ready', {
+      redisStatus: getRedisStatus(),
+      userId,
+    });
+    return;
+  }
   try {
     await redis.del(cacheKey(userId));
   } catch (error) {

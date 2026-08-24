@@ -65,8 +65,12 @@ const envSchema = z.object({
   SENDBYTE_FROM_ADMIN_NAME: z.string().default('Chalkboard'),
   // Billing. Leave BACHS_API_KEY empty to run with billing disabled: every
   // user then resolves to the Free plan and the checkout routes return 503.
+  // BACHS_SANDBOX_* aliases are supported because existing .env files use that
+  // prefix (see backend/.env); when both are set BACHS_API_* wins.
   BACHS_API_BASE_URL: z.string().url().default('https://sandbox-api.bachs.io'),
   BACHS_API_KEY: z.string().default(''),
+  BACHS_SANDBOX_API_BASE_URL: z.string().url().optional().or(z.literal('')).default(''),
+  BACHS_SANDBOX_API_KEY: z.string().default(''),
   BACHS_WEBHOOK_SECRET: z.string().default(''),
   // Live Bachs keys for the beta support/donation checkout. Completely
   // independent of the sandbox billing keys above.
@@ -126,7 +130,20 @@ const envSchema = z.object({
 });
 
 
-export const env = envSchema.parse(process.env);
+const parsedEnv = envSchema.parse(process.env);
+
+// Normalize sandbox aliases: backend/.env uses BACHS_SANDBOX_API_KEY /
+// BACHS_SANDBOX_API_BASE_URL while the code historically used BACHS_API_*.
+// Prefer the canonical BACHS_API_* when both are set, otherwise fall back
+// to the sandbox alias so existing .env files keep working.
+if (!parsedEnv.BACHS_API_KEY && parsedEnv.BACHS_SANDBOX_API_KEY) {
+  parsedEnv.BACHS_API_KEY = parsedEnv.BACHS_SANDBOX_API_KEY;
+}
+if (!process.env.BACHS_API_BASE_URL && parsedEnv.BACHS_SANDBOX_API_BASE_URL) {
+  parsedEnv.BACHS_API_BASE_URL = parsedEnv.BACHS_SANDBOX_API_BASE_URL;
+}
+
+export const env = parsedEnv;
 export const corsOrigins = env.CORS_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean);
 
 /**

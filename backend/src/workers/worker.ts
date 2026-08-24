@@ -21,7 +21,7 @@ import { sql } from '@/db/client';
 import {
   closeRedis,
   initRedis
-} from '@/services/rooms/roomState.service';
+} from '@/config/redis';
 import { logger } from '@/utils/logger';
 import {
   captureException,

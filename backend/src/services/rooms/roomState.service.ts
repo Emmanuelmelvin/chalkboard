@@ -1,78 +1,113 @@
-import { createClient } from 'redis';
+/**
+ * Room-state helpers — Redis-only, no in-memory fallback.
+ *
+ * The shared Redis client itself now lives in `config/redis.ts`. This module
+ * re-exports it for backwards compatibility (`import { redis } from
+ * '@/services/rooms/roomState.service'`) but new code should import from
+ * `@/config/redis` directly. All voice / hand state below requires Redis via
+ * `requireRedis()` — if Redis is unreachable the caller gets a thrown error
+ * and `/ready` goes down rather than a silent per-process Map.
+ */
+
+export * from '@/config/redis';
+
+import { redis, requireRedis, getRedisStatus, redisStatus } from '@/config/redis';
 import { logger } from '@/utils/logger';
-import { env } from '@/config/env';
 
-export const memoryState = new Map();
-export let redis = null;
-
-export async function initRedis() {
-  redis = createClient({ url: env.REDIS_URL });
-  redis.on('error', (err) => logger.error('Redis client error', { error: err }));
-  await redis.connect();
-  logger.info('Redis connected for ephemeral room state');
-  return redis;
-}
-
-function room(roomId) {
-  if (!memoryState.has(roomId)) memoryState.set(roomId, {
-    hands: new Map(),
-    reactions: [],
-    members: new Map(),
-    voicePublishers: new Set(),
-    voiceOwnerConnected: false,
-  });
-  return memoryState.get(roomId);
-}
-
-export async function setVoicePublisher(roomId, userId, allowed) {
-  if (redis) {
-    const key = `room:${roomId}:voice-publishers`;
-    if (allowed) await redis.sAdd(key, userId); else await redis.sRem(key, userId);
-    return;
+export async function setVoicePublisher(roomId: string, userId: string, allowed: boolean): Promise<void> {
+  const client = requireRedis();
+  const key = `room:${roomId}:voice-publishers`;
+  try {
+    if (allowed) await client.sAdd(key, userId);
+    else await client.sRem(key, userId);
+  } catch (error) {
+    logger.error('Redis setVoicePublisher failed', {
+      roomId,
+      userId,
+      allowed,
+      redisStatus,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  const publishers = room(roomId).voicePublishers;
-  if (allowed) publishers.add(userId); else publishers.delete(userId);
 }
 
-export async function isVoicePublisher(roomId, userId) {
-  if (redis) return Boolean(await redis.sIsMember(`room:${roomId}:voice-publishers`, userId));
-  return room(roomId).voicePublishers.has(userId);
-}
-
-export async function setVoiceOwnerConnected(roomId, connected) {
-  if (redis) {
-    const key = `room:${roomId}:voice-owner-connected`;
-    if (connected) await redis.set(key, '1'); else await redis.del(key);
-    return;
+export async function isVoicePublisher(roomId: string, userId: string): Promise<boolean> {
+  const client = requireRedis();
+  try {
+    return Boolean(await client.sIsMember(`room:${roomId}:voice-publishers`, userId));
+  } catch (error) {
+    logger.error('Redis isVoicePublisher failed', {
+      roomId,
+      userId,
+      redisStatus,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  room(roomId).voiceOwnerConnected = connected;
 }
 
-export async function isVoiceOwnerConnected(roomId) {
-  if (redis) return (await redis.get(`room:${roomId}:voice-owner-connected`)) === '1';
-  return room(roomId).voiceOwnerConnected;
+export async function setVoiceOwnerConnected(roomId: string, connected: boolean): Promise<void> {
+  const client = requireRedis();
+  const key = `room:${roomId}:voice-owner-connected`;
+  try {
+    if (connected) await client.set(key, '1');
+    else await client.del(key);
+  } catch (error) {
+    logger.error('Redis setVoiceOwnerConnected failed', {
+      roomId,
+      connected,
+      redisStatus,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
-export async function setRaisedHand(roomId, userId, raised) {
-  if (redis) {
-    const key = `room:${roomId}:hands`;
-    if (raised) await redis.hSet(key, userId, String(Date.now())); else await redis.hDel(key, userId);
+export async function isVoiceOwnerConnected(roomId: string): Promise<boolean> {
+  const client = requireRedis();
+  try {
+    return (await client.get(`room:${roomId}:voice-owner-connected`)) === '1';
+  } catch (error) {
+    logger.error('Redis isVoiceOwnerConnected failed', {
+      roomId,
+      redisStatus,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+export async function setRaisedHand(roomId: string, userId: string, raised: boolean): Promise<readonly { userId: string; raisedAt: number }[]> {
+  const client = requireRedis();
+  const key = `room:${roomId}:hands`;
+  try {
+    if (raised) await client.hSet(key, userId, String(Date.now()));
+    else await client.hDel(key, userId);
     return getRaisedHands(roomId);
+  } catch (error) {
+    logger.error('Redis setRaisedHand failed', {
+      roomId,
+      userId,
+      raised,
+      redisStatus,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  const state = room(roomId);
-  if (raised) state.hands.set(userId, Date.now()); else state.hands.delete(userId);
-  return getRaisedHands(roomId);
 }
 
-export async function getRaisedHands(roomId) {
-  if (redis) return Object.entries(await redis.hGetAll(`room:${roomId}:hands`)).map(([userId, at]) => ({ userId, raisedAt: Number(at) }));
-  return [...room(roomId).hands.entries()].map(([userId, raisedAt]) => ({ userId, raisedAt }));
-}
-
-export async function closeRedis() {
-  if (redis) {
-    await redis.quit();
-    redis = null;
-    logger.info('Redis connection closed');
+export async function getRaisedHands(roomId: string): Promise<readonly { userId: string; raisedAt: number }[]> {
+  const client = requireRedis();
+  try {
+    const data = await client.hGetAll(`room:${roomId}:hands`);
+    return Object.entries(data).map(([userId, at]) => ({ userId, raisedAt: Number(at as string) }));
+  } catch (error) {
+    logger.error('Redis getRaisedHands failed', {
+      roomId,
+      redisStatus,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
 }

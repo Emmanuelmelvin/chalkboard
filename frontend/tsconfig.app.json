@@ -17,6 +17,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@shared/*": [
+        "../shared/*"
+      ],
+      "@shared": [
+        "../shared"
       ]
     },
     /* Bundler mode */

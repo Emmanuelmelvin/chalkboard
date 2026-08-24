@@ -1,8 +1,8 @@
 import { Server } from 'socket.io';
 import { randomUUID } from 'node:crypto';
 import { createAdapter } from '@socket.io/redis-adapter';
+import { redis } from '@/config/redis';
 import {
-  redis,
   setRaisedHand,
   getRaisedHands,
   isVoiceOwnerConnected,
@@ -777,12 +777,22 @@ export async function attachSocket(server: any) {
     cors: { origin: corsOrigin, credentials: true },
     maxHttpBufferSize: SOCKET_LIMITS.maxPacketBytes,
   });
-  if (redis) {
-    const pubClient = redis.duplicate();
-    const subClient = redis.duplicate();
-    await Promise.all([pubClient.connect(), subClient.connect()]);
-    io.adapter(createAdapter(pubClient, subClient));
-    logger.info('Socket.IO Redis adapter attached');
+  if (redis?.isReady) {
+    try {
+      const pubClient = redis.duplicate();
+      const subClient = redis.duplicate();
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      io.adapter(createAdapter(pubClient, subClient));
+      logger.info('Socket.IO Redis adapter attached');
+    } catch (error) {
+      logger.error('Failed to attach Socket.IO Redis adapter, running without adapter', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } else if (redis) {
+    logger.warn('Redis not ready for Socket.IO adapter, running without adapter', {
+      redisStatus: (redis as unknown as { isReady?: boolean }).isReady ? 'unknown' : 'not-ready',
+    });
   }
   setPresenceServer(io);
 

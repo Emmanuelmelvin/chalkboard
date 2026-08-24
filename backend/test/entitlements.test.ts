@@ -189,35 +189,80 @@ describe('seat add-on override', () => {
 
 describe('constants parity with the frontend pricing page', () => {
   /**
-   * The frontend copy exists so `/plans` can render without a round trip. It is
-   * read here as text rather than imported, because the backend tsconfig does
-   * not reach into the frontend package. A drift between the two tables would
-   * mean the page advertises one thing and the server enforces another.
+   * Limits now live in `shared/plans.ts`. The backend and frontend both import
+   * from there, so divergence is impossible by construction. This suite is the
+   * second line of defence: it fails if anyone re-introduces a literal duplicate
+   * or stops re-exporting the shared table.
    */
-  const source = readFileSync(
-    fileURLToPath(new URL('../../frontend/src/constants/plans.ts', import.meta.url)),
-    'utf8',
-  );
 
-  function frontendLimits(plan: PlanId) {
-    const planBlock = source.split(`id: '${plan}'`)[1];
-    assert.ok(planBlock, `The frontend constants have no ${plan} plan.`);
-    const limitsBlock = planBlock.split('limits: {')[1]?.split('},')[0];
-    assert.ok(limitsBlock, `The frontend ${plan} plan has no limits block.`);
-
-    const parsed: Record<string, number | boolean> = {};
-    for (const line of limitsBlock.split('\n')) {
-      const match = /^\s*(\w+):\s*(UNLIMITED|true|false|\d+),/.exec(line);
-      if (!match) continue;
-      const [, key, raw] = match;
-      parsed[key] = raw === 'UNLIMITED' ? UNLIMITED : raw === 'true' ? true : raw === 'false' ? false : Number(raw);
+  it('backend re-exports the shared authoritative table unchanged', async () => {
+    const shared = await import('@shared/plans');
+    assert.deepEqual(planLimits, shared.planLimits);
+    assert.equal(UNLIMITED, shared.UNLIMITED);
+    // Every plan key must exist and match exactly; a partial re-export would
+    // silently widen or narrow access.
+    for (const plan of ['free', 'pro', 'team'] as const) {
+      assert.deepEqual(planLimits[plan], shared.planLimits[plan]);
     }
-    return parsed;
-  }
+  });
 
-  for (const plan of ['free', 'pro', 'team'] as const) {
-    it(`matches the ${plan} limits`, () => {
-      assert.deepEqual(frontendLimits(plan), { ...planLimits[plan] });
-    });
-  }
+  it('frontend imports from shared and does not duplicate literal limits', () => {
+    const source = readFileSync(
+      fileURLToPath(new URL('../../frontend/src/constants/plans.ts', import.meta.url)),
+      'utf8',
+    );
+
+    // Must import the authoritative table.
+    assert.match(source, /from\s+['"]@shared\/plans['"]/, 'frontend must import from @shared/plans');
+
+    // Must use the shared references rather than inline literals.
+    assert.match(source, /planLimits\.free/, 'frontend must use planLimits.free');
+    assert.match(source, /planLimits\.pro/, 'frontend must use planLimits.pro');
+    assert.match(source, /planLimits\.team/, 'frontend must use planLimits.team');
+
+    // Must not re-define the interface — it should re-export the shared type.
+    // A literal `interface PlanLimits {` would be a fork that can drift.
+    assert.equal(
+      source.includes('interface PlanLimits'),
+      false,
+      'frontend must not re-define PlanLimits; it should re-export from @shared/plans',
+    );
+
+    // Must not contain an inline limits literal block `limits: { activeRooms:`
+    // which would indicate a duplicated table.
+    assert.equal(
+      /limits:\s*\{\s*activeRooms/.test(source),
+      false,
+      'frontend must not contain an inline limits literal; use planLimits.* from @shared/plans',
+    );
+
+    // Re-export must be present so `import { planLimits } from "@/constants/plans"` keeps working.
+    assert.match(source, /export\s*\{\s*UNLIMITED.*planLimits/, 'frontend must re-export UNLIMITED and planLimits');
+  });
+
+  it('shared table contains the expected shape and sentinel', async () => {
+    const shared = await import('@shared/plans');
+    // Guard against accidental narrowing of the shared table — every limit key
+    // the enforcement code relies on must be present.
+    const requiredKeys = [
+      'activeRooms',
+      'attendeesPerRoom',
+      'retentionDays',
+      'voiceMinutesPerMonth',
+      'seats',
+      'proPlugins',
+      'publishPlugins',
+      'boardExport',
+      'customBranding',
+      'workspaceAdmin',
+      'prioritySupport',
+    ];
+    for (const plan of ['free', 'pro', 'team'] as const) {
+      for (const key of requiredKeys) {
+        assert.ok(key in shared.planLimits[plan], `shared ${plan} missing ${key}`);
+      }
+    }
+    assert.equal(shared.UNLIMITED, -1);
+    assert.equal(shared.defaultPlanId, 'free');
+  });
 });

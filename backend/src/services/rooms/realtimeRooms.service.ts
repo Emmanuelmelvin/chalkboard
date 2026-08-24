@@ -1,9 +1,10 @@
-import { redis } from '@/services/rooms/roomState.service';
+import { requireRedis, getRedisStatus } from '@/config/redis';
+import { logger } from '@/utils/logger';
 import { SOCKET_LIMITS } from '@/validators/socket.validator';
 
-const histories = new Map<string, any[]>();
-const links = new Map<string, any[]>();
-const chatMessages = new Map<string, any[]>();
+// Presence tracking remains in-memory per process but is supplemented by
+// `fetchSockets()` via the Redis adapter for cross-instance visibility.
+// Canvas/chat state below is Redis-only — no memory fallback in production.
 const usersByRoom = new Map<string, Map<string, any>>();
 const socketMeta = new Map<string, any>();
 const presenceByKey = new Map<string, { roomId: string; socketId: string; user: any; removalTimer?: ReturnType<typeof setTimeout> }>();
@@ -112,9 +113,15 @@ function parseJson<T>(value: string | null, fallback: T): T {
   }
 }
 
+// ── Redis-only canvas / chat state ──────────────────────────────────────────
+// All functions below require Redis. If Redis is unreachable they throw —
+// callers surface the error (and `/ready` goes 503) instead of silently
+// forking state into per-process Maps.
+
 export async function getRoomHistory(roomId: string): Promise<any[]> {
-  if (redis) {
-    const values = await redis.lRange(strokesKey(roomId), 0, -1);
+  const client = requireRedis();
+  try {
+    const values = await client.lRange(strokesKey(roomId), 0, -1);
     return values.flatMap((value: string) => {
       try {
         return [JSON.parse(value)];
@@ -122,55 +129,95 @@ export async function getRoomHistory(roomId: string): Promise<any[]> {
         return [];
       }
     });
+  } catch (error) {
+    logger.error('Redis getRoomHistory failed', {
+      roomId,
+      redisStatus: getRedisStatus(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  return histories.get(roomId) || [];
 }
 
-export async function appendStroke(roomId: string, stroke: any) {
-  if (redis) {
-    await redis.rPush(strokesKey(roomId), JSON.stringify(stroke));
-    return;
+export async function appendStroke(roomId: string, stroke: any): Promise<void> {
+  const client = requireRedis();
+  try {
+    await client.rPush(strokesKey(roomId), JSON.stringify(stroke));
+  } catch (error) {
+    logger.error('Redis appendStroke failed', {
+      roomId,
+      redisStatus: getRedisStatus(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  histories.set(roomId, [...(histories.get(roomId) || []), stroke]);
 }
 
-export async function replaceHistory(roomId: string, strokes: any[]) {
+export async function replaceHistory(roomId: string, strokes: any[]): Promise<void> {
   const next = strokes || [];
-  if (redis) {
+  const client = requireRedis();
+  try {
     const key = strokesKey(roomId);
-    const transaction = redis.multi().del(key);
+    const transaction = client.multi().del(key);
     if (next.length > 0) transaction.rPush(key, next.map((stroke) => JSON.stringify(stroke)));
     await transaction.exec();
-    return;
+  } catch (error) {
+    logger.error('Redis replaceHistory failed', {
+      roomId,
+      redisStatus: getRedisStatus(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  histories.set(roomId, next);
 }
 
-export async function clearHistory(roomId: string) {
-  if (redis) {
-    await redis.del(strokesKey(roomId));
-    return;
+export async function clearHistory(roomId: string): Promise<void> {
+  const client = requireRedis();
+  try {
+    await client.del(strokesKey(roomId));
+  } catch (error) {
+    logger.error('Redis clearHistory failed', {
+      roomId,
+      redisStatus: getRedisStatus(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  histories.set(roomId, []);
 }
 
 export async function getRoomLinks(roomId: string): Promise<any[]> {
-  if (redis) return parseJson(await redis.get(linksKey(roomId)), []);
-  return links.get(roomId) || [];
+  const client = requireRedis();
+  try {
+    return parseJson(await client.get(linksKey(roomId)), []);
+  } catch (error) {
+    logger.error('Redis getRoomLinks failed', {
+      roomId,
+      redisStatus: getRedisStatus(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
-export async function replaceLinks(roomId: string, next: any[]) {
+export async function replaceLinks(roomId: string, next: any[]): Promise<void> {
   const value = next || [];
-  if (redis) {
-    await redis.set(linksKey(roomId), JSON.stringify(value));
-    return;
+  const client = requireRedis();
+  try {
+    await client.set(linksKey(roomId), JSON.stringify(value));
+  } catch (error) {
+    logger.error('Redis replaceLinks failed', {
+      roomId,
+      redisStatus: getRedisStatus(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  links.set(roomId, value);
 }
 
 export async function getRoomChat(roomId: string): Promise<any[]> {
-  if (redis) {
-    const values = await redis.lRange(chatKey(roomId), -SOCKET_LIMITS.maxChatHistory, -1);
+  const client = requireRedis();
+  try {
+    const values = await client.lRange(chatKey(roomId), -SOCKET_LIMITS.maxChatHistory, -1);
     return values.flatMap((value: string) => {
       try {
         return [JSON.parse(value)];
@@ -178,27 +225,39 @@ export async function getRoomChat(roomId: string): Promise<any[]> {
         return [];
       }
     });
+  } catch (error) {
+    logger.error('Redis getRoomChat failed', {
+      roomId,
+      redisStatus: getRedisStatus(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  return (chatMessages.get(roomId) || []).slice(-SOCKET_LIMITS.maxChatHistory);
 }
 
-export async function appendChatMessage(roomId: string, message: any) {
-  if (redis) {
+export async function appendChatMessage(roomId: string, message: any): Promise<void> {
+  const client = requireRedis();
+  try {
     const key = chatKey(roomId);
-    await redis.multi()
+    await client.multi()
       .rPush(key, JSON.stringify(message))
       .lTrim(key, -SOCKET_LIMITS.maxChatHistory, -1)
       .exec();
-    return;
+  } catch (error) {
+    logger.error('Redis appendChatMessage failed', {
+      roomId,
+      redisStatus: getRedisStatus(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  const next = [...(chatMessages.get(roomId) || []), message].slice(-SOCKET_LIMITS.maxChatHistory);
-  chatMessages.set(roomId, next);
 }
 
 /** Delete every Redis-backed canvas/presence state for a permanently closed room. */
-export async function deleteRoomState(roomId: string) {
-  if (redis) {
-    await redis.del(
+export async function deleteRoomState(roomId: string): Promise<void> {
+  const client = requireRedis();
+  try {
+    await client.del(
       strokesKey(roomId),
       linksKey(roomId),
       chatKey(roomId),
@@ -206,8 +265,12 @@ export async function deleteRoomState(roomId: string) {
       `room:${roomId}:voice-publishers`,
       `room:${roomId}:voice-owner-connected`,
     );
+  } catch (error) {
+    logger.error('Redis deleteRoomState failed', {
+      roomId,
+      redisStatus: getRedisStatus(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-  histories.delete(roomId);
-  links.delete(roomId);
-  chatMessages.delete(roomId);
 }

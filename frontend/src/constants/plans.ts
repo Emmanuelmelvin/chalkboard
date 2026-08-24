@@ -1,42 +1,22 @@
 /**
- * Chalkboard subscription tiers.
+ * Chalkboard subscription tiers — presentation layer.
  *
- * This module is the presentation source of truth for pricing and limits.
- * The backend keeps its own copy of the numeric limits in
- * `backend/src/services/entitlements.ts` and remains authoritative for
- * enforcement. Never gate a capability using only these values: a client can
- * edit anything it is given. Keep the two files in step when limits change.
+ * Numeric limits are the single source of truth in `shared/plans.ts` and are
+ * imported here so the pricing page can never advertise a limit the server
+ * will not enforce. This file adds only presentation metadata (prices,
+ * taglines, comparison table) on top of those limits. Enforcement still lives
+ * on the server in `backend/src/services/billing/entitlements.service.ts`;
+ * never gate a capability using only a client-provided value.
  */
 
-export type PlanId = 'free' | 'pro' | 'team';
+import { UNLIMITED, defaultPlanId, planLimits } from '@shared/plans';
+import type { PlanId, PlanLimits } from '@shared/plans';
 
-/** Sentinel for a limit that is not capped on a given plan. */
-export const UNLIMITED = -1;
-
-export interface PlanLimits {
-    /** Concurrent open rooms an owner may hold. */
-    activeRooms: number;
-    /** Maximum simultaneous participants in one room. */
-    attendeesPerRoom: number;
-    /** Days a board is kept after its last activity. */
-    retentionDays: number;
-    /** LiveKit voice minutes included each billing period. */
-    voiceMinutesPerMonth: number;
-    /** Seats included in the subscription. */
-    seats: number;
-    /** Access to plugins published on the `pro` plugin plan. */
-    proPlugins: boolean;
-    /** Permission to publish plugins to the catalogue. */
-    publishPlugins: boolean;
-    /** Board export to PNG, SVG, and PDF. */
-    boardExport: boolean;
-    /** Room logo and colour customisation. */
-    customBranding: boolean;
-    /** Shared workspace, org billing, and member administration. */
-    workspaceAdmin: boolean;
-    /** Prioritised support queue. */
-    prioritySupport: boolean;
-}
+// Re-export the shared authoritative symbols so existing imports from
+// `@/constants/plans` keep working. New code may also import directly from
+// `@shared/plans`.
+export { UNLIMITED, defaultPlanId, planLimits };
+export type { PlanId, PlanLimits };
 
 export interface Plan {
     id: PlanId;
@@ -64,19 +44,7 @@ export const plans: readonly Plan[] = [
         description:
             'A complete Chalkboard room with no trial window and no participant paywall. Boards are kept for a week after their last activity.',
         recommended: false,
-        limits: {
-            activeRooms: 5,
-            attendeesPerRoom: 25,
-            retentionDays: 7,
-            voiceMinutesPerMonth: 200,
-            seats: 1,
-            proPlugins: false,
-            publishPlugins: false,
-            boardExport: false,
-            customBranding: false,
-            workspaceAdmin: false,
-            prioritySupport: false,
-        },
+        limits: planLimits.free,
     },
     {
         id: 'pro',
@@ -88,19 +56,7 @@ export const plans: readonly Plan[] = [
         description:
             'Boards never expire, rooms are uncapped, and the full plugin catalogue opens up. Part of every Pro subscription funds the developers whose plugins you use.',
         recommended: true,
-        limits: {
-            activeRooms: UNLIMITED,
-            attendeesPerRoom: 100,
-            retentionDays: UNLIMITED,
-            voiceMinutesPerMonth: 1500,
-            seats: 1,
-            proPlugins: true,
-            publishPlugins: true,
-            boardExport: true,
-            customBranding: true,
-            workspaceAdmin: false,
-            prioritySupport: false,
-        },
+        limits: planLimits.pro,
     },
     {
         id: 'team',
@@ -112,23 +68,9 @@ export const plans: readonly Plan[] = [
         description:
             'Ten seats in a shared workspace with pooled voice minutes, member administration, and a single invoice instead of ten.',
         recommended: false,
-        limits: {
-            activeRooms: UNLIMITED,
-            attendeesPerRoom: 300,
-            retentionDays: UNLIMITED,
-            voiceMinutesPerMonth: 10000,
-            seats: 10,
-            proPlugins: true,
-            publishPlugins: true,
-            boardExport: true,
-            customBranding: true,
-            workspaceAdmin: true,
-            prioritySupport: true,
-        },
+        limits: planLimits.team,
     },
 ] as const;
-
-export const defaultPlanId: PlanId = 'free';
 
 /** Share of paid subscription revenue distributed to plugin developers. */
 export const developerPoolRate = 0.15;

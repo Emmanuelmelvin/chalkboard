@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 import { env } from '@/config/env';
+import { logger } from '@/utils/logger';
 
 const connectionString = env.DATABASE_URL;
 
@@ -36,7 +37,10 @@ function shouldUseSsl(urlStr: string): boolean | { rejectUnauthorized: boolean }
 
     // Remote hosts with dots (e.g. Neon, Supabase, RDS)
     return { rejectUnauthorized: false };
-  } catch {
+  } catch (error) {
+    logger.error('Failed to determine SSL configuration for database URL', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }

@@ -14,8 +14,10 @@ import { sql } from '@/db/client';
 import {
   initRedis,
   closeRedis,
-  redis
-} from '@/services/rooms/roomState.service';
+  redis,
+  isRedisReady,
+  getRedisStatus
+} from '@/config/redis';
 import { attachSocket } from '@/realtime/socket';
 import { errorHandler } from '@/middlewares/errorHandler.middleware';
 import { requestLogger } from '@/middlewares/requestLogger.middleware';
@@ -55,7 +57,7 @@ export async function getReadiness() {
   const [database, cache] = await Promise.all([
     checkDependency('database', () => sql`select 1`),
     checkDependency('redis', async () => {
-      if (!redis?.isReady) throw new Error('Redis client is not ready');
+      if (!isRedisReady()) throw new Error(`Redis client is not ready (status=${getRedisStatus()})`);
       await redis.ping();
     }),
   ]);

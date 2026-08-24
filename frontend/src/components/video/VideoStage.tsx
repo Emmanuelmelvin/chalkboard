@@ -24,7 +24,7 @@ export interface VideoStageProps {
 type StageMode = 'docked' | 'bubble' | 'minimized';
 type LayoutMode = 'spotlight' | 'grid';
 
-export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className = '' }) => {
+export const VideoStage: React.FC<VideoStageProps> = ({ className = '' }) => {
   // Query all active camera and screen share tracks
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
     onlySubscribed: false,
@@ -93,14 +93,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
       (t) => t.participant.identity !== activeSpeakerTrack.participant.identity,
     );
   }, [cameraTracks, activeSpeakerTrack]);
-
-  const getMemberRole = useCallback(
-    (identity: string) => {
-      const member = members.find((m) => m.userId === identity);
-      return member?.role;
-    },
-    [members],
-  );
 
   // Dynamic layout class based on video count and layout mode
   const dockLayoutClass = useMemo(() => {
@@ -252,7 +244,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
                     <ParticipantVideoTile
                       key={trackRef.publication?.trackSid || trackRef.participant.identity}
                       trackRef={trackRef}
-                      role={getMemberRole(trackRef.participant.identity)}
                       isPinned={pinnedIdentity === trackRef.participant.identity}
                       onTogglePin={() =>
                         setPinnedIdentity((current) =>
@@ -377,7 +368,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
                         activeSpeakerTrack.participant.identity
                       }
                       trackRef={activeSpeakerTrack}
-                      role={getMemberRole(activeSpeakerTrack.participant.identity)}
                       isPinned={pinnedIdentity === activeSpeakerTrack.participant.identity}
                       onTogglePin={() =>
                         setPinnedIdentity((current) =>
@@ -397,7 +387,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
                       <ParticipantVideoTile
                         key={trackRef.publication?.trackSid || trackRef.participant.identity}
                         trackRef={trackRef}
-                        role={getMemberRole(trackRef.participant.identity)}
                         isPinned={pinnedIdentity === trackRef.participant.identity}
                         isFilmstrip={true}
                         onClick={() => setPinnedIdentity(trackRef.participant.identity)}
@@ -421,7 +410,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({ members = [], className 
                   <ParticipantVideoTile
                     key={trackRef.publication?.trackSid || trackRef.participant.identity}
                     trackRef={trackRef}
-                    role={getMemberRole(trackRef.participant.identity)}
                     isPinned={pinnedIdentity === trackRef.participant.identity}
                     onTogglePin={() =>
                       setPinnedIdentity((current) =>

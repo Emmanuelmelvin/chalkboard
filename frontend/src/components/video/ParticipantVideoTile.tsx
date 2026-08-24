@@ -9,7 +9,6 @@ export interface ParticipantVideoTileProps {
   trackRef: TrackReference;
   isPinned?: boolean;
   onTogglePin?: () => void;
-  role?: string;
   className?: string;
   style?: React.CSSProperties;
   isFilmstrip?: boolean;
@@ -20,7 +19,6 @@ export const ParticipantVideoTile: React.FC<ParticipantVideoTileProps> = ({
   trackRef,
   isPinned = false,
   onTogglePin,
-  role,
   className = '',
   style,
   isFilmstrip = false,
@@ -81,8 +79,6 @@ export const ParticipantVideoTile: React.FC<ParticipantVideoTileProps> = ({
         )}
 
         <div className="video-filmstrip-info">
-          {role === 'owner' && <span className="filmstrip-role-dot role-owner" title="Owner" />}
-          {role === 'instructor' && <span className="filmstrip-role-dot role-instructor" title="Instructor" />}
           <span className="filmstrip-name">{displayName}</span>
           {isMicMuted && <MicOff size={10} className="filmstrip-mic-muted" />}
         </div>
@@ -106,15 +102,9 @@ export const ParticipantVideoTile: React.FC<ParticipantVideoTileProps> = ({
         </div>
       )}
 
-      {/* Top action bar: role badge on left, screen share + mic + pin on right */}
+      {/* Top action bar: screen share + mic + pin on right */}
       <div className="video-tile-top-bar">
-        {role ? (
-          <span className={`video-tile-role-badge role-${role.toLowerCase()}`}>
-            {role === 'owner' ? 'Owner' : role === 'instructor' ? 'Instructor' : role}
-          </span>
-        ) : (
-          <span />
-        )}
+        <div />
 
         <div className="video-tile-top-actions-group">
           {/* Screen Share control / status beside mic and pin */}

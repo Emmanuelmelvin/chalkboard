@@ -5259,7 +5259,7 @@ html[data-theme='light'] .session-feedback-opt-out input {
   top: 84px;
   right: 18px;
   width: 260px;
-  max-height: calc(100vh - 150px);
+  max-height: calc(100vh - 130px);
   display: flex;
   flex-direction: column;
   background: rgba(12, 17, 30, 0.94);
@@ -5269,7 +5269,7 @@ html[data-theme='light'] .session-feedback-opt-out input {
   border-radius: 10px;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 0, 0, 0.3);
   overflow: hidden;
-  touch-action: none;
+  touch-action: auto;
   transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
 }
 
@@ -5302,6 +5302,7 @@ html[data-theme='light'] .session-feedback-opt-out input {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   cursor: grab;
   user-select: none;
+  touch-action: none;
 }
 
 .video-stage-header:active {
@@ -5365,21 +5366,31 @@ html[data-theme='light'] .session-feedback-opt-out input {
 .video-spotlight-container {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 8px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  max-height: calc(100vh - 170px);
 }
 
 .video-spotlight-main {
   width: 100%;
+  flex-shrink: 0;
 }
 
 .video-filmstrip-strip {
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  padding-bottom: 3px;
+  overflow-y: hidden;
+  padding: 2px 2px 6px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+  flex-shrink: 0;
+  min-height: 56px;
 }
 
 .video-filmstrip-strip::-webkit-scrollbar {
@@ -5387,7 +5398,7 @@ html[data-theme='light'] .session-feedback-opt-out input {
 }
 
 .video-filmstrip-strip::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.25);
   border-radius: 999px;
 }
 
@@ -5442,21 +5453,6 @@ html[data-theme='light'] .session-feedback-opt-out input {
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
-}
-
-.filmstrip-role-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.filmstrip-role-dot.role-owner {
-  background: #fde047;
-}
-
-.filmstrip-role-dot.role-instructor {
-  background: #38bdf8;
 }
 
 .filmstrip-mic-muted {
@@ -5546,29 +5542,6 @@ html[data-theme='light'] .session-feedback-opt-out input {
 
 .video-tile-top-bar button {
   pointer-events: auto;
-}
-
-.video-tile-role-badge {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 1px 5px;
-  border-radius: 4px;
-  backdrop-filter: blur(4px);
-  pointer-events: auto;
-}
-
-.video-tile-role-badge.role-owner {
-  background: rgba(234, 179, 8, 0.25);
-  color: #fde047;
-  border: 1px solid rgba(234, 179, 8, 0.4);
-}
-
-.video-tile-role-badge.role-instructor {
-  background: rgba(56, 189, 248, 0.25);
-  color: #7dd3fc;
-  border: 1px solid rgba(56, 189, 248, 0.4);
 }
 
 .video-tile-top-actions-group {
@@ -5843,8 +5816,10 @@ html[data-theme='light'] .session-feedback-opt-out input {
   border-top: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 20px 20px 0 0;
   padding: 14px 14px 24px;
-  max-height: 75vh;
+  max-height: 82vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -5883,6 +5858,46 @@ html[data-theme='light'] .session-feedback-opt-out input {
 
 .mobile-video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
+  max-height: calc(82vh - 70px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+  .video-stage-card {
+    width: min(calc(100vw - 28px), 300px) !important;
+    max-height: calc(100vh - 120px);
+    right: 14px;
+    top: 70px;
+  }
+
+  .video-spotlight-container {
+    max-height: calc(100vh - 170px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .video-spotlight-main {
+    width: 100%;
+    flex-shrink: 0;
+  }
+
+  .video-filmstrip-strip {
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+    flex-shrink: 0;
+    padding-bottom: 6px;
+  }
+
+  .video-tiles-container {
+    max-height: calc(100vh - 170px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
 }

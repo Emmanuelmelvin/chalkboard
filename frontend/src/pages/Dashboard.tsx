@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpRight,
   BookOpen,
@@ -48,9 +48,9 @@ import {
   hasRatedRoom,
   isSessionFeedbackOptedOut
 } from '@/lib/sessionFeedback';
-import DeveloperPlugins from '@/components/DeveloperPlugins';
-import BillingPanel from '@/components/BillingPanel';
-import WorkspacePanel from '@/components/WorkspacePanel';
+const DeveloperPlugins = lazy(() => import('@/components/DeveloperPlugins'));
+const BillingPanel = lazy(() => import('@/components/BillingPanel'));
+const WorkspacePanel = lazy(() => import('@/components/WorkspacePanel'));
 import { useEntitlements } from '@/hooks/useEntitlements';
 import type { UserProfile } from '@/stores/authStore';
 import {
@@ -828,15 +828,17 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
             </div>
           </header>
           <div className="dashboard-content">
-            {activeTab === 'overview' && renderOverview()}
-            {activeTab === 'rooms' && renderRooms()}
-            {activeTab === 'toolkit' && renderToolkit()}
-            {activeTab === 'developer' && <DeveloperPlugins />}
-            {activeTab === 'billing' && <BillingPanel />}
-            {/* Only the owner of a Team workspace reaches this: the rail filters
-              the tab, and the guard effect redirects deep links otherwise. */}
-            {activeTab === 'team' && (isTeamOwner || entitlements.isLoading) && <WorkspacePanel />}
-            {activeTab === 'profile' && renderProfile()}
+            <Suspense fallback={<div className="auth-loading" role="status" aria-live="polite"><span className="auth-loading-mark">C</span><span>Loading section…</span></div>}>
+              {activeTab === 'overview' && renderOverview()}
+              {activeTab === 'rooms' && renderRooms()}
+              {activeTab === 'toolkit' && renderToolkit()}
+              {activeTab === 'developer' && <DeveloperPlugins />}
+              {activeTab === 'billing' && <BillingPanel />}
+              {/* Only the owner of a Team workspace reaches this: the rail filters
+                the tab, and the guard effect redirects deep links otherwise. */}
+              {activeTab === 'team' && (isTeamOwner || entitlements.isLoading) && <WorkspacePanel />}
+              {activeTab === 'profile' && renderProfile()}
+            </Suspense>
             {activeTab !== 'rooms' && error && <p className="dashboard-error dashboard-floating-error" role="alert">{error}</p>}
           </div>
         </main>

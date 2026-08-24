@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useState,
@@ -20,7 +22,7 @@ import {
 import PluginPackagePicker, {
   type PluginPackageFile,
 } from "@/components/PluginPackagePicker";
-import DeveloperPluginAnalytics from "@/components/DeveloperPluginAnalytics";
+const DeveloperPluginAnalytics = lazy(() => import("@/components/DeveloperPluginAnalytics"));
 import {
   createBrowserModuleBundle,
   findZipEntry,
@@ -1163,10 +1165,12 @@ export default function DeveloperPlugins() {
                 </div>
               ))}
             </div>
-            <DeveloperPluginAnalytics
-              pluginId={selectedPlugin.pluginId}
-              plan={selectedPlugin.plan}
-            />
+            <Suspense fallback={<div className="auth-loading" role="status" aria-live="polite"><span className="auth-loading-mark">C</span><span>Loading analytics…</span></div>}>
+              <DeveloperPluginAnalytics
+                pluginId={selectedPlugin.pluginId}
+                plan={selectedPlugin.plan}
+              />
+            </Suspense>
             <form
               className="dashboard-developer-form"
               onSubmit={handleCreateVersion}

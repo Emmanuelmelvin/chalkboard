@@ -1,18 +1,20 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Redirect, Route, Switch, useLocation } from 'wouter';
-import Chalkboard from '@/pages/Chalkboard';
-import Home from '@/pages/Home';
-import Login from '@/pages/Login';
-import Dashboard from '@/pages/Dashboard';
-import Docs from '@/pages/Docs';
-import Guide from '@/pages/Guide';
-import Lobby from '@/pages/Lobby';
-import Plans from '@/pages/Plans';
-import BillingReturn from '@/pages/BillingReturn';
-import Support from '@/pages/Support';
-import SupportThankYou from '@/pages/SupportThankYou';
-import InviteAccept from '@/pages/InviteAccept';
+
+const Chalkboard = lazy(() => import('@/pages/Chalkboard'));
+const Home = lazy(() => import('@/pages/Home'));
+const Login = lazy(() => import('@/pages/Login'));
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Docs = lazy(() => import('@/pages/Docs'));
+const Guide = lazy(() => import('@/pages/Guide'));
+const Lobby = lazy(() => import('@/pages/Lobby'));
+const Plans = lazy(() => import('@/pages/Plans'));
+const BillingReturn = lazy(() => import('@/pages/BillingReturn'));
+const Support = lazy(() => import('@/pages/Support'));
+const SupportThankYou = lazy(() => import('@/pages/SupportThankYou'));
+const InviteAccept = lazy(() => import('@/pages/InviteAccept'));
+
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
 import FeedbackWidget from '@/components/FeedbackWidget';
@@ -126,110 +128,112 @@ function App() {
     <>
       {!isRoomRoute && <ThemeToggle theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />}
       {!isRoomRoute && status === 'authenticated' && <FeedbackWidget />}
-      <Switch>
-        {/* Dynamic room route */}
-        <Route path="/room/:roomId">
-          {(params: { roomId: string }) => {
-            const roomId = params.roomId.toLowerCase();
-            return (
+      <Suspense fallback={<AuthLoading />}>
+        <Switch>
+          {/* Dynamic room route */}
+          <Route path="/room/:roomId">
+            {(params: { roomId: string }) => {
+              const roomId = params.roomId.toLowerCase();
+              return (
+                <RequireAuth>
+                  {(user) => (
+                    <Chalkboard
+                      roomId={roomId}
+                      userId={user.id}
+                      userName={user.displayName}
+                      socket={socket}
+                      roomPassword={roomPassword}
+                      onLeaveRoom={handleLeaveRoom}
+                    />
+                  )}
+                </RequireAuth>
+              );
+            }}
+          </Route>
+
+          {/* Public authentication route */}
+          <Route path="/login">
+            <Login />
+          </Route>
+
+          {/* Signed-in workspace dashboard */}
+          <Route path="/dashboard">
+            <RequireAuth>
+              {(user) => <Dashboard profile={user} onJoinRoom={handleJoinRoom} />}
+            </RequireAuth>
+          </Route>
+
+          {/* Public plugin documentation */}
+          <Route path="/docs">
+            <Docs />
+          </Route>
+
+          {/* Public end-user guide */}
+          <Route path="/guide">
+            <Guide />
+          </Route>
+
+          {/* Public pricing and developer revenue explainer */}
+          <Route path="/plans">
+            <Plans />
+          </Route>
+
+          {/* Checkout return target. Bachs returns the browser to `success_url`
+              verbatim and appends nothing of its own, so the checkout reference
+              has to be part of the path we hand it. The bare path is kept only so
+              that a return without a reference lands somewhere sensible instead of
+              falling through to the 404 route. */}
+          <Route path="/billing/return/:reference">
+            {({ reference }) => (
               <RequireAuth>
-                {(user) => (
-                  <Chalkboard
-                    roomId={roomId}
-                    userId={user.id}
-                    userName={user.displayName}
-                    socket={socket}
-                    roomPassword={roomPassword}
-                    onLeaveRoom={handleLeaveRoom}
-                  />
-                )}
+                {() => <BillingReturn reference={decodeURIComponent(reference)} />}
               </RequireAuth>
-            );
-          }}
-        </Route>
+            )}
+          </Route>
+          <Route path="/billing/return">
+            <Redirect to="/dashboard?tab=billing" />
+          </Route>
 
-        {/* Public authentication route */}
-        <Route path="/login">
-          <Login />
-        </Route>
+          {/* Team workspace invite. Public at the router level: the page decides
+              between sign-in, a closed invite, and the accept button, and the
+              server does the email matching. */}
+          <Route path="/invite/:token">
+            <InviteAccept />
+          </Route>
 
-        {/* Signed-in workspace dashboard */}
-        <Route path="/dashboard">
-          <RequireAuth>
-            {(user) => <Dashboard profile={user} onJoinRoom={handleJoinRoom} />}
-          </RequireAuth>
-        </Route>
+          {/* Public support / donation page — beta only */}
+          <Route path="/support/thank-you">
+            <SupportThankYou />
+          </Route>
+          <Route path="/support">
+            <Support />
+          </Route>
 
-        {/* Public plugin documentation */}
-        <Route path="/docs">
-          <Docs />
-        </Route>
+          {/* Public landing page */}
+          <Route path="/">
+            <Home />
+          </Route>
 
-        {/* Public end-user guide */}
-        <Route path="/guide">
-          <Guide />
-        </Route>
-
-        {/* Public pricing and developer revenue explainer */}
-        <Route path="/plans">
-          <Plans />
-        </Route>
-
-        {/* Checkout return target. Bachs returns the browser to `success_url`
-            verbatim and appends nothing of its own, so the checkout reference
-            has to be part of the path we hand it. The bare path is kept only so
-            that a return without a reference lands somewhere sensible instead of
-            falling through to the 404 route. */}
-        <Route path="/billing/return/:reference">
-          {({ reference }) => (
+          {/* Room entry route */}
+          <Route path="/lobby/:roomId">
+            {(params: { roomId: string }) => (
+              <RequireAuth>
+                {(user) => <Lobby initialRoomId={params.roomId} profile={user} onJoinRoom={handleJoinRoom} />}
+              </RequireAuth>
+            )}
+          </Route>
+          <Route path="/lobby">
             <RequireAuth>
-              {() => <BillingReturn reference={decodeURIComponent(reference)} />}
+              {(user) => <Lobby initialRoomId={getLobbyRoomCode()} profile={user} onJoinRoom={handleJoinRoom} />}
             </RequireAuth>
-          )}
-        </Route>
-        <Route path="/billing/return">
-          <Redirect to="/dashboard?tab=billing" />
-        </Route>
+          </Route>
 
-        {/* Team workspace invite. Public at the router level: the page decides
-            between sign-in, a closed invite, and the accept button, and the
-            server does the email matching. */}
-        <Route path="/invite/:token">
-          <InviteAccept />
-        </Route>
-
-        {/* Public support / donation page — beta only */}
-        <Route path="/support/thank-you">
-          <SupportThankYou />
-        </Route>
-        <Route path="/support">
-          <Support />
-        </Route>
-
-        {/* Public landing page */}
-        <Route path="/">
-          <Home />
-        </Route>
-
-        {/* Room entry route */}
-        <Route path="/lobby/:roomId">
-          {(params: { roomId: string }) => (
-            <RequireAuth>
-              {(user) => <Lobby initialRoomId={params.roomId} profile={user} onJoinRoom={handleJoinRoom} />}
-            </RequireAuth>
-          )}
-        </Route>
-        <Route path="/lobby">
-          <RequireAuth>
-            {(user) => <Lobby initialRoomId={getLobbyRoomCode()} profile={user} onJoinRoom={handleJoinRoom} />}
-          </RequireAuth>
-        </Route>
-
-        {/* Catch-all fallback */}
-        <Route>
-          <Home />
-        </Route>
-      </Switch>
+          {/* Catch-all fallback */}
+          <Route>
+            <Home />
+          </Route>
+        </Switch>
+      </Suspense>
       <LoggerOutlet />
     </>
   );

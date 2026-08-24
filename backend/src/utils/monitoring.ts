@@ -10,8 +10,10 @@ export function initMonitoring() {
         release: env.SENTRY_RELEASE || undefined,
         tracesSampleRate: env.SENTRY_TRACES_SAMPLE_RATE,
         integrations: [
-            // send console.log, console.warn, and console.error calls as logs to Sentry
-            Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error", "info"] }),
+            // send console.* calls as logs to Sentry; aligned with Winston npm levels
+            // (logger.ts uses SentryWinstonTransport { levels: ['debug','info','warn','error'] })
+            // and includes 'log' for direct console.log usage.
+            Sentry.consoleLoggingIntegration({ levels: ["log", "info", "warn", "error", "debug"] }),
         ],
         // Enable logs to be sent to Sentry
         enableLogs: true,

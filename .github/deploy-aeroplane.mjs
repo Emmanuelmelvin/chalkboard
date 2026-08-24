@@ -87,6 +87,10 @@ const FRONTEND_ENV_ALLOWLIST = new Set([
   'VITE_GOOGLE_CLIENT_ID',
   'VITE_LIVEKIT_URL',
   'VITE_APP_URL',
+  'VITE_BACKEND_URL',
+  'VITE_API_URL',
+  'VITE_API_BASE_URL',
+  'BACKEND_URL',
 ]);
 
 function parseEnvFile(filePath, allowlist) {
@@ -449,19 +453,23 @@ async function main() {
     { key: 'APP_PUBLIC_URL', value: `https://${APP_DOMAIN}` },
   ];
 
+  // Frontend is static hosting via Caddy — no Dockerfile, just `npm run build` in `frontend/`
+  // and serve `dist/`. This keeps the build fast and lets us point the API at
+  // https://api.chalkboard.click directly (no Caddy proxy for /api needed).
+  const backendOrigin = `https://api.${APP_DOMAIN}`;
   const webEnv = [
     ...Object.entries(frontendSecrets).map(([key, value]) => ({ key, value })),
     { key: 'APP_PUBLIC_URL', value: `https://${APP_DOMAIN}` },
+    { key: 'VITE_BACKEND_URL', value: backendOrigin },
+    { key: 'VITE_API_URL', value: backendOrigin },
+    { key: 'BACKEND_URL', value: backendOrigin },
   ];
 
   console.log('— Creating / updating app services —');
-  // NOTE: rootDir='' (repo root) + dockerfile so the Docker context includes `shared/`.
-  // `backend/tsconfig.json:13` and `frontend/vite.config.ts:39` both resolve `@shared -> ../shared`,
-  // which is `/app/shared` inside the image when WORKDIR is `/app/backend` or `/app/frontend`.
   const web = await createService(projectId, {
-    name: 'web', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: '',
-    dockerfile: 'frontend/Dockerfile', dockerfilePath: 'frontend/Dockerfile',
-    buildMethod: 'auto', runtimeMode: 'web', internalPort: 80, staticOutput: 'frontend/dist', env: webEnv,
+    name: 'web', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: 'frontend',
+    dockerfile: '', dockerfilePath: '',
+    buildMethod: 'auto', runtimeMode: 'web', internalPort: 80, staticOutput: 'dist', env: webEnv,
   });
   const apiService = await createService(projectId, {
     name: 'api', repoUrl: 'https://github.com/Emmanuelmelvin/chalkboard.git', branch: BRANCH, rootDir: '',
@@ -514,10 +522,11 @@ async function main() {
   }
 
   console.log(`
-Done. Backend hostPort on the VPS: ${apiOverview.service.hostPort ?? 'n/a'}
-
-To route /api and /socket.io from ${APP_DOMAIN} to the backend, add to the
-Caddyfile on the VPS (/opt/aeroplane/data/Caddyfile):
+Done. Frontend at https://${APP_DOMAIN} is static (Caddy) and talks directly to https://api.${APP_DOMAIN}
+Backend hostPort on the VPS: ${apiOverview.service.hostPort ?? 'n/a'} (only needed if you proxy /api via Caddy)
+Caddy on the VPS already serves the static site from /opt/aeroplane/data/static-sites/; no extra
+handle for /api is required when VITE_BACKEND_URL=https://api.${APP_DOMAIN} is set (direct CORS).
+If you prefer same-origin /api, add to /opt/aeroplane/data/Caddyfile:
 
     handle /api/*       { reverse_proxy 127.0.0.1:${apiOverview.service.hostPort} }
     handle /socket.io/* { reverse_proxy 127.0.0.1:${apiOverview.service.hostPort} }

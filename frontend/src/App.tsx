@@ -23,8 +23,16 @@ import { markSessionFeedbackPending } from '@/lib/sessionFeedback';
 import type { LeaveRoomOptions } from '@/types';
 import '@/styles/PublicPages.css';
 
+// In production the frontend is static on chalkboard.click and the API is on
+// api.chalkboard.click — allow the backend host to be overridden at build time.
+const socketBackendUrl =
+  (import.meta.env.VITE_BACKEND_URL as string | undefined) ||
+  (import.meta.env.VITE_API_URL as string | undefined) ||
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+  undefined;
+
 // Initialize a single socket client that can be activated on demand
-const socket: Socket = io({
+const socket: Socket = io(socketBackendUrl, {
   autoConnect: false,
   // Allow polling to establish the session when a LAN proxy or firewall does
   // not support WebSocket upgrades, then let Socket.IO upgrade when possible.

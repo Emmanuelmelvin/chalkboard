@@ -1,8 +1,16 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
 import type { ApiErrorResponse } from '@/api/types';
 
+const backendUrl = (
+  // Preferred for static hosting on chalkboard.click -> api.chalkboard.click
+  (import.meta.env.VITE_BACKEND_URL as string | undefined) ||
+  (import.meta.env.VITE_API_URL as string | undefined) ||
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+  ''
+).replace(/\/$/, '');
+
 export const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: backendUrl ? `${backendUrl}/api` : '/api',
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });

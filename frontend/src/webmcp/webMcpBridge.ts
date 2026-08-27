@@ -4,7 +4,7 @@
  * W3C document.modelContext standard polyfill/compatibility, and debug execution logs.
  */
 
-import { ALL_CHALKBOARD_TOOLS } from './tools';
+import { getAllChalkboardTools, ALL_CHALKBOARD_TOOLS } from './tools';
 import { ALL_CHALKBOARD_PROMPTS } from './prompts';
 import { ALL_CHALKBOARD_RESOURCES } from './resources';
 import { createWebMcpToolsFromManifest, type PluginCommandExecutor } from './pluginToolsBridge';
@@ -49,7 +49,6 @@ export class WebMcpBridge {
   private initialized = false;
   private connected = false;
   private token = '';
-  private webMcpInstance: any = null;
 
   private constructor() {
     this.registerDefaults();
@@ -69,11 +68,12 @@ export class WebMcpBridge {
    * Register default tools, prompts, and resources into the bridge.
    */
   private registerDefaults() {
-    ALL_CHALKBOARD_TOOLS.forEach((tool) => this.registerTool(tool));
-    ALL_CHALKBOARD_PROMPTS.forEach((prompt) => this.registerPrompt(prompt));
-    ALL_CHALKBOARD_RESOURCES.forEach((resource) => this.registerResource(resource));
+    const defaultTools = typeof getAllChalkboardTools === 'function' ? getAllChalkboardTools() : (ALL_CHALKBOARD_TOOLS || []);
+    defaultTools.forEach((tool) => this.registerTool(tool));
+    (ALL_CHALKBOARD_PROMPTS || []).forEach((prompt) => this.registerPrompt(prompt));
+    (ALL_CHALKBOARD_RESOURCES || []).forEach((resource) => this.registerResource(resource));
     // Auto-register installed built-in plugins
-    installedPlugins.forEach((plugin) => this.registerPluginManifest(plugin.manifest));
+    (installedPlugins || []).forEach((plugin) => this.registerPluginManifest(plugin.manifest));
   }
 
   /**
@@ -141,7 +141,7 @@ export class WebMcpBridge {
     if (!socket) return;
 
     // Listen for MCP tools/list request from Cloud Run agent
-    socket.on('mcp:list_tools', (payload: any, ack?: (res: any) => void) => {
+    socket.on('mcp:list_tools', (_payload: any, ack?: (res: any) => void) => {
       const tools = Array.from(this.tools.values()).map((t) => ({
         name: t.name,
         description: t.description,

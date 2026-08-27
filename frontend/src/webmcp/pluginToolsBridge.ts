@@ -5,7 +5,7 @@
  */
 
 import type { PluginManifest, PluginToolContribution, PluginToolFormField } from '@/plugins/types';
-import type { WebMcpTool, McpToolResult } from './types';
+import type { WebMcpTool, McpToolResult, ToolInputSchema, JsonSchemaProperty } from './types';
 
 export type PluginCommandExecutor = (
   pluginId: string,
@@ -27,11 +27,11 @@ export function sanitizeMcpIdentifier(str: string): string {
 /**
  * Convert a PluginToolFormField into a standard JSON Schema property.
  */
-function formFieldToJsonSchemaProperty(field: PluginToolFormField): Record<string, any> {
+function formFieldToJsonSchemaProperty(field: PluginToolFormField): JsonSchemaProperty {
   const isNumber = field.type === 'number';
   const hasOptions = Array.isArray(field.options) && field.options.length > 0;
 
-  const prop: Record<string, any> = {
+  const prop: JsonSchemaProperty = {
     type: isNumber ? 'number' : 'string',
     description: field.placeholder
       ? `${field.label} (e.g. ${field.placeholder})`
@@ -52,7 +52,7 @@ function formFieldToJsonSchemaProperty(field: PluginToolFormField): Record<strin
 /**
  * Convert an array of PluginToolFormField into a complete JSON Schema object.
  */
-export function formFieldsToJsonSchema(fields?: PluginToolFormField[]): Record<string, any> {
+export function formFieldsToJsonSchema(fields?: PluginToolFormField[]): ToolInputSchema {
   if (!fields || fields.length === 0) {
     return {
       type: 'object',
@@ -60,7 +60,7 @@ export function formFieldsToJsonSchema(fields?: PluginToolFormField[]): Record<s
     };
   }
 
-  const properties: Record<string, any> = {};
+  const properties: Record<string, JsonSchemaProperty> = {};
   const required: string[] = [];
 
   for (const field of fields) {

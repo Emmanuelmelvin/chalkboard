@@ -42,7 +42,6 @@ import { installedPlugins } from '@/plugins/installedPlugins';
 import { pluginRegistry } from '@/plugins/registry';
 import { createPluginAPI } from '@/plugins/api';
 import { publishedPluginManifest } from '@/plugins/publishedRuntime';
-import { WebMcpBridge } from './webMcpBridge';
 
 import type { WebMcpTool, McpToolResult } from './types';
 
@@ -809,13 +808,13 @@ export const discoverPluginsTool: WebMcpTool<{
     },
   },
   handler: async ({ query, category }) => {
-    const bridge = WebMcpBridge.getInstance();
+    const bridge = typeof window !== 'undefined' ? (window as any).__CHALKBOARD_WEBMCP_BRIDGE__ : null;
     const queryLower = (query || '').toLowerCase().trim();
 
     // 1. Collect installed built-in plugins
     const localPlugins = installedPlugins.map((p) => {
       const manifest = p.manifest;
-      const isLoaded = bridge.isPluginLoaded(manifest.id);
+      const isLoaded = bridge ? bridge.isPluginLoaded(manifest.id) : false;
       const tools = manifest.contributes.tools || [];
       return {
         pluginId: manifest.id,
@@ -845,7 +844,7 @@ export const discoverPluginsTool: WebMcpTool<{
           .map((p: any) => {
             const manifest = publishedPluginManifest(p);
             if (!manifest) return null;
-            const isLoaded = bridge.isPluginLoaded(manifest.id);
+            const isLoaded = bridge ? bridge.isPluginLoaded(manifest.id) : false;
             const tools = manifest.contributes.tools || [];
             return {
               pluginId: manifest.id,
@@ -935,17 +934,20 @@ export const loadPluginTool: WebMcpTool<{
       return textResult('Error: "pluginId" parameter is required.', true);
     }
 
-    const bridge = WebMcpBridge.getInstance();
+    const bridge = typeof window !== 'undefined' ? (window as any).__CHALKBOARD_WEBMCP_BRIDGE__ : null;
+    if (!bridge) {
+      return textResult('WebMCP Bridge is not initialized in the current browser session.', true);
+    }
 
     // 1. Check if already loaded
     if (bridge.isPluginLoaded(pluginId)) {
       const pluginSlug = pluginId.replace(/^chalkboard\./i, '').replace(/[^a-zA-Z0-9_]/g, '_');
-      const tools = bridge.getToolsList().filter((t) => t.name.startsWith(`plugin_${pluginSlug}`));
+      const tools = bridge.getToolsList().filter((t: any) => t.name.startsWith(`plugin_${pluginSlug}`));
       return jsonResult({
         alreadyLoaded: true,
         pluginId,
         activeToolsCount: tools.length,
-        tools: tools.map((t) => ({ name: t.name, description: t.description })),
+        tools: tools.map((t: any) => ({ name: t.name, description: t.description })),
       });
     }
 
@@ -962,7 +964,7 @@ export const loadPluginTool: WebMcpTool<{
           pluginId,
           pluginName: builtIn.name,
           isBuiltIn: true,
-          newlyAddedTools: registeredTools.map((t) => ({
+          newlyAddedTools: registeredTools.map((t: any) => ({
             name: t.name,
             description: t.description,
             inputSchema: t.inputSchema,
@@ -998,7 +1000,7 @@ export const loadPluginTool: WebMcpTool<{
         pluginId,
         pluginName: manifest.name,
         isBuiltIn: false,
-        newlyAddedTools: registeredTools.map((t) => ({
+        newlyAddedTools: registeredTools.map((t: any) => ({
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema,
@@ -1011,20 +1013,27 @@ export const loadPluginTool: WebMcpTool<{
   },
 };
 
+/**
+ * Returns all default Chalkboard WebMCP tools.
+ */
+export function getAllChalkboardTools(): WebMcpTool[] {
+  return [
+    getBoardStateTool,
+    drawChalkTool,
+    writeTextTool,
+    insertShapeTool,
+    createNoteTool,
+    highlightAreaTool,
+    selectAndTransformTool,
+    navigateViewportTool,
+    manageTopicLinksTool,
+    sendChatMessageTool,
+    speakNarrationTool,
+    clearOrUndoTool,
+    discoverPluginsTool,
+    loadPluginTool,
+  ];
+}
+
 /** All registered Chalkboard WebMCP tools */
-export const ALL_CHALKBOARD_TOOLS: WebMcpTool[] = [
-  getBoardStateTool,
-  drawChalkTool,
-  writeTextTool,
-  insertShapeTool,
-  createNoteTool,
-  highlightAreaTool,
-  selectAndTransformTool,
-  navigateViewportTool,
-  manageTopicLinksTool,
-  sendChatMessageTool,
-  speakNarrationTool,
-  clearOrUndoTool,
-  discoverPluginsTool,
-  loadPluginTool,
-];
+export const ALL_CHALKBOARD_TOOLS: WebMcpTool[] = getAllChalkboardTools();

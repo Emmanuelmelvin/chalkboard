@@ -1,6 +1,6 @@
 import React, { useContext, useState } from 'react';
 import * as Avatar from '@radix-ui/react-avatar';
-import * as HoverCard from '@radix-ui/react-hover-card';
+import { HoverCard } from '@/components/ui/HoverCard';
 import { SpeakingParticipantsContext } from '@/contexts/SpeakingParticipantsContext';
 import type { Collaborator } from '@/types';
 

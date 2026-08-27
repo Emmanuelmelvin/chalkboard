@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Undo2, Redo2, Trash2, TriangleAlert } from 'lucide-react';
+import { HoverCard } from '@/components/ui/HoverCard';
 
 interface ActionSticksProps {
   onUndo: () => void;
@@ -39,41 +40,51 @@ const ActionSticks: React.FC<ActionSticksProps> = ({
 
   return (
     <div className="action-sticks" ref={sticksRef}>
-      <button
-        type="button"
-        title="Undo Action"
-        onClick={() => { disarm(); onUndo(); }}
-        disabled={!canUndo}
-        className={`action-stick ${canUndo ? '' : 'action-stick-disabled'}`}
-      >
-        <Undo2 size={14} />
-      </button>
+      <HoverCard content="Undo Action (Ctrl+Z)" placement="above" sideOffset={10}>
+        <button
+          type="button"
+          onClick={() => { disarm(); onUndo(); }}
+          disabled={!canUndo}
+          className={`action-stick ${canUndo ? '' : 'action-stick-disabled'}`}
+          aria-label="Undo Action"
+        >
+          <Undo2 size={14} />
+        </button>
+      </HoverCard>
 
-      <button
-        type="button"
-        title="Redo Action"
-        onClick={() => { disarm(); onRedo(); }}
-        disabled={!canRedo}
-        className={`action-stick ${canRedo ? '' : 'action-stick-disabled'}`}
-      >
-        <Redo2 size={14} />
-      </button>
+      <HoverCard content="Redo Action (Ctrl+Y)" placement="above" sideOffset={10}>
+        <button
+          type="button"
+          onClick={() => { disarm(); onRedo(); }}
+          disabled={!canRedo}
+          className={`action-stick ${canRedo ? '' : 'action-stick-disabled'}`}
+          aria-label="Redo Action"
+        >
+          <Redo2 size={14} />
+        </button>
+      </HoverCard>
 
-      <button
-        type="button"
-        className={`action-stick${confirmingClear ? ' action-stick-clear-arm' : ''}`}
-        title={confirmingClear ? 'Click again to clear blackboard' : 'Clear blackboard'}
-        onClick={() => {
-          if (confirmingClear) {
-            setConfirmingClear(false);
-            onClear();
-          } else {
-            setConfirmingClear(true);
-          }
-        }}
+      <HoverCard
+        content={confirmingClear ? 'Click again to confirm clear' : 'Clear blackboard'}
+        placement="above"
+        sideOffset={10}
       >
-        {confirmingClear ? <TriangleAlert size={14} /> : <Trash2 size={14} />}
-      </button>
+        <button
+          type="button"
+          className={`action-stick${confirmingClear ? ' action-stick-clear-arm' : ''}`}
+          aria-label={confirmingClear ? 'Confirm clear blackboard' : 'Clear blackboard'}
+          onClick={() => {
+            if (confirmingClear) {
+              setConfirmingClear(false);
+              onClear();
+            } else {
+              setConfirmingClear(true);
+            }
+          }}
+        >
+          {confirmingClear ? <TriangleAlert size={14} /> : <Trash2 size={14} />}
+        </button>
+      </HoverCard>
     </div>
   );
 };

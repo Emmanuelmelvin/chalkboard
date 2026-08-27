@@ -1,32 +1,29 @@
 import React from 'react';
+import type { ShapeType } from '@/types';
+import { HoverCard } from '@/components/ui/HoverCard';
 
 export interface ChalkColor {
   name: string;
   value: string;
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const CHALK_COLORS: ChalkColor[] = [
   { name: 'white', value: '#ffffff' },
-  { name: 'black', value: '#1a1a1a' },
-  { name: 'gray', value: '#a0a0a0' },
-  { name: 'brown', value: '#8b4513' },
-  { name: 'red', value: '#ff6b6b' },
-  { name: 'green', value: '#4ade80' },
-  { name: 'blue', value: '#60a5fa' },
-  { name: 'yellow', value: '#facc15' },
+  { name: 'yellow', value: '#fef08a' },
+  { name: 'blue', value: '#93c5fd' },
   { name: 'pink', value: '#f472b6' },
-  { name: 'purple', value: '#c084fc' },
+  { name: 'green', value: '#86efac' },
+  { name: 'orange', value: '#fdba74' },
 ];
 
 interface ColorPickerProps {
-  activeTool: 'chalk' | 'eraser' | 'pan' | 'select';
+  activeTool: 'chalk' | 'eraser' | 'pan' | 'select' | ShapeType;
   activeColor: string;
   onToolChange: (tool: 'chalk' | 'eraser' | 'pan' | 'select') => void;
   onColorChange: (color: string) => void;
 }
 
-const ColorPicker: React.FC<ColorPickerProps> = ({
+export const ColorPicker: React.FC<ColorPickerProps> = ({
   activeTool,
   activeColor,
   onToolChange,
@@ -34,28 +31,31 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
 }) => {
   return (
     <div className="color-picker-container">
-      <input
-        type="color"
-        className="native-color-picker"
-        value={activeColor}
-        onChange={(e) => {
-          onToolChange('chalk');
-          onColorChange(e.target.value);
-        }}
-        title="Custom Color Picker"
-      />
+      <HoverCard content="Custom Color Picker" placement="top" sideOffset={8}>
+        <input
+          type="color"
+          className="native-color-picker"
+          value={activeColor}
+          onChange={(e) => {
+            onToolChange('chalk');
+            onColorChange(e.target.value);
+          }}
+          aria-label="Custom Color Picker"
+        />
+      </HoverCard>
       <div className="swatch-grid">
         {CHALK_COLORS.map((color) => (
-          <button
-            key={color.name}
-            type="button"
-            className={`color-swatch color-swatch-${color.name} ${activeTool === 'chalk' && activeColor.toLowerCase() === color.value.toLowerCase() ? 'active' : ''}`}
-            title={`Chalk: ${color.name}`}
-            onClick={() => {
-              onToolChange('chalk');
-              onColorChange(color.value);
-            }}
-          />
+          <HoverCard key={color.name} content={`Chalk: ${color.name}`} placement="top" sideOffset={8}>
+            <button
+              type="button"
+              className={`color-swatch color-swatch-${color.name} ${activeTool === 'chalk' && activeColor.toLowerCase() === color.value.toLowerCase() ? 'active' : ''}`}
+              aria-label={`Chalk: ${color.name}`}
+              onClick={() => {
+                onToolChange('chalk');
+                onColorChange(color.value);
+              }}
+            />
+          </HoverCard>
         ))}
       </div>
     </div>

@@ -1,0 +1,94 @@
+/**
+ * @file HoverCard.css
+ * @description Astryx HoverCard Design System styling.
+ * Supports white background with refined ash typography, animations, and clean arrows.
+ */
+
+.astryx-hover-card-content {
+  z-index: 1000;
+  min-width: max-content;
+  max-width: min(340px, calc(100vw - 32px));
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.06);
+  color: #475569;
+  outline: none;
+  pointer-events: auto;
+  transform-origin: var(--radix-hover-card-content-transform-origin);
+  animation: astryxHoverCardIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.astryx-hover-card-content[data-state='closed'] {
+  animation: astryxHoverCardOut 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.astryx-hover-card-inner {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Compact action / icon hover card */
+.astryx-hover-card-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 550;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.astryx-hover-card-tip kbd,
+.hover-card-tip-kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1.5px 5px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  line-height: 1.3;
+}
+
+.astryx-hover-card-arrow {
+  fill: #ffffff;
+  stroke: rgba(0, 0, 0, 0.08);
+  stroke-width: 1px;
+}
+
+/* Collaborator card inside white modal adjustments */
+.astryx-hover-card-content .collaborator-card-full-name {
+  color: #1e293b;
+}
+
+.astryx-hover-card-content .collaborator-card-status-text,
+.astryx-hover-card-content .collaborator-card-presence {
+  color: #64748b;
+}
+
+@keyframes astryxHoverCardIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes astryxHoverCardOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+}

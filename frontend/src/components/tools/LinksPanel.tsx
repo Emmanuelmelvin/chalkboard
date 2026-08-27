@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, Plus, Check, Edit3, Trash2, X } from 'lucide-react';
 import type { SavedLink } from '@/types';
+import { HoverCard } from '@/components/ui/HoverCard';
 
 interface LinksPanelProps {
   /** Saved links for the current room */
@@ -44,35 +45,32 @@ const LinksPanel: React.FC<LinksPanelProps> = ({
     setShowCreateInput(false);
   };
 
+  const handleCreateKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleCreateLink();
+    if (e.key === 'Escape') {
+      setShowCreateInput(false);
+      setNewTag('');
+    }
+  };
+
   const handleStartRename = (link: SavedLink) => {
     setEditingLinkId(link.id);
     setEditTag(link.tag);
   };
 
   const handleFinishRename = () => {
+    if (!editingLinkId) return;
     const tag = editTag.trim();
-    if (editingLinkId && tag) {
-      onRenameLink(editingLinkId, tag);
-    }
+    if (tag) onRenameLink(editingLinkId, tag);
     setEditingLinkId(null);
     setEditTag('');
   };
 
-  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleFinishRename();
-    } else if (e.key === 'Escape') {
+  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleFinishRename();
+    if (e.key === 'Escape') {
       setEditingLinkId(null);
       setEditTag('');
-    }
-  };
-
-  const handleCreateKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleCreateLink();
-    } else if (e.key === 'Escape') {
-      setShowCreateInput(false);
-      setNewTag('');
     }
   };
 
@@ -88,15 +86,20 @@ const LinksPanel: React.FC<LinksPanelProps> = ({
       <div className="insert-links-content">
         {/* Add Link button */}
         {!showCreateInput ? (
-          <button
-            className="insert-links-add-btn"
-            disabled={!hasSelection}
-            onClick={() => setShowCreateInput(true)}
-            title={hasSelection ? 'Create a link from the current selection' : 'Select something on the canvas first'}
+          <HoverCard
+            content={hasSelection ? 'Create a link from current selection' : 'Select something on canvas first'}
+            placement="top"
           >
-            <Plus size={14} />
-            <span>Add Link</span>
-          </button>
+            <button
+              className="insert-links-add-btn"
+              disabled={!hasSelection}
+              onClick={() => setShowCreateInput(true)}
+              aria-label="Add Link"
+            >
+              <Plus size={14} />
+              <span>Add Link</span>
+            </button>
+          </HoverCard>
         ) : (
           <div className="insert-links-input-row">
             <input
@@ -108,14 +111,16 @@ const LinksPanel: React.FC<LinksPanelProps> = ({
               onKeyDown={handleCreateKeyDown}
               autoFocus
             />
-            <button
-              className="insert-links-confirm-btn"
-              onClick={handleCreateLink}
-              disabled={!newTag.trim()}
-              title="Save link"
-            >
-              <Check size={14} />
-            </button>
+            <HoverCard content="Save link" placement="top">
+              <button
+                className="insert-links-confirm-btn"
+                onClick={handleCreateLink}
+                disabled={!newTag.trim()}
+                aria-label="Save link"
+              >
+                <Check size={14} />
+              </button>
+            </HoverCard>
           </div>
         )}
 
@@ -142,40 +147,48 @@ const LinksPanel: React.FC<LinksPanelProps> = ({
                       onKeyDown={handleRenameKeyDown}
                       autoFocus
                     />
-                    <button
-                      className="insert-links-confirm-btn"
-                      onClick={handleFinishRename}
-                      disabled={!editTag.trim()}
-                      title="Save"
-                    >
-                      <Check size={14} />
-                    </button>
+                    <HoverCard content="Save" placement="top">
+                      <button
+                        className="insert-links-confirm-btn"
+                        onClick={handleFinishRename}
+                        disabled={!editTag.trim()}
+                        aria-label="Save"
+                      >
+                        <Check size={14} />
+                      </button>
+                    </HoverCard>
                   </div>
                 ) : (
                   <>
-                    <button
-                      className="insert-links-item-btn"
-                      onClick={() => onNavigateToLink(link)}
-                      title={`Navigate to "${link.tag}"`}
-                    >
-                      <Link size={14} />
-                      <span className="insert-links-item-tag">{link.tag}</span>
-                    </button>
+                    <HoverCard content={`Navigate to "${link.tag}"`} placement="top">
+                      <button
+                        className="insert-links-item-btn"
+                        onClick={() => onNavigateToLink(link)}
+                        aria-label={`Navigate to "${link.tag}"`}
+                      >
+                        <Link size={14} />
+                        <span className="insert-links-item-tag">{link.tag}</span>
+                      </button>
+                    </HoverCard>
                     <div className="insert-links-item-actions">
-                      <button
-                        className="insert-links-action-btn"
-                        onClick={() => handleStartRename(link)}
-                        title="Rename"
-                      >
-                        <Edit3 size={12} />
-                      </button>
-                      <button
-                        className="insert-links-action-btn danger"
-                        onClick={() => onDeleteLink(link.id)}
-                        title="Delete"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                      <HoverCard content="Rename" placement="top">
+                        <button
+                          className="insert-links-action-btn"
+                          onClick={() => handleStartRename(link)}
+                          aria-label="Rename"
+                        >
+                          <Edit3 size={12} />
+                        </button>
+                      </HoverCard>
+                      <HoverCard content="Delete" placement="top">
+                        <button
+                          className="insert-links-action-btn danger"
+                          onClick={() => onDeleteLink(link.id)}
+                          aria-label="Delete"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </HoverCard>
                     </div>
                   </>
                 )}

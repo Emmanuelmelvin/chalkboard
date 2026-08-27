@@ -1,19 +1,35 @@
+/**
+ * @file ChatPanel.tsx
+ * @description Accessible, modern classroom chat drawer built on Radix UI Dialog primitive
+ * and Astryx ChatLayout component specification (https://astryx.atmeta.com/components/ChatLayout).
+ */
+
 import {
   useEffect,
   useRef,
   useState,
-  type FormEvent,
-  type KeyboardEvent
+  type KeyboardEvent,
 } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import {
   MessageCircle,
-  Send,
-  X,
   Sparkles,
+  X,
 } from 'lucide-react';
 import type { Socket } from 'socket.io-client';
 import UserAvatar from '@/components/UserAvatar';
-import type { ChatMessage, RoomMember } from '@/types';
+import { HoverCard } from '@/components/ui/HoverCard';
+import type { ChatMessage as ChatMessageType, RoomMember } from '@/types';
+import {
+  ChatLayout,
+  ChatMessageList,
+  ChatMessage,
+  ChatMessageBubble,
+  ChatComposer,
+  ChatMentionMenu,
+  type MentionItemData,
+} from '@/components/chat';
+import '@/styles/ChatLayout.css';
 
 function parseAiMessage(rawMessage: string) {
   const match = rawMessage.match(/^\[AI(?::([a-zA-Z0-9_-]+))?\]\s*(.*)$/s);
@@ -40,7 +56,7 @@ interface ChatPanelProps {
   socket: Socket;
   roomId: string;
   userId: string;
-  messages: ChatMessage[];
+  messages: ChatMessageType[];
   members: RoomMember[];
   unreadMentions: number;
   canEdit: boolean;
@@ -49,19 +65,6 @@ interface ChatPanelProps {
 
 const ALL_MENTION_LABEL = 'all';
 const ALL_MENTION_USER_ID = '__all__';
-type AllMentionSuggestion = {
-  kind: 'all';
-  userId: typeof ALL_MENTION_USER_ID;
-  displayName: typeof ALL_MENTION_LABEL;
-  avatarUrl: null;
-};
-type MentionSuggestion = RoomMember | AllMentionSuggestion;
-const allMentionSuggestion: AllMentionSuggestion = {
-  kind: 'all',
-  userId: ALL_MENTION_USER_ID,
-  displayName: ALL_MENTION_LABEL,
-  avatarUrl: null,
-};
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -77,10 +80,6 @@ function mentionedUserIds(message: string, members: RoomMember[], currentUserId:
     .filter((member) => member.displayName.trim())
     .filter((member) => new RegExp(`(^|\\s)@${escapeRegExp(member.displayName.trim())}(?=\\s|$)`, 'i').test(message))
     .map((member) => member.userId);
-}
-
-function isAllMentionSuggestion(suggestion: MentionSuggestion): suggestion is AllMentionSuggestion {
-  return 'kind' in suggestion && suggestion.kind === 'all';
 }
 
 function formatMessageTime(value: string) {
@@ -104,35 +103,54 @@ export default function ChatPanel({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [highlightedSuggestion, setHighlightedSuggestion] = useState(0);
-  const endOfMessagesRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const mentionMatch = draft.match(/(?:^|\s)@([^\s@]*)$/);
   const mentionQuery = mentionMatch?.[1]?.toLocaleLowerCase() ?? null;
-  const mentionSuggestions: MentionSuggestion[] = mentionQuery === null ? [] : [
-    ...(ALL_MENTION_LABEL.includes(mentionQuery)
-      ? [allMentionSuggestion]
-      : []),
-    ...members
-      .filter((member) => member.userId !== userId)
-      .filter((member) => member.displayName.toLocaleLowerCase().includes(mentionQuery)),
-  ].slice(0, 6);
+  const mentionItems: MentionItemData[] =
+    mentionQuery === null
+      ? []
+      : [
+          ...(ALL_MENTION_LABEL.includes(mentionQuery)
+            ? [
+                {
+                  kind: 'all' as const,
+                  userId: ALL_MENTION_USER_ID,
+                  displayName: ALL_MENTION_LABEL,
+                  avatarUrl: null,
+                },
+              ]
+            : []),
+          ...members
+            .filter((member) => member.userId !== userId)
+            .filter((member) => member.displayName.toLocaleLowerCase().includes(mentionQuery))
+            .map((m) => ({
+              kind: 'member' as const,
+              userId: m.userId,
+              displayName: m.displayName,
+              avatarUrl: m.avatarUrl,
+              role: m.role,
+              online: m.online,
+            })),
+        ].slice(0, 6);
 
   useEffect(() => {
-    if (!open) return;
-    endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
-    if (unreadMentions > 0) onClearUnread();
-  }, [messages.length, open, unreadMentions, onClearUnread]);
+    if (open && unreadMentions > 0) {
+      onClearUnread();
+    }
+  }, [open, unreadMentions, onClearUnread]);
 
-  const toggleOpen = () => {
-    if (!open) onClearUnread();
-    setOpen((current) => !current);
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) onClearUnread();
+    setOpen(nextOpen);
   };
 
-  const selectMention = (member: MentionSuggestion) => {
+  const selectMention = (item: MentionItemData) => {
     if (!mentionMatch || mentionMatch.index === undefined) return;
     const atIndex = mentionMatch.index + mentionMatch[0].lastIndexOf('@');
-    const nextDraft = `${draft.slice(0, atIndex)}@${isAllMentionSuggestion(member) ? ALL_MENTION_LABEL : member.displayName} `;
+    const nextDraft = `${draft.slice(0, atIndex)}@${
+      item.kind === 'all' ? ALL_MENTION_LABEL : item.displayName
+    } `;
     setDraft(nextDraft);
     setHighlightedSuggestion(0);
     requestAnimationFrame(() => {
@@ -144,143 +162,205 @@ export default function ChatPanel({
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mentionSuggestions.length > 0 && event.key === 'ArrowDown') {
+    if (mentionItems.length > 0 && event.key === 'ArrowDown') {
       event.preventDefault();
-      setHighlightedSuggestion((current) => (current + 1) % mentionSuggestions.length);
+      setHighlightedSuggestion((current) => (current + 1) % mentionItems.length);
       return;
     }
-    if (mentionSuggestions.length > 0 && event.key === 'ArrowUp') {
+    if (mentionItems.length > 0 && event.key === 'ArrowUp') {
       event.preventDefault();
-      setHighlightedSuggestion((current) => (current - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+      setHighlightedSuggestion((current) => (current - 1 + mentionItems.length) % mentionItems.length);
       return;
     }
-    if (mentionSuggestions.length > 0 && event.key === 'Enter' && !event.shiftKey) {
+    if (mentionItems.length > 0 && event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      selectMention(mentionSuggestions[highlightedSuggestion]);
+      selectMention(mentionItems[highlightedSuggestion]);
       return;
     }
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      inputRef.current?.form?.requestSubmit();
+      handleSubmit();
     }
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSubmit = () => {
     const message = draft.trim();
     if (!message || sending) return;
 
     setSending(true);
     setError('');
-    socket.emit('chat:send', {
-      roomId,
-      message,
-      mentionedUserIds: mentionedUserIds(message, members, userId),
-    }, (response: { ok?: boolean; error?: string }) => {
-      setSending(false);
-      if (!response?.ok) {
-        setError(response?.error === 'rate_limited' ? 'You are sending messages too quickly.' : 'Your message could not be sent.');
-        return;
+    socket.emit(
+      'chat:send',
+      {
+        roomId,
+        message,
+        mentionedUserIds: mentionedUserIds(message, members, userId),
+      },
+      (response: { ok?: boolean; error?: string }) => {
+        setSending(false);
+        if (!response?.ok) {
+          setError(
+            response?.error === 'rate_limited'
+              ? 'You are sending messages too quickly.'
+              : 'Your message could not be sent.'
+          );
+          return;
+        }
+        setDraft('');
       }
-      setDraft('');
-    });
+    );
   };
 
-  const chatPanelRef = useRef<HTMLElement | null>(null);
-
   return (
-    <div className={`chat-widget ${canEdit ? 'chat-widget-editor' : 'chat-widget-viewer'}`}>
-      {open && (
-        <section ref={chatPanelRef} className="chat-panel" role="dialog" aria-modal="false" aria-labelledby="room-chat-title">
-          <header className="chat-panel-header">
-            <div>
-              <span className="chat-panel-kicker">Room chat</span>
-              <h2 id="room-chat-title">Everyone in the room</h2>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange} modal={false}>
+      <div className={`chat-widget ${canEdit ? 'chat-widget-editor' : 'chat-widget-viewer'}`}>
+        {open && (
+          <Dialog.Content
+            className="chat-panel"
+            onPointerDownOutside={(e) => {
+              // Allow drawing/clicking on canvas without forcefully closing the non-modal chat
+              const target = e.target as HTMLElement | null;
+              if (target?.closest('.chat-fab') || target?.closest('.chalkboard-canvas-layer')) {
+                e.preventDefault();
+              }
+            }}
+          >
+            {/* Minimal Header matching Insert modal */}
+            <div className="chat-mini-header">
+              <Dialog.Title asChild>
+                <h3>Chat</h3>
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="chat-mini-close"
+                  aria-label="Close chat"
+                  title="Close chat"
+                >
+                  <X size={16} />
+                </button>
+              </Dialog.Close>
             </div>
-            <button type="button" className="chat-panel-close" onClick={toggleOpen} aria-label="Close room chat">
-              <X size={15} />
+            <Dialog.Description className="sr-only">
+              Live collaborative chat messages with classmates and AI instructor in this room.
+            </Dialog.Description>
+
+            {/* Astryx Chat Layout Shell */}
+            <ChatLayout
+              isEmpty={messages.length === 0}
+              unreadCount={unreadMentions}
+              emptyState={
+                <div className="chat-empty-state">
+                  <div className="chat-empty-icon">
+                    <MessageCircle size={24} />
+                  </div>
+                  <p className="chat-panel-empty">
+                    No messages yet. Say hello or mention someone with @ to start collaborating!
+                  </p>
+                </div>
+              }
+              composer={
+                <ChatComposer
+                  textareaRef={inputRef}
+                  value={draft}
+                  onChange={(val) => {
+                    setDraft(val);
+                    setHighlightedSuggestion(0);
+                  }}
+                  onSubmit={handleSubmit}
+                  onKeyDown={handleInputKeyDown}
+                  placeholder="Message the room… (press Enter to send)"
+                  sending={sending}
+                  error={error}
+                  hint={
+                    <span>
+                      Type <strong>@</strong> to mention someone or <strong>@all</strong>
+                    </span>
+                  }
+                  mentionSuggestions={
+                    mentionItems.length > 0 ? (
+                      <ChatMentionMenu
+                        items={mentionItems}
+                        highlightedIndex={highlightedSuggestion}
+                        onSelect={selectMention}
+                      />
+                    ) : null
+                  }
+                />
+              }
+            >
+              <ChatMessageList>
+                {messages.map((entry) => {
+                  const aiInfo = parseAiMessage(entry.message);
+                  const isOwn = entry.userId === userId;
+                  const sender = isOwn ? 'user' : aiInfo.isAi ? 'assistant' : 'member';
+
+                  return (
+                    <ChatMessage
+                      key={entry.id}
+                      sender={sender}
+                      avatar={
+                        <div
+                          className="chat-message-avatar-wrap"
+                          title={aiInfo.isAi ? `AI Action (${aiInfo.agentName})` : entry.displayName}
+                        >
+                          <UserAvatar
+                            name={entry.displayName}
+                            avatarUrl={entry.avatarUrl}
+                            size="sm"
+                            className="chat-message-avatar"
+                          />
+                          {aiInfo.isAi && (
+                            <span className="chat-ai-avatar-badge" aria-label="AI Action">
+                              <Sparkles size={8} />
+                            </span>
+                          )}
+                        </div>
+                      }
+                      metadata={
+                        <>
+                          <strong>{isOwn ? 'You' : entry.displayName}</strong>
+                          <time dateTime={entry.createdAt}>
+                            {formatMessageTime(entry.createdAt)}
+                          </time>
+                        </>
+                      }
+                    >
+                      <ChatMessageBubble sender={sender}>
+                        {aiInfo.text}
+                      </ChatMessageBubble>
+                    </ChatMessage>
+                  );
+                })}
+              </ChatMessageList>
+            </ChatLayout>
+          </Dialog.Content>
+        )}
+
+        <HoverCard content={open ? 'Close room chat' : 'Open room chat'} placement="above" sideOffset={10}>
+          <Dialog.Trigger asChild>
+            <button
+              type="button"
+              className={`chat-fab${open ? ' active' : ''}`}
+              aria-label={open ? 'Close room chat' : 'Open room chat'}
+              onClick={() => {
+                if (!open) onClearUnread();
+                setOpen((prev) => !prev);
+              }}
+            >
+              <MessageCircle size={18} />
+              {unreadMentions > 0 && (
+                <span
+                  className="chat-unread-badge"
+                  aria-label={`${unreadMentions} unread mentions`}
+                >
+                  {unreadMentions > 9 ? '9+' : unreadMentions}
+                </span>
+              )}
             </button>
-          </header>
-
-          <div className="chat-panel-messages" aria-live="polite">
-            {messages.length === 0 ? (
-              <p className="chat-panel-empty">Start the conversation with everyone in this room.</p>
-            ) : messages.map((entry) => {
-              const aiInfo = parseAiMessage(entry.message);
-              return (
-                <article key={entry.id} className={`chat-message ${entry.userId === userId ? 'chat-message-own' : ''}${aiInfo.isAi ? ' chat-message-ai' : ''}`}>
-                  <div
-                    className="chat-message-avatar-wrap"
-                    title={aiInfo.isAi ? `AI Action (${aiInfo.agentName})` : entry.displayName}
-                  >
-                    <UserAvatar name={entry.displayName} avatarUrl={entry.avatarUrl} size="sm" className="chat-message-avatar" />
-                    {aiInfo.isAi && (
-                      <span className="chat-ai-avatar-badge" aria-label="AI Action">
-                        <Sparkles size={8} />
-                      </span>
-                    )}
-                  </div>
-                  <div className="chat-message-content">
-                    <div className="chat-message-meta">
-                      <strong>{entry.userId === userId ? 'You' : entry.displayName}</strong>
-                      <time dateTime={entry.createdAt}>{formatMessageTime(entry.createdAt)}</time>
-                    </div>
-                    <p>{aiInfo.text}</p>
-                  </div>
-                </article>
-              );
-            })}
-            <div ref={endOfMessagesRef} />
-          </div>
-
-          <form className="chat-panel-compose" onSubmit={handleSubmit}>
-            {mentionSuggestions.length > 0 && (
-              <div className="chat-mention-suggestions" role="listbox" aria-label="Mention a room member">
-                {mentionSuggestions.map((member, index) => (
-                  <button
-                    key={member.userId}
-                    type="button"
-                    className={index === highlightedSuggestion ? 'active' : ''}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => selectMention(member)}
-                  >
-                    <UserAvatar name={isAllMentionSuggestion(member) ? 'Everyone' : member.displayName} avatarUrl={member.avatarUrl} size="sm" />
-                    <span>{isAllMentionSuggestion(member) ? '@all' : member.displayName}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {error && <p className="chat-panel-error" role="alert">{error}</p>}
-            <div className="chat-panel-input-row">
-              <textarea
-                ref={inputRef}
-                value={draft}
-                onChange={(event) => { setDraft(event.target.value); setHighlightedSuggestion(0); }}
-                onKeyDown={handleInputKeyDown}
-                placeholder="Message the room…"
-                rows={1}
-                maxLength={2000}
-                aria-label="Room chat message"
-              />
-              <button type="submit" className="chat-send-button" disabled={!draft.trim() || sending} aria-label="Send message">
-                <Send size={15} />
-              </button>
-            </div>
-            <span className="chat-panel-hint">Use @ to mention someone or @all</span>
-          </form>
-        </section>
-      )}
-      <button
-        type="button"
-        className={`chat-fab${open ? ' active' : ''}`}
-        onClick={toggleOpen}
-        aria-expanded={open}
-        aria-label={open ? 'Close room chat' : 'Open room chat'}
-        title={open ? 'Close room chat' : 'Open room chat'}
-      >
-        <MessageCircle size={18} />
-        {unreadMentions > 0 && <span className="chat-unread-badge" aria-label={`${unreadMentions} unread mentions`}>{unreadMentions > 9 ? '9+' : unreadMentions}</span>}
-      </button>
-    </div>
+          </Dialog.Trigger>
+        </HoverCard>
+      </div>
+    </Dialog.Root>
   );
 }

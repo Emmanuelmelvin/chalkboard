@@ -39,6 +39,7 @@ import { getApiError, isPlanLimitError } from '@/api/client';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import { HoverCard } from '@/components/ui/HoverCard';
 import UserAvatar from '@/components/UserAvatar';
 import CollaboratorCursor from '@/components/CollaboratorCursor';
 import { SpeakingParticipantsContext } from '@/contexts/SpeakingParticipantsContext';
@@ -243,16 +244,20 @@ function RoomHeaderMediaControls({
 
   return (
     <div className="room-media-header-controls">
-      <button
-        type="button"
-        className={`voice-action-btn header-media-btn${isCameraEnabled ? ' is-active' : ''}`}
-        onClick={toggleCamera}
-        disabled={!canPublish}
-        title={!canPublish ? 'Camera is disabled for listeners' : (isCameraEnabled ? 'Turn off camera' : 'Turn on camera')}
-        aria-label={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+      <HoverCard
+        content={!canPublish ? 'Camera is disabled for listeners' : (isCameraEnabled ? 'Turn off camera' : 'Turn on camera')}
+        placement="below"
       >
-        {isCameraEnabled ? <Video size={14} /> : <VideoOff size={14} />}
-      </button>
+        <button
+          type="button"
+          className={`voice-action-btn header-media-btn${isCameraEnabled ? ' is-active' : ''}`}
+          onClick={toggleCamera}
+          disabled={!canPublish}
+          aria-label={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+        >
+          {isCameraEnabled ? <Video size={14} /> : <VideoOff size={14} />}
+        </button>
+      </HoverCard>
     </div>
   );
 }
@@ -358,10 +363,26 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
     if (localParticipant && (isOwner || canSpeak)) {
       return (
         <div className="voice-actions-group">
-          <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
-            <button type="button" className="voice-action-btn" onClick={toggleMute} disabled={voiceDisabled} title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>{voiceDisabled ? <WifiOff size={14} /> : (isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />)}</button>
-          </span>
-          {!isOwner && <button type="button" className="voice-action-btn" onClick={removeUser} title="Leave voice"><LogOut size={14} /></button>}
+          <HoverCard content={disabledReason || (isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone')} placement="top">
+            <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`}>
+              <button
+                type="button"
+                className="voice-action-btn"
+                onClick={toggleMute}
+                disabled={voiceDisabled}
+                aria-label={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
+              >
+                {voiceDisabled ? <WifiOff size={14} /> : (isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />)}
+              </button>
+            </span>
+          </HoverCard>
+          {!isOwner && (
+            <HoverCard content="Leave voice" placement="top">
+              <button type="button" className="voice-action-btn" onClick={removeUser} aria-label="Leave voice">
+                <LogOut size={14} />
+              </button>
+            </HoverCard>
+          )}
         </div>
       );
     }
@@ -372,17 +393,37 @@ function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, current
     if (canSpeak) {
       return (
         <div className="voice-actions-group">
-          <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
-            <button type="button" className="voice-action-btn" onClick={removeUser} disabled={voiceDisabled} title="Remove from video & voice">{voiceDisabled ? <WifiOff size={14} /> : <UserX size={14} />}</button>
-          </span>
+          <HoverCard content={disabledReason || 'Remove from video & voice'} placement="top">
+            <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`}>
+              <button
+                type="button"
+                className="voice-action-btn"
+                onClick={removeUser}
+                disabled={voiceDisabled}
+                aria-label="Remove from video & voice"
+              >
+                {voiceDisabled ? <WifiOff size={14} /> : <UserX size={14} />}
+              </button>
+            </span>
+          </HoverCard>
         </div>
       );
     }
     return (
       <div className="voice-actions-group">
-        <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
-          <button type="button" className="voice-action-btn" onClick={inviteUser} disabled={voiceDisabled} title="Invite to video & voice">{voiceDisabled ? <WifiOff size={14} /> : <UserPlus size={14} />}</button>
-        </span>
+        <HoverCard content={disabledReason || 'Invite to video & voice'} placement="top">
+          <span className={`voice-action-wrap${voiceDisabled ? ' is-disabled' : ''}`}>
+            <button
+              type="button"
+              className="voice-action-btn"
+              onClick={inviteUser}
+              disabled={voiceDisabled}
+              aria-label="Invite to video & voice"
+            >
+              {voiceDisabled ? <WifiOff size={14} /> : <UserPlus size={14} />}
+            </button>
+          </span>
+        </HoverCard>
       </div>
     );
   }
@@ -402,13 +443,23 @@ function RoomMemberVoiceControls(props: RoomMemberVoiceControlsProps) {
       const disabledReason = voiceDisabledReason(props);
       return (
         <div className="voice-actions-group">
-          <span className={`voice-action-wrap${disabledReason ? ' is-disabled' : ''}`} title={disabledReason ?? undefined}>
-            <button type="button" className="voice-action-btn" title="Invite to video & voice" disabled={Boolean(disabledReason)} onClick={() => {
-              (props.socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId: props.roomId, targetUserId: props.memberUserId }, (res: { ok?: boolean; error?: string }) => {
-                if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
-              });
-            }}>{disabledReason ? <WifiOff size={14} /> : <UserPlus size={14} />}</button>
-          </span>
+          <HoverCard content={disabledReason || 'Invite to video & voice'} placement="top">
+            <span className={`voice-action-wrap${disabledReason ? ' is-disabled' : ''}`}>
+              <button
+                type="button"
+                className="voice-action-btn"
+                aria-label="Invite to video & voice"
+                disabled={Boolean(disabledReason)}
+                onClick={() => {
+                  (props.socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId: props.roomId, targetUserId: props.memberUserId }, (res: { ok?: boolean; error?: string }) => {
+                    if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
+                  });
+                }}
+              >
+                {disabledReason ? <WifiOff size={14} /> : <UserPlus size={14} />}
+              </button>
+            </span>
+          </HoverCard>
         </div>
       );
     }
@@ -1263,13 +1314,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
         <div className="board-actions-card board-utility-actions">
           {roleReady && canEdit && (
             <div className="insert-shapes-trigger-wrap" ref={insertShapesWrapRef}>
-              <button
-                onClick={() => setShowInsertShapes(prev => !prev)}
-                title="Insert Shape (Ctrl+1)"
-                className={`insert-shapes-fab${showInsertShapes ? ' active' : ''}`}
-              >
-                <SquarePlus size={18} />
-              </button>
+              <HoverCard content="Insert Shape (Ctrl+1)" placement="above" sideOffset={10}>
+                <button
+                  onClick={() => setShowInsertShapes(prev => !prev)}
+                  className={`insert-shapes-fab${showInsertShapes ? ' active' : ''}`}
+                  aria-label="Insert Shape"
+                >
+                  <SquarePlus size={18} />
+                </button>
+              </HoverCard>
               {showInsertShapes && (
                 <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
                   pluginManifests={pluginManifests}
@@ -1315,12 +1368,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   <div key={i} className="trim-handle" data-left={pos.left} data-top={pos.top} style={{ left: pos.left, top: pos.top }} />
                 ))}
                 <div className="trim-actions">
-                  <button className="trim-apply-button" onClick={handleApplyTrim} title="Apply crop (Enter)" aria-label="Apply crop">
-                    <Check size={20} />
-                  </button>
-                  <button className="trim-cancel-button" onClick={handleCancelTrim} title="Cancel crop (Esc)" aria-label="Cancel crop">
-                    <X size={20} />
-                  </button>
+                  <HoverCard content="Apply crop (Enter)" placement="top">
+                    <button className="trim-apply-button" onClick={handleApplyTrim} aria-label="Apply crop">
+                      <Check size={20} />
+                    </button>
+                  </HoverCard>
+                  <HoverCard content="Cancel crop (Esc)" placement="top">
+                    <button className="trim-cancel-button" onClick={handleCancelTrim} aria-label="Cancel crop">
+                      <X size={20} />
+                    </button>
+                  </HoverCard>
                 </div>
               </>
             );
@@ -1333,14 +1390,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             const linkY = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y - 12;
 
             return (
-              <button onClick={() => { setHighlightedLinkId(linkedLink.id); setLinksPanelOpen(true); }}
-                className="selection-link-button"
-                data-left={linkX}
-                data-top={linkY}
-                style={{ left: linkX, top: linkY }}
-                title="Click to view linked location">
-                <LinkIcon />
-              </button>
+              <HoverCard content="Click to view linked location" placement="top">
+                <button onClick={() => { setHighlightedLinkId(linkedLink.id); setLinksPanelOpen(true); }}
+                  className="selection-link-button"
+                  data-left={linkX}
+                  data-top={linkY}
+                  style={{ left: linkX, top: linkY }}
+                  aria-label="Click to view linked location">
+                  <LinkIcon />
+                </button>
+              </HoverCard>
             );
           })()}
 
@@ -1398,16 +1457,21 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                     selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
                 )}
                 {/* ── Selection toolbox toggle button ── */}
-                <button
-                  onClick={() => setShowSelectionToolbox(prev => !prev)}
-                  title={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
-                  className={`selection-toolbox-toggle ${showSelectionToolbox ? 'active' : ''}`}
-                  data-left={BOX_SCREEN_RIGHT + 12}
-                  data-top={BOX_SCREEN_CENTER_Y - 11}
-                  style={{ left: BOX_SCREEN_RIGHT + 12, top: BOX_SCREEN_CENTER_Y - 11 }}
+                <HoverCard
+                  content={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
+                  placement="bottom"
                 >
-                  {showSelectionToolbox ? <EyeOff size={12} /> : <Eye size={12} />}
-                </button>
+                  <button
+                    onClick={() => setShowSelectionToolbox(prev => !prev)}
+                    className={`selection-toolbox-toggle ${showSelectionToolbox ? 'active' : ''}`}
+                    aria-label={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
+                    data-left={BOX_SCREEN_RIGHT + 12}
+                    data-top={BOX_SCREEN_CENTER_Y - 11}
+                    style={{ left: BOX_SCREEN_RIGHT + 12, top: BOX_SCREEN_CENTER_Y - 11 }}
+                  >
+                    {showSelectionToolbox ? <EyeOff size={12} /> : <Eye size={12} />}
+                  </button>
+                </HoverCard>
               </>
             );
           })()}
@@ -1424,21 +1488,24 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           <div className="board-header">
             <div className="board-header-tools">
               <div className="board-actions-card board-brand-menu">
-                <button type="button" className="board-brand" title="Chalkboard" aria-label="Chalkboard">
-                  <ChalkboardLogo className="board-brand-logo" />
-                  <span className="board-brand-name">Chalkboard</span>
-                  {planLabel && <span className="board-brand-plan">{planLabel}</span>}
-                </button>
-                <div className="room-info-trigger-wrap" ref={roomInfoRef}>
-                  <button
-                    type="button"
-                    className={`header-icon-btn${roomInfoOpen ? ' active' : ''}`}
-                    onClick={() => setRoomInfoOpen((open) => !open)}
-                    title="Room info"
-                    aria-label="Room info"
-                  >
-                    <Menu size={14} />
+                <HoverCard content="Chalkboard" placement="below">
+                  <button type="button" className="board-brand" aria-label="Chalkboard">
+                    <ChalkboardLogo className="board-brand-logo" />
+                    <span className="board-brand-name">Chalkboard</span>
+                    {planLabel && <span className="board-brand-plan">{planLabel}</span>}
                   </button>
+                </HoverCard>
+                <div className="room-info-trigger-wrap" ref={roomInfoRef}>
+                  <HoverCard content="Room info" placement="below">
+                    <button
+                      type="button"
+                      className={`header-icon-btn${roomInfoOpen ? ' active' : ''}`}
+                      onClick={() => setRoomInfoOpen((open) => !open)}
+                      aria-label="Room info"
+                    >
+                      <Menu size={14} />
+                    </button>
+                  </HoverCard>
                   {roomInfoOpen && (
                     <div className="room-info-popover">
                       <strong className="room-info-popover-title">{roomTitle}</strong>
@@ -1451,15 +1518,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                   )}
                 </div>
                 <div className="room-links-trigger-wrap" ref={linksPanelRef}>
-                  <button
-                    type="button"
-                    className={`header-icon-btn${linksPanelOpen ? ' active' : ''}`}
-                    onClick={() => { setLinksPanelOpen(!linksPanelOpen); setHighlightedLinkId(null); }}
-                    title="Links"
-                    aria-label="Links"
-                  >
-                    <Link size={14} />
-                  </button>
+                  <HoverCard content="Links" placement="below">
+                    <button
+                      type="button"
+                      className={`header-icon-btn${linksPanelOpen ? ' active' : ''}`}
+                      onClick={() => { setLinksPanelOpen(!linksPanelOpen); setHighlightedLinkId(null); }}
+                      aria-label="Links"
+                    >
+                      <Link size={14} />
+                    </button>
+                  </HoverCard>
                   {linksPanelOpen && (
                     <div className="room-links-popover">
                       <LinksPanel
@@ -1481,25 +1549,27 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               <div className="board-actions-card board-header-actions-card">
                 <div className="participation-actions">
                   {raisedHandCount > 0 && <span className="raised-hand-count" title="Raised hands">✋ {raisedHandCount}</span>}
-                  <button
-                    type="button"
-                    className={`voice-action-btn participation-action-btn${isHandRaised ? ' active' : ''}`}
-                    onClick={toggleRaisedHand}
-                    title={isHandRaised ? 'Lower hand' : 'Raise hand'}
-                    aria-label={isHandRaised ? 'Lower hand' : 'Raise hand'}
-                  >
-                    <Hand size={14} />
-                  </button>
-                  <div className="reaction-picker-wrap">
+                  <HoverCard content={isHandRaised ? 'Lower hand' : 'Raise hand'} placement="below">
                     <button
                       type="button"
-                      className="voice-action-btn participation-action-btn"
-                      onClick={() => setReactionPickerOpen((open) => !open)}
-                      title="Send reaction"
-                      aria-label="Send reaction"
+                      className={`voice-action-btn participation-action-btn${isHandRaised ? ' active' : ''}`}
+                      onClick={toggleRaisedHand}
+                      aria-label={isHandRaised ? 'Lower hand' : 'Raise hand'}
                     >
-                      <Smile size={14} />
+                      <Hand size={14} />
                     </button>
+                  </HoverCard>
+                  <div className="reaction-picker-wrap">
+                    <HoverCard content="Send reaction" placement="below">
+                      <button
+                        type="button"
+                        className="voice-action-btn participation-action-btn"
+                        onClick={() => setReactionPickerOpen((open) => !open)}
+                        aria-label="Send reaction"
+                      >
+                        <Smile size={14} />
+                      </button>
+                    </HoverCard>
                     {reactionPickerOpen && (
                       <div className="reaction-picker" role="menu" aria-label="Send a reaction">
                         {REACTION_EMOJIS.map((emoji) => (
@@ -1511,54 +1581,57 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                 </div>
                 <RoomHeaderMediaControls voiceConnected={voiceConnected} />
                 {effectiveRole === 'owner' && roomQuery.data?.room.voiceEnabled && (
+                  <HoverCard content={voiceConnected ? 'Disconnect Voice' : 'Connect Voice'} placement="below">
+                    <button
+                      type="button"
+                      className="header-icon-btn"
+                      onClick={() => {
+                        if (voiceToken && voiceUrl) {
+                          setVoiceListening(false);
+                          setVoiceToken('');
+                          setVoiceUrl('');
+                        } else {
+                          setVoiceListening(true);
+                        }
+                      }}
+                      aria-label={voiceConnected ? 'Disconnect voice' : 'Connect voice'}
+                    >
+                      {voiceConnected ? <Radio size={14} /> : <RadioOff size={14} />}
+                    </button>
+                  </HoverCard>
+                )}
+                <HoverCard content={isFullscreen ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)'} placement="below">
                   <button
                     type="button"
                     className="header-icon-btn"
-                    onClick={() => {
-                      if (voiceToken && voiceUrl) {
-                        setVoiceListening(false);
-                        setVoiceToken('');
-                        setVoiceUrl('');
-                      } else {
-                        setVoiceListening(true);
-                      }
-                    }}
-                    title={voiceConnected ? 'Disconnect Voice' : 'Connect Voice'}
-                    aria-label={voiceConnected ? 'Disconnect voice' : 'Connect voice'}
+                    onClick={() => { void toggleFullscreen(); }}
+                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
                   >
-                    {voiceConnected ? <Radio size={14} /> : <RadioOff size={14} />}
+                    {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="header-icon-btn"
-                  onClick={() => { void toggleFullscreen(); }}
-                  title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                >
-                  {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                </button>
+                </HoverCard>
                 <div className="room-members-trigger-wrap" ref={roomMembersRef}>
-                  <button
-                    type="button"
-                    className={`room-details-trigger${roomDetailsOpen ? ' active' : ''}`}
-                    onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
-                    aria-expanded={roomDetailsOpen}
-                    aria-label={`${onlineHeaderMembers.length} online — open room details`}
-                    title={`${onlineHeaderMembers.length} online`}
-                  >
-                    <span className="member-avatar-stack">
-                      {onlineHeaderMembers.slice(0, 4).map((member) => (
-                        <Avatar.Root key={member.userId} className="member-stack-avatar">
-                          <Avatar.Image src={member.avatarUrl || undefined} alt={member.displayName} />
-                          <Avatar.Fallback delayMs={300}>{avatarInitials(member.displayName)}</Avatar.Fallback>
-                        </Avatar.Root>
-                      ))}
-                      {onlineHeaderMembers.length > 4 && (
-                        <span className="member-stack-more">+{onlineHeaderMembers.length - 4}</span>
-                      )}
-                    </span>
-                  </button>
+                  <HoverCard content={`${onlineHeaderMembers.length} online — Click to view members`} placement="below">
+                    <button
+                      type="button"
+                      className={`room-details-trigger${roomDetailsOpen ? ' active' : ''}`}
+                      onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
+                      aria-expanded={roomDetailsOpen}
+                      aria-label={`${onlineHeaderMembers.length} online — open room details`}
+                    >
+                      <span className="member-avatar-stack">
+                        {onlineHeaderMembers.slice(0, 4).map((member) => (
+                          <Avatar.Root key={member.userId} className="member-stack-avatar">
+                            <Avatar.Image src={member.avatarUrl || undefined} alt={member.displayName} />
+                            <Avatar.Fallback delayMs={300}>{avatarInitials(member.displayName)}</Avatar.Fallback>
+                          </Avatar.Root>
+                        ))}
+                        {onlineHeaderMembers.length > 4 && (
+                          <span className="member-stack-more">+{onlineHeaderMembers.length - 4}</span>
+                        )}
+                      </span>
+                    </button>
+                  </HoverCard>
                   {roomDetailsOpen && (
                     <div className="room-members-popover" role="dialog" aria-modal="false" aria-label="Members">
                       <div className="room-info-panel-header">
@@ -1690,33 +1763,41 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  className="header-icon-btn"
-                  onClick={handleCopyLink}
-                  title="Copy Invite Link"
-                  aria-label="Copy invite link"
-                >
-                  {isCopied ? <Check size={14} className="copy-success-icon" /> : <Share2 size={14} />}
-                </button>
-                <button
-                  type="button"
-                  className="header-icon-btn header-exit-btn"
-                  onClick={() => onLeaveRoom({ promptSessionFeedback: true })}
-                  title="Exit room"
-                  aria-label="Exit room"
-                >
-                  <LogOut size={14} />
-                </button>
+                <HoverCard content={isCopied ? 'Link Copied!' : 'Copy Invite Link'} placement="below">
+                  <button
+                    type="button"
+                    className="header-icon-btn"
+                    onClick={handleCopyLink}
+                    aria-label="Copy invite link"
+                  >
+                    {isCopied ? <Check size={14} className="copy-success-icon" /> : <Share2 size={14} />}
+                  </button>
+                </HoverCard>
+                <HoverCard content="Exit room" placement="below">
+                  <button
+                    type="button"
+                    className="header-icon-btn header-exit-btn"
+                    onClick={() => onLeaveRoom({ promptSessionFeedback: true })}
+                    aria-label="Exit room"
+                  >
+                    <LogOut size={14} />
+                  </button>
+                </HoverCard>
               </div>
             </div>
           </div>
 
           <div className="zoom-indicator">
-            <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.1))}><Minus size={12} /></Button>
+            <HoverCard content="Zoom Out (-)" placement="top">
+              <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.1))} aria-label="Zoom out"><Minus size={12} /></Button>
+            </HoverCard>
             <span className="zoom-value">{Math.round(zoom * 100)}%</span>
-            <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.1))}><Plus size={12} /></Button>
-            <Button variant="icon" className="zoom-control-button zoom-reset-button" onClick={resetPanZoom} title="Reset Pan/Zoom"><Maximize2 size={12} /></Button>
+            <HoverCard content="Zoom In (+)" placement="top">
+              <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.1))} aria-label="Zoom in"><Plus size={12} /></Button>
+            </HoverCard>
+            <HoverCard content="Reset Pan/Zoom (Ctrl+0)" placement="top">
+              <Button variant="icon" className="zoom-control-button zoom-reset-button" onClick={resetPanZoom} aria-label="Reset Pan/Zoom"><Maximize2 size={12} /></Button>
+            </HoverCard>
           </div>
 
           {roleReady && canEdit && <Toolbar

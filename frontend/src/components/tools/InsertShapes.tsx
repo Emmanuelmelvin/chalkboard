@@ -23,6 +23,7 @@ import {
 import type { ShapeType } from '@/types';
 import PluginIcon from '@/components/svg/PluginIcons';
 import type { PluginManifest } from '@/plugins/types';
+import { HoverCard } from '@/components/ui/HoverCard';
 
 interface InsertShapesProps {
   onInsertShape: (shape: ShapeType) => void;
@@ -103,15 +104,16 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
         {activeTab === 'shapes' && (
           <div className="insert-shapes-grid">
             {shapes.map((s) => (
-              <button
-                key={s.type}
-                className="insert-shape-btn"
-                onClick={() => onInsertShape(s.type)}
-                title={s.label}
-              >
-                {s.icon}
-                <span>{s.label}</span>
-              </button>
+              <HoverCard key={s.type} content={`Insert ${s.label}`} placement="top" sideOffset={6}>
+                <button
+                  className="insert-shape-btn"
+                  onClick={() => onInsertShape(s.type)}
+                  aria-label={s.label}
+                >
+                  {s.icon}
+                  <span>{s.label}</span>
+                </button>
+              </HoverCard>
             ))}
           </div>
         )}
@@ -134,25 +136,30 @@ const InsertShapes: React.FC<InsertShapesProps> = ({
             ) : (
               <div className="insert-plugins-list">
                 {filteredPlugins.map((plugin) => (
-                  <button
+                  <HoverCard
                     key={plugin.id}
-                    className={`insert-plugin-card${plugin.locked ? ' is-pro-locked' : ''}`}
-                    disabled={plugin.id === 'chalkboard.tag' && !hasSelection}
-                    onClick={() => { if (plugin.id !== 'chalkboard.tag' || hasSelection) onOpenPlugin(plugin.id); }}
-                    title={plugin.locked ? `${plugin.name} — Pro plugin, upgrade to use` : plugin.description}
+                    content={plugin.locked ? `${plugin.name} — Pro plugin, upgrade to use` : plugin.description}
+                    placement="top"
+                    sideOffset={6}
                   >
-                    {plugin.locked && (
-                      <span className="insert-plugin-pro-badge" aria-label="Pro plugin">
-                        <Crown size={9} /> PRO
+                    <button
+                      className={`insert-plugin-card${plugin.locked ? ' is-pro-locked' : ''}`}
+                      disabled={plugin.id === 'chalkboard.tag' && !hasSelection}
+                      onClick={() => { if (plugin.id !== 'chalkboard.tag' || hasSelection) onOpenPlugin(plugin.id); }}
+                      aria-label={plugin.name}
+                    >
+                      {plugin.locked && (
+                        <span className="insert-plugin-pro-badge" aria-label="Pro plugin">
+                          <Crown size={9} /> PRO
+                        </span>
+                      )}
+                      <span className="insert-plugin-logo">{plugin.logoUrl ? <img src={plugin.logoUrl} alt="" /> : <PluginIcon pluginId={plugin.id} fallback={plugin.name.slice(0, 1)} />}</span>
+                      <span className="insert-plugin-copy">
+                        <strong>{plugin.name}</strong>
+                        <small>{plugin.description}</small>
                       </span>
-                    )}
-                    <span className="insert-plugin-logo">{plugin.logoUrl ? <img src={plugin.logoUrl} alt="" /> : <PluginIcon pluginId={plugin.id} fallback={plugin.name.slice(0, 1)} />}</span>
-                    <span className="insert-plugin-copy">
-                      <strong>{plugin.name}</strong>
-                      <small>{plugin.description}</small>
-                    </span>
-                  </button>
-
+                    </button>
+                  </HoverCard>
                 ))}
               </div>
             )}

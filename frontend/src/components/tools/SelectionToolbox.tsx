@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import * as Tooltip from '@radix-ui/react-tooltip';
 import * as Slider from '@radix-ui/react-slider';
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import {
@@ -25,6 +24,7 @@ import {
   Check,
 } from 'lucide-react';
 import { CHALK_COLORS } from '@/components/tools/ColorPicker';
+import { HoverCard } from '@/components/ui/HoverCard';
 
 interface SelectionToolboxProps {
   /** Canvas-space X of the horizontal center of the transform box in screen coords */
@@ -103,80 +103,77 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   selectedCount,
   isGrouped,
 }) => {
+  const barRef = useRef<HTMLDivElement>(null);
+  const [barWidth, setBarWidth] = useState(360);
+  const [barHeight, setBarHeight] = useState(44);
   const [colorMode, setColorMode] = useState<'stroke' | 'fill'>('stroke');
-  const [brushSize, setBrushSize] = useState<number>(currentSize);
-  const [dimW, setDimW] = useState<string>(String(Math.round(currentWidth)));
-  const [dimH, setDimH] = useState<string>(String(Math.round(currentHeight)));
-  const [customAngle, setCustomAngle] = useState<number>(currentRotation);
-  const barRef = useRef<HTMLDivElement | null>(null);
-  const [barSize, setBarSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [brushSize, setBrushSize] = useState(currentSize);
+  const [customAngle, setCustomAngle] = useState(currentRotation);
+  const [dimW, setDimW] = useState(Math.round(currentWidth));
+  const [dimH, setDimH] = useState(Math.round(currentHeight));
 
-  // Sync size when the selection's stroke size changes
+  // Sync internal states with incoming props
   useEffect(() => {
-    const timer = window.setTimeout(() => setBrushSize(currentSize), 0);
-    return () => window.clearTimeout(timer);
+    setBrushSize(currentSize);
   }, [currentSize]);
 
-  // Sync custom-angle slider with external rotation changes (rotate handles, presets)
   useEffect(() => {
-    const timer = window.setTimeout(() => setCustomAngle(Math.max(-180, Math.min(180, currentRotation))), 0);
-    return () => window.clearTimeout(timer);
+    setCustomAngle(currentRotation);
   }, [currentRotation]);
 
-  // Sync dimension inputs when currentWidth/currentHeight change
   useEffect(() => {
-    const timer = window.setTimeout(() => setDimW(String(Math.round(currentWidth))), 0);
-    return () => window.clearTimeout(timer);
-  }, [currentWidth]);
+    setDimW(Math.round(currentWidth));
+    setDimH(Math.round(currentHeight));
+  }, [currentWidth, currentHeight]);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDimH(String(Math.round(currentHeight))), 0);
-    return () => window.clearTimeout(timer);
-  }, [currentHeight]);
-
-  // Measure the bar so we can center it over the selection and clamp it on-screen
+  // Measure bar size once rendered
   useLayoutEffect(() => {
-    const el = barRef.current;
-    if (!el) return;
-    const measure = () => setBarSize({ w: el.offsetWidth, h: el.offsetHeight });
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+    if (barRef.current) {
+      const rect = barRef.current.getBoundingClientRect();
+      if (rect.width > 0) setBarWidth(rect.width);
+      if (rect.height > 0) setBarHeight(rect.height);
+    }
+  });
 
-  // Place the bar above the selection; flip below when there is no room on top.
-  const rawTop = boxScreenTop - barSize.h - BAR_GAP;
-  const placeBelow = rawTop < BAR_EDGE_MARGIN;
-  const barY = placeBelow
-    ? boxScreenBottom + BAR_GAP
-    : rawTop;
-  const rawLeft = boxScreenCenterX - barSize.w / 2;
-  const barX = Math.max(BAR_EDGE_MARGIN, Math.min(rawLeft, window.innerWidth - barSize.w - BAR_EDGE_MARGIN));
+  // Calculate screen-space position: centered horizontally above the selection box.
+  // If too close to the top of the viewport, place below the selection box instead.
+  const idealX = boxScreenCenterX - barWidth / 2;
+  const clampedX = Math.max(
+    BAR_EDGE_MARGIN,
+    Math.min(window.innerWidth - barWidth - BAR_EDGE_MARGIN, idealX)
+  );
+
+  const placeAbove = boxScreenTop - barHeight - BAR_GAP >= BAR_EDGE_MARGIN;
+  const idealY = placeAbove
+    ? boxScreenTop - barHeight - BAR_GAP
+    : boxScreenBottom + BAR_GAP;
+  const clampedY = Math.max(
+    BAR_EDGE_MARGIN,
+    Math.min(window.innerHeight - barHeight - BAR_EDGE_MARGIN, idealY)
+  );
+
+  const barX = Math.round(clampedX);
+  const barY = Math.round(clampedY);
 
   const handleDimWChange = (val: string) => {
-    setDimW(val);
+    const num = Math.max(1, parseInt(val, 10) || 0);
+    setDimW(num);
   };
 
   const handleDimHChange = (val: string) => {
-    setDimH(val);
+    const num = Math.max(1, parseInt(val, 10) || 0);
+    setDimH(num);
   };
 
   const commitDimW = () => {
-    const num = parseInt(dimW, 10);
-    if (!isNaN(num) && num > 0) {
-      onSetDimensions?.(num, parseInt(dimH, 10) || currentHeight);
-    } else {
-      setDimW(String(Math.round(currentWidth)));
+    if (dimW > 0 && dimH > 0 && onSetDimensions) {
+      onSetDimensions(dimW, dimH);
     }
   };
 
   const commitDimH = () => {
-    const num = parseInt(dimH, 10);
-    if (!isNaN(num) && num > 0) {
-      onSetDimensions?.(parseInt(dimW, 10) || currentWidth, num);
-    } else {
-      setDimH(String(Math.round(currentHeight)));
+    if (dimW > 0 && dimH > 0 && onSetDimensions) {
+      onSetDimensions(dimW, dimH);
     }
   };
 
@@ -186,47 +183,45 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   };
 
   return (
-    <Tooltip.Provider delayDuration={300} skipDelayDuration={0}>
-      <div
-        className="selection-toolbox"
-        data-panel-x={barX}
-        data-panel-y={barY}
-        style={{ left: barX, top: barY }}
-      >
-        <div ref={barRef} className="sel-bar" style={{ padding: BAR_PADDING }}>
-          {/* ── Color ── */}
-          <DropdownMenu.Root modal={false}>
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <DropdownMenu.Trigger asChild>
-                  <button type="button" className="sel-bar-btn" aria-label="Color" title="">
-                    <Palette size={16} />
-                    <span className="sel-bar-color-dot" data-color={activeColor} style={{ background: activeColor }} />
-                  </button>
-                </DropdownMenu.Trigger>
-              </Tooltip.Trigger>
-              <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-                Color
-                <Tooltip.Arrow className="sel-tooltip-arrow" />
-              </Tooltip.Content>
-            </Tooltip.Root>
-            <DropdownMenu.Content className="sel-subpanel" align="start" sideOffset={8} {...dropdownContentProps}>
-              <p className="sel-subpanel-title">Color</p>
-              <ToggleGroup.Root
-                type="single"
-                value={colorMode}
-                onValueChange={(v) => { if (v) setColorMode(v as 'stroke' | 'fill'); }}
-                className="sel-color-mode-toggle"
-              >
-                <ToggleGroup.Item value="stroke" className="sel-color-mode-button" title="Stroke color">
+    <div
+      className="selection-toolbox"
+      data-panel-x={barX}
+      data-panel-y={barY}
+      style={{ left: barX, top: barY }}
+    >
+      <div ref={barRef} className="sel-bar" style={{ padding: BAR_PADDING }}>
+        {/* ── Color ── */}
+        <DropdownMenu.Root modal={false}>
+          <HoverCard content="Color" placement="above" sideOffset={6}>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="sel-bar-btn" aria-label="Color">
+                <Palette size={16} />
+                <span className="sel-bar-color-dot" data-color={activeColor} style={{ background: activeColor }} />
+              </button>
+            </DropdownMenu.Trigger>
+          </HoverCard>
+          <DropdownMenu.Content className="sel-subpanel" align="start" sideOffset={8} {...dropdownContentProps}>
+            <p className="sel-subpanel-title">Color</p>
+            <ToggleGroup.Root
+              type="single"
+              value={colorMode}
+              onValueChange={(v) => { if (v) setColorMode(v as 'stroke' | 'fill'); }}
+              className="sel-color-mode-toggle"
+            >
+              <HoverCard content="Stroke color" placement="top">
+                <ToggleGroup.Item value="stroke" className="sel-color-mode-button" aria-label="Stroke color">
                   <PenLine size={12} />
                   Stroke
                 </ToggleGroup.Item>
-                <ToggleGroup.Item value="fill" className="sel-color-mode-button" title="Fill color">
+              </HoverCard>
+              <HoverCard content="Fill color" placement="top">
+                <ToggleGroup.Item value="fill" className="sel-color-mode-button" aria-label="Fill color">
                   <PaintBucket size={12} />
                   Fill
                 </ToggleGroup.Item>
-              </ToggleGroup.Root>
+              </HoverCard>
+            </ToggleGroup.Root>
+            <HoverCard content="Custom Color" placement="top">
               <input
                 type="color"
                 value={colorMode === 'stroke' ? activeColor : activeFillColor === 'transparent' ? '#ffffff' : activeFillColor}
@@ -237,428 +232,377 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
                     onFillColorChange?.(e.target.value);
                   }
                 }}
-                title="Custom Color"
+                aria-label="Custom Color"
                 className="native-color-picker sel-native-color-picker"
               />
-              <ToggleGroup.Root
-                type="single"
-                className="sel-swatch-grid"
-                value={(colorMode === 'stroke' ? activeColor : activeFillColor).toLowerCase()}
-                onValueChange={(value) => {
-                  if (!value) return;
-                  if (colorMode === 'stroke') {
-                    onColorChange(value);
-                  } else {
-                    onFillColorChange?.(value);
-                  }
-                }}
-              >
-                {CHALK_COLORS.map((c) => {
-                  const selected = (colorMode === 'stroke' ? activeColor : activeFillColor).toLowerCase() === c.value;
-                  return (
+            </HoverCard>
+            <ToggleGroup.Root
+              type="single"
+              className="sel-swatch-grid"
+              value={(colorMode === 'stroke' ? activeColor : activeFillColor).toLowerCase()}
+              onValueChange={(value) => {
+                if (!value) return;
+                if (colorMode === 'stroke') {
+                  onColorChange(value);
+                } else {
+                  onFillColorChange?.(value);
+                }
+              }}
+            >
+              {CHALK_COLORS.map((c) => {
+                const selected = (colorMode === 'stroke' ? activeColor : activeFillColor).toLowerCase() === c.value;
+                return (
+                  <HoverCard key={c.name} content={c.name} placement="top">
                     <ToggleGroup.Item
-                      key={c.name}
                       value={c.value}
-                      title={c.name}
+                      aria-label={c.name}
                       className={`sel-swatch sel-swatch-${c.name} ${selected ? 'sel-swatch-active' : ''}`}
                     >
                       {selected && <Check size={12} strokeWidth={3} className="sel-swatch-check" />}
                     </ToggleGroup.Item>
-                  );
-                })}
-              </ToggleGroup.Root>
-              {colorMode === 'fill' && (
-                <button
-                  type="button"
-                  className="sel-toolbox-row sel-action-row sel-transparent-fill-button"
-                  onClick={() => onFillColorChange?.('transparent')}
-                >
-                  <span className="sel-small-label">No Fill (Transparent)</span>
-                </button>
-              )}
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
-
-          {/* ── Size ── */}
-          <DropdownMenu.Root modal={false}>
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <DropdownMenu.Trigger asChild>
-                  <button type="button" className="sel-bar-btn" aria-label="Stroke size" title="">
-                    <Brush size={16} />
-                  </button>
-                </DropdownMenu.Trigger>
-              </Tooltip.Trigger>
-              <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-                Size
-                <Tooltip.Arrow className="sel-tooltip-arrow" />
-              </Tooltip.Content>
-            </Tooltip.Root>
-            <DropdownMenu.Content className="sel-subpanel" align="start" sideOffset={8} {...dropdownContentProps}>
-              <p className="sel-subpanel-title">Stroke Size</p>
-              <div className="sel-size-preview">
-                <div
-                  className="sel-size-dot"
-                  data-size={Math.min(brushSize * 3, 48)}
-                  style={{ width: Math.min(brushSize * 3, 48), height: Math.min(brushSize * 3, 48) }}
-                />
-                <span className="sel-size-value">{Math.round(brushSize)}</span>
-              </div>
-              <Slider.Root
-                className="sel-slider"
-                min={1}
-                max={100}
-                step={1}
-                value={[brushSize]}
-                onValueChange={([v]) => {
-                  setBrushSize(v);
-                  onSetSize(v);
-                }}
+                  </HoverCard>
+                );
+              })}
+            </ToggleGroup.Root>
+            {colorMode === 'fill' && (
+              <button
+                type="button"
+                className="sel-toolbox-row sel-action-row sel-transparent-fill-button"
+                onClick={() => onFillColorChange?.('transparent')}
               >
-                <Slider.Track className="sel-slider-track">
-                  <Slider.Range className="sel-slider-range" />
-                </Slider.Track>
-                <Slider.Thumb className="sel-slider-thumb" aria-label="Stroke size" />
-              </Slider.Root>
-              <div className="sel-size-stepper">
+                <span className="sel-small-label">No Fill (Transparent)</span>
+              </button>
+            )}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+
+        {/* ── Size ── */}
+        <DropdownMenu.Root modal={false}>
+          <HoverCard content="Stroke size" placement="above" sideOffset={6}>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="sel-bar-btn" aria-label="Stroke size">
+                <Brush size={16} />
+              </button>
+            </DropdownMenu.Trigger>
+          </HoverCard>
+          <DropdownMenu.Content className="sel-subpanel" align="start" sideOffset={8} {...dropdownContentProps}>
+            <p className="sel-subpanel-title">Stroke Size</p>
+            <div className="sel-size-preview">
+              <div
+                className="sel-size-dot"
+                data-size={Math.min(brushSize * 3, 48)}
+                style={{ width: Math.min(brushSize * 3, 48), height: Math.min(brushSize * 3, 48) }}
+              />
+              <span className="sel-size-value">{Math.round(brushSize)}</span>
+            </div>
+            <Slider.Root
+              className="sel-slider"
+              min={1}
+              max={100}
+              step={1}
+              value={[brushSize]}
+              onValueChange={([v]) => {
+                setBrushSize(v);
+                onSetSize(v);
+              }}
+            >
+              <Slider.Track className="sel-slider-track">
+                <Slider.Range className="sel-slider-range" />
+              </Slider.Track>
+              <Slider.Thumb className="sel-slider-thumb" aria-label="Stroke size" />
+            </Slider.Root>
+            <div className="sel-size-stepper">
+              <HoverCard content="Decrease ([)" placement="top">
                 <button
                   type="button"
                   className="sel-size-btn"
-                  title="Decrease ([ )"
+                  aria-label="Decrease size"
                   onClick={onDecreaseSize}
                 >
                   <Minus size={14} />
                 </button>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={brushSize}
-                  className="number-input sel-size-number"
-                  onChange={(e) => {
-                    const v = Math.min(100, Math.max(1, Number(e.target.value)));
-                    setBrushSize(v);
-                    onSetSize(v);
-                  }}
-                />
+              </HoverCard>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={brushSize}
+                className="number-input sel-size-number"
+                onChange={(e) => {
+                  const v = Math.min(100, Math.max(1, Number(e.target.value)));
+                  setBrushSize(v);
+                  onSetSize(v);
+                }}
+              />
+              <HoverCard content="Increase (])" placement="top">
                 <button
                   type="button"
                   className="sel-size-btn"
-                  title="Increase (] )"
+                  aria-label="Increase size"
                   onClick={onIncreaseSize}
                 >
                   <Plus size={14} />
                 </button>
-              </div>
-              <p className="sel-size-hint">Use <kbd className="sel-kbd">[ ]</kbd> keys to change size</p>
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
+              </HoverCard>
+            </div>
+            <p className="sel-size-hint">Use <kbd className="sel-kbd">[ ]</kbd> keys to change size</p>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
 
-          {/* ── Dimensions ── */}
-          <DropdownMenu.Root modal={false}>
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <DropdownMenu.Trigger asChild>
-                  <button type="button" className="sel-bar-btn" aria-label="Dimensions" title="">
-                    <Frame size={16} />
-                  </button>
-                </DropdownMenu.Trigger>
-              </Tooltip.Trigger>
-              <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-                Dimensions
-                <Tooltip.Arrow className="sel-tooltip-arrow" />
-              </Tooltip.Content>
-            </Tooltip.Root>
-            <DropdownMenu.Content className="sel-subpanel" align="start" sideOffset={8} {...dropdownContentProps}>
-              <p className="sel-subpanel-title">Dimensions</p>
-              <div className="sel-dimensions-fields">
-                <div className="sel-dimension-field">
-                  <label>W</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={dimW}
-                    className="number-input sel-dimension-input"
-                    onChange={(e) => handleDimWChange(e.target.value)}
-                    onBlur={commitDimW}
-                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                  />
-                </div>
-                <div className="sel-dimension-field">
-                  <label>H</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={dimH}
-                    className="number-input sel-dimension-input"
-                    onChange={(e) => handleDimHChange(e.target.value)}
-                    onBlur={commitDimH}
-                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                  />
-                </div>
+        {/* ── Dimensions ── */}
+        <DropdownMenu.Root modal={false}>
+          <HoverCard content="Dimensions" placement="above" sideOffset={6}>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="sel-bar-btn" aria-label="Dimensions">
+                <Frame size={16} />
+              </button>
+            </DropdownMenu.Trigger>
+          </HoverCard>
+          <DropdownMenu.Content className="sel-subpanel" align="start" sideOffset={8} {...dropdownContentProps}>
+            <p className="sel-subpanel-title">Dimensions</p>
+            <div className="sel-dimensions-fields">
+              <div className="sel-dimension-field">
+                <label>W</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={dimW}
+                  className="number-input sel-dimension-input"
+                  onChange={(e) => handleDimWChange(e.target.value)}
+                  onBlur={commitDimW}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                />
               </div>
-              <p className="sel-size-hint sel-size-hint-spaced">
-                Set exact width & height
-              </p>
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
+              <div className="sel-dimension-field">
+                <label>H</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={dimH}
+                  className="number-input sel-dimension-input"
+                  onChange={(e) => handleDimHChange(e.target.value)}
+                  onBlur={commitDimH}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                />
+              </div>
+            </div>
+            <p className="sel-size-hint sel-size-hint-spaced">
+              Set exact width & height
+            </p>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
 
-          {/* ── Rotate ── */}
-          <DropdownMenu.Root modal={false}>
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <DropdownMenu.Trigger asChild>
-                  <button type="button" className="sel-bar-btn" aria-label="Rotate" title="">
-                    <RotateCw size={16} />
-                    {currentRotation !== 0 && (
-                      <span className="sel-bar-badge">{Math.round(currentRotation)}°</span>
-                    )}
-                  </button>
-                </DropdownMenu.Trigger>
-              </Tooltip.Trigger>
-              <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-                Rotate
-                <Tooltip.Arrow className="sel-tooltip-arrow" />
-              </Tooltip.Content>
-            </Tooltip.Root>
-            <DropdownMenu.Content className="sel-subpanel" align="start" sideOffset={8} {...dropdownContentProps}>
-              <p className="sel-subpanel-title">
-                Rotate
-                <span className="sel-rotation-value sel-rotation-value-inline">
-                  {Math.round(currentRotation)}°
-                </span>
-              </p>
-              <div className="sel-rotate-presets" role="group" aria-label="Rotation presets">
+        {/* ── Rotate ── */}
+        <DropdownMenu.Root modal={false}>
+          <HoverCard content="Rotate" placement="above" sideOffset={6}>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="sel-bar-btn" aria-label="Rotate">
+                <RotateCw size={16} />
+                {currentRotation !== 0 && (
+                  <span className="sel-bar-badge">{Math.round(currentRotation)}°</span>
+                )}
+              </button>
+            </DropdownMenu.Trigger>
+          </HoverCard>
+          <DropdownMenu.Content className="sel-subpanel" align="start" sideOffset={8} {...dropdownContentProps}>
+            <p className="sel-subpanel-title">
+              Rotate
+              <span className="sel-rotation-value sel-rotation-value-inline">
+                {Math.round(currentRotation)}°
+              </span>
+            </p>
+            <div className="sel-rotate-presets" role="group" aria-label="Rotation presets">
+              <HoverCard content="Rotate 45° CCW" placement="top">
                 <button
                   type="button"
                   className="sel-rotate-preset-btn"
-                  title="Rotate 45° counter-clockwise"
+                  aria-label="Rotate 45° counter-clockwise"
                   onClick={() => onRotate?.(-45)}
                 >
                   <RotateCcw size={13} />
                   45°
                 </button>
+              </HoverCard>
+              <HoverCard content="Rotate 90° CCW (Ctrl+[)" placement="top">
                 <button
                   type="button"
                   className="sel-rotate-preset-btn"
-                  title="Rotate 90° counter-clockwise (Ctrl+[)"
+                  aria-label="Rotate 90° counter-clockwise (Ctrl+[)"
                   onClick={() => onRotate?.(-90)}
                 >
                   <RotateCcw size={13} />
                   90°
                 </button>
+              </HoverCard>
+              <HoverCard content="Rotate 180°" placement="top">
                 <button
                   type="button"
                   className="sel-rotate-preset-btn"
-                  title="Rotate 180°"
+                  aria-label="Rotate 180°"
                   onClick={() => onRotate?.(180)}
                 >
                   <RotateCw size={13} />
                   180°
                 </button>
+              </HoverCard>
+              <HoverCard content="Rotate 90° CW (Ctrl+])" placement="top">
                 <button
                   type="button"
                   className="sel-rotate-preset-btn"
-                  title="Rotate 90° clockwise (Ctrl+])"
+                  aria-label="Rotate 90° clockwise (Ctrl+])"
                   onClick={() => onRotate?.(90)}
                 >
                   <RotateCw size={13} />
                   90°
                 </button>
+              </HoverCard>
+              <HoverCard content="Rotate 45° CW" placement="top">
                 <button
                   type="button"
                   className="sel-rotate-preset-btn"
-                  title="Rotate 45° clockwise"
+                  aria-label="Rotate 45° clockwise"
                   onClick={() => onRotate?.(45)}
                 >
                   <RotateCw size={13} />
                   45°
                 </button>
-              </div>
-              <Slider.Root
-                className="sel-slider"
-                min={-180}
-                max={180}
-                step={1}
-                value={[customAngle]}
-                onValueChange={([v]) => {
-                  const delta = v - customAngle;
-                  setCustomAngle(v);
-                  if (delta !== 0) onRotate?.(delta);
-                }}
-              >
-                <Slider.Track className="sel-slider-track">
-                  <Slider.Range className="sel-slider-range" />
-                </Slider.Track>
-                <Slider.Thumb className="sel-slider-thumb" aria-label="Rotation angle" />
-              </Slider.Root>
-              <div className="sel-rotate-labels">
-                <span>-180°</span>
-                <span className="sel-rotate-current">{Math.round(customAngle)}°</span>
-                <span>180°</span>
-              </div>
-              <div className="sel-divider sel-divider-spaced" />
+              </HoverCard>
+            </div>
+            <Slider.Root
+              className="sel-slider"
+              min={-180}
+              max={180}
+              step={1}
+              value={[customAngle]}
+              onValueChange={([v]) => {
+                const delta = v - customAngle;
+                setCustomAngle(v);
+                if (delta !== 0) onRotate?.(delta);
+              }}
+            >
+              <Slider.Track className="sel-slider-track">
+                <Slider.Range className="sel-slider-range" />
+              </Slider.Track>
+              <Slider.Thumb className="sel-slider-thumb" aria-label="Rotation angle" />
+            </Slider.Root>
+            <div className="sel-rotate-labels">
+              <span>-180°</span>
+              <span className="sel-rotate-current">{Math.round(customAngle)}°</span>
+              <span>180°</span>
+            </div>
+            <div className="sel-divider sel-divider-spaced" />
+            <button
+              type="button"
+              className="sel-toolbox-row sel-action-row sel-wide-action"
+              onClick={onResetRotation}
+            >
+              <Undo2 size={14} className="sel-action-icon" />
+              Reset Rotation
+              <kbd className="sel-kbd sel-kbd-auto">Ctrl+Shift+R</kbd>
+            </button>
+            <p className="sel-size-hint sel-size-hint-spaced">Or drag the rotate handle below selection</p>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+
+        {/* ── Crop ── */}
+        <DropdownMenu.Root modal={false}>
+          <HoverCard content="Crop" placement="above" sideOffset={6}>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="sel-bar-btn" aria-label="Crop">
+                <Crop size={16} />
+              </button>
+            </DropdownMenu.Trigger>
+          </HoverCard>
+          <DropdownMenu.Content className="sel-subpanel" align="start" sideOffset={8} {...dropdownContentProps}>
+            <p className="sel-subpanel-title">Crop</p>
+            <div className="sel-rotate-actions">
               <button
                 type="button"
                 className="sel-toolbox-row sel-action-row sel-wide-action"
-                onClick={onResetRotation}
+                onClick={() => onTrim?.()}
+              >
+                <Crop size={14} className="sel-action-icon" />
+                Crop Selection
+              </button>
+              <button
+                type="button"
+                className="sel-toolbox-row sel-action-row sel-wide-action"
+                onClick={() => onResetTrim?.()}
               >
                 <Undo2 size={14} className="sel-action-icon" />
-                Reset Rotation
-                <kbd className="sel-kbd sel-kbd-auto">Ctrl+Shift+R</kbd>
+                Reset Crop
               </button>
-              <p className="sel-size-hint sel-size-hint-spaced">Or drag the rotate handle below selection</p>
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
+            </div>
+            <p className="sel-size-hint sel-size-hint-spaced">
+              Drag edges to crop, Enter to apply
+            </p>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
 
-          {/* ── Crop ── */}
-          <DropdownMenu.Root modal={false}>
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <DropdownMenu.Trigger asChild>
-                  <button type="button" className="sel-bar-btn" aria-label="Crop" title="">
-                    <Crop size={16} />
-                  </button>
-                </DropdownMenu.Trigger>
-              </Tooltip.Trigger>
-              <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-                Crop
-                <Tooltip.Arrow className="sel-tooltip-arrow" />
-              </Tooltip.Content>
-            </Tooltip.Root>
-            <DropdownMenu.Content className="sel-subpanel" align="start" sideOffset={8} {...dropdownContentProps}>
-              <p className="sel-subpanel-title">Crop</p>
-              <div className="sel-rotate-actions">
-                <button
-                  type="button"
-                  className="sel-toolbox-row sel-action-row sel-wide-action"
-                  onClick={() => onTrim?.()}
-                >
-                  <Crop size={14} className="sel-action-icon" />
-                  Crop Selection
-                </button>
-                <button
-                  type="button"
-                  className="sel-toolbox-row sel-action-row sel-wide-action"
-                  onClick={() => onResetTrim?.()}
-                >
-                  <Undo2 size={14} className="sel-action-icon" />
-                  Reset Crop
-                </button>
-              </div>
-              <p className="sel-size-hint sel-size-hint-spaced">
-                Drag edges to crop, Enter to apply
-              </p>
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
+        <div className="sel-bar-divider" />
 
-          <div className="sel-bar-divider" />
+        {/* ── Copy / Duplicate / Cut ── */}
+        <HoverCard content="Copy (Ctrl+C)" placement="above" sideOffset={6}>
+          <button type="button" className="sel-bar-btn" aria-label="Copy (Ctrl+C)" onClick={onCopy}>
+            <Copy size={16} />
+          </button>
+        </HoverCard>
 
-          {/* ── Copy / Duplicate / Cut ── */}
-          <Tooltip.Root>
-            <Tooltip.Trigger asChild>
-              <button type="button" className="sel-bar-btn" aria-label="Copy (Ctrl+C)" onClick={onCopy}>
-                <Copy size={16} />
-              </button>
-            </Tooltip.Trigger>
-            <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-              Copy <kbd className="sel-kbd">Ctrl+C</kbd>
-              <Tooltip.Arrow className="sel-tooltip-arrow" />
-            </Tooltip.Content>
-          </Tooltip.Root>
+        <HoverCard content="Duplicate (Ctrl+D)" placement="above" sideOffset={6}>
+          <button type="button" className="sel-bar-btn" aria-label="Duplicate (Ctrl+D)" onClick={onDuplicate}>
+            <CopyPlus size={16} />
+          </button>
+        </HoverCard>
 
-          <Tooltip.Root>
-            <Tooltip.Trigger asChild>
-              <button type="button" className="sel-bar-btn" aria-label="Duplicate (Ctrl+D)" onClick={onDuplicate}>
-                <CopyPlus size={16} />
-              </button>
-            </Tooltip.Trigger>
-            <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-              Duplicate <kbd className="sel-kbd">Ctrl+D</kbd>
-              <Tooltip.Arrow className="sel-tooltip-arrow" />
-            </Tooltip.Content>
-          </Tooltip.Root>
+        <HoverCard content="Cut (Ctrl+X)" placement="above" sideOffset={6}>
+          <button type="button" className="sel-bar-btn" aria-label="Cut (Ctrl+X)" onClick={onCut}>
+            <Scissors size={16} />
+          </button>
+        </HoverCard>
 
-          <Tooltip.Root>
-            <Tooltip.Trigger asChild>
-              <button type="button" className="sel-bar-btn" aria-label="Cut (Ctrl+X)" onClick={onCut}>
-                <Scissors size={16} />
-              </button>
-            </Tooltip.Trigger>
-            <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-              Cut <kbd className="sel-kbd">Ctrl+X</kbd>
-              <Tooltip.Arrow className="sel-tooltip-arrow" />
-            </Tooltip.Content>
-          </Tooltip.Root>
+        <div className="sel-bar-divider" />
 
-          <div className="sel-bar-divider" />
+        {/* ── Group / Ungroup ── */}
+        <HoverCard content="Group (Ctrl+G)" placement="above" sideOffset={6}>
+          <button
+            type="button"
+            className={`sel-bar-btn ${selectedCount < 2 || isGrouped ? 'sel-bar-btn-disabled' : ''}`}
+            aria-label="Group (Ctrl+G)"
+            disabled={selectedCount < 2 || isGrouped}
+            onClick={onGroup}
+          >
+            <Group size={16} />
+          </button>
+        </HoverCard>
 
-          {/* ── Group / Ungroup ── */}
-          <Tooltip.Root>
-            <Tooltip.Trigger asChild>
-              <button
-                type="button"
-                className={`sel-bar-btn ${selectedCount < 2 || isGrouped ? 'sel-bar-btn-disabled' : ''}`}
-                aria-label="Group (Ctrl+G)"
-                disabled={selectedCount < 2 || isGrouped}
-                onClick={onGroup}
-              >
-                <Group size={16} />
-              </button>
-            </Tooltip.Trigger>
-            <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-              Group <kbd className="sel-kbd">Ctrl+G</kbd>
-              <Tooltip.Arrow className="sel-tooltip-arrow" />
-            </Tooltip.Content>
-          </Tooltip.Root>
+        <HoverCard content="Ungroup (Ctrl+Shift+G)" placement="above" sideOffset={6}>
+          <button
+            type="button"
+            className={`sel-bar-btn ${!isGrouped || selectedCount < 1 ? 'sel-bar-btn-disabled' : ''}`}
+            aria-label="Ungroup (Ctrl+Shift+G)"
+            disabled={!isGrouped || selectedCount < 1}
+            onClick={onUngroup}
+          >
+            <Ungroup size={16} />
+          </button>
+        </HoverCard>
 
-          <Tooltip.Root>
-            <Tooltip.Trigger asChild>
-              <button
-                type="button"
-                className={`sel-bar-btn ${!isGrouped || selectedCount < 1 ? 'sel-bar-btn-disabled' : ''}`}
-                aria-label="Ungroup (Ctrl+Shift+G)"
-                disabled={!isGrouped || selectedCount < 1}
-                onClick={onUngroup}
-              >
-                <Ungroup size={16} />
-              </button>
-            </Tooltip.Trigger>
-            <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-              Ungroup <kbd className="sel-kbd">Ctrl+Shift+G</kbd>
-              <Tooltip.Arrow className="sel-tooltip-arrow" />
-            </Tooltip.Content>
-          </Tooltip.Root>
+        <div className="sel-bar-divider" />
 
-          <div className="sel-bar-divider" />
+        {/* ── Delete / Deselect ── */}
+        <HoverCard content="Delete (Del)" placement="above" sideOffset={6}>
+          <button type="button" className="sel-bar-btn sel-bar-btn-danger" aria-label="Delete (Del)" onClick={onDelete}>
+            <Trash2 size={16} />
+          </button>
+        </HoverCard>
 
-          {/* ── Delete / Deselect ── */}
-          <Tooltip.Root>
-            <Tooltip.Trigger asChild>
-              <button type="button" className="sel-bar-btn sel-bar-btn-danger" aria-label="Delete (Del)" onClick={onDelete}>
-                <Trash2 size={16} />
-              </button>
-            </Tooltip.Trigger>
-            <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-              Delete <kbd className="sel-kbd">Del</kbd>
-              <Tooltip.Arrow className="sel-tooltip-arrow" />
-            </Tooltip.Content>
-          </Tooltip.Root>
-
-          <Tooltip.Root>
-            <Tooltip.Trigger asChild>
-              <button type="button" className="sel-bar-btn" aria-label="Deselect (Esc)" onClick={onDeselect}>
-                <X size={16} />
-              </button>
-            </Tooltip.Trigger>
-            <Tooltip.Content className="sel-tooltip" sideOffset={6}>
-              Deselect <kbd className="sel-kbd">Esc</kbd>
-              <Tooltip.Arrow className="sel-tooltip-arrow" />
-            </Tooltip.Content>
-          </Tooltip.Root>
-        </div>
+        <HoverCard content="Deselect (Esc)" placement="above" sideOffset={6}>
+          <button type="button" className="sel-bar-btn" aria-label="Deselect (Esc)" onClick={onDeselect}>
+            <X size={16} />
+          </button>
+        </HoverCard>
       </div>
-    </Tooltip.Provider>
+    </div>
   );
 };
 

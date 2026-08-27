@@ -5,7 +5,7 @@ import {
   Hand,
   MousePointer2
 } from 'lucide-react';
-import * as HoverCard from '@radix-ui/react-hover-card';
+import { HoverCard } from '@/components/ui/HoverCard';
 import ColorPicker from '@/components/tools/ColorPicker';
 import BrushSize from '@/components/tools/BrushSize';
 import BrushIntensity from '@/components/tools/BrushIntensity';
@@ -44,182 +44,198 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     <div className="bottom-toolbar-container">
       <div className="bottom-toolbar-card">
         {/* Chalk/Brush settings — opens on hover while chalk is active */}
-        <HoverCard.Root
-          open={showChalkSettings}
-          onOpenChange={(open) => {
-            if (open && activeTool !== 'chalk') return;
-            setShowChalkSettings(open);
-          }}
-          openDelay={0}
-          closeDelay={100}
-        >
-          <HoverCard.Trigger asChild>
+        {activeTool === 'chalk' ? (
+          <HoverCard.Root
+            open={showChalkSettings}
+            onOpenChange={setShowChalkSettings}
+            openDelay={0}
+            closeDelay={100}
+          >
+            <HoverCard.Trigger asChild>
+              <button
+                type="button"
+                className="action-stick active"
+                onClick={() => setShowChalkSettings((prev) => !prev)}
+                aria-label="Chalk (Ctrl+B)"
+              >
+                <PenTool size={14} />
+              </button>
+            </HoverCard.Trigger>
+
+            <HoverCard.Content className="chalk-settings-flyout" side="top" sideOffset={12} align="center">
+              <div className="settings-section">
+                <span className="settings-label">Color</span>
+                <ColorPicker
+                  activeTool={activeTool}
+                  activeColor={activeColor}
+                  onToolChange={onToolChange}
+                  onColorChange={onColorChange}
+                />
+              </div>
+              <div className="settings-divider" />
+              <div className="settings-section">
+                <span className="settings-label">Size</span>
+                <BrushSize brushSize={brushSize} onBrushSizeChange={onBrushSizeChange} />
+              </div>
+              <div className="settings-divider" />
+              <div className="settings-section">
+                <span className="settings-label">Intensity</span>
+                <BrushIntensity brushIntensity={brushIntensity} onIntensityChange={onIntensityChange} />
+              </div>
+              <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
+            </HoverCard.Content>
+          </HoverCard.Root>
+        ) : (
+          <HoverCard content="Chalk (Ctrl+B)" placement="above" sideOffset={12}>
             <button
               type="button"
-              className={`action-stick ${activeTool === 'chalk' ? 'active' : ''}`}
+              className="action-stick"
               onClick={() => {
-                if (activeTool !== 'chalk') {
-                  onToolChange('chalk');
-                  setShowChalkSettings(true);
-                } else {
-                  setShowChalkSettings((prev) => !prev);
-                }
+                onToolChange('chalk');
+                setShowChalkSettings(true);
               }}
-              title="Chalk (Ctrl+B)"
+              aria-label="Chalk (Ctrl+B)"
             >
               <PenTool size={14} />
             </button>
-          </HoverCard.Trigger>
-
-          <HoverCard.Content className="chalk-settings-flyout" side="top" sideOffset={12} align="center">
-            <div className="settings-section">
-              <span className="settings-label">Color</span>
-              <ColorPicker
-                activeTool={activeTool}
-                activeColor={activeColor}
-                onToolChange={onToolChange}
-                onColorChange={onColorChange}
-              />
-            </div>
-            <div className="settings-divider" />
-            <div className="settings-section">
-              <span className="settings-label">Size</span>
-              <BrushSize brushSize={brushSize} onBrushSizeChange={onBrushSizeChange} />
-            </div>
-            <div className="settings-divider" />
-            <div className="settings-section">
-              <span className="settings-label">Intensity</span>
-              <BrushIntensity brushIntensity={brushIntensity} onIntensityChange={onIntensityChange} />
-            </div>
-            <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
-          </HoverCard.Content>
-        </HoverCard.Root>
+          </HoverCard>
+        )}
 
         {/* Eraser settings — opens on hover while eraser is active */}
-        <HoverCard.Root
-          open={showEraserSettings}
-          onOpenChange={(open) => {
-            if (open && activeTool !== 'eraser') return;
-            setShowEraserSettings(open);
-          }}
-          openDelay={0}
-          closeDelay={100}
-        >
-          <HoverCard.Trigger asChild>
+        {activeTool === 'eraser' ? (
+          <HoverCard.Root
+            open={showEraserSettings}
+            onOpenChange={setShowEraserSettings}
+            openDelay={0}
+            closeDelay={100}
+          >
+            <HoverCard.Trigger asChild>
+              <button
+                type="button"
+                className="action-stick active"
+                onClick={() => setShowEraserSettings((prev) => !prev)}
+                aria-label="Eraser (Ctrl+E)"
+              >
+                <Eraser size={14} />
+              </button>
+            </HoverCard.Trigger>
+
+            <HoverCard.Content className="chalk-settings-flyout eraser-settings-flyout" side="top" sideOffset={12} align="center">
+              <div className="eraser-flyout-header">
+                <span className="eraser-flyout-icon">⬜</span>
+                <span className="eraser-flyout-title">Eraser Size</span>
+              </div>
+              <div className="settings-divider" />
+
+              {/* Eraser Preview */}
+              <div className="eraser-preview-area">
+                <div
+                  className="eraser-preview-rect"
+                  data-width={Math.min(eraserWidth, 200)}
+                  data-height={Math.min(eraserHeight, 60)}
+                  style={{ width: Math.min(eraserWidth, 200), height: Math.min(eraserHeight, 60) }}
+                />
+              </div>
+
+              <div className="settings-section">
+                <span className="settings-label">Width — {eraserWidth}px</span>
+                <div className="slider-container">
+                  <input
+                    type="range"
+                    className="slider-input"
+                    min={10}
+                    max={300}
+                    step={5}
+                    value={eraserWidth}
+                    onChange={(e) => onEraserWidthChange(Number(e.target.value))}
+                  />
+                  <input
+                    type="number"
+                    className="number-input"
+                    min={10}
+                    max={300}
+                    value={eraserWidth}
+                    onChange={(e) => {
+                      const v = Math.min(300, Math.max(10, Number(e.target.value)));
+                      onEraserWidthChange(v);
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="settings-divider" />
+              <div className="settings-section">
+                <span className="settings-label">Height — {eraserHeight}px</span>
+                <div className="slider-container">
+                  <input
+                    type="range"
+                    className="slider-input"
+                    min={10}
+                    max={200}
+                    step={5}
+                    value={eraserHeight}
+                    onChange={(e) => onEraserHeightChange(Number(e.target.value))}
+                  />
+                  <input
+                    type="number"
+                    className="number-input"
+                    min={10}
+                    max={200}
+                    value={eraserHeight}
+                    onChange={(e) => {
+                      const v = Math.min(200, Math.max(10, Number(e.target.value)));
+                      onEraserHeightChange(v);
+                    }}
+                  />
+                </div>
+              </div>
+              <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
+            </HoverCard.Content>
+          </HoverCard.Root>
+        ) : (
+          <HoverCard content="Eraser (Ctrl+E)" placement="above" sideOffset={12}>
             <button
               type="button"
-              className={`action-stick ${activeTool === 'eraser' ? 'active' : ''}`}
+              className="action-stick"
               onClick={() => {
-                if (activeTool !== 'eraser') {
-                  onToolChange('eraser');
-                  setShowEraserSettings(true);
-                } else {
-                  setShowEraserSettings((prev) => !prev);
-                }
+                onToolChange('eraser');
+                setShowEraserSettings(true);
               }}
-              title="Eraser (Ctrl+E)"
+              aria-label="Eraser (Ctrl+E)"
             >
               <Eraser size={14} />
             </button>
-          </HoverCard.Trigger>
+          </HoverCard>
+        )}
 
-          <HoverCard.Content className="chalk-settings-flyout eraser-settings-flyout" side="top" sideOffset={12} align="center">
-            <div className="eraser-flyout-header">
-              <span className="eraser-flyout-icon">⬜</span>
-              <span className="eraser-flyout-title">Eraser Size</span>
-            </div>
-            <div className="settings-divider" />
+        <HoverCard content="Move Board (Ctrl+H / Ctrl+M)" placement="above" sideOffset={12}>
+          <button
+            type="button"
+            className={`action-stick ${activeTool === 'pan' ? 'active' : ''}`}
+            onClick={() => {
+              onToolChange('pan');
+              setShowChalkSettings(false);
+              setShowEraserSettings(false);
+            }}
+            aria-label="Move Board"
+          >
+            <Hand size={14} />
+          </button>
+        </HoverCard>
 
-            {/* Eraser Preview */}
-            <div className="eraser-preview-area">
-              <div
-                className="eraser-preview-rect"
-                data-width={Math.min(eraserWidth, 200)}
-                data-height={Math.min(eraserHeight, 60)}
-                style={{ width: Math.min(eraserWidth, 200), height: Math.min(eraserHeight, 60) }}
-              />
-            </div>
-
-            <div className="settings-section">
-              <span className="settings-label">Width — {eraserWidth}px</span>
-              <div className="slider-container">
-                <input
-                  type="range"
-                  className="slider-input"
-                  min={10}
-                  max={300}
-                  step={5}
-                  value={eraserWidth}
-                  onChange={(e) => onEraserWidthChange(Number(e.target.value))}
-                />
-                <input
-                  type="number"
-                  className="number-input"
-                  min={10}
-                  max={300}
-                  value={eraserWidth}
-                  onChange={(e) => {
-                    const v = Math.min(300, Math.max(10, Number(e.target.value)));
-                    onEraserWidthChange(v);
-                  }}
-                />
-              </div>
-            </div>
-            <div className="settings-divider" />
-            <div className="settings-section">
-              <span className="settings-label">Height — {eraserHeight}px</span>
-              <div className="slider-container">
-                <input
-                  type="range"
-                  className="slider-input"
-                  min={10}
-                  max={200}
-                  step={5}
-                  value={eraserHeight}
-                  onChange={(e) => onEraserHeightChange(Number(e.target.value))}
-                />
-                <input
-                  type="number"
-                  className="number-input"
-                  min={10}
-                  max={200}
-                  value={eraserHeight}
-                  onChange={(e) => {
-                    const v = Math.min(200, Math.max(10, Number(e.target.value)));
-                    onEraserHeightChange(v);
-                  }}
-                />
-              </div>
-            </div>
-            <HoverCard.Arrow className="chalk-settings-arrow" width={12} height={6} />
-          </HoverCard.Content>
-        </HoverCard.Root>
-
-        <button
-          type="button"
-          className={`action-stick ${activeTool === 'pan' ? 'active' : ''}`}
-          onClick={() => {
-            onToolChange('pan');
-            setShowChalkSettings(false);
-            setShowEraserSettings(false);
-          }}
-          title="Move Board (Ctrl+H / Ctrl+M)"
-        >
-          <Hand size={14} />
-        </button>
-
-        <button
-          type="button"
-          className={`action-stick ${activeTool === 'select' ? 'active' : ''}`}
-          onClick={() => {
-            onToolChange('select');
-            setShowChalkSettings(false);
-            setShowEraserSettings(false);
-          }}
-          title="Select Items (Ctrl+S)"
-        >
-          <MousePointer2 size={14} />
-        </button>
+        <HoverCard content="Select Items (Ctrl+S)" placement="above" sideOffset={12}>
+          <button
+            type="button"
+            className={`action-stick ${activeTool === 'select' ? 'active' : ''}`}
+            onClick={() => {
+              onToolChange('select');
+              setShowChalkSettings(false);
+              setShowEraserSettings(false);
+            }}
+            aria-label="Select Items"
+          >
+            <MousePointer2 size={14} />
+          </button>
+        </HoverCard>
       </div>
     </div>
   );

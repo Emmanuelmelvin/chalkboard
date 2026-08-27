@@ -1516,3 +1516,284 @@ export function isGrouped(): CommandResult<boolean> {
         data: selected.length > 0 && selected.every((s) => s.groupId !== undefined),
     };
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// AGENT-FACING DRAWING COMMANDS
+// Added for WebMCP tool handlers in src/webmcp/tools.ts
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Draw a single chalk stroke on the board and broadcast it via Socket.IO.
+ *
+ * @param opts - Stroke configuration: points, color, size, intensity, etc.
+ * @returns `{ ok: true, data: Stroke }` with the created stroke object.
+ *
+ * @example
+ * ```ts
+ * drawStroke({
+ *   points: [{ x: 100, y: 200 }, { x: 300, y: 200 }],
+ *   color: '#ffffff',
+ *   size: 4,
+ * });
+ * ```
+ */
+export function drawStroke(opts: {
+    points: Point[];
+    color?: string;
+    size?: number;
+    intensity?: number;
+    closed?: boolean;
+    fillColor?: string;
+    pathType?: 'smooth' | 'linear';
+    tool?: 'chalk' | 'eraser';
+}): CommandResult<Stroke> {
+    const {
+        socket,
+        roomId,
+        strokes,
+        activeColor,
+        brushSize,
+        brushIntensity,
+        setStrokes,
+    } = getBoard();
+    if (!socket) return { ok: false, error: 'no socket connection' };
+    if (!opts.points || opts.points.length === 0)
+        return { ok: false, error: 'points array must not be empty' };
+
+    const stroke: Stroke = {
+        id: `${socket.id}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        userId: socket.id || 'local',
+        tool: opts.tool ?? 'chalk',
+        color: opts.color ?? activeColor,
+        size: opts.size ?? brushSize,
+        intensity: opts.intensity ?? brushIntensity,
+        pathType: opts.pathType ?? 'smooth',
+        closed: opts.closed,
+        fillColor: opts.fillColor,
+        points: opts.points,
+    };
+
+    const updated = [...strokes, stroke];
+    setStrokes(updated);
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+    return { ok: true, data: stroke };
+}
+
+/**
+ * Draw multiple chalk strokes at once and broadcast the batch.
+ *
+ * @param strokeConfigs - Array of stroke configurations.
+ * @returns `{ ok: true, data: Stroke[] }` with all created stroke objects.
+ */
+export function drawMultipleStrokes(
+    strokeConfigs: Array<{
+        points: Point[];
+        color?: string;
+        size?: number;
+        intensity?: number;
+        closed?: boolean;
+        fillColor?: string;
+        pathType?: 'smooth' | 'linear';
+        tool?: 'chalk' | 'eraser';
+    }>
+): CommandResult<Stroke[]> {
+    const {
+        socket,
+        roomId,
+        strokes,
+        activeColor,
+        brushSize,
+        brushIntensity,
+        setStrokes,
+    } = getBoard();
+    if (!socket) return { ok: false, error: 'no socket connection' };
+    if (!strokeConfigs || strokeConfigs.length === 0)
+        return { ok: false, error: 'strokeConfigs must not be empty' };
+
+    const newStrokes: Stroke[] = strokeConfigs.map((opts, i) => ({
+        id: `${socket.id}-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
+        userId: socket.id || 'local',
+        tool: opts.tool ?? 'chalk',
+        color: opts.color ?? activeColor,
+        size: opts.size ?? brushSize,
+        intensity: opts.intensity ?? brushIntensity,
+        pathType: opts.pathType ?? 'smooth',
+        closed: opts.closed,
+        fillColor: opts.fillColor,
+        points: opts.points,
+    }));
+
+    const updated = [...strokes, ...newStrokes];
+    setStrokes(updated);
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+    return { ok: true, data: newStrokes };
+}
+
+/**
+ * Write text on the board as a chalk text-stroke at the given coordinates.
+ *
+ * @param text  - The text string to render.
+ * @param x     - Canvas X position.
+ * @param y     - Canvas Y position.
+ * @param opts  - Optional font/style overrides.
+ * @returns `{ ok: true, data: Stroke }` with the created text stroke.
+ *
+ * @example
+ * ```ts
+ * writeText('Hello World', 200, 300, { fontSize: 32, color: '#fde047' });
+ * ```
+ */
+export function writeText(
+    text: string,
+    x: number,
+    y: number,
+    opts?: {
+        fontSize?: number;
+        color?: string;
+        textAlign?: 'left' | 'center' | 'right';
+    }
+): CommandResult<Stroke> {
+    const {
+        socket,
+        roomId,
+        strokes,
+        activeColor,
+        setStrokes,
+    } = getBoard();
+    if (!socket) return { ok: false, error: 'no socket connection' };
+    if (!text) return { ok: false, error: 'text must not be empty' };
+
+    const fontSize = opts?.fontSize ?? 26;
+    const charWidth = fontSize * 0.55;
+    const textWidth = text.length * charWidth;
+
+    const stroke: Stroke = {
+        id: `${socket.id}-txt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        userId: socket.id || 'local',
+        tool: 'chalk',
+        color: opts?.color ?? activeColor,
+        size: 2,
+        text,
+        fontSize,
+        textAlign: opts?.textAlign ?? 'left',
+        pathType: 'linear',
+        points: [
+            { x, y },
+            { x: x + textWidth, y },
+        ],
+    };
+
+    const updated = [...strokes, stroke];
+    setStrokes(updated);
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+    return { ok: true, data: stroke };
+}
+
+/**
+ * Create a rich-text sticky note on the canvas.
+ *
+ * @param html  - HTML or plain-text content for the note body.
+ * @param x     - Canvas X position.
+ * @param y     - Canvas Y position.
+ * @param opts  - Optional width/height/colors.
+ * @returns `{ ok: true, data: Stroke }` with the created note stroke.
+ *
+ * @example
+ * ```ts
+ * createNote('<h3>Title</h3><p>Body</p>', 400, 200, { width: 300 });
+ * ```
+ */
+export function createNote(
+    html: string,
+    x: number,
+    y: number,
+    opts?: {
+        width?: number;
+        height?: number;
+        backgroundColor?: string;
+        textColor?: string;
+    }
+): CommandResult<Stroke> {
+    const {
+        socket,
+        roomId,
+        strokes,
+        setStrokes,
+    } = getBoard();
+    if (!socket) return { ok: false, error: 'no socket connection' };
+    if (!html) return { ok: false, error: 'note content must not be empty' };
+
+    const w = opts?.width ?? 260;
+    const h = opts?.height ?? 160;
+
+    const stroke: Stroke = {
+        id: `${socket.id}-note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        userId: socket.id || 'local',
+        tool: 'chalk',
+        color: opts?.textColor ?? '#f8fafc',
+        size: 1,
+        noteHtml: html,
+        noteWidth: w,
+        noteHeight: h,
+        noteBackgroundColor: opts?.backgroundColor ?? '#1e293b',
+        noteTextColor: opts?.textColor ?? '#f8fafc',
+        objectType: 'note',
+        pluginId: 'notes',
+        pathType: 'linear',
+        points: [
+            { x, y },
+            { x: x + w, y },
+            { x: x + w, y: y + h },
+            { x, y: y + h },
+        ],
+    };
+
+    const updated = [...strokes, stroke];
+    setStrokes(updated);
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+    return { ok: true, data: stroke };
+}
+
+/**
+ * Send a chat message to the room via Socket.IO.
+ *
+ * @param message - The text message to broadcast.
+ * @returns `{ ok: true }` on success.
+ *
+ * @example
+ * ```ts
+ * sendChatMessage('Great work! Now try problem 2.');
+ * ```
+ */
+export function sendChatMessage(message: string): CommandResult {
+    const { socket, roomId } = getBoard();
+    if (!socket) return { ok: false, error: 'no socket connection' };
+    if (!message || message.trim().length === 0)
+        return { ok: false, error: 'message must not be empty' };
+
+    socket.emit('chat:send', {
+        roomId,
+        message: message.trim(),
+        mentionedUserIds: [],
+    }, (response: { ok?: boolean; error?: string }) => {
+        if (!response?.ok) {
+            console.warn('[sendChatMessage] Server rejected:', response?.error);
+        }
+    });
+    return { ok: true };
+}
+
+/**
+ * Broadcast a cursor-move event so other participants see the agent's pointer.
+ *
+ * @param x - Canvas X coordinate.
+ * @param y - Canvas Y coordinate.
+ * @returns `{ ok: true }` on success.
+ */
+export function moveCursor(x: number, y: number): CommandResult {
+    const { socket, roomId } = getBoard();
+    if (!socket) return { ok: false, error: 'no socket connection' };
+
+    socket.emit('cursor-move', { roomId, x, y });
+    return { ok: true };
+}

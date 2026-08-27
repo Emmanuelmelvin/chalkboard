@@ -84,6 +84,7 @@ import NotesLayer from '@/plugins/builtin/notes/NotesLayer';
 import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
 import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
+import { webMcp } from '@/webmcp';
 import { useLoggerStore } from '@/stores/loggerStore';
 import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
@@ -911,6 +912,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   useEffect(() => {
     initSession({ roomId, socket, userId, canEdit });
   }, [roomId, socket, userId, canEdit, initSession]);
+
+  // Initialize WebMCP bridge — registers all 12 chalkboard tools so external
+  // AI clients (Claude Desktop, Cursor, or our Cloud Run agent) can call them.
+  useEffect(() => {
+    webMcp.init().then(() => {
+      console.log(
+        `[WebMCP] Bridge initialized — ${webMcp.getStatus().registeredToolsCount} tools, ` +
+        `${webMcp.getStatus().registeredPromptsCount} prompts, ` +
+        `${webMcp.getStatus().registeredResourcesCount} resources registered.`
+      );
+    });
+  }, []);
 
   useEffect(() => {
     const handleMembersUpdated = (payload: { members?: RoomMember[] }) => {

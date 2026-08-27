@@ -11,7 +11,6 @@ import {
   X,
   Sparkles,
 } from 'lucide-react';
-import * as Tooltip from '@radix-ui/react-tooltip';
 import type { Socket } from 'socket.io-client';
 import UserAvatar from '@/components/UserAvatar';
 import type { ChatMessage, RoomMember } from '@/types';
@@ -187,10 +186,12 @@ export default function ChatPanel({
     });
   };
 
+  const chatPanelRef = useRef<HTMLElement | null>(null);
+
   return (
     <div className={`chat-widget ${canEdit ? 'chat-widget-editor' : 'chat-widget-viewer'}`}>
       {open && (
-        <section className="chat-panel" role="dialog" aria-modal="false" aria-labelledby="room-chat-title">
+        <section ref={chatPanelRef} className="chat-panel" role="dialog" aria-modal="false" aria-labelledby="room-chat-title">
           <header className="chat-panel-header">
             <div>
               <span className="chat-panel-kicker">Room chat</span>
@@ -204,42 +205,31 @@ export default function ChatPanel({
           <div className="chat-panel-messages" aria-live="polite">
             {messages.length === 0 ? (
               <p className="chat-panel-empty">Start the conversation with everyone in this room.</p>
-            ) : (
-              <Tooltip.Provider delayDuration={200} skipDelayDuration={0}>
-                {messages.map((entry) => {
-                  const aiInfo = parseAiMessage(entry.message);
-                  return (
-                    <article key={entry.id} className={`chat-message ${entry.userId === userId ? 'chat-message-own' : ''}${aiInfo.isAi ? ' chat-message-ai' : ''}`}>
-                      <Tooltip.Root>
-                        <Tooltip.Trigger asChild>
-                          <div className="chat-message-avatar-wrap">
-                            <UserAvatar name={entry.displayName} avatarUrl={entry.avatarUrl} size="sm" className="chat-message-avatar" />
-                            {aiInfo.isAi && (
-                              <span className="chat-ai-avatar-badge" aria-label="AI Action">
-                                <Sparkles size={8} />
-                              </span>
-                            )}
-                          </div>
-                        </Tooltip.Trigger>
-                        <Tooltip.Portal>
-                          <Tooltip.Content className="chat-tooltip-content" side="top" sideOffset={5}>
-                            <span>{aiInfo.isAi ? `🤖 AI Assisted • ${aiInfo.agentName}` : (entry.userId === userId ? 'You' : entry.displayName)}</span>
-                            <Tooltip.Arrow className="chat-tooltip-arrow" />
-                          </Tooltip.Content>
-                        </Tooltip.Portal>
-                      </Tooltip.Root>
-                      <div className="chat-message-content">
-                        <div className="chat-message-meta">
-                          <strong>{entry.userId === userId ? 'You' : entry.displayName}</strong>
-                          <time dateTime={entry.createdAt}>{formatMessageTime(entry.createdAt)}</time>
-                        </div>
-                        <p>{aiInfo.text}</p>
-                      </div>
-                    </article>
-                  );
-                })}
-              </Tooltip.Provider>
-            )}
+            ) : messages.map((entry) => {
+              const aiInfo = parseAiMessage(entry.message);
+              return (
+                <article key={entry.id} className={`chat-message ${entry.userId === userId ? 'chat-message-own' : ''}${aiInfo.isAi ? ' chat-message-ai' : ''}`}>
+                  <div
+                    className="chat-message-avatar-wrap"
+                    title={aiInfo.isAi ? `AI Action (${aiInfo.agentName})` : entry.displayName}
+                  >
+                    <UserAvatar name={entry.displayName} avatarUrl={entry.avatarUrl} size="sm" className="chat-message-avatar" />
+                    {aiInfo.isAi && (
+                      <span className="chat-ai-avatar-badge" aria-label="AI Action">
+                        <Sparkles size={8} />
+                      </span>
+                    )}
+                  </div>
+                  <div className="chat-message-content">
+                    <div className="chat-message-meta">
+                      <strong>{entry.userId === userId ? 'You' : entry.displayName}</strong>
+                      <time dateTime={entry.createdAt}>{formatMessageTime(entry.createdAt)}</time>
+                    </div>
+                    <p>{aiInfo.text}</p>
+                  </div>
+                </article>
+              );
+            })}
             <div ref={endOfMessagesRef} />
           </div>
 

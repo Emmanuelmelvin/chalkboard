@@ -156,8 +156,27 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
           }
         }
 
+        // Helper for sending message with automatic retry on 503/429
+        const sendWithRetry = async (payload: any, maxRetries = 3) => {
+          for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+              return await chat.sendMessage(payload);
+            } catch (error: any) {
+              const status = error?.status || error?.statusCode;
+              if ((status === 503 || status === 429) && attempt < maxRetries) {
+                const delayMs = attempt * 2000;
+                console.warn(`[GeminiMcpRunner] Transient API error (${status}). Retrying in ${delayMs}ms (attempt ${attempt}/${maxRetries})...`);
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+              } else {
+                throw error;
+              }
+            }
+          }
+          throw new Error('Max retries exceeded');
+        };
+
         // Feed tool results back into Gemini for next autonomous reasoning step
-        currentResponse = await chat.sendMessage({
+        currentResponse = await sendWithRetry({
           message: functionResponseParts,
         });
       }

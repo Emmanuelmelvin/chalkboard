@@ -913,17 +913,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     initSession({ roomId, socket, userId, canEdit });
   }, [roomId, socket, userId, canEdit, initSession]);
 
-  // Initialize WebMCP bridge — registers all 12 chalkboard tools so external
-  // AI clients (Claude Desktop, Cursor, or our Cloud Run agent) can call them.
+  // Initialize WebMCP bridge — registers tools with W3C document.modelContext and
+  // attaches Socket.IO MCP JSON-RPC listener so remote agents can discover and call them.
   useEffect(() => {
-    webMcp.init().then(() => {
+    if (!socket || !roomId) return;
+    webMcp.init(socket, roomId).then(() => {
       console.log(
-        `[WebMCP] Bridge initialized — ${webMcp.getStatus().registeredToolsCount} tools, ` +
-        `${webMcp.getStatus().registeredPromptsCount} prompts, ` +
-        `${webMcp.getStatus().registeredResourcesCount} resources registered.`
+        `[WebMCP] W3C document.modelContext & Socket.IO bridge active — ${webMcp.getStatus().registeredToolsCount} tools registered.`
       );
     });
-  }, []);
+  }, [socket, roomId]);
 
   useEffect(() => {
     const handleMembersUpdated = (payload: { members?: RoomMember[] }) => {

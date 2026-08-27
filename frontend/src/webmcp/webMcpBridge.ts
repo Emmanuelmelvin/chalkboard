@@ -70,54 +70,99 @@ export class WebMcpBridge {
 
   /**
    * Initialize WebMCP runtime in the browser page.
+   * Polyfills/exposes standard document.modelContext and attaches Socket.IO MCP listeners.
    */
-  public async init(): Promise<void> {
-    if (this.initialized) return;
+  public async init(socket?: any, roomId?: string): Promise<void> {
+    if (this.initialized && (!socket || this.connected)) return;
 
-    // Check if W3C navigator.modelContext or document.modelContext exists
-    if (typeof window !== 'undefined') {
-      const nativeContext = window.modelContext || navigator.modelContext;
-      if (nativeContext && typeof nativeContext.registerTool === 'function') {
-        this.tools.forEach((tool) => {
-          try {
-            nativeContext.registerTool({
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.inputSchema,
-              execute: (args: any) => this.executeTool(tool.name, args),
-            });
-          } catch (err) {
-            console.warn(`[WebMCP] Native modelContext tool registration failed for ${tool.name}:`, err);
-          }
-        });
-      }
+    // 1. Expose the official W3C document.modelContext standard
+    if (typeof document !== 'undefined') {
+      const registry = this.tools;
+      const execute = (name: string, args: any) => this.executeTool(name, args);
 
-      // Check if global WebMCP constructor from webmcp.js exists
-      if (typeof window.WebMCP !== 'undefined') {
-        try {
-          this.webMcpInstance = new window.WebMCP({
-            color: '#38bdf8',
-            position: 'bottom-right',
-            size: '36px',
+      (document as any).modelContext = {
+        registerTool: async (tool: {
+          name: string;
+          description: string;
+          inputSchema?: any;
+          parameters?: any;
+          execute: (args: any) => Promise<any> | any;
+        }) => {
+          registry.set(tool.name, {
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema || tool.parameters || { type: 'object', properties: {} },
+            handler: tool.execute,
           });
+          this.notify();
+        },
+        getTools: async () => {
+          return Array.from(registry.values()).map((t) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.inputSchema,
+          }));
+        },
+        executeTool: execute,
+      };
 
-          this.tools.forEach((tool) => {
-            this.webMcpInstance.registerTool(
-              tool.name,
-              tool.description,
-              tool.inputSchema.properties,
-              (args: any) => this.executeTool(tool.name, args)
-            );
-          });
-        } catch (e) {
-          console.warn('[WebMCP] Global WebMCP widget init error:', e);
-        }
+      // Also mirror on window.modelContext & navigator.modelContext for maximum standard compatibility
+      if (typeof window !== 'undefined') {
+        (window as any).modelContext = (document as any).modelContext;
       }
+      if (typeof navigator !== 'undefined') {
+        (navigator as any).modelContext = (document as any).modelContext;
+      }
+    }
+
+    // 2. Attach Socket.IO MCP JSON-RPC Protocol Bridge
+    if (socket) {
+      this.attachSocketBridge(socket, roomId);
+      this.connected = true;
     }
 
     this.initialized = true;
     this.token = this.generateSessionToken();
     this.notify();
+  }
+
+  /**
+   * Attach Socket.IO listeners to respond to remote MCP requests (tools/list, tools/call).
+   */
+  public attachSocketBridge(socket: any, roomId?: string) {
+    if (!socket) return;
+
+    // Listen for MCP tools/list request from Cloud Run agent
+    socket.on('mcp:list_tools', (payload: any, ack?: (res: any) => void) => {
+      const tools = Array.from(this.tools.values()).map((t) => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      }));
+
+      if (typeof ack === 'function') {
+        ack({ ok: true, tools });
+      } else {
+        socket.emit('mcp:tools_list_response', { roomId, tools });
+      }
+    });
+
+    // Listen for MCP tools/call request from Cloud Run agent
+    socket.on(
+      'mcp:call_tool',
+      async (payload: { name: string; arguments?: any }, ack?: (res: any) => void) => {
+        const toolName = payload?.name;
+        const toolArgs = payload?.arguments || {};
+
+        const result = await this.executeTool(toolName, toolArgs);
+
+        if (typeof ack === 'function') {
+          ack({ ok: !result.isError, result });
+        } else {
+          socket.emit('mcp:tool_result_response', { roomId, result });
+        }
+      }
+    );
   }
 
   /**

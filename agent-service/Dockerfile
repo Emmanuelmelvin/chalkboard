@@ -1,7 +1,3 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Multi-stage Dockerfile for Chalkboard Agent Microservice (Google Cloud Run)
-# ─────────────────────────────────────────────────────────────────────────────
-
 FROM node:22-alpine AS builder
 
 WORKDIR /app

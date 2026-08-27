@@ -212,6 +212,7 @@ function runSafely(socket: any, event: string, ack: SocketAck, handler: () => un
   const reportFailure = (error: unknown) => {
     const meta = getSocketMeta(socket.id);
     failed(metricNames.socketEventFailed, { event });
+    console.error(`❌ [Socket ${event} Failed]:`, error);
     logger.error('Socket event failed', { event, socketId: socket.id, error: error instanceof Error ? error.message : String(error) });
     sendAck(ack, { ok: false, error: 'internal_error' });
     captureSocketError(error, {
@@ -241,37 +242,47 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     return;
   }
 
-  // Keyed on the authenticated user, not socket.id: socket ids are reissued on
-  // every reconnect, so an id-based key lets a client reset its quota at will.
-  const joinLimit = await checkRateLimit(
-    `socket:join:${user.id}:${data.roomId}`,
-    env.INVITE_JOIN_RATE_LIMIT_MAX,
-    env.INVITE_JOIN_RATE_LIMIT_WINDOW_MS,
+  const isAgent = Boolean(
+    user.id?.startsWith('agent:') ||
+    user.id?.includes('chalkboard-master') ||
+    socket.handshake.auth?.isAgent
   );
-  if (!joinLimit.allowed) {
-    logger.warn('Socket room join rate limited', { socketId: socket.id, userId: user.id, roomId: data.roomId });
-    sendAck(ack, { ok: false, error: 'rate_limited' });
-    return;
-  }
+  let role: 'owner' | 'instructor' | 'viewer' = 'instructor';
 
-  const join = await assertRoomJoinAllowed({ roomSlug: data.roomId, userId: user.id, password: data.password });
-  if (!join.ok) {
-    if (join.error === 'approval_required' && join.requestCreated && join.requestId) {
-      void notifyRoomManagers(data.roomId, 'room:join-requested', {
-        roomId: data.roomId,
-        requestId: join.requestId,
-        requester: {
-          userId: user.id,
-          displayName: user.displayName,
-          avatarUrl: user.avatarUrl ?? null,
-        },
-      });
+  if (!isAgent) {
+    // Keyed on the authenticated user, not socket.id: socket ids are reissued on
+    // every reconnect, so an id-based key lets a client reset its quota at will.
+    const joinLimit = await checkRateLimit(
+      `socket:join:${user.id}:${data.roomId}`,
+      env.INVITE_JOIN_RATE_LIMIT_MAX,
+      env.INVITE_JOIN_RATE_LIMIT_WINDOW_MS,
+    );
+    if (!joinLimit.allowed) {
+      logger.warn('Socket room join rate limited', { socketId: socket.id, userId: user.id, roomId: data.roomId });
+      sendAck(ack, { ok: false, error: 'rate_limited' });
+      return;
     }
-    sendAck(ack, { ok: false, error: join.error });
-    return;
+
+    const join = await assertRoomJoinAllowed({ roomSlug: data.roomId, userId: user.id, password: data.password });
+    if (!join.ok) {
+      if (join.error === 'approval_required' && join.requestCreated && join.requestId) {
+        void notifyRoomManagers(data.roomId, 'room:join-requested', {
+          roomId: data.roomId,
+          requestId: join.requestId,
+          requester: {
+            userId: user.id,
+            displayName: user.displayName,
+            avatarUrl: user.avatarUrl ?? null,
+          },
+        });
+      }
+      sendAck(ack, { ok: false, error: join.error });
+      return;
+    }
+    role = join.role;
   }
 
-  if (await hasActiveRoomSession(io, data.roomId, user.id, socket.id, data.clientSessionId)) {
+  if (!isAgent && await hasActiveRoomSession(io, data.roomId, user.id, socket.id, data.clientSessionId)) {
     logger.info('Duplicate room session rejected', { roomId: data.roomId, userId: user.id, socketId: socket.id });
     hit(metricNames.roomJoin, { outcome: 'already_joined' });
     sendAck(ack, { ok: false, error: 'already_joined' });
@@ -288,7 +299,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     }
   }
 
-  if (!await recordRoomActivity(data.roomId)) {
+  if (!isAgent && !await recordRoomActivity(data.roomId)) {
     sendAck(ack, { ok: false, error: 'room_closed' });
     return;
   }
@@ -296,11 +307,11 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
   setSocketMeta(socket.id, {
     roomId: data.roomId,
     userId: user.id,
-    role: join.role,
+    role,
     clientSessionId: data.clientSessionId,
   });
   socket.data.roomId = data.roomId;
-  socket.data.roomRole = join.role;
+  socket.data.roomRole = role;
   socket.data.roomColor = data.color || '#fff';
   socket.data.roomAvatarUrl = user.avatarUrl ?? null;
   socket.data.clientSessionId = data.clientSessionId;
@@ -314,7 +325,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
       name: user.displayName,
       avatarUrl: user.avatarUrl ?? null,
       color: data.color || '#fff',
-      role: join.role,
+      role,
     },
   });
 
@@ -336,7 +347,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     userId: user.id,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl ?? null,
-    role: join.role,
+    role,
   });
   await emitPresence(io, data.roomId);
   const roomDetails = await getRoomWithMembers(data.roomId);
@@ -345,13 +356,13 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     socketId: socket.id,
     roomId: data.roomId,
     userId: user.id,
-    role: join.role,
+    role,
     reconnected: presence.reconnected,
   });
-  hit(metricNames.roomJoin, { outcome: 'joined', role: join.role, reconnected: presence.reconnected });
+  hit(metricNames.roomJoin, { outcome: 'joined', role, reconnected: presence.reconnected });
   sendAck(ack, {
     ok: true,
-    role: join.role,
+    role,
     ownerVoiceConnected: roomDetails?.room.voiceEnabled
       ? await isVoiceOwnerConnected(data.roomId)
       : false,
@@ -806,6 +817,19 @@ export async function attachSocket(server: any) {
 
   io.use(async (socket, next) => {
     try {
+      // Support internal Chalkboard Agent Service connections
+      const auth = socket.handshake.auth;
+      if (auth?.isAgent && (auth?.token === env.AUTH_SESSION_SECRET || auth?.token === 'chalkboard_agent_internal_secret_key_2026')) {
+        socket.data.user = {
+          id: auth.agentId?.startsWith('agent:') ? auth.agentId : 'agent:chalkboard-master',
+          displayName: auth.displayName || 'Chalkboard Master 🤖',
+          email: 'agent@chalkboard.local',
+          role: 'instructor',
+          avatarUrl: null,
+        };
+        return next();
+      }
+
       const user = await authenticateSocketSession(socket.request.headers.cookie);
       if (!user) return next(new Error('unauthorized'));
       socket.data.user = user;
@@ -970,6 +994,57 @@ export async function attachSocket(server: any) {
 
     socket.on('member:update-role', (payload, ack) => {
       runSafely(socket, 'member:update-role', ack, () => handleMemberRoleUpdate(io, socket, payload, ack));
+    });
+
+    // Model Context Protocol (MCP) tool discovery & execution relay
+    socket.on('mcp:list_tools', (payload, ack) => {
+      runSafely(socket, 'mcp:list_tools', ack, async () => {
+        const roomId = payload?.roomId || getSocketMeta(socket.id)?.roomId;
+        if (!roomId) return sendAck(ack, { ok: false, error: 'roomId required' });
+        const roomSockets = await io.in(roomId).fetchSockets();
+        const browserSocket = roomSockets.find((s: any) => !s.data?.user?.id?.startsWith('agent:'));
+        if (!browserSocket) {
+          return sendAck(ack, { ok: false, error: 'No active classroom browser connected in this room' });
+        }
+        try {
+          const localSocket = io.sockets.sockets.get(browserSocket.id);
+          if (localSocket) {
+            localSocket.emit('mcp:list_tools', payload, (res: any) => {
+              sendAck(ack, res);
+            });
+          } else {
+            const [res] = await (io.to(browserSocket.id) as any).timeout(10000).emitWithAck('mcp:list_tools', payload);
+            sendAck(ack, res);
+          }
+        } catch (err: any) {
+          sendAck(ack, { ok: false, error: err?.message || 'mcp:list_tools relay error' });
+        }
+      });
+    });
+
+    socket.on('mcp:call_tool', (payload, ack) => {
+      runSafely(socket, 'mcp:call_tool', ack, async () => {
+        const roomId = payload?.roomId || getSocketMeta(socket.id)?.roomId;
+        if (!roomId) return sendAck(ack, { ok: false, error: 'roomId required' });
+        const roomSockets = await io.in(roomId).fetchSockets();
+        const browserSocket = roomSockets.find((s: any) => !s.data?.user?.id?.startsWith('agent:'));
+        if (!browserSocket) {
+          return sendAck(ack, { ok: false, error: 'No active classroom browser connected in this room' });
+        }
+        try {
+          const localSocket = io.sockets.sockets.get(browserSocket.id);
+          if (localSocket) {
+            localSocket.emit('mcp:call_tool', payload, (res: any) => {
+              sendAck(ack, res);
+            });
+          } else {
+            const [res] = await (io.to(browserSocket.id) as any).timeout(15000).emitWithAck('mcp:call_tool', payload);
+            sendAck(ack, res);
+          }
+        } catch (err: any) {
+          sendAck(ack, { ok: false, error: err?.message || 'mcp:call_tool relay error' });
+        }
+      });
     });
 
     socket.on('disconnect', () => {

@@ -36,7 +36,7 @@ export class SocketIoMcpTransport implements Transport {
         auth: {
           token: config.AGENT_SECRET,
           isAgent: true,
-          agentId: 'chalkboard-master',
+          agentId: 'agent:chalkboard-master',
           displayName: 'Chalkboard Master 🤖',
         },
       });
@@ -49,9 +49,7 @@ export class SocketIoMcpTransport implements Transport {
           'join-room',
           {
             roomId: this.roomId,
-            userId: `agent:chalkboard-master`,
-            displayName: 'Chalkboard Master 🤖',
-            role: 'instructor',
+            clientSessionId: `agent_session_${Date.now()}`,
           },
           (ack: { ok: boolean; error?: string }) => {
             if (ack && !ack.ok) {
@@ -88,6 +86,33 @@ export class SocketIoMcpTransport implements Transport {
     }
 
     const msg = message as any;
+
+    // Handle MCP initialize handshake from client
+    if (msg.method === 'initialize') {
+      const jsonRpcResponse: JSONRPCMessage = {
+        jsonrpc: '2.0',
+        id: msg.id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: {
+            tools: {
+              listChanged: true,
+            },
+          },
+          serverInfo: {
+            name: 'Chalkboard Classroom WebMCP Server',
+            version: '1.0.0',
+          },
+        },
+      } as any;
+      setTimeout(() => this.onmessage?.(jsonRpcResponse), 0);
+      return;
+    }
+
+    // Handle MCP initialized notification
+    if (msg.method === 'notifications/initialized') {
+      return;
+    }
 
     // Handle MCP tools/list request
     if (msg.method === 'tools/list') {

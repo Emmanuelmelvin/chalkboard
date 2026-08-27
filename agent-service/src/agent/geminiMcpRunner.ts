@@ -119,7 +119,7 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
           break;
         }
 
-        const functionResponses: any[] = [];
+        const functionResponseParts: any[] = [];
 
         // Execute each tool call through the MCP client
         for (const call of functionCalls) {
@@ -135,18 +135,22 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
               arguments: call.args as any,
             });
 
-            functionResponses.push({
-              name: call.name,
-              response: {
-                result: mcpResult,
+            functionResponseParts.push({
+              functionResponse: {
+                name: call.name,
+                response: {
+                  output: mcpResult,
+                },
               },
             });
           } catch (toolError: any) {
             console.error(`[GeminiMcpRunner] Tool execution failed for ${call.name}:`, toolError);
-            functionResponses.push({
-              name: call.name,
-              response: {
-                error: toolError?.message || 'Tool execution failed',
+            functionResponseParts.push({
+              functionResponse: {
+                name: call.name,
+                response: {
+                  error: toolError?.message || 'Tool execution failed',
+                },
               },
             });
           }
@@ -154,7 +158,7 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
 
         // Feed tool results back into Gemini for next autonomous reasoning step
         currentResponse = await chat.sendMessage({
-          message: functionResponses as any,
+          message: functionResponseParts,
         });
       }
 

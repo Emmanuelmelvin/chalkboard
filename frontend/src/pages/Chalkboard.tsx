@@ -279,9 +279,9 @@ function VoiceRoleSync({
 
     if (effectiveRole === 'viewer') {
       // User was demoted to Viewer: unpublish camera, mic, and screen share immediately
-      void localParticipant?.setCameraEnabled(false).catch(() => {});
-      void localParticipant?.setMicrophoneEnabled(false).catch(() => {});
-      void localParticipant?.setScreenShareEnabled(false).catch(() => {});
+      void localParticipant?.setCameraEnabled(false).catch(() => { });
+      void localParticipant?.setMicrophoneEnabled(false).catch(() => { });
+      void localParticipant?.setScreenShareEnabled(false).catch(() => { });
 
       // Refresh token with viewer permissions
       voiceSwappingRef.current = true;
@@ -1460,234 +1460,234 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             <div className="board-header-actions">
               <div className="board-actions-card board-header-actions-card">
                 <div className="participation-actions">
-                {raisedHandCount > 0 && <span className="raised-hand-count" title="Raised hands">✋ {raisedHandCount}</span>}
-                <button
-                  type="button"
-                  className={`voice-action-btn participation-action-btn${isHandRaised ? ' active' : ''}`}
-                  onClick={toggleRaisedHand}
-                  title={isHandRaised ? 'Lower hand' : 'Raise hand'}
-                  aria-label={isHandRaised ? 'Lower hand' : 'Raise hand'}
-                >
-                  <Hand size={14} />
-                </button>
-                <div className="reaction-picker-wrap">
+                  {raisedHandCount > 0 && <span className="raised-hand-count" title="Raised hands">✋ {raisedHandCount}</span>}
                   <button
                     type="button"
-                    className="voice-action-btn participation-action-btn"
-                    onClick={() => setReactionPickerOpen((open) => !open)}
-                    title="Send reaction"
-                    aria-label="Send reaction"
+                    className={`voice-action-btn participation-action-btn${isHandRaised ? ' active' : ''}`}
+                    onClick={toggleRaisedHand}
+                    title={isHandRaised ? 'Lower hand' : 'Raise hand'}
+                    aria-label={isHandRaised ? 'Lower hand' : 'Raise hand'}
                   >
-                    <Smile size={14} />
+                    <Hand size={14} />
                   </button>
-                  {reactionPickerOpen && (
-                    <div className="reaction-picker" role="menu" aria-label="Send a reaction">
-                      {REACTION_EMOJIS.map((emoji) => (
-                        <button key={emoji} type="button" onClick={() => sendReaction(emoji)} aria-label={`React ${emoji}`}>{emoji}</button>
-                      ))}
-                    </div>
-                  )}
+                  <div className="reaction-picker-wrap">
+                    <button
+                      type="button"
+                      className="voice-action-btn participation-action-btn"
+                      onClick={() => setReactionPickerOpen((open) => !open)}
+                      title="Send reaction"
+                      aria-label="Send reaction"
+                    >
+                      <Smile size={14} />
+                    </button>
+                    {reactionPickerOpen && (
+                      <div className="reaction-picker" role="menu" aria-label="Send a reaction">
+                        {REACTION_EMOJIS.map((emoji) => (
+                          <button key={emoji} type="button" onClick={() => sendReaction(emoji)} aria-label={`React ${emoji}`}>{emoji}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <RoomHeaderMediaControls voiceConnected={voiceConnected} />
-              {effectiveRole === 'owner' && roomQuery.data?.room.voiceEnabled && (
+                <RoomHeaderMediaControls voiceConnected={voiceConnected} />
+                {effectiveRole === 'owner' && roomQuery.data?.room.voiceEnabled && (
+                  <button
+                    type="button"
+                    className="header-icon-btn"
+                    onClick={() => {
+                      if (voiceToken && voiceUrl) {
+                        setVoiceListening(false);
+                        setVoiceToken('');
+                        setVoiceUrl('');
+                      } else {
+                        setVoiceListening(true);
+                      }
+                    }}
+                    title={voiceConnected ? 'Disconnect Voice' : 'Connect Voice'}
+                    aria-label={voiceConnected ? 'Disconnect voice' : 'Connect voice'}
+                  >
+                    {voiceConnected ? <Radio size={14} /> : <RadioOff size={14} />}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="header-icon-btn"
-                  onClick={() => {
-                    if (voiceToken && voiceUrl) {
-                      setVoiceListening(false);
-                      setVoiceToken('');
-                      setVoiceUrl('');
-                    } else {
-                      setVoiceListening(true);
-                    }
-                  }}
-                  title={voiceConnected ? 'Disconnect Voice' : 'Connect Voice'}
-                  aria-label={voiceConnected ? 'Disconnect voice' : 'Connect voice'}
+                  onClick={() => { void toggleFullscreen(); }}
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
                 >
-                  {voiceConnected ? <Radio size={14} /> : <RadioOff size={14} />}
+                  {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                 </button>
-              )}
-              <button
-                type="button"
-                className="header-icon-btn"
-                onClick={() => { void toggleFullscreen(); }}
-                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              >
-                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              </button>
-              <div className="room-members-trigger-wrap" ref={roomMembersRef}>
-              <button
-                type="button"
-                className={`room-details-trigger${roomDetailsOpen ? ' active' : ''}`}
-                onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
-                aria-expanded={roomDetailsOpen}
-                aria-label={`${onlineHeaderMembers.length} online — open room details`}
-                title={`${onlineHeaderMembers.length} online`}
-              >
-                <span className="member-avatar-stack">
-                  {onlineHeaderMembers.slice(0, 4).map((member) => (
-                    <Avatar.Root key={member.userId} className="member-stack-avatar">
-                      <Avatar.Image src={member.avatarUrl || undefined} alt={member.displayName} />
-                      <Avatar.Fallback delayMs={300}>{avatarInitials(member.displayName)}</Avatar.Fallback>
-                    </Avatar.Root>
-                  ))}
-                  {onlineHeaderMembers.length > 4 && (
-                    <span className="member-stack-more">+{onlineHeaderMembers.length - 4}</span>
-                  )}
-                </span>
-              </button>
-              {roomDetailsOpen && (
-                <div className="room-members-popover" role="dialog" aria-modal="false" aria-label="Members">
-                    <div className="room-info-panel-header">
-                      <h3>Members</h3>
-                      <button
-                        type="button"
-                        className="room-info-panel-close"
-                        onClick={() => { setRoomDetailsOpen(false); setRoleUpdateError(''); }}
-                        aria-label="Close members"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                    <div className="room-info-panel-body">
-                    {canManageMembers && roomAccessMode === 'approval_required' && (
-                      <section className="room-join-requests" aria-labelledby="room-join-requests-heading">
-                        <div className="room-details-section-title" id="room-join-requests-heading">
-                          Join requests <span>{joinRequests.length}</span>
-                        </div>
-                        {(joinRequestError || joinRequestsQuery.error) && <p className="room-details-error" role="alert">{joinRequestError || (joinRequestsQuery.error instanceof Error ? joinRequestsQuery.error.message : 'We could not load join requests.')}</p>}
-                        {joinRequestsLoading ? (
-                          <p className="room-join-requests-empty">Loading requests...</p>
-                        ) : joinRequests.length === 0 ? (
-                          <p className="room-join-requests-empty">No pending requests.</p>
-                        ) : (
-                          <div className="room-details-members">
-                            {joinRequests.map((request) => {
-                              const actionPending = Boolean(joinRequestAction);
-                              return (
-                                <div key={request.id} className="room-detail-member room-join-request-row">
-                                  <UserAvatar name={request.displayName} avatarUrl={request.avatarUrl} size="sm" className="room-member-avatar" />
-                                  <div className="room-member-name">
-                                    <strong>{request.displayName}</strong>
-                                    <span>{request.email || 'Waiting for approval'}</span>
-                                  </div>
-                                  <div className="room-join-request-controls">
-                                    <span className="room-member-role">Pending</span>
-                                    <button
-                                      type="button"
-                                      className="room-join-request-button room-join-request-approve"
-                                      onClick={() => { void resolveJoinRequest(request, 'approve'); }}
-                                      disabled={actionPending}
-                                      aria-label={`Approve ${request.displayName}`}
-                                    >
-                                      {joinRequestAction === `approve:${request.userId}` ? '...' : 'Approve'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="room-join-request-button room-join-request-deny"
-                                      onClick={() => { void resolveJoinRequest(request, 'deny'); }}
-                                      disabled={actionPending}
-                                      aria-label={`Decline ${request.displayName}`}
-                                    >
-                                      {joinRequestAction === `deny:${request.userId}` ? '...' : 'Decline'}
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                <div className="room-members-trigger-wrap" ref={roomMembersRef}>
+                  <button
+                    type="button"
+                    className={`room-details-trigger${roomDetailsOpen ? ' active' : ''}`}
+                    onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
+                    aria-expanded={roomDetailsOpen}
+                    aria-label={`${onlineHeaderMembers.length} online — open room details`}
+                    title={`${onlineHeaderMembers.length} online`}
+                  >
+                    <span className="member-avatar-stack">
+                      {onlineHeaderMembers.slice(0, 4).map((member) => (
+                        <Avatar.Root key={member.userId} className="member-stack-avatar">
+                          <Avatar.Image src={member.avatarUrl || undefined} alt={member.displayName} />
+                          <Avatar.Fallback delayMs={300}>{avatarInitials(member.displayName)}</Avatar.Fallback>
+                        </Avatar.Root>
+                      ))}
+                      {onlineHeaderMembers.length > 4 && (
+                        <span className="member-stack-more">+{onlineHeaderMembers.length - 4}</span>
+                      )}
+                    </span>
+                  </button>
+                  {roomDetailsOpen && (
+                    <div className="room-members-popover" role="dialog" aria-modal="false" aria-label="Members">
+                      <div className="room-info-panel-header">
+                        <h3>Members</h3>
+                        <button
+                          type="button"
+                          className="room-info-panel-close"
+                          onClick={() => { setRoomDetailsOpen(false); setRoleUpdateError(''); }}
+                          aria-label="Close members"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                      <div className="room-info-panel-body">
+                        {canManageMembers && roomAccessMode === 'approval_required' && (
+                          <section className="room-join-requests" aria-labelledby="room-join-requests-heading">
+                            <div className="room-details-section-title" id="room-join-requests-heading">
+                              Join requests <span>{joinRequests.length}</span>
+                            </div>
+                            {(joinRequestError || joinRequestsQuery.error) && <p className="room-details-error" role="alert">{joinRequestError || (joinRequestsQuery.error instanceof Error ? joinRequestsQuery.error.message : 'We could not load join requests.')}</p>}
+                            {joinRequestsLoading ? (
+                              <p className="room-join-requests-empty">Loading requests...</p>
+                            ) : joinRequests.length === 0 ? (
+                              <p className="room-join-requests-empty">No pending requests.</p>
+                            ) : (
+                              <div className="room-details-members">
+                                {joinRequests.map((request) => {
+                                  const actionPending = Boolean(joinRequestAction);
+                                  return (
+                                    <div key={request.id} className="room-detail-member room-join-request-row">
+                                      <UserAvatar name={request.displayName} avatarUrl={request.avatarUrl} size="sm" className="room-member-avatar" />
+                                      <div className="room-member-name">
+                                        <strong>{request.displayName}</strong>
+                                        <span>{request.email || 'Waiting for approval'}</span>
+                                      </div>
+                                      <div className="room-join-request-controls">
+                                        <span className="room-member-role">Pending</span>
+                                        <button
+                                          type="button"
+                                          className="room-join-request-button room-join-request-approve"
+                                          onClick={() => { void resolveJoinRequest(request, 'approve'); }}
+                                          disabled={actionPending}
+                                          aria-label={`Approve ${request.displayName}`}
+                                        >
+                                          {joinRequestAction === `approve:${request.userId}` ? '...' : 'Approve'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="room-join-request-button room-join-request-deny"
+                                          onClick={() => { void resolveJoinRequest(request, 'deny'); }}
+                                          disabled={actionPending}
+                                          aria-label={`Decline ${request.displayName}`}
+                                        >
+                                          {joinRequestAction === `deny:${request.userId}` ? '...' : 'Decline'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </section>
                         )}
-                      </section>
-                    )}
-                    <div className="room-details-section-title">Members <span>{displayedRoomMembers.length} · {onlineCount} online{raisedHandCount > 0 ? ` · ${raisedHandCount} raised` : ''}</span></div>
-                    <div className="room-details-members">
-                      {sortedDisplayedRoomMembers.map((member) => {
-                        const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);
-                        const isOnline = member.userId === userId || Boolean(collaborator);
-                        return (
-                          <div key={member.userId} className="room-detail-member">
-                            <RoomMemberAvatar
-                              userId={member.userId}
-                              name={member.displayName}
-                              avatarUrl={member.avatarUrl || collaborator?.avatarUrl}
-                            />
-                            {raisedHandUserIds.has(member.userId) && <span className="room-member-hand-badge" title="Hand raised">✋</span>}
-                            <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} style={{ backgroundColor: collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b') }} />
-                            <div className="room-member-name">
-                              <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>
-                              <span>{isOnline ? 'Online' : 'Offline'}</span>
-                            </div>
-                            <div className="room-member-actions">
-                              <RoomMemberVoiceControls
-                                memberUserId={member.userId}
-                                effectiveRole={effectiveRole}
-                                currentUserId={userId}
-                                socket={socket}
-                                roomId={roomId}
-                                voiceEnabled={roomQuery.data?.room.voiceEnabled ?? false}
-                                isOnline={isOnline}
-                                memberName={member.displayName}
-                                voiceConnected={voiceConnected}
-                              />
-                              {canManageMembers && member.role !== 'owner' ? (
-                                <select className="room-member-role-select"
-                                  value={member.role}
-                                  onChange={(event) => updateMemberRole(member.userId, event.target.value as 'instructor' | 'viewer')}
-                                  aria-label={`Role for ${member.displayName}`}
-                                >
-                                  <option value="instructor">Editor</option>
-                                  <option value="viewer">Viewer</option>
-                                </select>
-                              ) : (
-                                <span className="room-member-role">{roleLabel(member.role)}</span>
-                              )}
-                              {canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
-                                <button
-                                  type="button"
-                                  className="room-member-kick-button"
-                                  onClick={() => requestKickMember(member, collaborator.id)}
-                                  disabled={Boolean(kickingMemberId)}
-                                  aria-label={`Kick ${member.displayName}`}
-                                >
-                                  {kickingMemberId === member.userId ? '...' : 'Kick'}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                        <div className="room-details-section-title">Members <span>{displayedRoomMembers.length} · {onlineCount} online{raisedHandCount > 0 ? ` · ${raisedHandCount} raised` : ''}</span></div>
+                        <div className="room-details-members">
+                          {sortedDisplayedRoomMembers.map((member) => {
+                            const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);
+                            const isOnline = member.userId === userId || Boolean(collaborator);
+                            return (
+                              <div key={member.userId} className="room-detail-member">
+                                <RoomMemberAvatar
+                                  userId={member.userId}
+                                  name={member.displayName}
+                                  avatarUrl={member.avatarUrl || collaborator?.avatarUrl}
+                                />
+                                {raisedHandUserIds.has(member.userId) && <span className="room-member-hand-badge" title="Hand raised">✋</span>}
+                                <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} style={{ backgroundColor: collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b') }} />
+                                <div className="room-member-name">
+                                  <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>
+                                  <span>{isOnline ? 'Online' : 'Offline'}</span>
+                                </div>
+                                <div className="room-member-actions">
+                                  <RoomMemberVoiceControls
+                                    memberUserId={member.userId}
+                                    effectiveRole={effectiveRole}
+                                    currentUserId={userId}
+                                    socket={socket}
+                                    roomId={roomId}
+                                    voiceEnabled={roomQuery.data?.room.voiceEnabled ?? false}
+                                    isOnline={isOnline}
+                                    memberName={member.displayName}
+                                    voiceConnected={voiceConnected}
+                                  />
+                                  {canManageMembers && member.role !== 'owner' ? (
+                                    <select className="room-member-role-select"
+                                      value={member.role}
+                                      onChange={(event) => updateMemberRole(member.userId, event.target.value as 'instructor' | 'viewer')}
+                                      aria-label={`Role for ${member.displayName}`}
+                                    >
+                                      <option value="instructor">Editor</option>
+                                      <option value="viewer">Viewer</option>
+                                    </select>
+                                  ) : (
+                                    <span className="room-member-role">{roleLabel(member.role)}</span>
+                                  )}
+                                  {canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
+                                    <button
+                                      type="button"
+                                      className="room-member-kick-button"
+                                      onClick={() => requestKickMember(member, collaborator.id)}
+                                      disabled={Boolean(kickingMemberId)}
+                                      aria-label={`Kick ${member.displayName}`}
+                                    >
+                                      {kickingMemberId === member.userId ? '...' : 'Kick'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {(roleUpdateError || kickMemberError) && <p className="room-details-error">{roleUpdateError || kickMemberError}</p>}
+                        {canManageMembers && (
+                          <button className="room-close-button" type="button" onClick={requestCloseRoom}>
+                            Close room
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {(roleUpdateError || kickMemberError) && <p className="room-details-error">{roleUpdateError || kickMemberError}</p>}
-                    {canManageMembers && (
-                      <button className="room-close-button" type="button" onClick={requestCloseRoom}>
-                        Close room
-                      </button>
-                    )}
-                    </div>
-                    </div>
-                )}
-              </div>
-              <button
-                type="button"
-                className="header-icon-btn"
-                onClick={handleCopyLink}
-                title="Copy Invite Link"
-                aria-label="Copy invite link"
-              >
-                {isCopied ? <Check size={14} className="copy-success-icon" /> : <Share2 size={14} />}
-              </button>
-              <button
-                type="button"
-                className="header-icon-btn header-exit-btn"
-                onClick={() => onLeaveRoom({ promptSessionFeedback: true })}
-                title="Exit room"
-                aria-label="Exit room"
-              >
-                <LogOut size={14} />
-              </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="header-icon-btn"
+                  onClick={handleCopyLink}
+                  title="Copy Invite Link"
+                  aria-label="Copy invite link"
+                >
+                  {isCopied ? <Check size={14} className="copy-success-icon" /> : <Share2 size={14} />}
+                </button>
+                <button
+                  type="button"
+                  className="header-icon-btn header-exit-btn"
+                  onClick={() => onLeaveRoom({ promptSessionFeedback: true })}
+                  title="Exit room"
+                  aria-label="Exit room"
+                >
+                  <LogOut size={14} />
+                </button>
               </div>
             </div>
           </div>

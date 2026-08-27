@@ -42,6 +42,7 @@ import { installedPlugins } from '@/plugins/installedPlugins';
 import { pluginRegistry } from '@/plugins/registry';
 import { createPluginAPI } from '@/plugins/api';
 import { publishedPluginManifest } from '@/plugins/publishedRuntime';
+import { WebMcpBridge } from './webMcpBridge';
 
 import type { WebMcpTool, McpToolResult } from './types';
 
@@ -808,7 +809,6 @@ export const discoverPluginsTool: WebMcpTool<{
     },
   },
   handler: async ({ query, category }) => {
-    const { WebMcpBridge } = await import('./webMcpBridge');
     const bridge = WebMcpBridge.getInstance();
     const queryLower = (query || '').toLowerCase().trim();
 
@@ -935,7 +935,6 @@ export const loadPluginTool: WebMcpTool<{
       return textResult('Error: "pluginId" parameter is required.', true);
     }
 
-    const { WebMcpBridge } = await import('./webMcpBridge');
     const bridge = WebMcpBridge.getInstance();
 
     // 1. Check if already loaded

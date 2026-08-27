@@ -98,7 +98,7 @@ export function createWebMcpToolsFromManifest(
       description: `[Plugin: ${manifest.name}] ${toolContribution.label}: ${
         toolContribution.description || manifest.description
       }`,
-      inputSchema: inputSchema as any,
+      inputSchema,
       handler: async (args: Record<string, any> = {}): Promise<McpToolResult> => {
         try {
           // Normalize argument values to strings if expected by plugin formValues

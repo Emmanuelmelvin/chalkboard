@@ -49,6 +49,7 @@ export class WebMcpBridge {
   private initialized = false;
   private connected = false;
   private token = '';
+  private webMcpInstance: any = null;
 
   private constructor() {
     this.registerDefaults();
@@ -140,7 +141,7 @@ export class WebMcpBridge {
     if (!socket) return;
 
     // Listen for MCP tools/list request from Cloud Run agent
-    socket.on('mcp:list_tools', (_payload: any, ack?: (res: any) => void) => {
+    socket.on('mcp:list_tools', (payload: any, ack?: (res: any) => void) => {
       const tools = Array.from(this.tools.values()).map((t) => ({
         name: t.name,
         description: t.description,

@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { adminRouter } from '@/routers/admin.route';
-import { agentRouter } from '@/routers/agent.route';
 import { authRouter } from '@/routers/auth.route';
 import { billingRouter } from '@/routers/billing.route';
 import { feedbackRouter } from '@/routers/feedback.route';
@@ -26,4 +25,3 @@ api.route('/rooms', roomRouter);
 api.route('/workspace', workspaceRouter);
 api.route('/feedback', feedbackRouter);
 api.route('/support', supportRouter);
-api.route('/agent', agentRouter);

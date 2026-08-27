@@ -68,7 +68,6 @@ import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
 import LinksPanel from '@/components/tools/LinksPanel';
 import ChatPanel from '@/components/ChatPanel';
-import AiChatPanel from '@/components/AiChatPanel';
 import PluginModal from '@/components/tools/PluginModal';
 import {
   LiveKitRoom,
@@ -1281,11 +1280,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               )}
             </div>
           )}
-          <AiChatPanel
-            roomId={roomId}
-            canEdit={canEdit}
-            roomTitle={roomTitle}
-          />
           <ChatPanel
             socket={socket}
             roomId={roomId}

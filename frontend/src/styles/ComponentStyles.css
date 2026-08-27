@@ -660,16 +660,80 @@
   flex: 0 0 auto;
 }
 
+.chat-message-avatar-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+.chat-ai-avatar-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border: 1.5px solid #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  cursor: help;
+  transition: transform 0.15s ease;
+}
+
+.chat-ai-avatar-badge:hover {
+  transform: scale(1.15);
+}
+
 .chat-message-content {
   min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.13);
-  background: rgba(30, 41, 59, 0.68);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(30, 41, 59, 0.7);
 }
 
 .chat-message-own .chat-message-content {
-  border-color: rgba(96, 165, 250, 0.28);
-  background: rgba(30, 64, 175, 0.33);
+  border-color: rgba(96, 165, 250, 0.24);
+  background: rgba(30, 58, 138, 0.32);
+}
+
+/* AI Assisted Message Styling: subtle, refined dark violet tone */
+.chat-message-ai .chat-message-content {
+  border-color: rgba(139, 92, 246, 0.32);
+  background: rgba(26, 24, 42, 0.85);
+}
+
+.chat-message-own.chat-message-ai .chat-message-content {
+  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(45, 30, 78, 0.45);
+}
+
+/* Radix Tooltip styling for chat avatar & AI badges */
+.chat-tooltip-content {
+  z-index: 100;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  animation: chat-tooltip-fade 0.15s ease;
+  user-select: none;
+}
+
+.chat-tooltip-arrow {
+  fill: rgba(15, 23, 42, 0.96);
+}
+
+@keyframes chat-tooltip-fade {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .chat-message-meta {

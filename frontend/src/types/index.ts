@@ -57,6 +57,10 @@ export interface Stroke {
   originalClosed?: boolean;
   /** Original path type before a destructive crop, so Reset Crop can restore it */
   originalPathType?: 'smooth' | 'linear';
+  /** AI agent identifier if drawn/created by an autonomous agent (e.g. 'chalkboard-master') */
+  agentId?: string;
+  /** User ID of the editor/student who requested or initiated the AI action */
+  requestedBy?: string;
 }
 
 /** Represents a link reference to a canvas area */
@@ -143,6 +147,8 @@ export interface ChatMessage {
   message: string;
   mentionedUserIds: string[];
   createdAt: string;
+  agentId?: string;
+  requestedBy?: string;
 }
 
 export interface LeaveRoomOptions {

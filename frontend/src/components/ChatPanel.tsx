@@ -7,11 +7,35 @@ import {
 } from 'react';
 import {
   MessageCircle,
-  Send, X
+  Send,
+  X,
+  Sparkles,
 } from 'lucide-react';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import type { Socket } from 'socket.io-client';
 import UserAvatar from '@/components/UserAvatar';
 import type { ChatMessage, RoomMember } from '@/types';
+
+function parseAiMessage(rawMessage: string) {
+  const match = rawMessage.match(/^\[AI(?::([a-zA-Z0-9_-]+))?\]\s*(.*)$/s);
+  if (match) {
+    const rawAgent = match[1] || 'chalkboard-master';
+    const formattedAgent = rawAgent
+      .split('-')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+    return {
+      isAi: true,
+      agentName: formattedAgent,
+      text: match[2],
+    };
+  }
+  return {
+    isAi: false,
+    agentName: null,
+    text: rawMessage,
+  };
+}
 
 interface ChatPanelProps {
   socket: Socket;
@@ -180,18 +204,42 @@ export default function ChatPanel({
           <div className="chat-panel-messages" aria-live="polite">
             {messages.length === 0 ? (
               <p className="chat-panel-empty">Start the conversation with everyone in this room.</p>
-            ) : messages.map((entry) => (
-              <article key={entry.id} className={`chat-message ${entry.userId === userId ? 'chat-message-own' : ''}`}>
-                <UserAvatar name={entry.displayName} avatarUrl={entry.avatarUrl} size="sm" className="chat-message-avatar" />
-                <div className="chat-message-content">
-                  <div className="chat-message-meta">
-                    <strong>{entry.userId === userId ? 'You' : entry.displayName}</strong>
-                    <time dateTime={entry.createdAt}>{formatMessageTime(entry.createdAt)}</time>
-                  </div>
-                  <p>{entry.message}</p>
-                </div>
-              </article>
-            ))}
+            ) : (
+              <Tooltip.Provider delayDuration={200} skipDelayDuration={0}>
+                {messages.map((entry) => {
+                  const aiInfo = parseAiMessage(entry.message);
+                  return (
+                    <article key={entry.id} className={`chat-message ${entry.userId === userId ? 'chat-message-own' : ''}${aiInfo.isAi ? ' chat-message-ai' : ''}`}>
+                      <Tooltip.Root>
+                        <Tooltip.Trigger asChild>
+                          <div className="chat-message-avatar-wrap">
+                            <UserAvatar name={entry.displayName} avatarUrl={entry.avatarUrl} size="sm" className="chat-message-avatar" />
+                            {aiInfo.isAi && (
+                              <span className="chat-ai-avatar-badge" aria-label="AI Action">
+                                <Sparkles size={8} />
+                              </span>
+                            )}
+                          </div>
+                        </Tooltip.Trigger>
+                        <Tooltip.Portal>
+                          <Tooltip.Content className="chat-tooltip-content" side="top" sideOffset={5}>
+                            <span>{aiInfo.isAi ? `🤖 AI Assisted • ${aiInfo.agentName}` : (entry.userId === userId ? 'You' : entry.displayName)}</span>
+                            <Tooltip.Arrow className="chat-tooltip-arrow" />
+                          </Tooltip.Content>
+                        </Tooltip.Portal>
+                      </Tooltip.Root>
+                      <div className="chat-message-content">
+                        <div className="chat-message-meta">
+                          <strong>{entry.userId === userId ? 'You' : entry.displayName}</strong>
+                          <time dateTime={entry.createdAt}>{formatMessageTime(entry.createdAt)}</time>
+                        </div>
+                        <p>{aiInfo.text}</p>
+                      </div>
+                    </article>
+                  );
+                })}
+              </Tooltip.Provider>
+            )}
             <div ref={endOfMessagesRef} />
           </div>
 

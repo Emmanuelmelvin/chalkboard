@@ -864,7 +864,11 @@ export function clearBoard(): CommandResult {
 export function insertShape(
     type: ShapeType,
     centerX?: number,
-    centerY?: number
+    centerY?: number,
+    opts?: {
+        agentId?: string;
+        requestedBy?: string;
+    }
 ): CommandResult<string[]> {
     const {
         canvas,
@@ -895,7 +899,7 @@ export function insertShape(
         cy = center.y;
     }
 
-    const newStrokes = generateShapeStrokes(
+    const generated = generateShapeStrokes(
         type,
         { x: cx, y: cy },
         {
@@ -906,6 +910,12 @@ export function insertShape(
             intensity: brushIntensity,
         }
     );
+
+    const newStrokes = generated.map((s) => ({
+        ...s,
+        agentId: opts?.agentId,
+        requestedBy: opts?.requestedBy,
+    }));
 
     const updated = [...strokes, ...newStrokes];
     setStrokes(updated);
@@ -1546,6 +1556,8 @@ export function drawStroke(opts: {
     fillColor?: string;
     pathType?: 'smooth' | 'linear';
     tool?: 'chalk' | 'eraser';
+    agentId?: string;
+    requestedBy?: string;
 }): CommandResult<Stroke> {
     const {
         socket,
@@ -1571,6 +1583,8 @@ export function drawStroke(opts: {
         closed: opts.closed,
         fillColor: opts.fillColor,
         points: opts.points,
+        agentId: opts.agentId,
+        requestedBy: opts.requestedBy,
     };
 
     const updated = [...strokes, stroke];
@@ -1595,6 +1609,8 @@ export function drawMultipleStrokes(
         fillColor?: string;
         pathType?: 'smooth' | 'linear';
         tool?: 'chalk' | 'eraser';
+        agentId?: string;
+        requestedBy?: string;
     }>
 ): CommandResult<Stroke[]> {
     const {
@@ -1621,6 +1637,8 @@ export function drawMultipleStrokes(
         closed: opts.closed,
         fillColor: opts.fillColor,
         points: opts.points,
+        agentId: opts.agentId,
+        requestedBy: opts.requestedBy,
     }));
 
     const updated = [...strokes, ...newStrokes];
@@ -1635,7 +1653,7 @@ export function drawMultipleStrokes(
  * @param text  - The text string to render.
  * @param x     - Canvas X position.
  * @param y     - Canvas Y position.
- * @param opts  - Optional font/style overrides.
+ * @param opts  - Optional font/style overrides and agent attribution.
  * @returns `{ ok: true, data: Stroke }` with the created text stroke.
  *
  * @example
@@ -1651,6 +1669,8 @@ export function writeText(
         fontSize?: number;
         color?: string;
         textAlign?: 'left' | 'center' | 'right';
+        agentId?: string;
+        requestedBy?: string;
     }
 ): CommandResult<Stroke> {
     const {
@@ -1681,6 +1701,8 @@ export function writeText(
             { x, y },
             { x: x + textWidth, y },
         ],
+        agentId: opts?.agentId,
+        requestedBy: opts?.requestedBy,
     };
 
     const updated = [...strokes, stroke];
@@ -1695,7 +1717,7 @@ export function writeText(
  * @param html  - HTML or plain-text content for the note body.
  * @param x     - Canvas X position.
  * @param y     - Canvas Y position.
- * @param opts  - Optional width/height/colors.
+ * @param opts  - Optional width/height/colors and agent attribution.
  * @returns `{ ok: true, data: Stroke }` with the created note stroke.
  *
  * @example
@@ -1712,6 +1734,8 @@ export function createNote(
         height?: number;
         backgroundColor?: string;
         textColor?: string;
+        agentId?: string;
+        requestedBy?: string;
     }
 ): CommandResult<Stroke> {
     const {
@@ -1746,6 +1770,8 @@ export function createNote(
             { x: x + w, y: y + h },
             { x, y: y + h },
         ],
+        agentId: opts?.agentId,
+        requestedBy: opts?.requestedBy,
     };
 
     const updated = [...strokes, stroke];
@@ -1755,25 +1781,37 @@ export function createNote(
 }
 
 /**
- * Send a chat message to the room via Socket.IO.
+ * Send a chat message to the room via Socket.IO with optional AI action tagging.
  *
  * @param message - The text message to broadcast.
+ * @param opts    - Optional attribution flags (isAi, agentId, requestedBy).
  * @returns `{ ok: true }` on success.
  *
  * @example
  * ```ts
- * sendChatMessage('Great work! Now try problem 2.');
+ * sendChatMessage('Great work! Now try problem 2.', { isAi: true, agentId: 'chalkboard-master' });
  * ```
  */
-export function sendChatMessage(message: string): CommandResult {
+export function sendChatMessage(
+    message: string,
+    opts?: {
+        isAi?: boolean;
+        agentId?: string;
+        requestedBy?: string;
+    }
+): CommandResult {
     const { socket, roomId } = getBoard();
     if (!socket) return { ok: false, error: 'no socket connection' };
     if (!message || message.trim().length === 0)
         return { ok: false, error: 'message must not be empty' };
 
+    // If marked as AI action, prefix with standard AI tag for clear classroom attribution
+    const agentTag = opts?.isAi || opts?.agentId ? `[AI:${opts?.agentId || 'chalkboard-master'}] ` : '';
+    const formattedMessage = `${agentTag}${message.trim()}`;
+
     socket.emit('chat:send', {
         roomId,
-        message: message.trim(),
+        message: formattedMessage,
         mentionedUserIds: [],
     }, (response: { ok?: boolean; error?: string }) => {
         if (!response?.ok) {

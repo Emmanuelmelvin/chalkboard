@@ -203,6 +203,7 @@ export const drawChalkTool: WebMcpTool<{
       fillColor,
       pathType: pathType ?? 'smooth',
       tool: 'chalk',
+      agentId: 'chalkboard-master',
     });
 
     if (!res.ok) return textResult(`Draw stroke failed: ${res.error}`, true);
@@ -256,7 +257,7 @@ export const writeTextTool: WebMcpTool<{
     required: ['text', 'x', 'y'],
   },
   handler: ({ text, x, y, fontSize, color, textAlign }) => {
-    const res = writeText(text, x, y, { fontSize, color, textAlign });
+    const res = writeText(text, x, y, { fontSize, color, textAlign, agentId: 'chalkboard-master' });
     if (!res.ok) return textResult(`Write text failed: ${res.error}`, true);
     return jsonResult({ success: true, strokeId: res.data?.id, text, position: { x, y } });
   },
@@ -310,7 +311,7 @@ export const insertShapeTool: WebMcpTool<{
     required: ['shape'],
   },
   handler: ({ shape, x, y }) => {
-    const res = insertShape(shape, x, y);
+    const res = insertShape(shape, x, y, { agentId: 'chalkboard-master' });
     if (!res.ok) return textResult(`Insert shape failed: ${res.error}`, true);
     return jsonResult({ success: true, shape, insertedStrokeIds: res.data });
   },
@@ -366,7 +367,7 @@ export const createNoteTool: WebMcpTool<{
     required: ['content', 'x', 'y'],
   },
   handler: ({ content, x, y, width, height, backgroundColor, textColor }) => {
-    const res = createNote(content, x, y, { width, height, backgroundColor, textColor });
+    const res = createNote(content, x, y, { width, height, backgroundColor, textColor, agentId: 'chalkboard-master' });
     if (!res.ok) return textResult(`Create note failed: ${res.error}`, true);
     return jsonResult({ success: true, strokeId: res.data?.id, position: { x, y } });
   },
@@ -428,12 +429,14 @@ export const highlightAreaTool: WebMcpTool<{
       pathType: 'linear',
       closed: true,
       fillColor: type === 'praise' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(56, 189, 248, 0.08)',
+      agentId: 'chalkboard-master',
     });
 
     if (label) {
       writeText(label, minX + 8, minY - 28, {
         color,
         fontSize: 20,
+        agentId: 'chalkboard-master',
       });
     }
 
@@ -680,7 +683,7 @@ export const sendChatMessageTool: WebMcpTool<{
     if (!message || message.trim().length === 0) {
       return textResult('Message cannot be empty', true);
     }
-    const res = sendChatMessage(message);
+    const res = sendChatMessage(message, { isAi: true, agentId: 'chalkboard-master' });
     if (!res.ok) return textResult(`Send chat message failed: ${res.error}`, true);
     return jsonResult({ success: true, message });
   },

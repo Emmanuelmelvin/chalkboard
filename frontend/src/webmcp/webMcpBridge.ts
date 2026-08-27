@@ -7,6 +7,10 @@
 import { ALL_CHALKBOARD_TOOLS } from './tools';
 import { ALL_CHALKBOARD_PROMPTS } from './prompts';
 import { ALL_CHALKBOARD_RESOURCES } from './resources';
+import { createWebMcpToolsFromManifest, type PluginCommandExecutor } from './pluginToolsBridge';
+import { installedPlugins } from '@/plugins/installedPlugins';
+import { pluginRegistry } from '@/plugins/registry';
+import type { PluginManifest } from '@/plugins/types';
 import type {
   WebMcpTool,
   WebMcpPrompt,
@@ -36,6 +40,8 @@ export class WebMcpBridge {
   private tools: Map<string, WebMcpTool> = new Map();
   private prompts: Map<string, WebMcpPrompt> = new Map();
   private resources: Map<string, WebMcpResource> = new Map();
+  private registeredPluginManifests: Map<string, PluginManifest> = new Map();
+  private pluginExecutor: PluginCommandExecutor | null = null;
 
   private logs: WebMcpExecutionLog[] = [];
   private listeners: Set<StatusListener> = new Set();
@@ -43,7 +49,6 @@ export class WebMcpBridge {
   private initialized = false;
   private connected = false;
   private token = '';
-  private webMcpInstance: any = null;
 
   private constructor() {
     this.registerDefaults();
@@ -66,6 +71,8 @@ export class WebMcpBridge {
     ALL_CHALKBOARD_TOOLS.forEach((tool) => this.registerTool(tool));
     ALL_CHALKBOARD_PROMPTS.forEach((prompt) => this.registerPrompt(prompt));
     ALL_CHALKBOARD_RESOURCES.forEach((resource) => this.registerResource(resource));
+    // Auto-register installed built-in plugins
+    installedPlugins.forEach((plugin) => this.registerPluginManifest(plugin.manifest));
   }
 
   /**
@@ -133,7 +140,7 @@ export class WebMcpBridge {
     if (!socket) return;
 
     // Listen for MCP tools/list request from Cloud Run agent
-    socket.on('mcp:list_tools', (payload: any, ack?: (res: any) => void) => {
+    socket.on('mcp:list_tools', (_payload: any, ack?: (res: any) => void) => {
       const tools = Array.from(this.tools.values()).map((t) => ({
         name: t.name,
         description: t.description,
@@ -261,6 +268,63 @@ export class WebMcpBridge {
   }
 
   /**
+   * Set the active command executor for running plugin tools on the canvas.
+   */
+  public setPluginExecutor(executor: PluginCommandExecutor): void {
+    this.pluginExecutor = executor;
+  }
+
+  /**
+   * Register tools contributed by a plugin manifest into WebMCP.
+   */
+  public registerPluginManifest(manifest: PluginManifest, executor?: PluginCommandExecutor): WebMcpTool[] {
+    const exec: PluginCommandExecutor =
+      executor ||
+      this.pluginExecutor ||
+      (async (_pluginId, commandId, formValues) => {
+        return pluginRegistry.executeCommand(commandId, { formValues });
+      });
+
+    const tools = createWebMcpToolsFromManifest(manifest, exec);
+    tools.forEach((tool) => {
+      this.tools.set(tool.name, tool);
+    });
+
+    this.registeredPluginManifests.set(manifest.id, manifest);
+    this.notify();
+    return tools;
+  }
+
+  /**
+   * Unregister tools contributed by a plugin.
+   */
+  public unregisterPlugin(pluginId: string): void {
+    const slug = pluginId.replace(/^chalkboard\./i, '').replace(/[^a-zA-Z0-9_]/g, '_');
+    const prefix = `plugin_${slug}_`;
+    for (const toolName of Array.from(this.tools.keys())) {
+      if (toolName.startsWith(prefix)) {
+        this.tools.delete(toolName);
+      }
+    }
+    this.registeredPluginManifests.delete(pluginId);
+    this.notify();
+  }
+
+  /**
+   * Get all currently loaded plugin manifests.
+   */
+  public getLoadedPlugins(): PluginManifest[] {
+    return Array.from(this.registeredPluginManifests.values());
+  }
+
+  /**
+   * Check if a plugin is currently loaded in WebMCP.
+   */
+  public isPluginLoaded(pluginId: string): boolean {
+    return this.registeredPluginManifests.has(pluginId);
+  }
+
+  /**
    * Generate a one-time connection token for Claude Desktop / Cursor CLI bridge.
    */
   public generateSessionToken(): string {
@@ -285,6 +349,8 @@ export class WebMcpBridge {
       registeredToolsCount: this.tools.size,
       registeredPromptsCount: this.prompts.size,
       registeredResourcesCount: this.resources.size,
+      loadedPluginsCount: this.registeredPluginManifests.size,
+      loadedPluginIds: Array.from(this.registeredPluginManifests.keys()),
       lastActive: this.logs[0]?.timestamp,
       logs: [...this.logs],
     };

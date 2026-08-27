@@ -68,6 +68,7 @@ import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
 import LinksPanel from '@/components/tools/LinksPanel';
 import ChatPanel from '@/components/ChatPanel';
+import AiChatPanel from '@/components/AiChatPanel';
 import PluginModal from '@/components/tools/PluginModal';
 import {
   LiveKitRoom,
@@ -916,10 +917,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   // Initialize WebMCP bridge — registers tools with W3C document.modelContext and
   // attaches Socket.IO MCP JSON-RPC listener so remote agents can discover and call them.
   useEffect(() => {
+    webMcp.setPluginExecutor(async (pluginId: string, commandId: string, formValues: Record<string, any>) => {
+      const localResult = await pluginRegistry.executeCommand(commandId, { formValues });
+      if (localResult) return true;
+      return publishedRuntime.execute(pluginId, commandId, { formValues });
+    });
+  }, [publishedRuntime]);
+
+  useEffect(() => {
     if (!socket || !roomId) return;
     webMcp.init(socket, roomId).then(() => {
       console.log(
-        `[WebMCP] W3C document.modelContext & Socket.IO bridge active — ${webMcp.getStatus().registeredToolsCount} tools registered.`
+        `[WebMCP] W3C document.modelContext & Socket.IO bridge active — ${webMcp.getStatus().registeredToolsCount} tools registered (${webMcp.getStatus().loadedPluginsCount || 0} plugins loaded).`
       );
     });
   }, [socket, roomId]);
@@ -1272,6 +1281,11 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
               )}
             </div>
           )}
+          <AiChatPanel
+            roomId={roomId}
+            canEdit={canEdit}
+            roomTitle={roomTitle}
+          />
           <ChatPanel
             socket={socket}
             roomId={roomId}

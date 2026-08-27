@@ -114,6 +114,8 @@ export interface WebMcpBridgeStatus {
   registeredToolsCount: number;
   registeredPromptsCount: number;
   registeredResourcesCount: number;
+  loadedPluginsCount?: number;
+  loadedPluginIds?: string[];
   lastActive?: number;
   logs: WebMcpExecutionLog[];
 }

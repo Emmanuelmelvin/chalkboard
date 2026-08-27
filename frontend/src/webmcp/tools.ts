@@ -37,6 +37,11 @@ import {
   sendChatMessage,
 } from '@/lib/boardCommands';
 import type { ShapeType, Point, Rect } from '@/types';
+import { listPluginCatalogue, getPluginCataloguePlugin } from '@/api/plugins';
+import { installedPlugins } from '@/plugins/installedPlugins';
+import { pluginRegistry } from '@/plugins/registry';
+import { createPluginAPI } from '@/plugins/api';
+import { publishedPluginManifest } from '@/plugins/publishedRuntime';
 
 import type { WebMcpTool, McpToolResult } from './types';
 
@@ -778,6 +783,235 @@ export const clearOrUndoTool: WebMcpTool<{
   },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. DISCOVER / SEARCH PLUGINS
+// ─────────────────────────────────────────────────────────────────────────────
+export const discoverPluginsTool: WebMcpTool<{
+  query?: string;
+  category?: string;
+}> = {
+  name: 'chalkboard_discover_plugins',
+  description:
+    'Discovers and queries available Chalkboard plugins and tool extensions from the local installed library and the backend published catalogue. Returns plugin descriptions and summary of contributed tools.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description:
+          'Optional search keyword to match against plugin names, descriptions, or tool capabilities (e.g. "math", "graph", "statistics", "venn", "notes").',
+      },
+      category: {
+        type: 'string',
+        description: 'Optional category or plan filter.',
+      },
+    },
+  },
+  handler: async ({ query, category }) => {
+    const { WebMcpBridge } = await import('./webMcpBridge');
+    const bridge = WebMcpBridge.getInstance();
+    const queryLower = (query || '').toLowerCase().trim();
+
+    // 1. Collect installed built-in plugins
+    const localPlugins = installedPlugins.map((p) => {
+      const manifest = p.manifest;
+      const isLoaded = bridge.isPluginLoaded(manifest.id);
+      const tools = manifest.contributes.tools || [];
+      return {
+        pluginId: manifest.id,
+        name: manifest.name,
+        version: manifest.version,
+        description: manifest.description,
+        author: manifest.author,
+        isBuiltIn: true,
+        isLoaded,
+        plan: 'free',
+        toolsCount: tools.length,
+        tools: tools.map((t) => ({
+          id: t.id,
+          label: t.label,
+          description: t.description || '',
+          command: t.command,
+        })),
+      };
+    });
+
+    // 2. Fetch backend catalogue plugins
+    let cataloguePlugins: any[] = [];
+    try {
+      const res = await listPluginCatalogue();
+      if (res?.plugins) {
+        cataloguePlugins = res.plugins
+          .map((p: any) => {
+            const manifest = publishedPluginManifest(p);
+            if (!manifest) return null;
+            const isLoaded = bridge.isPluginLoaded(manifest.id);
+            const tools = manifest.contributes.tools || [];
+            return {
+              pluginId: manifest.id,
+              name: manifest.name,
+              version: manifest.version,
+              description: manifest.description,
+              author: manifest.author,
+              isBuiltIn: false,
+              isLoaded,
+              plan: manifest.plan || 'free',
+              locked: manifest.locked,
+              toolsCount: tools.length,
+              tools: tools.map((t) => ({
+                id: t.id,
+                label: t.label,
+                description: t.description || '',
+                command: t.command,
+              })),
+            };
+          })
+          .filter(Boolean);
+      }
+    } catch {
+      // Backend catalogue fetch is non-blocking
+    }
+
+    // Deduplicate and merge by pluginId
+    const all = [...localPlugins];
+    for (const catPlugin of cataloguePlugins) {
+      if (!all.some((p) => p.pluginId === catPlugin.pluginId)) {
+        all.push(catPlugin);
+      }
+    }
+
+    // Filter by query and category
+    const filtered = all.filter((plugin) => {
+      if (category && plugin.plan !== category) return false;
+      if (!queryLower) return true;
+
+      const matchesMeta =
+        plugin.name.toLowerCase().includes(queryLower) ||
+        plugin.pluginId.toLowerCase().includes(queryLower) ||
+        plugin.description.toLowerCase().includes(queryLower);
+
+      const matchesTools = plugin.tools.some(
+        (t: any) =>
+          t.label.toLowerCase().includes(queryLower) ||
+          t.description.toLowerCase().includes(queryLower) ||
+          t.id.toLowerCase().includes(queryLower)
+      );
+
+      return matchesMeta || matchesTools;
+    });
+
+    return jsonResult({
+      totalFound: filtered.length,
+      query: query || null,
+      plugins: filtered,
+      instructions:
+        'To use tools from any plugin that is not yet loaded (isLoaded: false), call "chalkboard_load_plugin" with the pluginId.',
+    });
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14. LOAD / EXPAND PLUGIN TOOLS
+// ─────────────────────────────────────────────────────────────────────────────
+export const loadPluginTool: WebMcpTool<{
+  pluginId: string;
+}> = {
+  name: 'chalkboard_load_plugin',
+  description:
+    'Dynamically loads and activates a plugin by ID (built-in or from the backend catalogue), generating and registering all its tools into WebMCP so the agent can immediately execute them on the board.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      pluginId: {
+        type: 'string',
+        description:
+          'The unique ID of the plugin to load (e.g. "chalkboard.math-set", "chalkboard.statistics", "chalkboard.tag", "chalkboard.notes", or a catalogue plugin ID).',
+      },
+    },
+    required: ['pluginId'],
+  },
+  handler: async ({ pluginId }) => {
+    if (!pluginId) {
+      return textResult('Error: "pluginId" parameter is required.', true);
+    }
+
+    const { WebMcpBridge } = await import('./webMcpBridge');
+    const bridge = WebMcpBridge.getInstance();
+
+    // 1. Check if already loaded
+    if (bridge.isPluginLoaded(pluginId)) {
+      const pluginSlug = pluginId.replace(/^chalkboard\./i, '').replace(/[^a-zA-Z0-9_]/g, '_');
+      const tools = bridge.getToolsList().filter((t) => t.name.startsWith(`plugin_${pluginSlug}`));
+      return jsonResult({
+        alreadyLoaded: true,
+        pluginId,
+        activeToolsCount: tools.length,
+        tools: tools.map((t) => ({ name: t.name, description: t.description })),
+      });
+    }
+
+    // 2. Check if it's a built-in plugin
+    const builtIn = installedPlugins.find((p) => p.manifest.id === pluginId || p.id === pluginId);
+    if (builtIn) {
+      try {
+        const pluginApi = createPluginAPI();
+        await pluginRegistry.activatePlugin(builtIn.id, pluginApi);
+        const registeredTools = bridge.registerPluginManifest(builtIn.manifest);
+
+        return jsonResult({
+          success: true,
+          pluginId,
+          pluginName: builtIn.name,
+          isBuiltIn: true,
+          newlyAddedTools: registeredTools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.inputSchema,
+          })),
+          totalWebMcpToolsCount: bridge.getStatus().registeredToolsCount,
+        });
+      } catch (err: any) {
+        return textResult(`Failed to activate built-in plugin "${pluginId}": ${err?.message || err}`, true);
+      }
+    }
+
+    // 3. Check backend published catalogue
+    try {
+      const res = await getPluginCataloguePlugin(pluginId);
+      const plugin = res?.plugin;
+      if (!plugin) {
+        return textResult(`Plugin "${pluginId}" was not found in installed plugins or backend catalogue.`, true);
+      }
+
+      const manifest = publishedPluginManifest(plugin);
+      if (!manifest) {
+        return textResult(`Plugin "${pluginId}" has no valid manifest version published.`, true);
+      }
+
+      if (manifest.locked) {
+        return textResult(`Plugin "${pluginId}" is a Pro plugin locked for the current account.`, true);
+      }
+
+      const registeredTools = bridge.registerPluginManifest(manifest);
+
+      return jsonResult({
+        success: true,
+        pluginId,
+        pluginName: manifest.name,
+        isBuiltIn: false,
+        newlyAddedTools: registeredTools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema,
+        })),
+        totalWebMcpToolsCount: bridge.getStatus().registeredToolsCount,
+      });
+    } catch (err: any) {
+      return textResult(`Failed to load catalogue plugin "${pluginId}": ${err?.message || err}`, true);
+    }
+  },
+};
+
 /** All registered Chalkboard WebMCP tools */
 export const ALL_CHALKBOARD_TOOLS: WebMcpTool[] = [
   getBoardStateTool,
@@ -792,4 +1026,6 @@ export const ALL_CHALKBOARD_TOOLS: WebMcpTool[] = [
   sendChatMessageTool,
   speakNarrationTool,
   clearOrUndoTool,
+  discoverPluginsTool,
+  loadPluginTool,
 ];

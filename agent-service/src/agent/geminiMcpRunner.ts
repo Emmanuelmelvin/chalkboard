@@ -66,18 +66,22 @@ export class GeminiMcpRunner {
    * Run an autonomous teaching lesson on the board.
    */
   public async instruct(payload: InstructPayload): Promise<{ success: boolean; turns: number; log: string[] }> {
-    const tools = await this.init();
-    const geminiFunctionDeclarations = this.convertMcpToolsToGemini(tools);
+    let tools = await this.init();
+    let geminiFunctionDeclarations = this.convertMcpToolsToGemini(tools);
 
     const systemInstruction = `You are the Chalkboard Master, an autonomous AI instructor leading a live collaborative classroom lesson.
-You have direct control over the chalkboard canvas via the discovered tools.
+You have direct control over the chalkboard canvas via core tools and dynamic domain plugin tools.
 
 Pedagogical Structure:
 1. INTRODUCE TOPIC: Write a clean title header with \`chalkboard_write_text\`. Speak a welcome with \`chalkboard_speak_narration\`.
-2. VISUAL DIAGRAM: Draw geometric figures, coordinate axes, or concept diagrams with \`chalkboard_draw_chalk\` and \`chalkboard_insert_shape\`. Label components.
+2. VISUAL DIAGRAM: Draw geometric figures, coordinate axes, Venn diagrams, or concept charts.
+   - For standard geometry/curves, use \`chalkboard_draw_chalk\` and \`chalkboard_insert_shape\`.
+   - For mathematical set diagrams, coordinate grids, graphs, number lines, or matrices, prefer using the dedicated \`plugin_math_set_*\` tools (e.g. \`plugin_math_set_two_set_venn\`, \`plugin_math_set_coordinate_grid\`, \`plugin_math_set_graph\`, \`plugin_math_set_number_line\`, \`plugin_math_set_matrix\`).
+   - For data charts, box plots, and statistical summaries, use \`plugin_statistics_*\` tools.
 3. WORKED EXAMPLE: Step through mathematical calculations or proofs. Use \`chalkboard_highlight_area\` (type="focus") to emphasize steps.
 4. PRACTICE CHALLENGE: Use \`chalkboard_highlight_area\` (type="answer_box") to give students a designated space to work. Ask questions in \`chalkboard_send_chat\`.
-5. ADAPT: Always verify what is drawn on the board. When you see student errors, circle them with \`chalkboard_highlight_area\` (type="correction") and provide gentle hints.
+5. EXPAND EXTENSIONS: If your lesson requires domain plugins not yet loaded (e.g. specialized subjects), use \`chalkboard_discover_plugins\` to search available plugins and \`chalkboard_load_plugin\` to load their tools on demand.
+6. ADAPT: Always verify what is drawn on the board. When you see student errors, circle them with \`chalkboard_highlight_area\` (type="correction") and provide gentle hints.
 
 Lesson Context:
 Topic: "${payload.prompt}"
@@ -92,7 +96,7 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
 
     try {
       // Initialize Gemini Chat session with dynamic tools
-      const chat = this.ai.chats.create({
+      let chat = this.ai.chats.create({
         model: config.GEMINI_MODEL,
         config: {
           systemInstruction,
@@ -120,6 +124,7 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
         }
 
         const functionResponseParts: any[] = [];
+        let shouldRefreshTools = false;
 
         // Execute each tool call through the MCP client
         for (const call of functionCalls) {
@@ -127,6 +132,10 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
           const logMsg = `Executing MCP Tool: ${call.name}(${JSON.stringify(call.args)})`;
           console.log(`[GeminiMcpRunner] ${logMsg}`);
           executionLogs.push(logMsg);
+
+          if (call.name === 'chalkboard_load_plugin') {
+            shouldRefreshTools = true;
+          }
 
           try {
             // CALL TOOL OVER MCP -> SOCKET.IO -> BROWSER -> CANVAS
@@ -156,11 +165,38 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
           }
         }
 
+        // If a plugin was loaded during this turn, refresh tools from browser
+        if (shouldRefreshTools) {
+          try {
+            const refreshed = await this.mcpClient.listTools();
+            if (refreshed.tools.length > tools.length) {
+              console.log(
+                `[GeminiMcpRunner] Tool catalogue dynamically expanded from ${tools.length} to ${refreshed.tools.length} tools.`
+              );
+              tools = refreshed.tools;
+              geminiFunctionDeclarations = this.convertMcpToolsToGemini(tools);
+
+              const history = await chat.getHistory();
+              chat = this.ai.chats.create({
+                model: config.GEMINI_MODEL,
+                history,
+                config: {
+                  systemInstruction,
+                  tools: [{ functionDeclarations: geminiFunctionDeclarations }],
+                  temperature: 0.4,
+                },
+              });
+            }
+          } catch (refreshErr) {
+            console.warn('[GeminiMcpRunner] Could not refresh dynamic tools after plugin load:', refreshErr);
+          }
+        }
+
         // Helper for sending message with automatic retry on 503/429
-        const sendWithRetry = async (payload: any, maxRetries = 3) => {
+        const sendWithRetry = async (payloadMsg: any, maxRetries = 3) => {
           for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-              return await chat.sendMessage(payload);
+              return await chat.sendMessage(payloadMsg);
             } catch (error: any) {
               const status = error?.status || error?.statusCode;
               if ((status === 503 || status === 429) && attempt < maxRetries) {

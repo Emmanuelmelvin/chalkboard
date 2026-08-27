@@ -121,6 +121,11 @@ const envSchema = z.object({
   // End-of-session room rating submissions.
   FEEDBACK_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
   FEEDBACK_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(600000),
+  // AI Agent service proxy
+  AGENT_SERVICE_URL: z.string().url().default('http://localhost:8080'),
+  AGENT_SECRET: z.string().default('chalkboard_agent_internal_secret_key_2026'),
+  AGENT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  AGENT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   // When Redis is unavailable, fall back to per-process counters instead of
   // failing open. Set false to reject traffic outright if that is preferred.
   RATE_LIMIT_FALLBACK_TO_MEMORY: booleanEnv(true),

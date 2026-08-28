@@ -182,9 +182,51 @@ export class SocketIoMcpTransport implements Transport {
   }
 
   /**
+   * Check if transport is currently connected.
+   */
+  public isConnected(): boolean {
+    return Boolean(this.socket?.connected);
+  }
+
+  /**
+   * Send a chat message to the room as the agent.
+   */
+  public async sendChatMessage(message: string): Promise<boolean> {
+    if (!this.socket || !this.socket.connected) return false;
+    return new Promise((resolve) => {
+      this.socket?.emit(
+        'chat:send',
+        {
+          roomId: this.roomId,
+          message: message.trim(),
+          mentionedUserIds: [],
+        },
+        (ack?: { ok: boolean; error?: string }) => {
+          resolve(Boolean(ack?.ok));
+        }
+      );
+    });
+  }
+
+  /**
+   * Listen to an arbitrary room socket event.
+   */
+  public onSocketEvent(event: string, handler: (...args: any[]) => void): void {
+    this.socket?.on(event, handler);
+  }
+
+  /**
+   * Remove a room socket event listener.
+   */
+  public offSocketEvent(event: string, handler: (...args: any[]) => void): void {
+    this.socket?.off(event, handler);
+  }
+
+  /**
    * Get the underlying raw Socket.IO instance.
    */
   public getSocket(): Socket | null {
     return this.socket;
   }
 }
+

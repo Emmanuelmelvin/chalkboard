@@ -458,6 +458,23 @@
   color: #ffffff;
 }
 
+.user-avatar-ai {
+  background: radial-gradient(circle at 35% 35%, #2e1065 0%, #0f172a 100%) !important;
+  border: 1.5px solid rgba(129, 140, 248, 0.6) !important;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  border-radius: 50% !important;
+}
+
+.user-avatar-ai svg {
+  display: block !important;
+  flex-shrink: 0 !important;
+}
+
+
 .menu-item-content {
   display: flex;
   flex-direction: column;

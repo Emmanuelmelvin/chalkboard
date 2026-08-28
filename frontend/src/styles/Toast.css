@@ -1,7 +1,7 @@
 /**
  * @file Toast.css
  * @description Astryx Toast Design System styling matching the dark pill design.
- * Positioned at the top center with smooth slide-down entrance animations.
+ * Features distinct color palettes for error, warning/warn, success, info, and neutral.
  */
 
 .astryx-toast-viewport {
@@ -24,25 +24,25 @@
   pointer-events: none;
 }
 
+/* Base Toast Pill */
 .astryx-toast-root {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-width: 260px;
   max-width: 540px;
-  padding: 10px 16px 10px 20px;
-  background: #090d16;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 16px 10px 16px;
   border-radius: 12px;
-  box-shadow:
-    0 14px 36px -4px rgba(0, 0, 0, 0.6),
-    0 4px 14px -2px rgba(0, 0, 0, 0.4);
-  color: #ffffff;
   pointer-events: auto;
   user-select: none;
   overflow: hidden;
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  transition:
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .astryx-toast-root[data-state='open'] {
@@ -66,32 +66,153 @@
   animation: astryxToastSwipeOut 0.15s ease-out forwards;
 }
 
-/* Optional icon */
+/* ─────────────────────────────────────────────────────────────
+   TYPE COLOR THEMES
+   ───────────────────────────────────────────────────────────── */
+
+/* Neutral / Default (Deep Slate) */
+.astryx-toast-type-neutral {
+  background: #090d16;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 14px 36px -4px rgba(0, 0, 0, 0.65),
+    0 4px 14px -2px rgba(0, 0, 0, 0.45);
+  color: #ffffff;
+}
+
+.astryx-toast-type-neutral .astryx-toast-dot {
+  background: #94a3b8;
+  box-shadow: 0 0 6px rgba(148, 163, 184, 0.6);
+}
+
+.astryx-toast-type-neutral .astryx-toast-close-btn {
+  color: #94a3b8;
+}
+
+.astryx-toast-type-neutral .astryx-toast-close-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+/* Success (Emerald Forest) */
+.astryx-toast-type-success {
+  background: #042017;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  box-shadow:
+    0 14px 36px -4px rgba(0, 0, 0, 0.65),
+    0 0 24px -2px rgba(16, 185, 129, 0.26);
+  color: #ffffff;
+}
+
+.astryx-toast-type-success .astryx-toast-dot {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+.astryx-toast-type-success .astryx-toast-close-btn {
+  color: #6ee7b7;
+}
+
+.astryx-toast-type-success .astryx-toast-close-btn:hover {
+  background: rgba(16, 185, 129, 0.22);
+  color: #ffffff;
+}
+
+/* Warning / Warn (Deep Amber) */
+.astryx-toast-type-warning,
+.astryx-toast-type-warn {
+  background: #241402;
+  border: 1px solid rgba(245, 158, 11, 0.42);
+  box-shadow:
+    0 14px 36px -4px rgba(0, 0, 0, 0.65),
+    0 0 24px -2px rgba(245, 158, 11, 0.26);
+  color: #ffffff;
+}
+
+.astryx-toast-type-warning .astryx-toast-dot,
+.astryx-toast-type-warn .astryx-toast-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+.astryx-toast-type-warning .astryx-toast-close-btn,
+.astryx-toast-type-warn .astryx-toast-close-btn {
+  color: #fcd34d;
+}
+
+.astryx-toast-type-warning .astryx-toast-close-btn:hover,
+.astryx-toast-type-warn .astryx-toast-close-btn:hover {
+  background: rgba(245, 158, 11, 0.22);
+  color: #ffffff;
+}
+
+/* Error (Crimson Flame) */
+.astryx-toast-type-error {
+  background: #24080b;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  box-shadow:
+    0 14px 36px -4px rgba(0, 0, 0, 0.65),
+    0 0 24px -2px rgba(239, 68, 68, 0.3);
+  color: #ffffff;
+}
+
+.astryx-toast-type-error .astryx-toast-dot {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+.astryx-toast-type-error .astryx-toast-close-btn {
+  color: #fca5a5;
+}
+
+.astryx-toast-type-error .astryx-toast-close-btn:hover {
+  background: rgba(239, 68, 68, 0.24);
+  color: #ffffff;
+}
+
+/* Info (Deep Blue / Indigo) */
+.astryx-toast-type-info {
+  background: #08162e;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  box-shadow:
+    0 14px 36px -4px rgba(0, 0, 0, 0.65),
+    0 0 24px -2px rgba(59, 130, 246, 0.25);
+  color: #ffffff;
+}
+
+.astryx-toast-type-info .astryx-toast-dot {
+  background: #3b82f6;
+  box-shadow: 0 0 8px #3b82f6;
+}
+
+.astryx-toast-type-info .astryx-toast-close-btn {
+  color: #93c5fd;
+}
+
+.astryx-toast-type-info .astryx-toast-close-btn:hover {
+  background: rgba(59, 130, 246, 0.22);
+  color: #ffffff;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TOAST INTERNALS
+   ───────────────────────────────────────────────────────────── */
+
+.astryx-toast-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 .astryx-toast-icon-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #94a3b8;
 }
 
-.astryx-toast-type-success .astryx-toast-icon-wrap {
-  color: #10b981;
-}
-
-.astryx-toast-type-warning .astryx-toast-icon-wrap {
-  color: #f59e0b;
-}
-
-.astryx-toast-type-error .astryx-toast-icon-wrap {
-  color: #ef4444;
-}
-
-.astryx-toast-type-info .astryx-toast-icon-wrap {
-  color: #60a5fa;
-}
-
-/* Content */
 .astryx-toast-content {
   flex: 1;
   display: flex;
@@ -115,7 +236,6 @@
   word-break: break-word;
 }
 
-/* End content / actions */
 .astryx-toast-end {
   display: flex;
   align-items: center;
@@ -133,15 +253,9 @@
   border-radius: 6px;
   border: none;
   background: transparent;
-  color: #94a3b8;
   cursor: pointer;
   padding: 0;
   transition: all 0.12s ease;
-}
-
-.astryx-toast-close-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
 }
 
 /* Animations */

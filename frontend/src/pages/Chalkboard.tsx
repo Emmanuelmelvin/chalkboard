@@ -42,6 +42,8 @@ import Button from '@/components/ui/Button';
 import { HoverCard } from '@/components/ui/HoverCard';
 import UserAvatar from '@/components/UserAvatar';
 import CollaboratorCursor from '@/components/CollaboratorCursor';
+import ChalkboardMasterIcon from '@/components/ChalkboardMasterIcon';
+
 import { SpeakingParticipantsContext } from '@/contexts/SpeakingParticipantsContext';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import LinkIcon from '@/components/svg/LinkIcon';
@@ -1622,16 +1624,33 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                       aria-label={`${onlineHeaderMembers.length} online — open room details`}
                     >
                       <span className="member-avatar-stack">
-                        {onlineHeaderMembers.slice(0, 4).map((member) => (
-                          <Avatar.Root key={member.userId} className="member-stack-avatar">
-                            <Avatar.Image src={member.avatarUrl || undefined} alt={member.displayName} />
-                            <Avatar.Fallback delayMs={300}>{avatarInitials(member.displayName)}</Avatar.Fallback>
-                          </Avatar.Root>
-                        ))}
+                        {onlineHeaderMembers.slice(0, 4).map((member) => {
+                          const isAgent = Boolean(
+                            member.userId?.startsWith('agent:') ||
+                            member.displayName?.toLowerCase().includes('chalkboard master') ||
+                            member.avatarUrl === 'ai:chalkboard-master'
+                          );
+
+                          if (isAgent) {
+                            return (
+                              <span key={member.userId} className="member-stack-avatar member-stack-avatar-ai" title="Chalkboard Master 🤖">
+                                <ChalkboardMasterIcon size={22} withBackground={true} />
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <Avatar.Root key={member.userId} className="member-stack-avatar">
+                              <Avatar.Image src={member.avatarUrl || undefined} alt={member.displayName} />
+                              <Avatar.Fallback delayMs={300}>{avatarInitials(member.displayName)}</Avatar.Fallback>
+                            </Avatar.Root>
+                          );
+                        })}
                         {onlineHeaderMembers.length > 4 && (
                           <span className="member-stack-more">+{onlineHeaderMembers.length - 4}</span>
                         )}
                       </span>
+
                     </button>
                   </HoverCard>
                   {roomDetailsOpen && (

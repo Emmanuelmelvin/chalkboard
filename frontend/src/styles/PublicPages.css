@@ -2129,6 +2129,22 @@
   font-family: var(--font-sans);
 }
 
+.user-avatar-ai {
+  background: radial-gradient(circle at 35% 35%, #2e1065 0%, #0f172a 100%) !important;
+  border: 1.5px solid rgba(129, 140, 248, 0.5) !important;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.35) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.user-avatar-ai svg {
+  display: block !important;
+}
+
+
 .lobby-profile-copy {
   display: flex;
   min-width: 0;

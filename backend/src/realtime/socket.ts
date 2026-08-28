@@ -43,6 +43,8 @@ import { logger } from '@/utils/logger';
 import { captureSocketError } from '@/utils/monitoring';
 import { failed, hit, metricNames, record, timed } from '@/utils/metrics';
 import { env, isAllowedCorsOrigin } from '@/config/env';
+import { notifyAgentToJoinRoom } from '@/services/rooms/roomAgent.service';
+
 import { checkRateLimit } from '@/services/infra/rateLimiter.service';
 import { authenticateSocketSession } from '@/services/auth/auth.service';
 import {
@@ -360,7 +362,13 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     reconnected: presence.reconnected,
   });
   hit(metricNames.roomJoin, { outcome: 'joined', role, reconnected: presence.reconnected });
+
+  if (!isAgent) {
+    void notifyAgentToJoinRoom(data.roomId);
+  }
+
   sendAck(ack, {
+
     ok: true,
     role,
     ownerVoiceConnected: roomDetails?.room.voiceEnabled
@@ -409,19 +417,31 @@ async function handleChatMessage(io: Server, socket: any, payload: unknown, ack?
   const actor = getSocketMeta(socket.id);
   const roomDetails = await getRoomWithMembers(data.roomId);
   const memberIds = new Set((roomDetails?.members ?? []).map((member: { userId: string }) => member.userId));
+  memberIds.add('agent:chalkboard-master');
+  memberIds.add('chalkboard-master');
+
   const mentionedUserIds = [...new Set(data.mentionedUserIds)]
-    .filter((mentionedUserId) => mentionedUserId !== actor?.userId && memberIds.has(mentionedUserId));
+    .filter((mentionedUserId) => mentionedUserId !== actor?.userId && (memberIds.has(mentionedUserId) || mentionedUserId === '__all__' || mentionedUserId.startsWith('agent:')));
+
   const user = socket.data.user;
+  const isAgentSender = Boolean(
+    actor?.userId?.startsWith('agent:') ||
+    user?.id?.startsWith('agent:') ||
+    actor?.userId?.includes('chalkboard-master') ||
+    socket.handshake.auth?.isAgent
+  );
+
   const message = {
     id: randomUUID(),
     roomId: data.roomId,
-    userId: actor?.userId,
-    displayName: user?.displayName ?? 'Classmate',
-    avatarUrl: user?.avatarUrl ?? null,
+    userId: isAgentSender ? 'agent:chalkboard-master' : (actor?.userId || user?.id),
+    displayName: isAgentSender ? 'Chalkboard Master 🤖' : (user?.displayName ?? 'Classmate'),
+    avatarUrl: isAgentSender ? null : (user?.avatarUrl ?? null),
     message: data.message,
     mentionedUserIds,
     createdAt: new Date().toISOString(),
   };
+
 
   await appendChatMessage(data.roomId, message);
   hit(metricNames.chatMessageSent);

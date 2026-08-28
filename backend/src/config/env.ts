@@ -95,6 +95,12 @@ const envSchema = z.object({
   // past the point where their duration is still a fair estimate.
   VOICE_RECONCILE_REPEAT_MS: z.coerce.number().int().positive().default(900000),
 
+  // Chalkboard Master Agent Service (Cloud Run / Local)
+  AGENT_SERVICE_URL: z.string().default('http://localhost:8080'),
+  ENABLE_AGENT_ALL_ROOMS: booleanEnv(true),
+
+
+
   // --- Rate limiting -------------------------------------------------------
   // Number of reverse proxies (LB, CDN, ingress) in front of this process.
   // 0 means the app is directly exposed and forwarded-for headers must be

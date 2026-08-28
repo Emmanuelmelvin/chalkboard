@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ChalkboardMasterIcon from './ChalkboardMasterIcon';
 
 interface UserAvatarProps {
   name: string;
@@ -42,11 +43,25 @@ function AvatarImage({ name, source, classes }: AvatarImageProps) {
 }
 
 export default function UserAvatar({ name, avatarUrl, size = 'md', className = '' }: UserAvatarProps) {
+  const isAgent = Boolean(
+    name?.toLowerCase().includes('chalkboard master') ||
+    name?.toLowerCase().includes('master 🤖') ||
+    avatarUrl === 'ai:chalkboard-master' ||
+    avatarUrl?.startsWith('agent:')
+  );
+
+  if (isAgent) {
+    return <ChalkboardMasterIcon size={size} className={className} withBackground={true} />;
+  }
+
   const source = avatarUrl?.trim() || '';
   const classes = `user-avatar user-avatar-${size}${className ? ` ${className}` : ''}`;
   if (!source) {
     return <span className={`${classes} user-avatar-fallback`} aria-label={name}>{initials(name)}</span>;
   }
 
+
+
   return <AvatarImage key={source} name={name} source={source} classes={classes} />;
 }
+

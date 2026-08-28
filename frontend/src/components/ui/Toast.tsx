@@ -2,7 +2,7 @@
  * @file Toast.tsx
  * @description Astryx Toast component and useToast() hook implementation.
  * Complies with Astryx Design System (https://astryx.atmeta.com/components/Toast)
- * and matches the dark pill notification design with fullscreen portal support.
+ * Supports distinct color theming for error, warning, success, info, and neutral toasts.
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -11,7 +11,7 @@ import * as RadixToast from '@radix-ui/react-toast';
 import { X } from 'lucide-react';
 import '@/styles/Toast.css';
 
-export type ToastType = 'info' | 'success' | 'warning' | 'error' | 'neutral';
+export type ToastType = 'info' | 'success' | 'warning' | 'warn' | 'error' | 'neutral';
 
 export interface ToastOptions {
   id?: string;
@@ -35,6 +35,12 @@ const ToastContext = createContext<((options: ToastOptions | string) => string) 
 
 let globalToastHandler: ((options: ToastOptions | string) => string) | null = null;
 
+function normalizeToastType(type?: ToastType): 'info' | 'success' | 'warning' | 'error' | 'neutral' {
+  if (type === 'warn') return 'warning';
+  if (!type) return 'info';
+  return type;
+}
+
 /**
  * Astryx Toast visual component
  */
@@ -51,6 +57,8 @@ export const Toast: React.FC<ToastProps> = ({
   onDismiss,
   className = '',
 }) => {
+  const normType = normalizeToastType(type);
+
   return (
     <RadixToast.Root
       open={open}
@@ -59,8 +67,10 @@ export const Toast: React.FC<ToastProps> = ({
         if (!nextOpen) onDismiss?.();
       }}
       duration={isAutoHide ? autoHideDuration : Infinity}
-      className={`astryx-toast-root astryx-toast-type-${type} ${className}`}
+      className={`astryx-toast-root astryx-toast-type-${normType} ${className}`}
     >
+      <span className="astryx-toast-dot" aria-hidden="true" />
+
       {icon && (
         <div className="astryx-toast-icon-wrap" aria-hidden="true">
           {icon}
@@ -180,6 +190,8 @@ export function useToast() {
       toastFn({ body, title, type: 'success' }),
     warning: (body: string | React.ReactNode, title?: string) =>
       toastFn({ body, title, type: 'warning' }),
+    warn: (body: string | React.ReactNode, title?: string) =>
+      toastFn({ body, title, type: 'warning' }),
     error: (body: string | React.ReactNode, title?: string) =>
       toastFn({ body, title, type: 'error' }),
   });
@@ -203,6 +215,8 @@ export const toast = Object.assign(
     success: (body: string | React.ReactNode, title?: string) =>
       globalToastHandler ? globalToastHandler({ body, title, type: 'success' }) : '',
     warning: (body: string | React.ReactNode, title?: string) =>
+      globalToastHandler ? globalToastHandler({ body, title, type: 'warning' }) : '',
+    warn: (body: string | React.ReactNode, title?: string) =>
       globalToastHandler ? globalToastHandler({ body, title, type: 'warning' }) : '',
     error: (body: string | React.ReactNode, title?: string) =>
       globalToastHandler ? globalToastHandler({ body, title, type: 'error' }) : '',

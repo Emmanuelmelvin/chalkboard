@@ -2,6 +2,7 @@ import React, { useContext, useState } from 'react';
 import * as Avatar from '@radix-ui/react-avatar';
 import { HoverCard } from '@/components/ui/HoverCard';
 import { SpeakingParticipantsContext } from '@/contexts/SpeakingParticipantsContext';
+import ChalkboardMasterIcon from '@/components/ChalkboardMasterIcon';
 import type { Collaborator } from '@/types';
 
 export interface CollaboratorCursorProps {
@@ -43,6 +44,12 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
   const speakingIdentities = useContext(SpeakingParticipantsContext);
   const userSpeaking = isSpeaking || (collaborator.userId ? speakingIdentities.has(collaborator.userId) : false);
   const color = collaborator.color || '#10b981';
+
+  const isAgent = Boolean(
+    collaborator.userId?.startsWith('agent:') ||
+    collaborator.name?.toLowerCase().includes('chalkboard master') ||
+    collaborator.avatarUrl === 'ai:chalkboard-master'
+  );
 
   return (
     <div
@@ -109,16 +116,20 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
           >
             {/* Picture on the LEFT */}
             <div className={`collaborator-cursor-avatar-wrap${userSpeaking ? ' is-speaking' : ''}`}>
-              <Avatar.Root className="collaborator-cursor-avatar-root">
-                <Avatar.Image
-                  className="collaborator-cursor-avatar-img"
-                  src={collaborator.avatarUrl || undefined}
-                  alt={collaborator.name}
-                />
-                <Avatar.Fallback className="collaborator-cursor-avatar-fallback">
-                  {avatarInitials(collaborator.name)}
-                </Avatar.Fallback>
-              </Avatar.Root>
+              {isAgent ? (
+                <ChalkboardMasterIcon size={20} withBackground={true} className="collaborator-cursor-avatar-img" />
+              ) : (
+                <Avatar.Root className="collaborator-cursor-avatar-root">
+                  <Avatar.Image
+                    className="collaborator-cursor-avatar-img"
+                    src={collaborator.avatarUrl || undefined}
+                    alt={collaborator.name}
+                  />
+                  <Avatar.Fallback className="collaborator-cursor-avatar-fallback">
+                    {avatarInitials(collaborator.name)}
+                  </Avatar.Fallback>
+                </Avatar.Root>
+              )}
               {userSpeaking && <span className="collaborator-speaking-ring" />}
             </div>
 
@@ -146,19 +157,23 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
           <div className="collaborator-card-body">
             {/* Profile image with border & active dot */}
             <div className="collaborator-card-avatar-wrap">
-              <Avatar.Root
-                className="collaborator-card-avatar-root"
-                style={{ borderColor: color }}
-              >
-                <Avatar.Image
-                  className="collaborator-card-avatar-img"
-                  src={collaborator.avatarUrl || undefined}
-                  alt={collaborator.name}
-                />
-                <Avatar.Fallback className="collaborator-card-avatar-fallback">
-                  {avatarInitials(collaborator.name)}
-                </Avatar.Fallback>
-              </Avatar.Root>
+              {isAgent ? (
+                <ChalkboardMasterIcon size={38} withBackground={true} className="collaborator-card-avatar-img" />
+              ) : (
+                <Avatar.Root
+                  className="collaborator-card-avatar-root"
+                  style={{ borderColor: color }}
+                >
+                  <Avatar.Image
+                    className="collaborator-card-avatar-img"
+                    src={collaborator.avatarUrl || undefined}
+                    alt={collaborator.name}
+                  />
+                  <Avatar.Fallback className="collaborator-card-avatar-fallback">
+                    {avatarInitials(collaborator.name)}
+                  </Avatar.Fallback>
+                </Avatar.Root>
+              )}
               <span
                 className="collaborator-card-status-dot"
                 style={{ backgroundColor: color }}
@@ -170,13 +185,16 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
               <div className="collaborator-card-name-row">
                 <span className="collaborator-card-full-name">{collaborator.name}</span>
                 <span className={`collaborator-card-role-badge role-${collaborator.role}`}>
-                  {collaborator.role === 'owner'
+                  {isAgent
+                    ? '✨ AI Co-Pilot'
+                    : collaborator.role === 'owner'
                     ? '👑 Owner'
                     : collaborator.role === 'instructor'
                     ? '🛡️ Instructor'
                     : 'Collaborator'}
                 </span>
               </div>
+
 
               <div className="collaborator-card-details">
                 <div className="collaborator-card-detail-item">

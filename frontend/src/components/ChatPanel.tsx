@@ -65,21 +65,32 @@ interface ChatPanelProps {
 
 const ALL_MENTION_LABEL = 'all';
 const ALL_MENTION_USER_ID = '__all__';
+const AGENT_MENTION_LABEL = 'Chalkboard Master';
+const AGENT_MENTION_USER_ID = 'agent:chalkboard-master';
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function mentionedUserIds(message: string, members: RoomMember[], currentUserId: string) {
+  const result: string[] = [];
   const mentionableMembers = members.filter((member) => member.userId !== currentUserId);
+
   if (new RegExp(`(^|\\s)@${ALL_MENTION_LABEL}(?=\\s|$)`, 'i').test(message)) {
-    return mentionableMembers.map((member) => member.userId);
+    result.push(...mentionableMembers.map((member) => member.userId));
   }
 
-  return mentionableMembers
+  if (new RegExp(`(^|\\s)@(chalkboard\\s*master|master|ai|agent)(?=\\s|$|[:,])`, 'i').test(message)) {
+    result.push(AGENT_MENTION_USER_ID);
+  }
+
+  const memberMatches = mentionableMembers
     .filter((member) => member.displayName.trim())
     .filter((member) => new RegExp(`(^|\\s)@${escapeRegExp(member.displayName.trim())}(?=\\s|$)`, 'i').test(message))
     .map((member) => member.userId);
+
+  result.push(...memberMatches);
+  return [...new Set(result)];
 }
 
 function formatMessageTime(value: string) {
@@ -107,6 +118,13 @@ export default function ChatPanel({
 
   const mentionMatch = draft.match(/(?:^|\s)@([^\s@]*)$/);
   const mentionQuery = mentionMatch?.[1]?.toLocaleLowerCase() ?? null;
+  const isAgentMatch = mentionQuery !== null && (
+    'chalkboard master'.includes(mentionQuery) ||
+    'master'.includes(mentionQuery) ||
+    'ai'.includes(mentionQuery) ||
+    'agent'.includes(mentionQuery)
+  );
+
   const mentionItems: MentionItemData[] =
     mentionQuery === null
       ? []
@@ -121,8 +139,20 @@ export default function ChatPanel({
                 },
               ]
             : []),
+          ...(isAgentMatch
+            ? [
+                {
+                  kind: 'member' as const,
+                  userId: AGENT_MENTION_USER_ID,
+                  displayName: AGENT_MENTION_LABEL,
+                  avatarUrl: null,
+                  role: 'instructor' as const,
+                  online: true,
+                },
+              ]
+            : []),
           ...members
-            .filter((member) => member.userId !== userId)
+            .filter((member) => member.userId !== userId && !member.userId.startsWith('agent:'))
             .filter((member) => member.displayName.toLocaleLowerCase().includes(mentionQuery))
             .map((m) => ({
               kind: 'member' as const,
@@ -133,6 +163,7 @@ export default function ChatPanel({
               online: m.online,
             })),
         ].slice(0, 6);
+
 
   useEffect(() => {
     if (open && unreadMentions > 0) {
@@ -292,8 +323,14 @@ export default function ChatPanel({
               <ChatMessageList>
                 {messages.map((entry) => {
                   const aiInfo = parseAiMessage(entry.message);
-                  const isOwn = entry.userId === userId;
-                  const sender = isOwn ? 'user' : aiInfo.isAi ? 'assistant' : 'member';
+                  const isAi =
+                    entry.userId === AGENT_MENTION_USER_ID ||
+                    entry.userId?.startsWith('agent:') ||
+                    entry.displayName.includes('Chalkboard Master') ||
+                    aiInfo.isAi;
+                  const isOwn = !isAi && entry.userId === userId;
+                  const sender = isOwn ? 'user' : isAi ? 'assistant' : 'member';
+                  const displayName = isAi ? 'Chalkboard Master 🤖' : isOwn ? 'You' : entry.displayName;
 
                   return (
                     <ChatMessage
@@ -302,16 +339,16 @@ export default function ChatPanel({
                       avatar={
                         <div
                           className="chat-message-avatar-wrap"
-                          title={aiInfo.isAi ? `AI Action (${aiInfo.agentName})` : entry.displayName}
+                          title={isAi ? 'Chalkboard Master 🤖' : entry.displayName}
                         >
                           <UserAvatar
-                            name={entry.displayName}
-                            avatarUrl={entry.avatarUrl}
+                            name={isAi ? 'Chalkboard Master' : entry.displayName}
+                            avatarUrl={isAi ? null : entry.avatarUrl}
                             size="sm"
                             className="chat-message-avatar"
                           />
-                          {aiInfo.isAi && (
-                            <span className="chat-ai-avatar-badge" aria-label="AI Action">
+                          {isAi && (
+                            <span className="chat-ai-avatar-badge" aria-label="Chalkboard Master">
                               <Sparkles size={8} />
                             </span>
                           )}
@@ -319,7 +356,7 @@ export default function ChatPanel({
                       }
                       metadata={
                         <>
-                          <strong>{isOwn ? 'You' : entry.displayName}</strong>
+                          <strong>{displayName}</strong>
                           <time dateTime={entry.createdAt}>
                             {formatMessageTime(entry.createdAt)}
                           </time>
@@ -333,6 +370,7 @@ export default function ChatPanel({
                   );
                 })}
               </ChatMessageList>
+
             </ChatLayout>
           </Dialog.Content>
         )}

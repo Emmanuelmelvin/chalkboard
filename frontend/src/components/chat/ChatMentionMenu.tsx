@@ -82,12 +82,15 @@ export const ChatMentionMenu: React.FC<ChatMentionMenuProps> = ({
                 <span className="menu-item-subtext">
                   {isAll
                     ? 'Notify everyone in room'
+                    : item.userId === 'agent:chalkboard-master' || item.displayName.includes('Chalkboard Master')
+                    ? 'AI Classroom Co-Pilot'
                     : item.role === 'owner'
                     ? 'Owner'
                     : item.role === 'instructor'
                     ? 'Instructor'
                     : 'Member'}
                 </span>
+
               </div>
             </button>
           );

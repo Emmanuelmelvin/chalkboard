@@ -1794,20 +1794,19 @@ export function createNote(
  */
 export function sendChatMessage(
     message: string,
-    opts?: {
+    _opts?: {
         isAi?: boolean;
         agentId?: string;
         requestedBy?: string;
     }
 ): CommandResult {
+
     const { socket, roomId } = getBoard();
     if (!socket) return { ok: false, error: 'no socket connection' };
     if (!message || message.trim().length === 0)
         return { ok: false, error: 'message must not be empty' };
 
-    // If marked as AI action, prefix with standard AI tag for clear classroom attribution
-    const agentTag = opts?.isAi || opts?.agentId ? `[AI:${opts?.agentId || 'chalkboard-master'}] ` : '';
-    const formattedMessage = `${agentTag}${message.trim()}`;
+    const formattedMessage = message.trim();
 
     socket.emit('chat:send', {
         roomId,
@@ -1820,6 +1819,7 @@ export function sendChatMessage(
     });
     return { ok: true };
 }
+
 
 /**
  * Broadcast a cursor-move event so other participants see the agent's pointer.

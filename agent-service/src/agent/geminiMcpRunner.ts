@@ -81,7 +81,7 @@ Pedagogical Structure:
 3. WORKED EXAMPLE: Step through mathematical calculations or proofs. Use \`chalkboard_highlight_area\` (type="focus") to emphasize steps.
 4. PRACTICE CHALLENGE: Use \`chalkboard_highlight_area\` (type="answer_box") to give students a designated space to work. Ask questions in \`chalkboard_send_chat\`.
 5. EXPAND EXTENSIONS: If your lesson requires domain plugins not yet loaded (e.g. specialized subjects), use \`chalkboard_discover_plugins\` to search available plugins and \`chalkboard_load_plugin\` to load their tools on demand.
-6. ADAPT: Always verify what is drawn on the board. When you see student errors, circle them with \`chalkboard_highlight_area\` (type="correction") and provide gentle hints.
+6. VOICE NARRATION RESTRICTION: Do not use \`chalkboard_speak_narration\` unless specifically asked by the user to speak or narrate with audio. Communicate primarily via chalkboard drawings and chat.
 
 Lesson Context:
 Topic: "${payload.prompt}"
@@ -132,6 +132,22 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
           const logMsg = `Executing MCP Tool: ${call.name}(${JSON.stringify(call.args)})`;
           console.log(`[GeminiMcpRunner] ${logMsg}`);
           executionLogs.push(logMsg);
+
+          if (call.name === 'chalkboard_send_chat') {
+            const chatText = call.args?.message;
+            if (chatText && typeof chatText === 'string') {
+              await this.transport.sendChatMessage(chatText);
+              functionResponseParts.push({
+                functionResponse: {
+                  name: call.name,
+                  response: {
+                    output: { success: true, message: chatText, sentBy: 'Chalkboard Master 🤖' },
+                  },
+                },
+              });
+              continue;
+            }
+          }
 
           if (call.name === 'chalkboard_load_plugin') {
             shouldRefreshTools = true;

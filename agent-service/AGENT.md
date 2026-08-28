@@ -380,3 +380,137 @@ curl -X POST http://localhost:5001/instruct \
     "style": "Visual, Step-by-Step & Interactive"
   }'
 ```
+
+---
+
+## 10. Advanced Agent Intelligence & The 3-Layer Architecture
+
+Chalkboard Master incorporates state-of-the-art agent engineering principles synthesized from **OpenAI Codex**, **Set Kyar Autonomous Agent Loops**, and **Google Agent Development Kit (ADK)**:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                     LAYER 3: MULTI-AGENT SUB-DELEGATION & REFINEMENT                    │
+│                                  (Google ADK Architecture)                              │
+│                                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────────────────────┐   │
+│   │  LoopAgent (Iterative Refinement)                                               │   │
+│   │   ┌───────────────────────────┐      Feedback Loop     ┌─────────────────────┐  │   │
+│   │   │     Generator Agent       │ ─────────────────────► │  Reviewer / Critic  │  │   │
+│   │   │ (Drafts diagram / proof)  │ ◄───────────────────── │ (Checks layout/math)│  │   │
+│   │   └───────────────────────────┘      State Variable    └──────────┬──────────┘  │   │
+│   │                                                                   │ Escalation /│   │
+│   │                                                                   ▼ Max Iter    │   │
+│   │  SequentialAgent Pipeline:   [Socratic Planner] ──► [LoopAgent] ──► [Executor]  │   │
+│   └─────────────────────────────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────┬────────────────────────────────────────────┘
+                                             │
+                                             ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                     LAYER 2: MACRO TASK ORCHESTRATION & STATE LEDGER                    │
+│                                 (Set Kyar Architecture)                                 │
+│                                                                                         │
+│   • Socratic Requirements Interview: Ask probing questions before major actions        │
+│   • Three-Tier Ledger: Master Spec ──► Prioritized Task Backlog ──► Change History      │
+│   • Single-Task Isolation: Pick 1 discrete task, execute with sub-agents, verify        │
+│   • Gap Analysis: Continuously check remaining work against Master Spec                 │
+└────────────────────────────────────────────┬────────────────────────────────────────────┘
+                                             │
+                                             ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                     LAYER 1: MICRO-TURN HARNESS & CONTEXT ENGINEERING                   │
+│                                 (OpenAI Codex Architecture)                             │
+│                                                                                         │
+│   • Progressive Tool Disclosure: Load only active tool subsets (WebMCP plugins)         │
+│   • Actionable Error Signals: Diagnostic hints when tools fail (coordinate boundaries)  │
+│   • Context Compaction: Prune stale tool outputs and keep rolling milestone summaries  │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 11. Room Metadata & Environmental Context Ingestion
+
+When the agent connects to a classroom (`SocketIoMcpTransport` / `RoomAgentSession`), it automatically receives and ingests the classroom's full metadata profile from the backend:
+
+### Ingested Room Profile
+* **Classroom Title** (e.g. *"AP Physics C: Classical Mechanics"*): Establishes the subject, domain, and context.
+* **Description / Syllabus** (e.g. *"Kinematics, Newton's Laws, Rotational Dynamics"*): Establishes the scope and learning objectives.
+* **Visual Theme** (`classroom`, `dark`, `blueprint`, `math_grid`): Influences contrast and chalk color choices.
+* **Access Mode & Default Role** (`open`, `invite_only`, `instructor`, `viewer`): Informs audience privilege.
+* **Voice / WebRTC Status** (`voiceEnabled`): Indicates whether voice channels are active.
+
+```typescript
+export interface RoomMetadata {
+  id: string;
+  slug: string;
+  title: string;
+  description?: string | null;
+  theme: string;
+  accessMode: string;
+  defaultRole: string;
+  voiceEnabled: boolean;
+  ownerId?: string;
+  createdAt?: string;
+}
+```
+
+This metadata is injected directly into Gemini's system instructions, providing immediate contextual grounding without requiring the user to restate the subject matter.
+
+---
+
+## 12. Strict Modality Matching & Canvas Restraint Policies
+
+Chalkboard Master enforces strict behavioral invariants to ensure non-disruptive, polite classroom assistance:
+
+| Invocation Modality | Permitted Response Modality | Rules & Constraints |
+| :--- | :--- | :--- |
+| **💬 Chat Text Query** (`@Master`, `/ask`, `/help`) | **Chat Text (`chalkboard_send_chat`)** | • **No Voice Spoken**: Do NOT call `chalkboard_speak_narration` unless audio was explicitly requested.<br>• **No Canvas Clutter**: Do NOT draw or modify the board unless visual action was requested. |
+| **🎙️ Voice / Audio Channel** | **Spoken Narration (`chalkboard_speak_narration`)** | • Do not spam text chat with duplicate transcripts unless asked. |
+| **🎨 Visual / Drawing Request** (*"Draw a Venn diagram"*, *"Graph $f(x)$"*) | **Canvas Primitives & Domain Plugins** | • Execute layout calculation, select tools, and render clean visual objects. |
+
+### Core Invariants:
+1. **Canvas Restraint Policy**: Never alter or draw on the chalkboard unless the user explicitly requested drawing, diagrams, visual proofs, or board changes. Conceptual questions asked in chat receive answers in chat.
+2. **Socratic Clarification Policy**: If a request is ambiguous, underspecified, or could overwrite existing work, ask clarifying questions in chat before taking action.
+3. **No Meta-Summary Leaking**: Never output internal tool lists (e.g., `"Actions Taken: 1. chalkboard_write_text..."`). Address the students naturally and directly.
+
+---
+
+## 13. Socratic Clarification & Interactive Requirements Gathering
+
+Before executing complex or destructive requests (e.g., clearing the board, reorganizing notes, or building advanced charts), the agent initiates a **Socratic Clarification Turn**:
+
+1. **Detect Ambiguity**:
+   * Missing parameters (e.g., *"Draw a coordinate grid"* $\to$ what ranges for $x$ and $y$?).
+   * Destructive actions (e.g., *"Clear and draw physics"* $\to$ confirm if existing student notes should be erased or moved aside).
+2. **Formulate Probing Question**:
+   * Send a polite, targeted question via `chalkboard_send_chat`.
+3. **Wait for Student Clarification**:
+   * Ingest user response into `RoomWorkingMemory` and execute with full specification.
+
+---
+
+## 14. Multi-Agent Refinement Loops (`LoopAgent` Pattern)
+
+For complex domain visuals (e.g. coordinate graphs with multiple roots, statistical distributions, or multi-set Venn diagrams), Chalkboard Master employs a **Generator $\leftrightarrow$ Critic Loop**:
+
+```
+[Drafter Sub-Agent] ──(Draft Layout & Coordinates)──► [Visual & Pedagogical Critic]
+       ▲                                                          │
+       │                                                          ▼
+       └────────────(Critique & Spacing Adjustments)──────────────┘
+                                                                  │
+                                                        Approved? │ (Score >= 90% or maxTurns)
+                                                                  ▼
+                                                      [Emit Canvas Strokes]
+```
+
+* **Drafter**: Proposes bounding boxes, point series, and font sizes.
+* **Critic**: Evaluates against canvas collision rules, text legibility, and pedagogical clarity.
+* **Harness**: Executes the verified commands sequentially through WebMCP.
+
+---
+
+## 15. System Information Reference
+
+Complete system environment contracts, runtime variables, tool catalogs, and template parameters are formally maintained in [`SYSTEM_INFO.md`](file:///c:/Users/HP/codes/chalkboard/agent-service/SYSTEM_INFO.md).
+

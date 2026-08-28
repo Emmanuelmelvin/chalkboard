@@ -9,6 +9,8 @@ import { GoogleGenAI } from '@google/genai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SocketIoMcpTransport } from '../socket/roomMcpTransport.js';
 import { config } from '../config.js';
+import type { RoomMetadata, AgentActivityPayload } from '../types/index.js';
+import { formatToolActivity } from './activityFormatter.js';
 
 export type SessionState = 'INITIALIZING' | 'IDLE_OBSERVING' | 'ACTIVE_REASONING' | 'DISCONNECTED' | 'ERROR';
 
@@ -22,6 +24,7 @@ export interface ChatEntry {
 
 export interface RoomWorkingMemory {
   roomId: string;
+  roomMetadata?: RoomMetadata | null;
   recentChat: ChatEntry[];
   strokeCount: number;
   lastActivityAt: number;
@@ -59,6 +62,7 @@ export class RoomAgentSession {
 
     this.memory = {
       roomId,
+      roomMetadata: null,
       recentChat: [],
       strokeCount: 0,
       lastActivityAt: Date.now(),
@@ -78,6 +82,9 @@ export class RoomAgentSession {
 
       // 1. Connect Socket.IO transport and join room
       await this.transport.start();
+      if (this.transport.roomMetadata) {
+        this.memory.roomMetadata = this.transport.roomMetadata;
+      }
 
       // 2. Connect MCP client
       await this.mcpClient.connect(this.transport);
@@ -294,11 +301,19 @@ export class RoomAgentSession {
       .map((u) => `${u.name} (${u.role})`)
       .join(', ') || 'No other active participants';
 
+    const meta = this.memory.roomMetadata || this.transport.roomMetadata;
+    const roomTitle = meta?.title ? `"${meta.title}"` : 'General Classroom';
+    const roomDesc = meta?.description ? `"${meta.description}"` : 'No description provided';
+    const roomTheme = meta?.theme || 'classroom';
+
     const systemInstruction = `You are the Chalkboard Master, an intelligent, friendly AI co-pilot and teaching assistant operating inside a live collaborative chalkboard classroom.
 You are directly connected as a participant in the room ("Chalkboard Master (AI)").
 
-
-Room Context:
+Classroom Environment & Metadata:
+- Room Title: ${roomTitle}
+- Room Description / Syllabus: ${roomDesc}
+- Visual Theme: ${roomTheme}
+- Access Mode: ${meta?.accessMode || 'open'}
 - Room ID: "${this.roomId}"
 - Active Participants: ${activeMembers}
 - Current Canvas Activity: ~${this.memory.strokeCount} strokes drawn on the board.
@@ -306,24 +321,38 @@ Room Context:
 ${recentChatContext || '(No recent chat)'}
 
 Your Capabilities:
+- Send chat replies to students via \`chalkboard_send_chat\`.
+- Speak out loud to the room via \`chalkboard_speak_narration\` (ONLY when audio/voice is explicitly requested).
 - Control the chalkboard canvas: draw diagrams, geometry, graphs, Cartesian coordinates, write chalkboard text, place sticky notes, highlight areas.
 - For domain mathematics: use Math Set tools (Venn diagrams, coordinate grids, function plots, number lines, matrices).
 - For statistics: use Statistics tools (charts, box plots, summary tables).
-- Send chat replies to students via \`chalkboard_send_chat\`.
-- Speak out loud to the room via \`chalkboard_speak_narration\`.
 - Discover and activate new domain plugins using \`chalkboard_discover_plugins\` and \`chalkboard_load_plugin\`.
 
-Guidelines:
-1. Be helpful, concise, visually expressive, and pedagogically clear.
-2. When asked to explain or solve something, draw diagrams or formulas on the chalkboard while explaining in chat.
-3. Address the student who called you (${requestedBy}) directly.
-4. To send text messages to the classroom, use the \`chalkboard_send_chat\` tool.
-5. VOICE NARRATION RESTRICTION: When responding to chat requests, do NOT call \`chalkboard_speak_narration\` unless the user explicitly instructed you to speak aloud or narrate with audio (e.g. "read aloud", "speak", "narrate"). By default, communicate exclusively via chat and on-board drawings.
-6. NEVER output internal meta-summaries or checklists of tools called (e.g. do NOT write "Actions Taken: 1. Chalkboard: ..."). Speak directly and naturally to the students.`;
+Strict Behavioral & Modality Invariants:
+1. MODALITY SYMMETRY (Respond in the exact modality you were asked):
+   - You are currently responding to a CHAT invocation from ${requestedBy}.
+   - Respond ONLY via chat text using \`chalkboard_send_chat\`.
+   - NEVER call \`chalkboard_speak_narration\` (voice/audio) unless the student explicitly asked you to speak aloud or narrate with audio (e.g. "read aloud", "speak", "voice").
+   - Conversely, in voice mode, speak with audio and do not send redundant chat text unless requested.
+2. CANVAS RESTRAINT (Do NOT clutter the board unprompted):
+   - Do NOT add elements or drawings to the chalkboard unless the user explicitly requested visual representations, drawings, diagrams, graphs, or board modifications (e.g. "draw", "graph", "sketch", "show on board", "diagram").
+   - For general conceptual, textual, or conversational questions, answer concisely and clearly in chat WITHOUT calling canvas tools.
+3. SOCRATIC CLARIFICATION:
+   - If the student's request is ambiguous, underspecified, or if an action might overwrite existing student drawings, ask clarifying questions in chat before taking major canvas actions.
+4. ADDRESS USER NATURALLY:
+   - Address ${requestedBy} directly.
+   - NEVER output internal meta-summaries or checklists of tools called (e.g. do NOT write "Actions Taken: 1. Chalkboard: ...").`;
 
     let turnCount = 0;
     let hasSentChatMessage = false;
     const maxTurns = config.MAX_TURNS_PER_INSTRUCTION;
+
+    this.transport.broadcastActivity({
+      stage: 'thinking',
+      thought: `Analyzing request from ${requestedBy}: "${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}"`,
+      turnIndex: 0,
+      maxTurns,
+    });
 
     try {
       let chat = this.ai.chats.create({
@@ -336,7 +365,7 @@ Guidelines:
       });
 
       let currentResponse = await chat.sendMessage({
-        message: `${requestedBy} asked: "${prompt}". Please assist them by taking appropriate action on the board and responding in chat.`,
+        message: `${requestedBy} asked: "${prompt}". Evaluate their request, ask clarifying questions if underspecified, and respond adhering strictly to the modality matching and canvas restraint rules.`,
       });
 
       // Autonomous Tool Execution Loop
@@ -354,6 +383,14 @@ Guidelines:
               await this.transport.sendChatMessage(trimmed);
             }
           }
+
+          this.transport.broadcastActivity({
+            stage: 'completed',
+            thought: 'Completed response.',
+            turnIndex: turnCount,
+            maxTurns,
+          });
+          setTimeout(() => this.transport.broadcastActivity({ stage: 'idle' }), 3000);
           break;
         }
 
@@ -362,7 +399,18 @@ Guidelines:
 
         for (const call of functionCalls) {
           if (!call.name) continue;
+          const { toolAction, toolSummary } = formatToolActivity(call.name, call.args);
           console.log(`[RoomAgentSession] Tool Call in ${this.roomId}: ${call.name}(${JSON.stringify(call.args)})`);
+
+          this.transport.broadcastActivity({
+            stage: 'executing_tool',
+            toolName: call.name,
+            toolAction,
+            toolSummary,
+            toolArgs: call.args as Record<string, any>,
+            turnIndex: turnCount,
+            maxTurns,
+          });
 
           if (call.name === 'chalkboard_send_chat') {
             hasSentChatMessage = true;
@@ -375,6 +423,16 @@ Guidelines:
                   name: call.name,
                   response: { output: { success: true, message: chatText, sentBy: 'Chalkboard Master (AI)' } },
                 },
+              });
+
+              this.transport.broadcastActivity({
+                stage: 'tool_result',
+                toolName: call.name,
+                toolAction,
+                toolSummary,
+                resultSummary: 'Sent chat message',
+                turnIndex: turnCount,
+                maxTurns,
               });
 
               continue;
@@ -397,6 +455,16 @@ Guidelines:
                 response: { output: mcpResult },
               },
             });
+
+            this.transport.broadcastActivity({
+              stage: 'tool_result',
+              toolName: call.name,
+              toolAction,
+              toolSummary,
+              resultSummary: 'Executed successfully',
+              turnIndex: turnCount,
+              maxTurns,
+            });
           } catch (toolError: any) {
             console.error(`[RoomAgentSession] Tool execution error for ${call.name}:`, toolError);
             functionResponseParts.push({
@@ -404,6 +472,16 @@ Guidelines:
                 name: call.name,
                 response: { error: toolError?.message || 'Tool execution failed' },
               },
+            });
+
+            this.transport.broadcastActivity({
+              stage: 'tool_result',
+              toolName: call.name,
+              toolAction,
+              toolSummary,
+              resultSummary: `Error: ${toolError?.message || 'Execution failed'}`,
+              turnIndex: turnCount,
+              maxTurns,
             });
           }
         }
@@ -434,6 +512,13 @@ Guidelines:
           }
         }
 
+        this.transport.broadcastActivity({
+          stage: 'thinking',
+          thought: 'Processing tool results and reasoning next action...',
+          turnIndex: turnCount,
+          maxTurns,
+        });
+
         // Send function responses back to Gemini
         currentResponse = await chat.sendMessage({
           message: functionResponseParts,
@@ -444,6 +529,10 @@ Guidelines:
       return { success: true, turns: turnCount };
     } catch (err: any) {
       console.error(`[RoomAgentSession] Reasoning error:`, err);
+      this.transport.broadcastActivity({
+        stage: 'error',
+        thought: err?.message || 'Encountered an error during reasoning',
+      });
       throw err;
     }
   }
@@ -472,6 +561,7 @@ Guidelines:
   public getStatus() {
     return {
       roomId: this.roomId,
+      roomMetadata: this.memory.roomMetadata,
       state: this.state,
       isProcessing: this.isProcessing,
       connected: this.transport.isConnected(),

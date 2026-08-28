@@ -74,6 +74,7 @@ type SocketAckResponse = {
   ok: boolean;
   error?: string;
   role?: string;
+  room?: Record<string, any>;
   ownerVoiceConnected?: boolean;
 };
 
@@ -368,9 +369,22 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
   }
 
   sendAck(ack, {
-
     ok: true,
     role,
+    room: roomDetails?.room
+      ? {
+          id: roomDetails.room.id,
+          slug: roomDetails.room.slug,
+          title: roomDetails.room.title,
+          description: roomDetails.room.description,
+          theme: roomDetails.room.theme,
+          accessMode: roomDetails.room.accessMode,
+          defaultRole: roomDetails.room.defaultRole,
+          voiceEnabled: roomDetails.room.voiceEnabled,
+          ownerId: roomDetails.room.ownerId,
+          createdAt: roomDetails.room.createdAt,
+        }
+      : undefined,
     ownerVoiceConnected: roomDetails?.room.voiceEnabled
       ? await isVoiceOwnerConnected(data.roomId)
       : false,
@@ -1066,6 +1080,16 @@ export async function attachSocket(server: any) {
         } catch (err: any) {
           sendAck(ack, { ok: false, error: err?.message || 'mcp:call_tool relay error' });
         }
+      });
+    });
+
+    // Relay agent thinking, stage, and tool activity telemetry to all room members
+    socket.on('agent:activity', (payload, ack) => {
+      runSafely(socket, 'agent:activity', ack, () => {
+        const roomId = payload?.roomId || getSocketMeta(socket.id)?.roomId;
+        if (!roomId) return sendAck(ack, { ok: false, error: 'roomId required' });
+        io.to(roomId).emit('agent:activity', payload);
+        sendAck(ack, { ok: true });
       });
     });
 

@@ -8,7 +8,8 @@ import { GoogleGenAI } from '@google/genai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SocketIoMcpTransport } from '../socket/roomMcpTransport.js';
 import { config } from '../config.js';
-import type { InstructPayload } from '../types/index.js';
+import type { InstructPayload, AgentActivityPayload } from '../types/index.js';
+import { formatToolActivity } from './activityFormatter.js';
 
 export class GeminiMcpRunner {
   private ai: GoogleGenAI;
@@ -69,11 +70,24 @@ export class GeminiMcpRunner {
     let tools = await this.init();
     let geminiFunctionDeclarations = this.convertMcpToolsToGemini(tools);
 
+    const meta = this.transport.roomMetadata;
+    const roomTitle = meta?.title ? `"${meta.title}"` : 'General Classroom';
+    const roomDesc = meta?.description ? `"${meta.description}"` : 'No description provided';
+    const roomTheme = meta?.theme || 'classroom';
+
     const systemInstruction = `You are the Chalkboard Master, an autonomous AI instructor leading a live collaborative classroom lesson.
 You have direct control over the chalkboard canvas via core tools and dynamic domain plugin tools.
 
+Classroom Environment & Metadata:
+- Room Title: ${roomTitle}
+- Room Description: ${roomDesc}
+- Visual Theme: ${roomTheme}
+- Target Topic: "${payload.prompt}"
+- Difficulty Level: ${payload.level || 'High School'}
+- Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}
+
 Pedagogical Structure:
-1. INTRODUCE TOPIC: Write a clean title header with \`chalkboard_write_text\`. Speak a welcome with \`chalkboard_speak_narration\`.
+1. INTRODUCE TOPIC: Write a clean title header with \`chalkboard_write_text\`.
 2. VISUAL DIAGRAM: Draw geometric figures, coordinate axes, Venn diagrams, or concept charts.
    - For standard geometry/curves, use \`chalkboard_draw_chalk\` and \`chalkboard_insert_shape\`.
    - For mathematical set diagrams, coordinate grids, graphs, number lines, or matrices, prefer using the dedicated \`plugin_math_set_*\` tools (e.g. \`plugin_math_set_two_set_venn\`, \`plugin_math_set_coordinate_grid\`, \`plugin_math_set_graph\`, \`plugin_math_set_number_line\`, \`plugin_math_set_matrix\`).
@@ -81,18 +95,25 @@ Pedagogical Structure:
 3. WORKED EXAMPLE: Step through mathematical calculations or proofs. Use \`chalkboard_highlight_area\` (type="focus") to emphasize steps.
 4. PRACTICE CHALLENGE: Use \`chalkboard_highlight_area\` (type="answer_box") to give students a designated space to work. Ask questions in \`chalkboard_send_chat\`.
 5. EXPAND EXTENSIONS: If your lesson requires domain plugins not yet loaded (e.g. specialized subjects), use \`chalkboard_discover_plugins\` to search available plugins and \`chalkboard_load_plugin\` to load their tools on demand.
-6. VOICE NARRATION RESTRICTION: Do not use \`chalkboard_speak_narration\` unless specifically asked by the user to speak or narrate with audio. Communicate primarily via chalkboard drawings and chat.
 
-Lesson Context:
-Topic: "${payload.prompt}"
-Difficulty Level: ${payload.level || 'High School'}
-Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
+Strict Behavioral Invariants:
+1. VOICE NARRATION RESTRICTION: Do not use \`chalkboard_speak_narration\` unless specifically asked by the user to speak or narrate with audio. Communicate primarily via chalkboard drawings and chat.
+2. CANVAS RESTRAINT: Do not draw unrelated or unrequested items. If a user asks a conceptual question in chat, answer in chat.
+3. SOCRATIC CLARIFICATION: If the prompt is ambiguous or underspecified, ask clarifying questions in \`chalkboard_send_chat\` before making destructive board changes.
+4. NO META-SUMMARY LEAKING: Never output internal tool lists (e.g., "Actions Taken: 1. ...").`;
 
-    console.log(`[GeminiMcpRunner] Starting autonomous lesson for prompt: "${payload.prompt}"`);
+    console.log(`[GeminiMcpRunner] Starting autonomous lesson for prompt: "${payload.prompt}" in "${roomTitle}"`);
 
     const executionLogs: string[] = [];
     let turnCount = 0;
     const maxTurns = config.MAX_TURNS_PER_INSTRUCTION;
+
+    this.transport.broadcastActivity({
+      stage: 'thinking',
+      thought: `Structuring lesson on "${payload.prompt}"...`,
+      turnIndex: 0,
+      maxTurns,
+    });
 
     try {
       // Initialize Gemini Chat session with dynamic tools
@@ -107,7 +128,7 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
 
       // Send initial prompt to Gemini
       let currentResponse = await chat.sendMessage({
-        message: `Please begin teaching the lesson: "${payload.prompt}". Start by writing the lesson title, sketching the introductory diagram on the board, and introducing the topic out loud.`,
+        message: `Please begin teaching the lesson: "${payload.prompt}". Start by writing the lesson title on the chalkboard and sketching the introductory diagram.`,
       });
 
       // Autonomous Tool Calling Loop
@@ -120,6 +141,13 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
           if (currentResponse.text) {
             executionLogs.push(`Model Thought: ${currentResponse.text}`);
           }
+          this.transport.broadcastActivity({
+            stage: 'completed',
+            thought: 'Lesson steps completed.',
+            turnIndex: turnCount,
+            maxTurns,
+          });
+          setTimeout(() => this.transport.broadcastActivity({ stage: 'idle' }), 3000);
           break;
         }
 
@@ -129,9 +157,20 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
         // Execute each tool call through the MCP client
         for (const call of functionCalls) {
           if (!call.name) continue;
+          const { toolAction, toolSummary } = formatToolActivity(call.name, call.args);
           const logMsg = `Executing MCP Tool: ${call.name}(${JSON.stringify(call.args)})`;
           console.log(`[GeminiMcpRunner] ${logMsg}`);
           executionLogs.push(logMsg);
+
+          this.transport.broadcastActivity({
+            stage: 'executing_tool',
+            toolName: call.name,
+            toolAction,
+            toolSummary,
+            toolArgs: call.args as Record<string, any>,
+            turnIndex: turnCount,
+            maxTurns,
+          });
 
           if (call.name === 'chalkboard_send_chat') {
             const chatText = call.args?.message;
@@ -144,6 +183,16 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
                     output: { success: true, message: chatText, sentBy: 'Chalkboard Master (AI)' },
                   },
                 },
+              });
+
+              this.transport.broadcastActivity({
+                stage: 'tool_result',
+                toolName: call.name,
+                toolAction,
+                toolSummary,
+                resultSummary: 'Sent chat message',
+                turnIndex: turnCount,
+                maxTurns,
               });
 
               continue;
@@ -169,6 +218,16 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
                 },
               },
             });
+
+            this.transport.broadcastActivity({
+              stage: 'tool_result',
+              toolName: call.name,
+              toolAction,
+              toolSummary,
+              resultSummary: 'Executed successfully',
+              turnIndex: turnCount,
+              maxTurns,
+            });
           } catch (toolError: any) {
             console.error(`[GeminiMcpRunner] Tool execution failed for ${call.name}:`, toolError);
             functionResponseParts.push({
@@ -178,6 +237,16 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
                   error: toolError?.message || 'Tool execution failed',
                 },
               },
+            });
+
+            this.transport.broadcastActivity({
+              stage: 'tool_result',
+              toolName: call.name,
+              toolAction,
+              toolSummary,
+              resultSummary: `Error: ${toolError?.message || 'Execution failed'}`,
+              turnIndex: turnCount,
+              maxTurns,
             });
           }
         }
@@ -209,6 +278,13 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
           }
         }
 
+        this.transport.broadcastActivity({
+          stage: 'thinking',
+          thought: 'Processing board results and calculating next diagram...',
+          turnIndex: turnCount,
+          maxTurns,
+        });
+
         // Helper for sending message with automatic retry on 503/429
         const sendWithRetry = async (payloadMsg: any, maxRetries = 3) => {
           for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -238,6 +314,10 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
       return { success: true, turns: turnCount, log: executionLogs };
     } catch (err: any) {
       console.error('[GeminiMcpRunner] Agent execution error:', err);
+      this.transport.broadcastActivity({
+        stage: 'error',
+        thought: err?.message || 'Execution error during lesson',
+      });
       return { success: false, turns: turnCount, log: [...executionLogs, `Error: ${err?.message}`] };
     } finally {
       await this.transport.close();

@@ -230,3 +230,30 @@ export type ShapeType =
   | 'arrow'
   | 'cross'
   | 'heart';
+
+export type AgentStage =
+  | 'idle'
+  | 'thinking'
+  | 'planning'
+  | 'executing_tool'
+  | 'tool_result'
+  | 'clarifying'
+  | 'completed'
+  | 'error';
+
+export interface AgentActivityPayload {
+  roomId: string;
+  agentId?: string;
+  displayName?: string;
+  stage: AgentStage;
+  thought?: string;
+  toolName?: string;
+  toolAction?: string;
+  toolSummary?: string;
+  toolArgs?: Record<string, any>;
+  resultSummary?: string;
+  turnIndex?: number;
+  maxTurns?: number;
+  timestamp?: string;
+}
+

@@ -90,3 +90,45 @@ export interface StopPayload {
   roomId: string;
   reason?: string;
 }
+
+export interface RoomMetadata {
+  id?: string;
+  slug?: string;
+  title?: string;
+  description?: string | null;
+  theme?: string;
+  accessMode?: string;
+  defaultRole?: string;
+  voiceEnabled?: boolean;
+  ownerId?: string;
+  createdAt?: string;
+}
+
+export type InvocationModality = 'chat' | 'voice' | 'instruct';
+
+export type AgentStage =
+  | 'idle'
+  | 'thinking'
+  | 'planning'
+  | 'executing_tool'
+  | 'tool_result'
+  | 'clarifying'
+  | 'completed'
+  | 'error';
+
+export interface AgentActivityPayload {
+  roomId: string;
+  agentId?: string;
+  displayName?: string;
+  stage: AgentStage;
+  thought?: string;
+  toolName?: string;
+  toolAction?: string;
+  toolSummary?: string;
+  toolArgs?: Record<string, any>;
+  resultSummary?: string;
+  turnIndex?: number;
+  maxTurns?: number;
+  timestamp?: string;
+}
+

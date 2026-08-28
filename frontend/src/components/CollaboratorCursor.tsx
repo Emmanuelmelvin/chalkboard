@@ -60,9 +60,9 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
         isDefaultPosition
           ? undefined
           : {
-              transform: `translate3d(${x}px, ${y}px, 0)`,
-              willChange: 'transform',
-            }
+            transform: `translate3d(${x}px, ${y}px, 0)`,
+            willChange: 'transform',
+          }
       }
       aria-label={`${collaborator.name}'s cursor`}
     >
@@ -136,9 +136,10 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
             </div>
 
             {/* Name on the RIGHT (shortened if too long) */}
-            <span className="collaborator-cursor-name" title={collaborator.name}>
+            <span className="collaborator-cursor-name">
               {shortenName(collaborator.name, 12)}
             </span>
+
           </div>
         </HoverCard.Trigger>
 
@@ -153,85 +154,74 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
             onPointerDownOutside={() => setOpen(false)}
           >
 
-          {/* Colored top accent bar */}
-          <div
-            className="collaborator-card-accent-bar"
-            style={{ backgroundColor: color }}
-          />
+            {/* Colored top accent bar */}
+            <div
+              className="collaborator-card-accent-bar"
+              style={{ backgroundColor: color }}
+            />
 
-          <div className="collaborator-card-body">
-            {/* Profile image with border & active dot */}
-            <div className="collaborator-card-avatar-wrap">
-              {isAgent ? (
-                <div
-                  className="collaborator-card-avatar-root"
-                  style={{ borderColor: color }}
-                >
-                  <ChalkboardMasterIcon size="100%" withBackground={true} className="collaborator-card-avatar-img" />
-                </div>
-              ) : (
-                <Avatar.Root
-                  className="collaborator-card-avatar-root"
-                  style={{ borderColor: color }}
-                >
-                  <Avatar.Image
-                    className="collaborator-card-avatar-img"
-                    src={collaborator.avatarUrl || undefined}
-                    alt={collaborator.name}
-                  />
-                  <Avatar.Fallback className="collaborator-card-avatar-fallback">
-                    {avatarInitials(collaborator.name)}
-                  </Avatar.Fallback>
-                </Avatar.Root>
-              )}
-              <span
-                className="collaborator-card-status-dot"
-                style={{ backgroundColor: color }}
-              />
-            </div>
-
-
-            {/* User details and status */}
-            <div className="collaborator-card-info">
-              <div className="collaborator-card-name-row">
-                <span className="collaborator-card-full-name">{collaborator.name}</span>
-                <span className={`collaborator-card-role-badge role-${collaborator.role}`}>
-                  {isAgent
-                    ? '✨ AI Co-Pilot'
-                    : collaborator.role === 'owner'
-                    ? '👑 Owner'
-                    : collaborator.role === 'instructor'
-                    ? '🛡️ Instructor'
-                    : 'Collaborator'}
-                </span>
-              </div>
-
-
-              <div className="collaborator-card-details">
-                <div className="collaborator-card-detail-item">
-                  <span
-                    className="collaborator-card-color-chip"
-                    style={{ backgroundColor: color }}
-                  />
-                  <span>Canvas Cursor</span>
-                </div>
-
-                {userSpeaking && (
-                  <div className="collaborator-card-detail-item speaking-item">
-                    <span className="speaking-wave-dot" />
-                    <span>Speaking live</span>
+            <div className="collaborator-card-body">
+              {/* Profile image with border & active dot */}
+              <div className="collaborator-card-avatar-wrap">
+                {isAgent ? (
+                  <div
+                    className="collaborator-card-avatar-root"
+                    style={{ borderColor: color }}
+                  >
+                    <ChalkboardMasterIcon size="100%" withBackground={true} className="collaborator-card-avatar-img" />
                   </div>
+                ) : (
+                  <Avatar.Root
+                    className="collaborator-card-avatar-root"
+                    style={{ borderColor: color }}
+                  >
+                    <Avatar.Image
+                      className="collaborator-card-avatar-img"
+                      src={collaborator.avatarUrl || undefined}
+                      alt={collaborator.name}
+                    />
+                    <Avatar.Fallback className="collaborator-card-avatar-fallback">
+                      {avatarInitials(collaborator.name)}
+                    </Avatar.Fallback>
+                  </Avatar.Root>
                 )}
+                <span
+                  className="collaborator-card-status-dot"
+                  style={{ backgroundColor: color }}
+                />
+              </div>
+
+
+              {/* User details and status */}
+              <div className="collaborator-card-info">
+                <div className="collaborator-card-name-row">
+                  <span className="collaborator-card-full-name">{collaborator.name}</span>
+                </div>
+                <div className="collaborator-card-details">
+                  <div className="collaborator-card-detail-item">
+                    <span
+                      className="collaborator-card-color-chip"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span>Canvas Cursor</span>
+                  </div>
+
+                  {userSpeaking && (
+                    <div className="collaborator-card-detail-item speaking-item">
+                      <span className="speaking-wave-dot" />
+                      <span>Speaking live</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          <HoverCard.Arrow className="collaborator-hover-card-arrow" />
-        </HoverCard.Content>
-      </HoverCard.Portal>
-    </HoverCard.Root>
-  </div>
-);
+            <HoverCard.Arrow className="collaborator-hover-card-arrow" />
+          </HoverCard.Content>
+        </HoverCard.Portal>
+      </HoverCard.Root>
+    </div>
+  );
 
 };
 

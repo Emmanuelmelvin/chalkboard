@@ -8,11 +8,13 @@ import { io, Socket } from 'socket.io-client';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import { config } from '../config.js';
+import type { RoomMetadata, AgentActivityPayload } from '../types/index.js';
 
 export class SocketIoMcpTransport implements Transport {
   private socket: Socket | null = null;
   private roomId: string;
   private backendUrl: string;
+  public roomMetadata: RoomMetadata | null = null;
 
   public onmessage?: (message: JSONRPCMessage) => void;
   public onerror?: (error: Error) => void;
@@ -52,17 +54,34 @@ export class SocketIoMcpTransport implements Transport {
             roomId: this.roomId,
             clientSessionId: `agent_session_${Date.now()}`,
           },
-          (ack: { ok: boolean; error?: string }) => {
+          (ack: { ok: boolean; role?: string; room?: RoomMetadata; error?: string }) => {
             if (ack && !ack.ok) {
               const err = new Error(`Failed to join room ${this.roomId}: ${ack.error}`);
               this.onerror?.(err);
               reject(err);
               return;
             }
+
+            if (ack && ack.room) {
+              this.roomMetadata = ack.room;
+              console.log(
+                `[SocketIoMcpTransport] Ingested room metadata: "${ack.room.title || 'Untitled'}" (Theme: ${ack.room.theme || 'default'})`
+              );
+            }
+
             console.log(`[SocketIoMcpTransport] Agent successfully joined room: ${this.roomId}`);
             resolve();
           }
         );
+      });
+
+      this.socket.on('room-members-updated', (data: any) => {
+        if (data?.room) {
+          this.roomMetadata = {
+            ...this.roomMetadata,
+            ...data.room,
+          };
+        }
       });
 
       this.socket.on('connect_error', (err) => {
@@ -224,10 +243,25 @@ export class SocketIoMcpTransport implements Transport {
   }
 
   /**
+   * Broadcast realtime thinking / stage / tool activity telemetry to the classroom room.
+   */
+  public broadcastActivity(activity: Partial<AgentActivityPayload>): void {
+    if (!this.socket || !this.socket.connected) return;
+    this.socket.emit('agent:activity', {
+      roomId: this.roomId,
+      agentId: 'agent:chalkboard-master',
+      displayName: 'Chalkboard Master (AI)',
+      timestamp: new Date().toISOString(),
+      ...activity,
+    });
+  }
+
+  /**
    * Get the underlying raw Socket.IO instance.
    */
   public getSocket(): Socket | null {
     return this.socket;
   }
 }
+
 

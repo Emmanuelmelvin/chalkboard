@@ -85,6 +85,7 @@ import NotesLayer from '@/plugins/builtin/notes/NotesLayer';
 import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
 import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
+import { toast } from '@/components/ui/Toast';
 import { webMcp } from '@/webmcp';
 import { useLoggerStore } from '@/stores/loggerStore';
 import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
@@ -1176,6 +1177,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     const inviteLink = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
     navigator.clipboard.writeText(inviteLink).then(() => {
       setIsCopied(true);
+      toast.success('Room invite link copied to clipboard');
       setTimeout(() => setIsCopied(false), 2000);
     });
   };

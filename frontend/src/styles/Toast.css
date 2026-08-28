@@ -1,0 +1,179 @@
+/**
+ * @file Toast.css
+ * @description Astryx Toast Design System styling matching the dark pill design.
+ * Positioned at the top center with smooth slide-down entrance animations.
+ */
+
+.astryx-toast-viewport {
+  position: fixed;
+  top: 24px;
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  z-index: 999999;
+  outline: none;
+  pointer-events: none;
+}
+
+.astryx-toast-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 260px;
+  max-width: 540px;
+  padding: 10px 16px 10px 20px;
+  background: #090d16;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow:
+    0 14px 36px -4px rgba(0, 0, 0, 0.6),
+    0 4px 14px -2px rgba(0, 0, 0, 0.4);
+  color: #ffffff;
+  pointer-events: auto;
+  user-select: none;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+
+.astryx-toast-root[data-state='open'] {
+  animation: astryxToastSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.astryx-toast-root[data-state='closed'] {
+  animation: astryxToastHide 0.15s ease-in forwards;
+}
+
+.astryx-toast-root[data-swipe='move'] {
+  transform: translateX(var(--radix-toast-swipe-move-x, 0));
+}
+
+.astryx-toast-root[data-swipe='cancel'] {
+  transform: translateX(0);
+  transition: transform 0.2s ease-out;
+}
+
+.astryx-toast-root[data-swipe='end'] {
+  animation: astryxToastSwipeOut 0.15s ease-out forwards;
+}
+
+/* Optional icon */
+.astryx-toast-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #94a3b8;
+}
+
+.astryx-toast-type-success .astryx-toast-icon-wrap {
+  color: #10b981;
+}
+
+.astryx-toast-type-warning .astryx-toast-icon-wrap {
+  color: #f59e0b;
+}
+
+.astryx-toast-type-error .astryx-toast-icon-wrap {
+  color: #ef4444;
+}
+
+.astryx-toast-type-info .astryx-toast-icon-wrap {
+  color: #60a5fa;
+}
+
+/* Content */
+.astryx-toast-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.astryx-toast-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.3;
+}
+
+.astryx-toast-body {
+  font-size: 13.5px;
+  font-weight: 450;
+  color: #ffffff;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+/* End content / actions */
+.astryx-toast-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.astryx-toast-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.12s ease;
+}
+
+.astryx-toast-close-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+/* Animations */
+@keyframes astryxToastSlideIn {
+  from {
+    transform: translateY(-20px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes astryxToastHide {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+  }
+}
+
+@keyframes astryxToastSwipeOut {
+  from {
+    transform: translateX(var(--radix-toast-swipe-end-x, 0));
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}

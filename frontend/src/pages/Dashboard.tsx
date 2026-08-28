@@ -52,6 +52,7 @@ const DeveloperPlugins = lazy(() => import('@/components/DeveloperPlugins'));
 const BillingPanel = lazy(() => import('@/components/BillingPanel'));
 const WorkspacePanel = lazy(() => import('@/components/WorkspacePanel'));
 import { useEntitlements } from '@/hooks/useEntitlements';
+import { toast } from '@/components/ui/Toast';
 import type { UserProfile } from '@/stores/authStore';
 import {
   useCreateRoomMutation,
@@ -322,9 +323,11 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     try {
       await navigator.clipboard.writeText(value);
       setCopiedRoomValue(key);
+      toast.success('Copied to clipboard');
       window.setTimeout(() => setCopiedRoomValue((current) => current === key ? null : current), 1800);
     } catch {
       setError('We could not copy that value. Please copy it manually.');
+      toast.error('Could not copy to clipboard');
     }
   };
 
@@ -960,6 +963,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                 onClick={() => {
                   void navigator.clipboard.writeText(createdRoomInvite.slug).then(() => {
                     setCopiedInviteValue('code');
+                    toast.success('Room code copied to clipboard');
                     window.setTimeout(() => setCopiedInviteValue((current) => current === 'code' ? null : current), 1800);
                   });
                 }}
@@ -979,6 +983,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                   onClick={() => {
                     void navigator.clipboard.writeText(createdRoomInvite.password || '').then(() => {
                       setCopiedInviteValue('password');
+                      toast.success('Room password copied to clipboard');
                       window.setTimeout(() => setCopiedInviteValue((current) => current === 'password' ? null : current), 1800);
                     });
                   }}

@@ -18,6 +18,7 @@ const InviteAccept = lazy(() => import('@/pages/InviteAccept'));
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
 import FeedbackWidget from '@/components/FeedbackWidget';
+import { ToastProvider } from '@/components/ui/Toast';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
 import { identifyUserJot } from '@/lib/userjot';
@@ -116,16 +117,15 @@ function App() {
   const handleLeaveRoom = (options?: LeaveRoomOptions) => {
     socket.disconnect();
     setRoomPassword(undefined);
-    if (options?.promptSessionFeedback) {
-      // We are leaving /room/:slug, so ask the dashboard about this session.
-      const slug = location.replace(/^\/room\//, '').split(/[?#]/)[0];
-      if (slug) markSessionFeedbackPending(slug);
+    if (options?.promptSessionFeedback && location.startsWith('/room/')) {
+      const slug = location.replace('/room/', '').split('?')[0];
+      markSessionFeedbackPending(slug);
     }
     setLocation('/dashboard?tab=rooms');
   };
 
   return (
-    <>
+    <ToastProvider>
       {!isRoomRoute && <ThemeToggle theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />}
       {!isRoomRoute && status === 'authenticated' && <FeedbackWidget />}
       <Suspense fallback={<AuthLoading />}>
@@ -159,7 +159,12 @@ function App() {
           {/* Signed-in workspace dashboard */}
           <Route path="/dashboard">
             <RequireAuth>
-              {(user) => <Dashboard profile={user} onJoinRoom={handleJoinRoom} />}
+              {(user) => (
+                <Dashboard
+                  profile={user}
+                  onJoinRoom={handleJoinRoom}
+                />
+              )}
             </RequireAuth>
           </Route>
 
@@ -178,11 +183,7 @@ function App() {
             <Plans />
           </Route>
 
-          {/* Checkout return target. Bachs returns the browser to `success_url`
-              verbatim and appends nothing of its own, so the checkout reference
-              has to be part of the path we hand it. The bare path is kept only so
-              that a return without a reference lands somewhere sensible instead of
-              falling through to the 404 route. */}
+          {/* Checkout return target */}
           <Route path="/billing/return/:reference">
             {({ reference }) => (
               <RequireAuth>
@@ -194,9 +195,7 @@ function App() {
             <Redirect to="/dashboard?tab=billing" />
           </Route>
 
-          {/* Team workspace invite. Public at the router level: the page decides
-              between sign-in, a closed invite, and the accept button, and the
-              server does the email matching. */}
+          {/* Team workspace invite */}
           <Route path="/invite/:token">
             <InviteAccept />
           </Route>
@@ -235,7 +234,7 @@ function App() {
         </Switch>
       </Suspense>
       <LoggerOutlet />
-    </>
+    </ToastProvider>
   );
 }
 

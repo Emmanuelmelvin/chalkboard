@@ -152,8 +152,6 @@
 
 .selection-toolbox {
   position: fixed;
-  left: attr(data-panel-x px);
-  top: attr(data-panel-y px);
   z-index: 2000;
   pointer-events: auto;
 }

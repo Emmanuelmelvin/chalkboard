@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Slider from '@radix-ui/react-slider';
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
@@ -21,9 +21,8 @@ import {
   Brush,
   PenLine,
   PaintBucket,
-  Check,
 } from 'lucide-react';
-import { CHALK_COLORS } from '@/components/tools/ColorPicker';
+import { ColorPicker } from '@/components/ui/ColorPicker';
 import { HoverCard } from '@/components/ui/HoverCard';
 
 interface SelectionToolboxProps {
@@ -103,9 +102,6 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   selectedCount,
   isGrouped,
 }) => {
-  const barRef = useRef<HTMLDivElement>(null);
-  const [barWidth, setBarWidth] = useState(360);
-  const [barHeight, setBarHeight] = useState(44);
   const [colorMode, setColorMode] = useState<'stroke' | 'fill'>('stroke');
   const [brushSize, setBrushSize] = useState(currentSize);
   const [customAngle, setCustomAngle] = useState(currentRotation);
@@ -126,34 +122,17 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
     setDimH(Math.round(currentHeight));
   }, [currentWidth, currentHeight]);
 
-  // Measure bar size once rendered
-  useLayoutEffect(() => {
-    if (barRef.current) {
-      const rect = barRef.current.getBoundingClientRect();
-      if (rect.width > 0) setBarWidth(rect.width);
-      if (rect.height > 0) setBarHeight(rect.height);
-    }
-  });
-
-  // Calculate screen-space position: centered horizontally above the selection box.
-  // If too close to the top of the viewport, place below the selection box instead.
-  const idealX = boxScreenCenterX - barWidth / 2;
+  // Stable screen-space positioning centered horizontally over the selection box.
+  const BAR_ESTIMATED_HALF_WIDTH = 240;
   const clampedX = Math.max(
-    BAR_EDGE_MARGIN,
-    Math.min(window.innerWidth - barWidth - BAR_EDGE_MARGIN, idealX)
+    BAR_EDGE_MARGIN + BAR_ESTIMATED_HALF_WIDTH,
+    Math.min(window.innerWidth - BAR_ESTIMATED_HALF_WIDTH - BAR_EDGE_MARGIN, boxScreenCenterX)
   );
 
-  const placeAbove = boxScreenTop - barHeight - BAR_GAP >= BAR_EDGE_MARGIN;
-  const idealY = placeAbove
-    ? boxScreenTop - barHeight - BAR_GAP
-    : boxScreenBottom + BAR_GAP;
-  const clampedY = Math.max(
-    BAR_EDGE_MARGIN,
-    Math.min(window.innerHeight - barHeight - BAR_EDGE_MARGIN, idealY)
-  );
-
-  const barX = Math.round(clampedX);
-  const barY = Math.round(clampedY);
+  const placeAbove = boxScreenTop - 56 >= BAR_EDGE_MARGIN;
+  const targetY = placeAbove
+    ? Math.max(BAR_EDGE_MARGIN + 48, boxScreenTop - BAR_GAP)
+    : Math.min(window.innerHeight - 56, boxScreenBottom + BAR_GAP);
 
   const handleDimWChange = (val: string) => {
     const num = Math.max(1, parseInt(val, 10) || 0);
@@ -185,11 +164,13 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
   return (
     <div
       className="selection-toolbox"
-      data-panel-x={barX}
-      data-panel-y={barY}
-      style={{ left: barX, top: barY }}
+      style={{
+        left: `${Math.round(clampedX)}px`,
+        top: `${Math.round(targetY)}px`,
+        transform: placeAbove ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+      }}
     >
-      <div ref={barRef} className="sel-bar" style={{ padding: BAR_PADDING }}>
+      <div className="sel-bar" style={{ padding: BAR_PADDING }}>
         {/* ── Color ── */}
         <DropdownMenu.Root modal={false}>
           <HoverCard content="Color" placement="above" sideOffset={6}>
@@ -221,58 +202,19 @@ const SelectionToolbox: React.FC<SelectionToolboxProps> = ({
                 </ToggleGroup.Item>
               </HoverCard>
             </ToggleGroup.Root>
-            <HoverCard content="Custom Color" placement="top">
-              <input
-                type="color"
-                value={colorMode === 'stroke' ? activeColor : activeFillColor === 'transparent' ? '#ffffff' : activeFillColor}
-                onChange={(e) => {
-                  if (colorMode === 'stroke') {
-                    onColorChange(e.target.value);
-                  } else {
-                    onFillColorChange?.(e.target.value);
-                  }
-                }}
-                aria-label="Custom Color"
-                className="native-color-picker sel-native-color-picker"
-              />
-            </HoverCard>
-            <ToggleGroup.Root
-              type="single"
-              className="sel-swatch-grid"
-              value={(colorMode === 'stroke' ? activeColor : activeFillColor).toLowerCase()}
-              onValueChange={(value) => {
-                if (!value) return;
+
+            <ColorPicker
+              value={colorMode === 'stroke' ? activeColor : (activeFillColor ?? 'transparent')}
+              onChange={(color) => {
                 if (colorMode === 'stroke') {
-                  onColorChange(value);
+                  onColorChange(color);
                 } else {
-                  onFillColorChange?.(value);
+                  onFillColorChange?.(color);
                 }
               }}
-            >
-              {CHALK_COLORS.map((c) => {
-                const selected = (colorMode === 'stroke' ? activeColor : activeFillColor).toLowerCase() === c.value;
-                return (
-                  <HoverCard key={c.name} content={c.name} placement="top">
-                    <ToggleGroup.Item
-                      value={c.value}
-                      aria-label={c.name}
-                      className={`sel-swatch sel-swatch-${c.name} ${selected ? 'sel-swatch-active' : ''}`}
-                    >
-                      {selected && <Check size={12} strokeWidth={3} className="sel-swatch-check" />}
-                    </ToggleGroup.Item>
-                  </HoverCard>
-                );
-              })}
-            </ToggleGroup.Root>
-            {colorMode === 'fill' && (
-              <button
-                type="button"
-                className="sel-toolbox-row sel-action-row sel-transparent-fill-button"
-                onClick={() => onFillColorChange?.('transparent')}
-              >
-                <span className="sel-small-label">No Fill (Transparent)</span>
-              </button>
-            )}
+              allowTransparent={colorMode === 'fill'}
+              onSelectTransparent={() => onFillColorChange?.('transparent')}
+            />
           </DropdownMenu.Content>
         </DropdownMenu.Root>
 

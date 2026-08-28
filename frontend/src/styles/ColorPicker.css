@@ -1,0 +1,192 @@
+/**
+ * @file ColorPicker.css
+ * @description Astryx Color Picker component styling.
+ * Pure white background, ash typography, refined swatches, hex text input, and active indicators.
+ */
+
+.astryx-color-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.astryx-color-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.astryx-color-picker-label {
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Custom Hex & Eyedropper row */
+.astryx-color-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.astryx-color-preview-trigger {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: all 0.15s ease;
+}
+
+.astryx-color-preview-trigger:hover {
+  border-color: #94a3b8;
+  transform: scale(1.05);
+}
+
+.astryx-color-preview-swatch {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.astryx-color-native-hidden {
+  position: absolute;
+  top: -100px;
+  left: -100px;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.astryx-color-hex-field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 8px;
+  height: 28px;
+  transition: all 0.12s ease;
+}
+
+.astryx-color-hex-field:focus-within {
+  border-color: #4f46e5;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.18);
+}
+
+.astryx-color-hex-prefix {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  user-select: none;
+}
+
+.astryx-color-hex-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.astryx-color-pipette-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.12s ease;
+}
+
+.astryx-color-pipette-btn:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
+
+/* Swatches Grid */
+.astryx-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  width: 100%;
+}
+
+.astryx-color-swatch-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 7px;
+  border: 1.5px solid rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  outline: none;
+}
+
+.astryx-color-swatch-item:hover {
+  transform: scale(1.12);
+  border-color: rgba(0, 0, 0, 0.25);
+  z-index: 2;
+}
+
+.astryx-color-swatch-item.active {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.35);
+  transform: scale(1.08);
+  z-index: 1;
+}
+
+.astryx-color-swatch-check {
+  pointer-events: none;
+}
+
+/* Transparent fill button */
+.astryx-color-transparent-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 26px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.astryx-color-transparent-btn:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #94a3b8;
+}

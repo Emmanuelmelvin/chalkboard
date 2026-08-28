@@ -2724,15 +2724,16 @@ body {
 .eraser-flyout-icon {
   font-size: 14px;
   line-height: 1;
-  opacity: 0.85;
+  color: #64748b;
 }
 
 .eraser-flyout-title {
-  font-family: var(--font-sketch);
+  font-family: inherit;
   font-size: 11px;
-  color: #e2e8f0;
+  font-weight: 600;
+  color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.5px;
 }
 
 /* Live preview area */

@@ -13,7 +13,6 @@ import {
 import {
   transformStrokes,
   rotateStrokesTo,
-  eraseStrokePoints,
 } from '@/lib/strokes';
 import {
   hitTestTransformBox,
@@ -221,40 +220,12 @@ export function useCanvasInteraction(
     socket?.emit('stroke-end', { roomId });
 
     // Live stroke-start/stroke-draw packets are transient. Persist the
-    // completed stroke through the existing full-stroke event so Redis keeps
-    // the complete room history for refreshes and later joins.
-    if (completedStroke?.tool === 'chalk' && strokeId) {
+    // completed stroke (chalk or eraser) through the full-stroke event so Redis
+    // keeps the complete room history for refreshes and later joins.
+    if (completedStroke && strokeId) {
       socket?.emit('draw-stroke', { roomId, stroke: completedStroke });
     }
-
-    if (completedStroke?.tool === 'eraser' && strokeId) {
-      setStrokes((prevStrokes) => {
-        const eraserStroke = prevStrokes.find((s) => s.id === strokeId);
-        if (!eraserStroke || eraserStroke.points.length === 0) {
-          return prevStrokes.filter((s) => s.id !== strokeId);
-        }
-
-        const eraserPoints = eraserStroke.points;
-        const radius = eraserStroke.eraserWidth && eraserStroke.eraserHeight
-          ? Math.max(eraserStroke.eraserWidth, eraserStroke.eraserHeight) / 2
-          : eraserStroke.size * 2;
-
-        const updated: Stroke[] = [];
-        prevStrokes.forEach((stroke) => {
-          if (stroke.id === strokeId) return;
-          if (stroke.tool === 'eraser') {
-            updated.push(stroke);
-            return;
-          }
-          const sliced = eraseStrokePoints(stroke, eraserPoints, radius, eraserStroke.eraserWidth, eraserStroke.eraserHeight);
-          updated.push(...sliced);
-        });
-
-        socket?.emit('undo-stroke', { roomId, strokes: updated });
-        return updated;
-      });
-    }
-  }, [isDrawing, roomId, socket, setStrokes]);
+  }, [isDrawing, roomId, socket]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;

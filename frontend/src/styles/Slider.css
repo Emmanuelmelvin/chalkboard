@@ -1,0 +1,152 @@
+/**
+ * @file Slider.css
+ * @description Astryx Slider Design System styling.
+ * Complies with Astryx Slider specification (https://astryx.atmeta.com/components/Slider)
+ * Smooth draggable control, concentric thumb with elevation, numerical inputs, and value indicators.
+ */
+
+.astryx-slider-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.astryx-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.astryx-slider-label {
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.astryx-slider-value {
+  font-weight: 600;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.astryx-slider-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+/* Radix Slider Root */
+.astryx-slider-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  touch-action: none;
+  flex: 1;
+  height: 20px;
+  cursor: pointer;
+}
+
+.astryx-slider-root[data-orientation='vertical'] {
+  flex-direction: column;
+  width: 20px;
+  height: 100px;
+}
+
+.astryx-slider-root[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Track */
+.astryx-slider-track {
+  background-color: #e2e8f0;
+  position: relative;
+  flex-grow: 1;
+  border-radius: 9999px;
+  height: 6px;
+  overflow: hidden;
+  transition: background-color 0.15s ease;
+}
+
+.astryx-slider-root[data-orientation='vertical'] .astryx-slider-track {
+  width: 6px;
+  height: 100%;
+}
+
+/* Range */
+.astryx-slider-range {
+  position: absolute;
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  border-radius: 9999px;
+  height: 100%;
+}
+
+.astryx-slider-root[data-orientation='vertical'] .astryx-slider-range {
+  width: 100%;
+  height: auto;
+}
+
+/* Thumb */
+.astryx-slider-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  background-color: #ffffff;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.16),
+    0 0 0 1.5px #4f46e5;
+  border-radius: 50%;
+  cursor: grab;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  outline: none;
+}
+
+.astryx-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.2),
+    0 0 0 2px #4338ca;
+}
+
+.astryx-slider-thumb:active,
+.astryx-slider-thumb:focus-visible {
+  cursor: grabbing;
+  transform: scale(1.2);
+  box-shadow:
+    0 0 0 4px rgba(99, 102, 241, 0.25),
+    0 0 0 2px #4338ca;
+}
+
+/* Number Input Box */
+.astryx-slider-number-input {
+  width: 46px;
+  height: 24px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  outline: none;
+  font-family: inherit;
+  transition: all 0.12s ease;
+  padding: 0 4px;
+}
+
+.astryx-slider-number-input:focus {
+  border-color: #4f46e5;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.astryx-slider-number-input::-webkit-inner-spin-button,
+.astryx-slider-number-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

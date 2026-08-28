@@ -1,20 +1,9 @@
 import React from 'react';
 import type { ShapeType } from '@/types';
-import { HoverCard } from '@/components/ui/HoverCard';
+import { ColorPicker as AstryxColorPicker, CHALK_COLORS, type ChalkColor } from '@/components/ui/ColorPicker';
 
-export interface ChalkColor {
-  name: string;
-  value: string;
-}
-
-export const CHALK_COLORS: ChalkColor[] = [
-  { name: 'white', value: '#ffffff' },
-  { name: 'yellow', value: '#fef08a' },
-  { name: 'blue', value: '#93c5fd' },
-  { name: 'pink', value: '#f472b6' },
-  { name: 'green', value: '#86efac' },
-  { name: 'orange', value: '#fdba74' },
-];
+export { CHALK_COLORS };
+export type { ChalkColor };
 
 interface ColorPickerProps {
   activeTool: 'chalk' | 'eraser' | 'pan' | 'select' | ShapeType;
@@ -24,41 +13,20 @@ interface ColorPickerProps {
 }
 
 export const ColorPicker: React.FC<ColorPickerProps> = ({
-  activeTool,
-  activeColor,
   onToolChange,
+  activeColor,
   onColorChange,
 }) => {
   return (
-    <div className="color-picker-container">
-      <HoverCard content="Custom Color Picker" placement="top" sideOffset={8}>
-        <input
-          type="color"
-          className="native-color-picker"
-          value={activeColor}
-          onChange={(e) => {
-            onToolChange('chalk');
-            onColorChange(e.target.value);
-          }}
-          aria-label="Custom Color Picker"
-        />
-      </HoverCard>
-      <div className="swatch-grid">
-        {CHALK_COLORS.map((color) => (
-          <HoverCard key={color.name} content={`Chalk: ${color.name}`} placement="top" sideOffset={8}>
-            <button
-              type="button"
-              className={`color-swatch color-swatch-${color.name} ${activeTool === 'chalk' && activeColor.toLowerCase() === color.value.toLowerCase() ? 'active' : ''}`}
-              aria-label={`Chalk: ${color.name}`}
-              onClick={() => {
-                onToolChange('chalk');
-                onColorChange(color.value);
-              }}
-            />
-          </HoverCard>
-        ))}
-      </div>
-    </div>
+    <AstryxColorPicker
+      value={activeColor}
+      onChange={(color) => {
+        onToolChange('chalk');
+        onColorChange(color);
+      }}
+      showInput={true}
+      showSwatches={true}
+    />
   );
 };
 

@@ -2,7 +2,7 @@
  * @file HoverCard.tsx
  * @description Astryx HoverCard component implementation.
  * Complies with Astryx Design System (https://astryx.atmeta.com/components/HoverCard)
- * built on top of Radix UI HoverCard primitive.
+ * built on top of Radix UI HoverCard primitive with fullscreen support.
  */
 
 import React from 'react';
@@ -36,6 +36,7 @@ export interface HoverCardProps {
   className?: string;
   contentClassName?: string;
   portal?: boolean;
+  container?: HTMLElement | null;
 }
 
 const mapPlacementToSide = (placement: HoverCardPlacement): 'top' | 'bottom' | 'left' | 'right' => {
@@ -72,12 +73,59 @@ function formatHoverCardContent(content: React.ReactNode) {
 }
 
 /**
+ * Astryx HoverCard Portal with automatic Fullscreen support
+ */
+export const HoverCardPortal: React.FC<RadixHoverCard.HoverCardPortalProps> = ({
+  container,
+  children,
+  ...props
+}) => {
+  const targetContainer =
+    container ??
+    (typeof document !== 'undefined' && document.fullscreenElement
+      ? (document.fullscreenElement as HTMLElement)
+      : undefined);
+
+  return (
+    <RadixHoverCard.Portal container={targetContainer} {...props}>
+      {children}
+    </RadixHoverCard.Portal>
+  );
+};
+
+export interface HoverCardContentProps
+  extends React.ComponentPropsWithoutRef<typeof RadixHoverCard.Content> {
+  showArrow?: boolean;
+}
+
+export const HoverCardContent = React.forwardRef<
+  React.ElementRef<typeof RadixHoverCard.Content>,
+  HoverCardContentProps
+>(({ className = '', children, showArrow = true, ...props }, ref) => (
+  <RadixHoverCard.Content
+    ref={ref}
+    className={`astryx-hover-card-content ${className}`}
+    {...props}
+  >
+    <div className="astryx-hover-card-inner">{children}</div>
+    {showArrow && (
+      <RadixHoverCard.Arrow
+        className="astryx-hover-card-arrow"
+        width={12}
+        height={6}
+      />
+    )}
+  </RadixHoverCard.Content>
+));
+HoverCardContent.displayName = 'HoverCardContent';
+
+/**
  * Astryx HoverCard single-wrapper component
  */
 export const HoverCard: React.FC<HoverCardProps> & {
   Root: typeof RadixHoverCard.Root;
   Trigger: typeof RadixHoverCard.Trigger;
-  Portal: typeof RadixHoverCard.Portal;
+  Portal: typeof HoverCardPortal;
   Content: typeof HoverCardContent;
   Arrow: typeof RadixHoverCard.Arrow;
 } = ({
@@ -97,6 +145,7 @@ export const HoverCard: React.FC<HoverCardProps> & {
   className = '',
   contentClassName = '',
   portal = false,
+  container,
 }) => {
   const side = mapPlacementToSide(placement);
 
@@ -134,7 +183,7 @@ export const HoverCard: React.FC<HoverCardProps> & {
         {children}
       </RadixHoverCard.Trigger>
       {portal ? (
-        <RadixHoverCard.Portal>{contentElement}</RadixHoverCard.Portal>
+        <HoverCardPortal container={container}>{contentElement}</HoverCardPortal>
       ) : (
         contentElement
       )}
@@ -142,35 +191,9 @@ export const HoverCard: React.FC<HoverCardProps> & {
   );
 };
 
-export interface HoverCardContentProps
-  extends React.ComponentPropsWithoutRef<typeof RadixHoverCard.Content> {
-  showArrow?: boolean;
-}
-
-export const HoverCardContent = React.forwardRef<
-  React.ElementRef<typeof RadixHoverCard.Content>,
-  HoverCardContentProps
->(({ className = '', children, showArrow = true, ...props }, ref) => (
-  <RadixHoverCard.Content
-    ref={ref}
-    className={`astryx-hover-card-content ${className}`}
-    {...props}
-  >
-    <div className="astryx-hover-card-inner">{children}</div>
-    {showArrow && (
-      <RadixHoverCard.Arrow
-        className="astryx-hover-card-arrow"
-        width={12}
-        height={6}
-      />
-    )}
-  </RadixHoverCard.Content>
-));
-HoverCardContent.displayName = 'HoverCardContent';
-
 HoverCard.Root = RadixHoverCard.Root;
 HoverCard.Trigger = RadixHoverCard.Trigger;
-HoverCard.Portal = RadixHoverCard.Portal;
+HoverCard.Portal = HoverCardPortal;
 HoverCard.Content = HoverCardContent;
 HoverCard.Arrow = RadixHoverCard.Arrow;
 

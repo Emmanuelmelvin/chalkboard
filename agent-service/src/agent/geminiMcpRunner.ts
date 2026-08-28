@@ -8,8 +8,9 @@ import { GoogleGenAI } from '@google/genai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SocketIoMcpTransport } from '../socket/roomMcpTransport.js';
 import { config } from '../config.js';
-import type { InstructPayload, AgentActivityPayload } from '../types/index.js';
+import type { InstructPayload } from '../types/index.js';
 import { formatToolActivity, extractCursorPosition } from './activityFormatter.js';
+import { sanitizeChatMessage } from './roomAgentSession.js';
 
 export class GeminiMcpRunner {
   private ai: GoogleGenAI;
@@ -180,14 +181,15 @@ Strict Behavioral Invariants:
           }
 
           if (call.name === 'chalkboard_send_chat') {
-            const chatText = call.args?.message;
-            if (chatText && typeof chatText === 'string') {
-              await this.transport.sendChatMessage(chatText);
+            const rawChatText = typeof call.args?.message === 'string' ? call.args.message : String(call.args?.message ?? '');
+            const clean = sanitizeChatMessage(rawChatText);
+            if (clean) {
+              await this.transport.sendChatMessage(clean);
               functionResponseParts.push({
                 functionResponse: {
                   name: call.name,
                   response: {
-                    output: { success: true, message: chatText, sentBy: 'Chalkboard Master (AI)' },
+                    output: { success: true, message: clean, sentBy: 'Chalkboard Master (AI)' },
                   },
                 },
               });
@@ -241,7 +243,8 @@ Strict Behavioral Invariants:
               functionResponse: {
                 name: call.name,
                 response: {
-                  error: toolError?.message || 'Tool execution failed',
+                  status: 'failed',
+                  reason: 'That action could not be completed right now. Please continue explaining in the chat instead.',
                 },
               },
             });
@@ -251,7 +254,7 @@ Strict Behavioral Invariants:
               toolName: call.name,
               toolAction,
               toolSummary,
-              resultSummary: `Error: ${toolError?.message || 'Execution failed'}`,
+              resultSummary: 'Action unavailable',
               turnIndex: turnCount,
               maxTurns,
             });

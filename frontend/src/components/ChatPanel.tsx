@@ -171,7 +171,7 @@ export default function ChatPanel({
   useEffect(() => {
     const handleAgentActivity = (payload: AgentActivityPayload) => {
       if (payload.roomId !== roomId) return;
-      if (payload.stage === 'idle') {
+      if (payload.stage === 'idle' || payload.stage === 'completed') {
         setAgentActivity(null);
       } else {
         setAgentActivity(payload);
@@ -182,6 +182,13 @@ export default function ChatPanel({
       socket.off('agent:activity', handleAgentActivity);
     };
   }, [socket, roomId]);
+
+  // Instantly dissolve transient activity indicator when new chat message arrives
+  useEffect(() => {
+    if (messages.length > 0) {
+      setAgentActivity(null);
+    }
+  }, [messages.length]);
 
   useEffect(() => {
     if (open && unreadMentions > 0) {
@@ -389,7 +396,30 @@ export default function ChatPanel({
                   );
                 })}
                 {agentActivity && (
-                  <AgentThinkingCard activity={agentActivity} />
+                  <ChatMessage
+                    sender="assistant"
+                    avatar={
+                      <div
+                        className="chat-message-avatar-wrap"
+                        title="Chalkboard Master (AI)"
+                      >
+                        <UserAvatar
+                          name="Chalkboard Master"
+                          avatarUrl={null}
+                          size="sm"
+                          className="chat-message-avatar"
+                        />
+                        <span className="chat-ai-avatar-badge" aria-label="Chalkboard Master">
+                          <Sparkles size={8} />
+                        </span>
+                      </div>
+                    }
+                    metadata={
+                      <strong>Chalkboard Master (AI)</strong>
+                    }
+                  >
+                    <AgentThinkingCard activity={agentActivity} />
+                  </ChatMessage>
                 )}
               </ChatMessageList>
 

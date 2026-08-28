@@ -33,6 +33,41 @@ export interface RoomWorkingMemory {
   loadedPlugins: Set<string>;
 }
 
+/**
+ * Deterministic safety filter for outbound chat messages.
+ * Only guards against raw unparsed JSON envelopes or process crash traces.
+ * Does NOT corrupt educational content (e.g. programming questions about Error or TypeError).
+ */
+export function sanitizeChatMessage(text: string | null | undefined): string | null {
+  if (!text || typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  // Reject if it's an unparsed raw JSON object or array envelope
+  if (/^[\{\[]/.test(trimmed) && /[\}\]]$/.test(trimmed)) {
+    return null;
+  }
+
+  // Reject if it contains process crash traces or invalid command dumps
+  if (/^(?:Invalid command|Traceback|node:internal|UnhandledPromiseRejection)/i.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+}
+
+/**
+ * Generates a friendly, pedagogical error message without exposing technical stack traces or JSON.
+ */
+function getFriendlyErrorMessage(displayName: string): string {
+  const friendlyVariations = [
+    `I ran into a temporary hiccup while working on the chalkboard. Could you please ask again, ${displayName}?`,
+    `Sorry ${displayName}, my connection to the board had a brief interruption. Please try asking once more!`,
+    `I hit a slight bump while updating the classroom. Let me know what you'd like me to explain or draw next!`,
+  ];
+  return friendlyVariations[Math.floor(Math.random() * friendlyVariations.length)];
+}
+
 export class RoomAgentSession {
   public readonly roomId: string;
   public state: SessionState = 'INITIALIZING';
@@ -253,9 +288,8 @@ export class RoomAgentSession {
       await this.executeReasoningTask(cleanPrompt, chatEntry.displayName);
     } catch (err: any) {
       console.error(`[RoomAgentSession] Error during reasoning in ${this.roomId}:`, err);
-      await this.transport.sendChatMessage(
-        `Sorry ${chatEntry.displayName}, I ran into an issue while helping: ${err?.message || 'Unknown error'}`
-      );
+      // Send a clean, friendly message to the classroom — NEVER expose raw error messages or JSON stack traces
+      await this.transport.sendChatMessage(getFriendlyErrorMessage(chatEntry.displayName));
     } finally {
       this.isProcessing = false;
       this.state = 'IDLE_OBSERVING';
@@ -377,10 +411,9 @@ Strict Behavioral & Modality Invariants:
         if (!functionCalls || functionCalls.length === 0) {
           // If the model did NOT use chalkboard_send_chat during its tools, but produced conversational text, send it now
           if (currentResponse.text && !hasSentChatMessage) {
-            const trimmed = currentResponse.text.trim();
-            // Filter out any internal action summary thoughts
-            if (trimmed && !trimmed.startsWith('Actions Taken:') && !trimmed.startsWith('### Actions Taken')) {
-              await this.transport.sendChatMessage(trimmed);
+            const cleanMessage = sanitizeChatMessage(currentResponse.text);
+            if (cleanMessage) {
+              await this.transport.sendChatMessage(cleanMessage);
             }
           }
 
@@ -477,7 +510,10 @@ Strict Behavioral & Modality Invariants:
             functionResponseParts.push({
               functionResponse: {
                 name: call.name,
-                response: { error: toolError?.message || 'Tool execution failed' },
+                response: {
+                  status: 'failed',
+                  reason: 'That action could not be completed right now. Please continue explaining in the chat instead.',
+                },
               },
             });
 
@@ -486,7 +522,7 @@ Strict Behavioral & Modality Invariants:
               toolName: call.name,
               toolAction,
               toolSummary,
-              resultSummary: `Error: ${toolError?.message || 'Execution failed'}`,
+              resultSummary: 'Action unavailable',
               turnIndex: turnCount,
               maxTurns,
             });

@@ -257,6 +257,19 @@ export class SocketIoMcpTransport implements Transport {
   }
 
   /**
+   * Broadcast the agent's cursor position so other participants see where
+   * the agent is working on the canvas. Uses the existing `cursor-move`
+   * protocol that powers the collaborator cursor rendering system.
+   */
+  public broadcastCursorPosition(x: number, y: number): void {
+    if (!this.socket || !this.socket.connected) return;
+    this.socket.emit('cursor-move', {
+      roomId: this.roomId,
+      cursor: { x, y },
+    });
+  }
+
+  /**
    * Get the underlying raw Socket.IO instance.
    */
   public getSocket(): Socket | null {

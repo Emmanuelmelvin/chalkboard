@@ -10,7 +10,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SocketIoMcpTransport } from '../socket/roomMcpTransport.js';
 import { config } from '../config.js';
 import type { RoomMetadata, AgentActivityPayload } from '../types/index.js';
-import { formatToolActivity } from './activityFormatter.js';
+import { formatToolActivity, extractCursorPosition } from './activityFormatter.js';
 
 export type SessionState = 'INITIALIZING' | 'IDLE_OBSERVING' | 'ACTIVE_REASONING' | 'DISCONNECTED' | 'ERROR';
 
@@ -399,7 +399,8 @@ Strict Behavioral & Modality Invariants:
 
         for (const call of functionCalls) {
           if (!call.name) continue;
-          const { toolAction, toolSummary } = formatToolActivity(call.name, call.args);
+          const toolDef = this.tools.find((t) => t.name === call.name);
+          const { toolAction, toolSummary } = formatToolActivity(call.name, call.args, toolDef);
           console.log(`[RoomAgentSession] Tool Call in ${this.roomId}: ${call.name}(${JSON.stringify(call.args)})`);
 
           this.transport.broadcastActivity({
@@ -411,6 +412,12 @@ Strict Behavioral & Modality Invariants:
             turnIndex: turnCount,
             maxTurns,
           });
+
+          // Move the agent's collaborator cursor to the tool's target position
+          const cursorPos = extractCursorPosition(call.name, call.args);
+          if (cursorPos) {
+            this.transport.broadcastCursorPosition(cursorPos.x, cursorPos.y);
+          }
 
           if (call.name === 'chalkboard_send_chat') {
             hasSentChatMessage = true;

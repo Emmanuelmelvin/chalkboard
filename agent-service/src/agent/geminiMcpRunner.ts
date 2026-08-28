@@ -9,7 +9,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SocketIoMcpTransport } from '../socket/roomMcpTransport.js';
 import { config } from '../config.js';
 import type { InstructPayload, AgentActivityPayload } from '../types/index.js';
-import { formatToolActivity } from './activityFormatter.js';
+import { formatToolActivity, extractCursorPosition } from './activityFormatter.js';
 
 export class GeminiMcpRunner {
   private ai: GoogleGenAI;
@@ -157,7 +157,8 @@ Strict Behavioral Invariants:
         // Execute each tool call through the MCP client
         for (const call of functionCalls) {
           if (!call.name) continue;
-          const { toolAction, toolSummary } = formatToolActivity(call.name, call.args);
+          const toolDef = tools.find((t) => t.name === call.name);
+          const { toolAction, toolSummary } = formatToolActivity(call.name, call.args, toolDef);
           const logMsg = `Executing MCP Tool: ${call.name}(${JSON.stringify(call.args)})`;
           console.log(`[GeminiMcpRunner] ${logMsg}`);
           executionLogs.push(logMsg);
@@ -171,6 +172,12 @@ Strict Behavioral Invariants:
             turnIndex: turnCount,
             maxTurns,
           });
+
+          // Move the agent's collaborator cursor to the tool's target position
+          const cursorPos = extractCursorPosition(call.name, call.args);
+          if (cursorPos) {
+            this.transport.broadcastCursorPosition(cursorPos.x, cursorPos.y);
+          }
 
           if (call.name === 'chalkboard_send_chat') {
             const chatText = call.args?.message;

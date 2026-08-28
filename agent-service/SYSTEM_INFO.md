@@ -1,4 +1,4 @@
-﻿# Chalkboard Master — System Information & Environment Specification
+# Chalkboard Master — System Information & Environment Specification
 
 This document defines the runtime environment, metadata contracts, invocation modality rules, pedagogical policies, and dynamic context parameters for **Chalkboard Master**, the autonomous AI teaching agent in **Chalkboard**.
 
@@ -146,3 +146,88 @@ Chalkboard Master implements a 3-layer architecture synthesized from **OpenAI Co
 * **Health Endpoint**: `GET /health` returns active room sessions, active runners, model configuration, and timestamp.
 * **Session Status**: `GET /sessions/status/:roomId` returns state (`IDLE_OBSERVING` | `ACTIVE_REASONING`), stroke count, active users, chat history length, and last activity timestamp.
 * **Auto-Garbage Collection**: Ambient room sessions with 0 human attendees automatically disconnect after 5 minutes of inactivity.
+
+---
+
+## 7. Real-Time Agent Activity Telemetry Protocol
+
+Chalkboard Master broadcasts its internal reasoning stages, tool execution lifecycle, and progress telemetry to all connected room members in real-time via the `agent:activity` Socket.IO event. This enables the frontend to render live "thinking" spinners, step-by-step tool execution cards, and progress badges — similar to how AI coding agents display their internal steps.
+
+### 7.1 Event Schema
+
+```typescript
+type AgentStage =
+  | 'idle'        // Agent is dormant, no active task
+  | 'thinking'    // Model is reasoning / generating next step
+  | 'planning'    // Structuring multi-step plan
+  | 'executing_tool' // Currently calling an MCP tool
+  | 'tool_result' // Tool call completed (success or error)
+  | 'clarifying'  // Asking the user a clarifying question
+  | 'completed'   // Task finished
+  | 'error';      // Encountered an error during execution
+
+interface AgentActivityPayload {
+  roomId: string;
+  agentId?: string;           // 'agent:chalkboard-master'
+  displayName?: string;       // 'Chalkboard Master (AI)'
+  stage: AgentStage;
+  thought?: string;           // Human-readable reasoning snippet
+  toolName?: string;          // MCP tool name, e.g. 'chalkboard_write_text'
+  toolAction?: string;        // Human-readable action verb, e.g. 'Writing on chalkboard'
+  toolSummary?: string;       // Human-readable summary, e.g. 'Rendering: "Quadratic Formula"'
+  toolArgs?: Record<string, any>;
+  resultSummary?: string;     // 'Executed successfully' | 'Error: ...'
+  turnIndex?: number;         // Current turn in the loop (1-indexed)
+  maxTurns?: number;          // Maximum turns allowed
+  timestamp?: string;         // ISO 8601
+}
+```
+
+### 7.2 Lifecycle Flow
+
+```
+User sends @Chalkboard Master message
+  → agent:activity { stage: 'thinking', thought: 'Analyzing request...' }
+  → Model produces function calls
+    → agent:activity { stage: 'executing_tool', toolName: '...', toolAction: '...' }
+    → MCP tool executes
+    → agent:activity { stage: 'tool_result', resultSummary: '...' }
+  → agent:activity { stage: 'thinking', thought: 'Processing results...' }
+  → (repeat tool calls if needed)
+  → agent:activity { stage: 'completed' }
+  → (3 second delay)
+  → agent:activity { stage: 'idle' }
+```
+
+### 7.3 Transport Path
+
+1. **Agent Service** (`roomMcpTransport.broadcastActivity()`) emits `agent:activity` via Socket.IO.
+2. **Backend** (`socket.ts`) receives the event and relays it to all room members via `io.to(roomId).emit('agent:activity', payload)`.
+3. **Frontend** (`ChatPanel.tsx`) listens for `agent:activity` and renders the `AgentThinkingCard` component inline in the chat panel.
+
+### 7.4 Dynamic Schema-Aware Tool Formatting Engine
+
+Rather than relying on static tables or hardcoded switches, `activityFormatter.ts` uses an autonomous, schema-aware synthesis engine (similar to modern coding agents):
+
+1. **Semantic Action Synthesis (`synthesizeToolAction`)**:
+   - Deconstructs arbitrary and newly discovered tool identifiers (e.g. `plugin_chemistry_periodic_table_draw_element` $\to$ `"Drawing Element (Chemistry Periodic Table)"`).
+   - Automatically detects domain plugins, strips namespaces, and conjugates imperative verbs into present continuous gerunds (e.g. `simulate_circuit` $\to$ `"Simulating Circuit"`, `insert_note` $\to$ `"Inserting Note"`).
+
+2. **Salient Parameter Summarization (`synthesizeToolSummary`)**:
+   - Uses multi-tier weighted parameter heuristics to automatically extract and format the most informative values (`formula`, `text`, `label`, `query`, `prompt`, `symbol`, `code`, `action`, `type`, `element`, etc.) or spatial ranges/points, with safe string truncation and dynamic dictionary fallback.
+
+3. **Universal Spatial Coordinate Extraction (`extractCursorPosition`)**:
+   - Recursively inspects tool arguments for any coordinate representation (direct `x`/`y`, nested `position`/`center`/`target`/`bounds`, point arrays `points[0]`, ranges `[xMin..xMax]`) so the agent's live cursor functions across 100% of discovered tools.
+
+
+---
+
+## 8. Real-Time Agent Cursor Broadcasting
+
+As Chalkboard Master performs canvas operations, it continuously broadcasts its spatial pointer position over the classroom's standard `cursor-move` real-time channel.
+
+### 8.1 Cursor Mechanics
+* **Position Extraction (`extractCursorPosition`)**: Automatically extracts target canvas coordinates `(x, y)` from tool execution arguments (`write_text`, `draw_chalk`, `insert_shape`, `create_note`, `highlight_area`, `select_and_transform`, `plugin_math_set_*`).
+* **Socket Event**: Dispatches `cursor-move` `{ roomId, cursor: { x, y } }` from the agent's authenticated socket.
+* **Frontend Visualization**: Rendered automatically by `CollaboratorCursor.tsx` with the special `isAgent` badge (Chalkboard Master AI icon, sparkling indicator, and purple radial glow) gliding across the board as the agent drafts diagrams and notes.
+

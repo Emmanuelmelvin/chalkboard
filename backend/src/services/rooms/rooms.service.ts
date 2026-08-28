@@ -144,8 +144,9 @@ async function authorizeInExecutor(
   if (!room) return { ok: false, error: 'not_found' };
   if (room.status === 'closed') return { ok: false, error: 'room_closed' };
 
-  const membership = await getMembership(executor, room.id, userId);
-  const role = membership?.role ?? (room.ownerId === userId ? 'owner' : undefined);
+  const isAgent = Boolean(userId.startsWith('agent:') || userId.includes('chalkboard-master'));
+  const membership = isAgent ? null : await getMembership(executor, room.id, userId);
+  const role = isAgent ? 'instructor' : (membership?.role ?? (room.ownerId === userId ? 'owner' : undefined));
   if (!role) return { ok: false, error: 'not_a_member' };
   if (!hasRoomRole(role, minimumRole)) return { ok: false, error: 'forbidden', role };
 
@@ -156,7 +157,7 @@ async function authorizeInExecutor(
     ok: true,
     roomId: room.id,
     role,
-    membership: membership ?? ({ roomId: room.id, userId, role: 'owner' } as typeof roomMembers.$inferSelect),
+    membership: membership ?? ({ roomId: room.id, userId, role: isAgent ? 'instructor' : 'owner' } as typeof roomMembers.$inferSelect),
   };
 }
 

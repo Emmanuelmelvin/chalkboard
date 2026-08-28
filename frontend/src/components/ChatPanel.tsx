@@ -5,6 +5,7 @@
  */
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -19,7 +20,7 @@ import {
 import type { Socket } from 'socket.io-client';
 import UserAvatar from '@/components/UserAvatar';
 import { HoverCard } from '@/components/ui/HoverCard';
-import type { ChatMessage as ChatMessageType, RoomMember } from '@/types';
+import type { ChatMessage as ChatMessageType, RoomMember, AgentActivityPayload } from '@/types';
 import {
   ChatLayout,
   ChatMessageList,
@@ -27,6 +28,7 @@ import {
   ChatMessageBubble,
   ChatComposer,
   ChatMentionMenu,
+  AgentThinkingCard,
   type MentionItemData,
 } from '@/components/chat';
 import '@/styles/ChatLayout.css';
@@ -114,6 +116,7 @@ export default function ChatPanel({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [highlightedSuggestion, setHighlightedSuggestion] = useState(0);
+  const [agentActivity, setAgentActivity] = useState<AgentActivityPayload | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const mentionMatch = draft.match(/(?:^|\s)@([^\s@]*)$/);
@@ -164,6 +167,21 @@ export default function ChatPanel({
             })),
         ].slice(0, 6);
 
+  // Listen to agent:activity broadcasts for realtime thinking/tool telemetry
+  useEffect(() => {
+    const handleAgentActivity = (payload: AgentActivityPayload) => {
+      if (payload.roomId !== roomId) return;
+      if (payload.stage === 'idle') {
+        setAgentActivity(null);
+      } else {
+        setAgentActivity(payload);
+      }
+    };
+    socket.on('agent:activity', handleAgentActivity);
+    return () => {
+      socket.off('agent:activity', handleAgentActivity);
+    };
+  }, [socket, roomId]);
 
   useEffect(() => {
     if (open && unreadMentions > 0) {
@@ -370,6 +388,9 @@ export default function ChatPanel({
                     </ChatMessage>
                   );
                 })}
+                {agentActivity && (
+                  <AgentThinkingCard activity={agentActivity} />
+                )}
               </ChatMessageList>
 
             </ChatLayout>

@@ -435,8 +435,9 @@ async function handleChatMessage(io: Server, socket: any, payload: unknown, ack?
     id: randomUUID(),
     roomId: data.roomId,
     userId: isAgentSender ? 'agent:chalkboard-master' : (actor?.userId || user?.id),
-    displayName: isAgentSender ? 'Chalkboard Master 🤖' : (user?.displayName ?? 'Classmate'),
+    displayName: isAgentSender ? 'Chalkboard Master (AI)' : (user?.displayName ?? 'Classmate'),
     avatarUrl: isAgentSender ? null : (user?.avatarUrl ?? null),
+
     message: data.message,
     mentionedUserIds,
     createdAt: new Date().toISOString(),
@@ -842,8 +843,9 @@ export async function attachSocket(server: any) {
       if (auth?.isAgent && (auth?.token === env.AUTH_SESSION_SECRET || auth?.token === 'chalkboard_agent_internal_secret_key_2026')) {
         socket.data.user = {
           id: auth.agentId?.startsWith('agent:') ? auth.agentId : 'agent:chalkboard-master',
-          displayName: auth.displayName || 'Chalkboard Master 🤖',
+          displayName: auth.displayName || 'Chalkboard Master (AI)',
           email: 'agent@chalkboard.local',
+
           role: 'instructor',
           avatarUrl: null,
         };

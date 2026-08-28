@@ -43,6 +43,8 @@ import { HoverCard } from '@/components/ui/HoverCard';
 import UserAvatar from '@/components/UserAvatar';
 import CollaboratorCursor from '@/components/CollaboratorCursor';
 import ChalkboardMasterIcon from '@/components/ChalkboardMasterIcon';
+import { RoleDropdown } from '@/components/ui/DropdownMenu';
+
 
 import { SpeakingParticipantsContext } from '@/contexts/SpeakingParticipantsContext';
 import ConfirmModal from '@/components/ui/ConfirmModal';
@@ -1045,7 +1047,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   useEffect(() => {
     if (!roomDetailsOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (!roomMembersRef.current?.contains(event.target as Node)) setRoomDetailsOpen(false);
+      const target = event.target as Element | null;
+      const isInsidePortal = Boolean(
+        target?.closest?.('.astryx-dropdown-content, [data-radix-popper-content-wrapper], .astryx-hover-card-content, [data-radix-menu-content]')
+      );
+      if (!roomMembersRef.current?.contains(event.target as Node) && !isInsidePortal) {
+        setRoomDetailsOpen(false);
+      }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setRoomDetailsOpen(false);
@@ -1057,6 +1065,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [roomDetailsOpen]);
+
 
   useEffect(() => {
     if (!linksPanelOpen) return;
@@ -1138,7 +1147,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
   };
 
-  const roleLabel = (role: RoomMember['role']) => role === 'instructor' ? 'Editor' : role === 'viewer' ? 'Viewer' : 'Owner';
+
 
   // Register the canvas element in the board store. A callback ref is used
   // instead of a mount effect because LiveKitRoom renders its children one
@@ -1633,11 +1642,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
                           if (isAgent) {
                             return (
-                              <span key={member.userId} className="member-stack-avatar member-stack-avatar-ai" title="Chalkboard Master 🤖">
-                                <ChalkboardMasterIcon size={22} withBackground={true} />
+                              <span key={member.userId} className="member-stack-avatar member-stack-avatar-ai" title="Chalkboard Master (AI)">
+                                <ChalkboardMasterIcon size="100%" withBackground={true} />
                               </span>
                             );
                           }
+
+
 
                           return (
                             <Avatar.Root key={member.userId} className="member-stack-avatar">
@@ -1721,44 +1732,68 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                           {sortedDisplayedRoomMembers.map((member) => {
                             const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);
                             const isOnline = member.userId === userId || Boolean(collaborator);
+                            const isAgent = Boolean(
+                              member.userId?.startsWith('agent:') ||
+                              member.displayName?.toLowerCase().includes('chalkboard master') ||
+                              member.avatarUrl === 'ai:chalkboard-master'
+                            );
+                            const displayName = isAgent ? 'Chalkboard Master (AI)' : member.displayName;
                             return (
                               <div key={member.userId} className="room-detail-member">
                                 <RoomMemberAvatar
                                   userId={member.userId}
-                                  name={member.displayName}
+                                  name={displayName}
                                   avatarUrl={member.avatarUrl || collaborator?.avatarUrl}
                                 />
                                 {raisedHandUserIds.has(member.userId) && <span className="room-member-hand-badge" title="Hand raised">✋</span>}
                                 <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} style={{ backgroundColor: collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b') }} />
                                 <div className="room-member-name">
-                                  <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>
+                                  <strong>{displayName}{member.userId === userId ? ' (You)' : ''}</strong>
                                   <span>{isOnline ? 'Online' : 'Offline'}</span>
                                 </div>
+
                                 <div className="room-member-actions">
-                                  <RoomMemberVoiceControls
-                                    memberUserId={member.userId}
-                                    effectiveRole={effectiveRole}
-                                    currentUserId={userId}
-                                    socket={socket}
-                                    roomId={roomId}
-                                    voiceEnabled={roomQuery.data?.room.voiceEnabled ?? false}
-                                    isOnline={isOnline}
-                                    memberName={member.displayName}
-                                    voiceConnected={voiceConnected}
-                                  />
-                                  {canManageMembers && member.role !== 'owner' ? (
-                                    <select className="room-member-role-select"
-                                      value={member.role}
-                                      onChange={(event) => updateMemberRole(member.userId, event.target.value as 'instructor' | 'viewer')}
-                                      aria-label={`Role for ${member.displayName}`}
-                                    >
-                                      <option value="instructor">Editor</option>
-                                      <option value="viewer">Viewer</option>
-                                    </select>
-                                  ) : (
-                                    <span className="room-member-role">{roleLabel(member.role)}</span>
+                                  {!isAgent && (
+                                    <RoomMemberVoiceControls
+                                      memberUserId={member.userId}
+                                      effectiveRole={effectiveRole}
+                                      currentUserId={userId}
+                                      socket={socket}
+                                      roomId={roomId}
+                                      voiceEnabled={roomQuery.data?.room.voiceEnabled ?? false}
+                                      isOnline={isOnline}
+                                      memberName={member.displayName}
+                                      voiceConnected={voiceConnected}
+                                    />
                                   )}
-                                  {canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
+                                  {isAgent ? (
+                                    <RoleDropdown
+                                      role="instructor"
+                                      disabled={true}
+                                      ariaLabel="Chalkboard Master role (Editor)"
+                                    />
+                                  ) : member.userId === userId ? (
+                                    <RoleDropdown
+                                      role="instructor"
+                                      disabled={true}
+                                      ariaLabel="Your role (Editor)"
+                                    />
+                                  ) : canManageMembers && member.role !== 'owner' ? (
+                                    <RoleDropdown
+                                      role={member.role as 'instructor' | 'viewer'}
+                                      onChange={(newRole) => updateMemberRole(member.userId, newRole)}
+                                      ariaLabel={`Change role for ${member.displayName}`}
+                                    />
+                                  ) : (
+                                    <RoleDropdown
+                                      role={member.role === 'viewer' ? 'viewer' : 'instructor'}
+                                      disabled={true}
+                                      ariaLabel={`Role for ${member.displayName}`}
+                                    />
+                                  )}
+
+
+                                  {!isAgent && canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
                                     <button
                                       type="button"
                                       className="room-member-kick-button"
@@ -1773,6 +1808,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                               </div>
                             );
                           })}
+
                         </div>
                         {(roleUpdateError || kickMemberError) && <p className="room-details-error">{roleUpdateError || kickMemberError}</p>}
                         {canManageMembers && (

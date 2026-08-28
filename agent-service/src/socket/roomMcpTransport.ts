@@ -37,8 +37,9 @@ export class SocketIoMcpTransport implements Transport {
           token: config.AGENT_SECRET,
           isAgent: true,
           agentId: 'agent:chalkboard-master',
-          displayName: 'Chalkboard Master 🤖',
+          displayName: 'Chalkboard Master (AI)',
         },
+
       });
 
       this.socket.on('connect', () => {

@@ -7,7 +7,7 @@
 import React from 'react';
 
 export interface ChalkboardMasterIconProps {
-  size?: number | 'sm' | 'md' | 'lg';
+  size?: number | string | 'sm' | 'md' | 'lg';
   className?: string;
   withBackground?: boolean;
 }
@@ -18,7 +18,7 @@ export const ChalkboardMasterIcon: React.FC<ChalkboardMasterIconProps> = ({
   withBackground = true,
 }) => {
   const pixelSize =
-    typeof size === 'number'
+    typeof size === 'number' || (typeof size === 'string' && (size.includes('%') || size.includes('px') || size.includes('rem')))
       ? size
       : size === 'sm'
       ? 32
@@ -34,14 +34,15 @@ export const ChalkboardMasterIcon: React.FC<ChalkboardMasterIconProps> = ({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={`chalkboard-master-avatar-svg ${className}`}
-      aria-label="Chalkboard Master 🤖"
-      style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+      aria-label="Chalkboard Master (AI)"
+      style={{ display: 'block', width: typeof pixelSize === 'number' ? `${pixelSize}px` : pixelSize, height: typeof pixelSize === 'number' ? `${pixelSize}px` : pixelSize, flexShrink: 0 }}
+
     >
       <defs>
-        {/* Background Dark Radial Gradient */}
-        <radialGradient id="cm_avatar_bg" cx="40%" cy="40%" r="60%">
+        {/* Full Edge-to-Edge Dark Radial Gradient */}
+        <radialGradient id="cm_avatar_bg" cx="40%" cy="40%" r="70%">
           <stop offset="0%" stopColor="#311042" />
-          <stop offset="60%" stopColor="#1e1b4b" />
+          <stop offset="55%" stopColor="#1e1b4b" />
           <stop offset="100%" stopColor="#0f172a" />
         </radialGradient>
 
@@ -62,17 +63,17 @@ export const ChalkboardMasterIcon: React.FC<ChalkboardMasterIconProps> = ({
         </linearGradient>
 
         {/* Soft Ambient Center Glow */}
-        <radialGradient id="cm_glow" cx="42%" cy="40%" r="35%">
+        <radialGradient id="cm_glow" cx="42%" cy="40%" r="40%">
           <stop offset="0%" stopColor="#818cf8" stopOpacity="0.5" />
           <stop offset="100%" stopColor="#818cf8" stopOpacity="0" />
         </radialGradient>
       </defs>
 
-      {/* Circular Avatar Background */}
+      {/* Edge-to-edge background for perfect circular clipping by container */}
       {withBackground && (
         <>
-          <circle cx="50" cy="50" r="48" fill="url(#cm_avatar_bg)" stroke="#6366f1" strokeWidth="3" />
-          <circle cx="42" cy="40" r="30" fill="url(#cm_glow)" />
+          <rect width="100" height="100" fill="url(#cm_avatar_bg)" />
+          <circle cx="42" cy="40" r="38" fill="url(#cm_glow)" />
         </>
       )}
 

@@ -295,7 +295,8 @@ export class RoomAgentSession {
       .join(', ') || 'No other active participants';
 
     const systemInstruction = `You are the Chalkboard Master, an intelligent, friendly AI co-pilot and teaching assistant operating inside a live collaborative chalkboard classroom.
-You are directly connected as a participant in the room ("Chalkboard Master 🤖").
+You are directly connected as a participant in the room ("Chalkboard Master (AI)").
+
 
 Room Context:
 - Room ID: "${this.roomId}"
@@ -367,14 +368,15 @@ Guidelines:
             hasSentChatMessage = true;
             const chatText = call.args?.message;
             if (chatText && typeof chatText === 'string') {
-              // Direct dispatch via agent's authenticated socket (Chalkboard Master 🤖)
+              // Direct dispatch via agent's authenticated socket (Chalkboard Master (AI))
               await this.transport.sendChatMessage(chatText);
               functionResponseParts.push({
                 functionResponse: {
                   name: call.name,
-                  response: { output: { success: true, message: chatText, sentBy: 'Chalkboard Master 🤖' } },
+                  response: { output: { success: true, message: chatText, sentBy: 'Chalkboard Master (AI)' } },
                 },
               });
+
               continue;
             }
           }

@@ -144,9 +144,10 @@ export const HoverCard: React.FC<HoverCardProps> & {
   collisionPadding = 16,
   className = '',
   contentClassName = '',
-  portal = false,
+  portal = true,
   container,
 }) => {
+
   const side = mapPlacementToSide(placement);
 
   const contentElement = (

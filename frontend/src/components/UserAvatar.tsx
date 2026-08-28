@@ -50,15 +50,21 @@ export default function UserAvatar({ name, avatarUrl, size = 'md', className = '
     avatarUrl?.startsWith('agent:')
   );
 
+  const classes = `user-avatar user-avatar-${size}${className ? ` ${className}` : ''}`;
+
   if (isAgent) {
-    return <ChalkboardMasterIcon size={size} className={className} withBackground={true} />;
+    return (
+      <span className={`${classes} user-avatar-ai`} aria-label="Chalkboard Master">
+        <ChalkboardMasterIcon size="100%" withBackground={true} />
+      </span>
+    );
   }
 
   const source = avatarUrl?.trim() || '';
-  const classes = `user-avatar user-avatar-${size}${className ? ` ${className}` : ''}`;
   if (!source) {
     return <span className={`${classes} user-avatar-fallback`} aria-label={name}>{initials(name)}</span>;
   }
+
 
 
 

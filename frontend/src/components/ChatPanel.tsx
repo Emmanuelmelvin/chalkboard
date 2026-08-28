@@ -330,7 +330,7 @@ export default function ChatPanel({
                     aiInfo.isAi;
                   const isOwn = !isAi && entry.userId === userId;
                   const sender = isOwn ? 'user' : isAi ? 'assistant' : 'member';
-                  const displayName = isAi ? 'Chalkboard Master 🤖' : isOwn ? 'You' : entry.displayName;
+                  const displayName = isAi ? 'Chalkboard Master (AI)' : isOwn ? 'You' : entry.displayName;
 
                   return (
                     <ChatMessage
@@ -339,8 +339,9 @@ export default function ChatPanel({
                       avatar={
                         <div
                           className="chat-message-avatar-wrap"
-                          title={isAi ? 'Chalkboard Master 🤖' : entry.displayName}
+                          title={isAi ? 'Chalkboard Master (AI)' : entry.displayName}
                         >
+
                           <UserAvatar
                             name={isAi ? 'Chalkboard Master' : entry.displayName}
                             avatarUrl={isAi ? null : entry.avatarUrl}

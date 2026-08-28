@@ -5,8 +5,9 @@
  */
 
 .astryx-hover-card-content {
-  z-index: 1000;
+  z-index: 100000;
   min-width: max-content;
+
   max-width: min(340px, calc(100vw - 32px));
   border-radius: 10px;
   background: #ffffff;

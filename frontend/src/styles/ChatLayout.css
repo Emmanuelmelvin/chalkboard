@@ -374,6 +374,7 @@
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   overflow: hidden;
+  font-family: var(--font-sans, inherit);
 }
 
 .astryx-trigger-menu-header {
@@ -381,6 +382,7 @@
   align-items: center;
   padding: 8px 10px 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-sans, inherit);
 }
 
 .trigger-menu-title {
@@ -389,6 +391,7 @@
   gap: 5px;
   font-size: 10px;
   font-weight: 700;
+  font-family: var(--font-sans, inherit);
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -401,6 +404,7 @@
   max-height: 180px;
   overflow-y: auto;
   gap: 2px;
+  font-family: var(--font-sans, inherit);
 }
 
 .astryx-menu-item {
@@ -414,6 +418,7 @@
   background: transparent;
   color: #cbd5e1;
   font-size: 12px;
+  font-family: var(--font-sans, inherit);
   text-align: left;
   cursor: pointer;
   transition: all 0.12s ease;
@@ -480,11 +485,13 @@
   flex-direction: column;
   min-width: 0;
   flex: 1;
+  font-family: var(--font-sans, inherit);
 }
 
 .menu-item-name {
   font-weight: 600;
   font-size: 12px;
+  font-family: var(--font-sans, inherit);
   color: #f1f5f9;
   white-space: nowrap;
   overflow: hidden;
@@ -493,17 +500,20 @@
 
 .menu-item-subtext {
   font-size: 10px;
+  font-family: var(--font-sans, inherit);
   color: #94a3b8;
   line-height: 1.2;
 }
 
 .menu-item-shortcut-hint {
   font-size: 10px;
+  font-family: var(--font-sans, inherit);
   color: #818cf8;
   font-weight: 600;
   margin-left: auto;
   flex-shrink: 0;
 }
+
 
 /* Visually Hidden Screen Reader Only Utility */
 .sr-only {

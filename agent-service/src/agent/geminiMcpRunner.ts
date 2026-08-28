@@ -141,10 +141,11 @@ Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}`;
                 functionResponse: {
                   name: call.name,
                   response: {
-                    output: { success: true, message: chatText, sentBy: 'Chalkboard Master 🤖' },
+                    output: { success: true, message: chatText, sentBy: 'Chalkboard Master (AI)' },
                   },
                 },
               });
+
               continue;
             }
           }

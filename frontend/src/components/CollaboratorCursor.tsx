@@ -117,7 +117,9 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
             {/* Picture on the LEFT */}
             <div className={`collaborator-cursor-avatar-wrap${userSpeaking ? ' is-speaking' : ''}`}>
               {isAgent ? (
-                <ChalkboardMasterIcon size={20} withBackground={true} className="collaborator-cursor-avatar-img" />
+                <div className="collaborator-cursor-avatar-root">
+                  <ChalkboardMasterIcon size="100%" withBackground={true} className="collaborator-cursor-avatar-img" />
+                </div>
               ) : (
                 <Avatar.Root className="collaborator-cursor-avatar-root">
                   <Avatar.Image
@@ -140,14 +142,17 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
           </div>
         </HoverCard.Trigger>
 
-        <HoverCard.Content
-          className="collaborator-hover-card-content"
-          side="bottom"
-          align="start"
-          sideOffset={8}
-          collisionPadding={16}
-          onPointerDownOutside={() => setOpen(false)}
-        >
+        <HoverCard.Portal>
+          <HoverCard.Content
+
+            className="collaborator-hover-card-content"
+            side="bottom"
+            align="start"
+            sideOffset={8}
+            collisionPadding={16}
+            onPointerDownOutside={() => setOpen(false)}
+          >
+
           {/* Colored top accent bar */}
           <div
             className="collaborator-card-accent-bar"
@@ -158,7 +163,12 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
             {/* Profile image with border & active dot */}
             <div className="collaborator-card-avatar-wrap">
               {isAgent ? (
-                <ChalkboardMasterIcon size={38} withBackground={true} className="collaborator-card-avatar-img" />
+                <div
+                  className="collaborator-card-avatar-root"
+                  style={{ borderColor: color }}
+                >
+                  <ChalkboardMasterIcon size="100%" withBackground={true} className="collaborator-card-avatar-img" />
+                </div>
               ) : (
                 <Avatar.Root
                   className="collaborator-card-avatar-root"
@@ -179,6 +189,7 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
                 style={{ backgroundColor: color }}
               />
             </div>
+
 
             {/* User details and status */}
             <div className="collaborator-card-info">
@@ -217,9 +228,11 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
 
           <HoverCard.Arrow className="collaborator-hover-card-arrow" />
         </HoverCard.Content>
-      </HoverCard.Root>
-    </div>
-  );
+      </HoverCard.Portal>
+    </HoverCard.Root>
+  </div>
+);
+
 };
 
 export default CollaboratorCursor;

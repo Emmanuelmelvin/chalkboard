@@ -8,7 +8,8 @@ RUN npm ci
 
 # Copy source and build TypeScript
 COPY src/ ./src/
-RUN npm run build
+COPY SYSTEM_INFO.md ./SYSTEM_INFO.md
+RUN npm run build && cp SYSTEM_INFO.md dist/SYSTEM_INFO.md
 
 # Production image
 FROM node:22-alpine AS runner
@@ -22,6 +23,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/SYSTEM_INFO.md ./SYSTEM_INFO.md
 
 EXPOSE 8080
 

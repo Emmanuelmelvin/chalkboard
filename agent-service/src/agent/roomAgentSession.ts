@@ -11,6 +11,7 @@ import { SocketIoMcpTransport } from '../socket/roomMcpTransport.js';
 import { config } from '../config.js';
 import type { RoomMetadata, AgentActivityPayload } from '../types/index.js';
 import { formatToolActivity, extractCursorPosition } from './activityFormatter.js';
+import { getStaticInstructions } from '../utils/loadSystemInfo.js';
 
 export type SessionState = 'INITIALIZING' | 'IDLE_OBSERVING' | 'ACTIVE_REASONING' | 'DISCONNECTED' | 'ERROR';
 
@@ -78,6 +79,8 @@ export class RoomAgentSession {
   private tools: any[] = [];
   private isProcessing = false;
   private idleGcTimeout: NodeJS.Timeout | null = null;
+  /** Static base instructions loaded once at agent build (OpenAI pattern: Agent(instructions=...)). */
+  private readonly baseSystemInstruction: string;
 
   public memory: RoomWorkingMemory;
 
@@ -94,6 +97,8 @@ export class RoomAgentSession {
         capabilities: {},
       }
     );
+    // Load static SYSTEM_INFO.md once — dynamic room state is injected per run via UserMessage template variables.
+    this.baseSystemInstruction = getStaticInstructions();
 
     this.memory = {
       roomId,
@@ -340,10 +345,8 @@ export class RoomAgentSession {
     const roomDesc = meta?.description ? `"${meta.description}"` : 'No description provided';
     const roomTheme = meta?.theme || 'classroom';
 
-    const systemInstruction = `You are the Chalkboard Master, an intelligent, friendly AI co-pilot and teaching assistant operating inside a live collaborative chalkboard classroom.
-You are directly connected as a participant in the room ("Chalkboard Master (AI)").
-
-Classroom Environment & Metadata:
+    // Per-run dynamic template variables — injected via UserMessage, not rebuilt into instructions (OpenAI prompt-template pattern).
+    const runContext = `## Active Classroom Context (Live — Template Variables for This Run)
 - Room Title: ${roomTitle}
 - Room Description / Syllabus: ${roomDesc}
 - Visual Theme: ${roomTheme}
@@ -351,31 +354,13 @@ Classroom Environment & Metadata:
 - Room ID: "${this.roomId}"
 - Active Participants: ${activeMembers}
 - Current Canvas Activity: ~${this.memory.strokeCount} strokes drawn on the board.
-- Recent Chat History:
+- Active Domain Plugins: ${Array.from(this.memory.loadedPlugins).join(', ') || 'none yet (discover via chalkboard_discover_plugins if needed)'}
+- Recent Chat History (last 8):
 ${recentChatContext || '(No recent chat)'}
+- Invocation: CHAT mention from ${requestedBy} — respond via \`chalkboard_send_chat\` (voice only if explicitly requested). Address ${requestedBy} directly.`;
 
-Your Capabilities:
-- Send chat replies to students via \`chalkboard_send_chat\`.
-- Speak out loud to the room via \`chalkboard_speak_narration\` (ONLY when audio/voice is explicitly requested).
-- Control the chalkboard canvas: draw diagrams, geometry, graphs, Cartesian coordinates, write chalkboard text, place sticky notes, highlight areas.
-- For domain mathematics: use Math Set tools (Venn diagrams, coordinate grids, function plots, number lines, matrices).
-- For statistics: use Statistics tools (charts, box plots, summary tables).
-- Discover and activate new domain plugins using \`chalkboard_discover_plugins\` and \`chalkboard_load_plugin\`.
-
-Strict Behavioral & Modality Invariants:
-1. MODALITY SYMMETRY (Respond in the exact modality you were asked):
-   - You are currently responding to a CHAT invocation from ${requestedBy}.
-   - Respond ONLY via chat text using \`chalkboard_send_chat\`.
-   - NEVER call \`chalkboard_speak_narration\` (voice/audio) unless the student explicitly asked you to speak aloud or narrate with audio (e.g. "read aloud", "speak", "voice").
-   - Conversely, in voice mode, speak with audio and do not send redundant chat text unless requested.
-2. CANVAS RESTRAINT (Do NOT clutter the board unprompted):
-   - Do NOT add elements or drawings to the chalkboard unless the user explicitly requested visual representations, drawings, diagrams, graphs, or board modifications (e.g. "draw", "graph", "sketch", "show on board", "diagram").
-   - For general conceptual, textual, or conversational questions, answer concisely and clearly in chat WITHOUT calling canvas tools.
-3. SOCRATIC CLARIFICATION:
-   - If the student's request is ambiguous, underspecified, or if an action might overwrite existing student drawings, ask clarifying questions in chat before taking major canvas actions.
-4. ADDRESS USER NATURALLY:
-   - Address ${requestedBy} directly.
-   - NEVER output internal meta-summaries or checklists of tools called (e.g. do NOT write "Actions Taken: 1. Chalkboard: ...").`;
+    // Static base instructions were loaded once at construction (OpenAI: Agent(instructions=...) once).
+    const systemInstruction = this.baseSystemInstruction;
 
     let turnCount = 0;
     let hasSentChatMessage = false;
@@ -392,14 +377,15 @@ Strict Behavioral & Modality Invariants:
       let chat = this.ai.chats.create({
         model: config.GEMINI_MODEL,
         config: {
-          systemInstruction,
+          systemInstruction, // static base loaded once at build — per OpenAI Agent(instructions=...)
           tools: [{ functionDeclarations: geminiFunctionDeclarations }],
           temperature: 0.4,
         },
       });
 
+      // Inject live run context as template variables via the first UserMessage (not via rebuilding instructions).
       let currentResponse = await chat.sendMessage({
-        message: `${requestedBy} asked: "${prompt}". Evaluate their request, ask clarifying questions if underspecified, and respond adhering strictly to the modality matching and canvas restraint rules.`,
+        message: `${runContext}\n\n${requestedBy} asked: "${prompt}". Evaluate their request, ask clarifying questions if underspecified, and respond adhering strictly to SYSTEM_INFO.md policies (especially modality matching, canvas restraint, and incremental live-cursor UX).`,
       });
 
       // Autonomous Tool Execution Loop
@@ -432,6 +418,98 @@ Strict Behavioral & Modality Invariants:
 
         for (const call of functionCalls) {
           if (!call.name) continue;
+
+          // ── Incremental live-cursor guard: auto-split oversized write_text into word-chunks ──
+          // Guarantees cursor glide even if LLM ignores the prompt instruction.
+          if (call.name === 'chalkboard_write_text' && typeof (call.args as any)?.text === 'string') {
+            const rawText: string = ((call.args as any).text as string).trim();
+            const words = rawText.split(/\s+/).filter(Boolean);
+            const fontSize: number = typeof (call.args as any)?.fontSize === 'number' ? (call.args as any).fontSize : 26;
+            const isTitle = fontSize >= 36;
+            const chunkSize = isTitle ? 1 : 2; // titles: 1 word/call, body: 2 words/call
+            if (words.length > chunkSize) {
+              const toolDefChunk = this.tools.find((t) => t.name === call.name);
+              console.log(`[RoomAgentSession] Auto-chunking write_text "${rawText}" (${words.length} words, fontSize ${fontSize}) into ${Math.ceil(words.length / chunkSize)} incremental calls for live cursor UX.`);
+              const chunks: string[] = [];
+              for (let i = 0; i < words.length; i += chunkSize) chunks.push(words.slice(i, i + chunkSize).join(' '));
+              let curX: number = typeof (call.args as any)?.x === 'number' ? (call.args as any).x : 0;
+              const baseY: number = typeof (call.args as any)?.y === 'number' ? (call.args as any).y : 0;
+              const baseColor: string | undefined = (call.args as any)?.color;
+              const charW = fontSize * 0.6;
+              const gap = fontSize * 0.3;
+              const allResults: any[] = [];
+              let chunkError: any = null;
+              for (let idx = 0; idx < chunks.length; idx++) {
+                const chunkText = chunks[idx];
+                const chunkArgs: Record<string, any> = {
+                  ...(call.args as any),
+                  text: chunkText,
+                  x: Math.round(curX),
+                  y: baseY,
+                  textAlign: 'left',
+                  fontSize,
+                  ...(baseColor ? { color: baseColor } : {}),
+                };
+                const { toolAction: cAction } = formatToolActivity(call.name, chunkArgs, toolDefChunk);
+                this.transport.broadcastActivity({
+                  stage: 'executing_tool',
+                  toolName: call.name,
+                  toolAction: `${cAction} (${idx + 1}/${chunks.length})`,
+                  toolSummary: `Writing: "${chunkText}"`,
+                  toolArgs: chunkArgs,
+                  turnIndex: turnCount,
+                  maxTurns,
+                });
+                const chunkCursor = extractCursorPosition(call.name, chunkArgs);
+                if (chunkCursor) this.transport.broadcastCursorPosition(chunkCursor.x, chunkCursor.y);
+                try {
+                  const cRes = await this.mcpClient.callTool({ name: call.name, arguments: chunkArgs as any });
+                  allResults.push(cRes);
+                  this.transport.broadcastActivity({
+                    stage: 'tool_result',
+                    toolName: call.name,
+                    toolAction: cAction,
+                    toolSummary: `Wrote "${chunkText}"`,
+                    resultSummary: 'Executed successfully',
+                    turnIndex: turnCount,
+                    maxTurns,
+                  });
+                } catch (e: any) {
+                  chunkError = e;
+                  console.error(`[RoomAgentSession] Chunk write error "${chunkText}":`, e);
+                  this.transport.broadcastActivity({
+                    stage: 'tool_result',
+                    toolName: call.name,
+                    toolAction: cAction,
+                    toolSummary: `Wrote "${chunkText}"`,
+                    resultSummary: 'Action unavailable',
+                    turnIndex: turnCount,
+                    maxTurns,
+                  });
+                  break;
+                }
+                curX += chunkText.length * charW + gap;
+                if (idx < chunks.length - 1) await new Promise((r) => setTimeout(r, 85));
+              }
+              if (chunkError) {
+                functionResponseParts.push({
+                  functionResponse: {
+                    name: call.name,
+                    response: { status: 'failed', reason: 'That action could not be completed right now. Please continue explaining in the chat instead.' },
+                  },
+                });
+              } else {
+                functionResponseParts.push({
+                  functionResponse: {
+                    name: call.name,
+                    response: { output: { success: true, originalText: rawText, chunks, chunkCount: chunks.length, results: allResults } },
+                  },
+                });
+              }
+              continue; // handled as chunked — skip default single-call path
+            }
+          }
+
           const toolDef = this.tools.find((t) => t.name === call.name);
           const { toolAction, toolSummary } = formatToolActivity(call.name, call.args, toolDef);
           console.log(`[RoomAgentSession] Tool Call in ${this.roomId}: ${call.name}(${JSON.stringify(call.args)})`);

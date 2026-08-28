@@ -150,7 +150,7 @@ export const drawChalkTool: WebMcpTool<{
 }> = {
   name: 'chalkboard_draw_chalk',
   description:
-    'Draws a freehand chalk stroke, smooth line, curve, or closed polygon on the board and broadcasts it to all students in real time.',
+    'Draws a freehand chalk stroke, smooth line, curve, or closed polygon on the board and broadcasts it to all students in real time. LIVE-CURSOR RULE: Draw ONE continuous stroke per call — for multi-part diagrams, use separate calls per component (one call per line/shape edge) so the cursor visibly glides between parts. Do not batch an entire diagram into one points array.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -229,7 +229,7 @@ export const writeTextTool: WebMcpTool<{
 }> = {
   name: 'chalkboard_write_text',
   description:
-    'Writes clean chalkboard typography, title headers, mathematical equations, or numbered step labels at a given coordinate.',
+    'Writes clean chalkboard typography, title headers, mathematical equations, or numbered step labels at a given coordinate. CRITICAL LIVE-CURSOR RULE: NEVER write a full sentence/phrase in one call — you MUST split text into 1-3 words per call (titles: 1 word per call), advancing x each time (charWidth≈fontSize×0.6, gap≈fontSize×0.3) with textAlign:"left" so cursor-movement is broadcast and users see live word-by-word writing. Preserve color/fontSize across chunks. Example for "Chalkboard Master" at 48px white: call 1: {text:"Chalkboard", x:-60, y:180, fontSize:48, color:"#ffffff", textAlign:"left"}, call 2: {text:"Master", x:130, y:180, fontSize:48, color:"#ffffff", textAlign:"left"}.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -278,7 +278,7 @@ export const insertShapeTool: WebMcpTool<{
 }> = {
   name: 'chalkboard_insert_shape',
   description:
-    'Inserts a geometric chalk shape on the board at (x, y) or viewport center. Supported shapes: triangle, square, rectangle, pentagon, hexagon, heptagon, octagon, decagon, circle, star, diamond, line, arrow, cross, heart.',
+    'Inserts a geometric chalk shape on the board at (x, y) or viewport center. Supported shapes: triangle, square, rectangle, pentagon, hexagon, heptagon, octagon, decagon, circle, star, diamond, line, arrow, cross, heart. LIVE-CURSOR RULE: Insert ONE shape per call; label it in a separate chalkboard_write_text call so the cursor visibly moves from shape to label. Do not bundle multiple shapes in one conceptual step.',
   inputSchema: {
     type: 'object',
     properties: {

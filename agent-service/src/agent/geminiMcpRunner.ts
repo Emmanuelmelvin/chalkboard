@@ -11,12 +11,15 @@ import { config } from '../config.js';
 import type { InstructPayload } from '../types/index.js';
 import { formatToolActivity, extractCursorPosition } from './activityFormatter.js';
 import { sanitizeChatMessage } from './roomAgentSession.js';
+import { getStaticInstructions } from '../utils/loadSystemInfo.js';
 
 export class GeminiMcpRunner {
   private ai: GoogleGenAI;
   private mcpClient: Client;
   private transport: SocketIoMcpTransport;
   private roomId: string;
+  /** Static base instructions loaded once at build (OpenAI pattern: Agent(instructions=...)). */
+  private readonly baseSystemInstruction: string;
 
   constructor(roomId: string) {
     this.roomId = roomId;
@@ -31,6 +34,7 @@ export class GeminiMcpRunner {
         capabilities: {},
       }
     );
+    this.baseSystemInstruction = getStaticInstructions();
   }
 
   /**
@@ -76,32 +80,18 @@ export class GeminiMcpRunner {
     const roomDesc = meta?.description ? `"${meta.description}"` : 'No description provided';
     const roomTheme = meta?.theme || 'classroom';
 
-    const systemInstruction = `You are the Chalkboard Master, an autonomous AI instructor leading a live collaborative classroom lesson.
-You have direct control over the chalkboard canvas via core tools and dynamic domain plugin tools.
-
-Classroom Environment & Metadata:
+    // Per-run dynamic template variables — injected via UserMessage, not rebuilt into instructions (OpenAI prompt-template pattern).
+    const runContext = `## Active Lesson Context (Live — Template Variables for This Run)
 - Room Title: ${roomTitle}
 - Room Description: ${roomDesc}
 - Visual Theme: ${roomTheme}
 - Target Topic: "${payload.prompt}"
 - Difficulty Level: ${payload.level || 'High School'}
 - Teaching Style: ${payload.style || 'Visual, Interactive & Step-by-Step'}
+- Requested By: ${payload.requestedBy || 'instructor'}`;
 
-Pedagogical Structure:
-1. INTRODUCE TOPIC: Write a clean title header with \`chalkboard_write_text\`.
-2. VISUAL DIAGRAM: Draw geometric figures, coordinate axes, Venn diagrams, or concept charts.
-   - For standard geometry/curves, use \`chalkboard_draw_chalk\` and \`chalkboard_insert_shape\`.
-   - For mathematical set diagrams, coordinate grids, graphs, number lines, or matrices, prefer using the dedicated \`plugin_math_set_*\` tools (e.g. \`plugin_math_set_two_set_venn\`, \`plugin_math_set_coordinate_grid\`, \`plugin_math_set_graph\`, \`plugin_math_set_number_line\`, \`plugin_math_set_matrix\`).
-   - For data charts, box plots, and statistical summaries, use \`plugin_statistics_*\` tools.
-3. WORKED EXAMPLE: Step through mathematical calculations or proofs. Use \`chalkboard_highlight_area\` (type="focus") to emphasize steps.
-4. PRACTICE CHALLENGE: Use \`chalkboard_highlight_area\` (type="answer_box") to give students a designated space to work. Ask questions in \`chalkboard_send_chat\`.
-5. EXPAND EXTENSIONS: If your lesson requires domain plugins not yet loaded (e.g. specialized subjects), use \`chalkboard_discover_plugins\` to search available plugins and \`chalkboard_load_plugin\` to load their tools on demand.
-
-Strict Behavioral Invariants:
-1. VOICE NARRATION RESTRICTION: Do not use \`chalkboard_speak_narration\` unless specifically asked by the user to speak or narrate with audio. Communicate primarily via chalkboard drawings and chat.
-2. CANVAS RESTRAINT: Do not draw unrelated or unrequested items. If a user asks a conceptual question in chat, answer in chat.
-3. SOCRATIC CLARIFICATION: If the prompt is ambiguous or underspecified, ask clarifying questions in \`chalkboard_send_chat\` before making destructive board changes.
-4. NO META-SUMMARY LEAKING: Never output internal tool lists (e.g., "Actions Taken: 1. ...").`;
+    // Static base instructions loaded once at build — per OpenAI Agent(instructions=...) once.
+    const systemInstruction = this.baseSystemInstruction;
 
     console.log(`[GeminiMcpRunner] Starting autonomous lesson for prompt: "${payload.prompt}" in "${roomTitle}"`);
 
@@ -127,9 +117,9 @@ Strict Behavioral Invariants:
         },
       });
 
-      // Send initial prompt to Gemini
+      // Inject live run context via UserMessage template variables (not via rebuilding instructions).
       let currentResponse = await chat.sendMessage({
-        message: `Please begin teaching the lesson: "${payload.prompt}". Start by writing the lesson title on the chalkboard and sketching the introductory diagram.`,
+        message: `${runContext}\n\nPlease begin teaching the lesson: "${payload.prompt}". Start by writing the lesson title on the chalkboard and sketching the introductory diagram.`,
       });
 
       // Autonomous Tool Calling Loop
@@ -158,6 +148,93 @@ Strict Behavioral Invariants:
         // Execute each tool call through the MCP client
         for (const call of functionCalls) {
           if (!call.name) continue;
+
+          // ── Incremental live-cursor guard: auto-split oversized write_text ──
+          if (call.name === 'chalkboard_write_text' && typeof (call.args as any)?.text === 'string') {
+            const rawText: string = ((call.args as any).text as string).trim();
+            const words = rawText.split(/\s+/).filter(Boolean);
+            const fontSize: number = typeof (call.args as any)?.fontSize === 'number' ? (call.args as any).fontSize : 26;
+            const isTitle = fontSize >= 36;
+            const chunkSize = isTitle ? 1 : 2;
+            if (words.length > chunkSize) {
+              const toolDefChunk = tools.find((t) => t.name === call.name);
+              const logMsgChunk = `Auto-chunking write_text "${rawText}" (${words.length} words, fontSize ${fontSize}) into ${Math.ceil(words.length / chunkSize)} incremental calls`;
+              console.log(`[GeminiMcpRunner] ${logMsgChunk}`);
+              executionLogs.push(logMsgChunk);
+              const chunks: string[] = [];
+              for (let i = 0; i < words.length; i += chunkSize) chunks.push(words.slice(i, i + chunkSize).join(' '));
+              let curX: number = typeof (call.args as any)?.x === 'number' ? (call.args as any).x : 0;
+              const baseY: number = typeof (call.args as any)?.y === 'number' ? (call.args as any).y : 0;
+              const baseColor: string | undefined = (call.args as any)?.color;
+              const charW = fontSize * 0.6;
+              const gap = fontSize * 0.3;
+              const allResults: any[] = [];
+              let chunkError: any = null;
+              for (let idx = 0; idx < chunks.length; idx++) {
+                const chunkText = chunks[idx];
+                const chunkArgs: Record<string, any> = {
+                  ...(call.args as any),
+                  text: chunkText,
+                  x: Math.round(curX),
+                  y: baseY,
+                  textAlign: 'left',
+                  fontSize,
+                  ...(baseColor ? { color: baseColor } : {}),
+                };
+                const { toolAction: cAction } = formatToolActivity(call.name, chunkArgs, toolDefChunk);
+                this.transport.broadcastActivity({
+                  stage: 'executing_tool',
+                  toolName: call.name,
+                  toolAction: `${cAction} (${idx + 1}/${chunks.length})`,
+                  toolSummary: `Writing: "${chunkText}"`,
+                  toolArgs: chunkArgs,
+                  turnIndex: turnCount,
+                  maxTurns,
+                });
+                const chunkCursor = extractCursorPosition(call.name, chunkArgs);
+                if (chunkCursor) this.transport.broadcastCursorPosition(chunkCursor.x, chunkCursor.y);
+                try {
+                  const cRes = await this.mcpClient.callTool({ name: call.name, arguments: chunkArgs as any });
+                  allResults.push(cRes);
+                  this.transport.broadcastActivity({
+                    stage: 'tool_result',
+                    toolName: call.name,
+                    toolAction: cAction,
+                    toolSummary: `Wrote "${chunkText}"`,
+                    resultSummary: 'Executed successfully',
+                    turnIndex: turnCount,
+                    maxTurns,
+                  });
+                } catch (e: any) {
+                  chunkError = e;
+                  console.error(`[GeminiMcpRunner] Chunk write error "${chunkText}":`, e);
+                  this.transport.broadcastActivity({
+                    stage: 'tool_result',
+                    toolName: call.name,
+                    toolAction: cAction,
+                    toolSummary: `Wrote "${chunkText}"`,
+                    resultSummary: 'Action unavailable',
+                    turnIndex: turnCount,
+                    maxTurns,
+                  });
+                  break;
+                }
+                curX += chunkText.length * charW + gap;
+                if (idx < chunks.length - 1) await new Promise((r) => setTimeout(r, 85));
+              }
+              if (chunkError) {
+                functionResponseParts.push({
+                  functionResponse: { name: call.name, response: { status: 'failed', reason: 'That action could not be completed right now.' } },
+                });
+              } else {
+                functionResponseParts.push({
+                  functionResponse: { name: call.name, response: { output: { success: true, originalText: rawText, chunks, chunkCount: chunks.length, results: allResults } } },
+                });
+              }
+              continue;
+            }
+          }
+
           const toolDef = tools.find((t) => t.name === call.name);
           const { toolAction, toolSummary } = formatToolActivity(call.name, call.args, toolDef);
           const logMsg = `Executing MCP Tool: ${call.name}(${JSON.stringify(call.args)})`;

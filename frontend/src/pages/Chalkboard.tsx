@@ -93,6 +93,7 @@ import { toast } from '@/components/ui/Toast';
 import { webMcp } from '@/webmcp';
 import { useLoggerStore } from '@/stores/loggerStore';
 import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
+import { REACTION_EMOJIS, REACTION_PICKER_EVENT } from '@/constants/reactions';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -204,8 +205,6 @@ function avatarInitials(name: string) {
     .join('')
     .toUpperCase() || 'C';
 }
-
-const REACTION_EMOJIS = ['👍', '👏', '😂', '😮', '❤️', '🎉'];
 
 type RaisedHand = { userId: string; raisedAt: number };
 type ActiveReaction = { id: string; userId: string; emoji: string; at: number; lane: number };
@@ -987,6 +986,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       );
     });
   }, [socket, roomId]);
+
+  // Interactive WebMCP reaction picker — allows chalkboard_send_reaction tool to animate UI
+  useEffect(() => {
+    const handleReactionPicker = () => {
+      setReactionPickerOpen(true);
+      window.setTimeout(() => setReactionPickerOpen(false), 1200);
+    };
+    window.addEventListener(REACTION_PICKER_EVENT as any, handleReactionPicker);
+    return () => window.removeEventListener(REACTION_PICKER_EVENT as any, handleReactionPicker);
+  }, []);
 
   useEffect(() => {
     const handleMembersUpdated = (payload: { members?: RoomMember[] }) => {

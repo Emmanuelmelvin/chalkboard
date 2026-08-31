@@ -5,6 +5,7 @@
  */
 
 import type { AgentRoomSocket } from '../socket/agentSocket.js';
+import { logger } from '../utils/logger.js';
 
 type Role = 'owner' | 'instructor' | 'viewer';
 
@@ -54,9 +55,12 @@ export async function executeTool(
   args: any,
   invokerRole: Role
 ): Promise<{ content: [{ type: 'text'; text: string }]; isError?: boolean }> {
+  logger.info('[Executor] Tool invoked', { tool: toolName, invokerRole, args: JSON.stringify(args).slice(0, 200), roomId: socket.roomId });
   // Permission pre-check (inherit invoker)
   if (!canInvoker(invokerRole, toolName)) {
-    return { content: [{ type: 'text', text: forbiddenMessage(toolName, invokerRole) }], isError: true };
+    const msg = forbiddenMessage(toolName, invokerRole);
+    logger.warn('[Executor] Permission denied', { tool: toolName, invokerRole, roomId: socket.roomId });
+    return { content: [{ type: 'text', text: msg }], isError: true };
   }
 
   const roomId = socket.roomId;
@@ -235,6 +239,7 @@ export async function executeTool(
         return { content: [{ type: 'text', text: `Unknown tool ${toolName}` }], isError: true };
     }
   } catch (err: any) {
+    logger.error('[Executor] Exception', { tool: toolName, roomId: socket.roomId, error: err?.message || String(err) });
     return { content: [{ type: 'text', text: `Tool exception: ${err?.message || String(err)}` }], isError: true };
   }
 }

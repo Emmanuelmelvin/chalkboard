@@ -12,6 +12,7 @@ import { executeTool } from '../tools/executors.js';
 import { formatToolActivity, extractCursorPosition } from './activityFormatter.js';
 import { sanitizeChatMessage, getFriendlyErrorMessage } from './messageSanitizer.js';
 import { getStaticInstructions } from '../utils/loadSystemInfo.js';
+import { logger } from '../utils/logger.js';
 
 export type SessionState = 'INITIALIZING' | 'IDLE_OBSERVING' | 'ACTIVE_REASONING' | 'DISCONNECTED' | 'ERROR';
 
@@ -34,15 +35,15 @@ export class RoomSession {
   async start(): Promise<boolean> {
     try {
       this.state = 'INITIALIZING';
-      console.log(`[RoomSession] Starting for ${this.roomId}`);
+      logger.info('[RoomSession] Starting', { roomId: this.roomId });
       const ok = await this.socket.connect();
-      if (!ok) { this.state = 'ERROR'; return false; }
+      if (!ok) { this.state = 'ERROR'; logger.warn('[RoomSession] connect failed', { roomId: this.roomId }); return false; }
       this.attachListeners();
       this.state = 'IDLE_OBSERVING';
-      console.log(`[RoomSession] Observing ${this.roomId} with ${TOOL_DEFINITIONS.length} tools`);
+      logger.info('[RoomSession] Observing', { roomId: this.roomId, tools: TOOL_DEFINITIONS.length });
       return true;
     } catch (err) {
-      console.error(`[RoomSession] start failed ${this.roomId}:`, err);
+      logger.error('[RoomSession] start failed', { roomId: this.roomId, error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
       this.state = 'ERROR';
       return false;
     }
@@ -65,13 +66,53 @@ export class RoomSession {
   private handlePresenceCount(humanCount: number) {
     if (humanCount <= 0) {
       if (!this.idleGcTimeout) {
-        console.log(`[RoomSession] ${this.roomId} empty, GC in 5m`);
-        this.idleGcTimeout = setTimeout(() => this.stop(), 5 * 60 * 1000);
+        logger.info('[RoomSession] empty, scheduling GC', { roomId: this.roomId });
+        this.idleGcTimeout = setTimeout(() => { void this.stop(); }, 5 * 60 * 1000);
       }
     } else if (this.idleGcTimeout) {
       clearTimeout(this.idleGcTimeout);
       this.idleGcTimeout = null;
+      logger.debug('[RoomSession] GC cancelled, human joined', { roomId: this.roomId });
     }
+  }
+
+  private resolveUserRole(msg: ChatEntry): 'owner' | 'instructor' | 'viewer' {
+    const ownerId = this.socket.context.roomMetadata?.ownerId || this.socket.roomMetadata?.ownerId;
+
+    // 1. Direct match with ownerId from room metadata
+    if (msg.userId && ownerId && msg.userId === ownerId) {
+      return 'owner';
+    }
+
+    // 2. Match active room members by userId or displayName
+    for (const [, u] of this.socket.context.members) {
+      const matchId = Boolean(msg.userId && (u.userId === msg.userId || u.id === msg.userId));
+      const matchName = Boolean(msg.displayName && u.name.trim().toLowerCase() === msg.displayName.trim().toLowerCase());
+      if (matchId || matchName) {
+        if (u.role === 'owner' || u.role === 'instructor' || u.role === 'viewer') {
+          return u.role;
+        }
+      }
+    }
+
+    // 3. Match persisted members from roomDetails (if available)
+    if (Array.isArray(this.socket.context.persistedMembers)) {
+      const pm = this.socket.context.persistedMembers.find(
+        (m) => (msg.userId && m.userId === msg.userId) || (msg.displayName && m.displayName?.trim().toLowerCase() === msg.displayName.trim().toLowerCase())
+      );
+      if (pm && (pm.role === 'owner' || pm.role === 'instructor' || pm.role === 'viewer')) {
+        return pm.role as any;
+      }
+    }
+
+    // 4. Fallback to room default role (defaults to 'instructor' in DB)
+    const defaultRole = (this.socket.context.roomMetadata?.defaultRole || this.socket.roomMetadata?.defaultRole) as any;
+    if (defaultRole === 'owner' || defaultRole === 'instructor' || defaultRole === 'viewer') {
+      return defaultRole;
+    }
+
+    // 5. Default classroom collaborator fallback
+    return 'instructor';
   }
 
   private async handleIncomingChat(msg: ChatEntry) {
@@ -85,13 +126,17 @@ export class RoomSession {
     const slashMatch = /^\/(ask|teach|draw|solve|master|ai|help)\b/i.test(raw);
     if (!mentioned && !regexMatch && !slashMatch) return;
 
-    console.log(`[RoomSession] Invoked by ${msg.displayName} in ${this.roomId}: "${raw}"`);
+    const invokerRole = this.resolveUserRole(msg);
 
-    // Resolve invokerRole from members
-    let invokerRole: 'owner'|'instructor'|'viewer' = 'viewer';
-    for (const [, u] of this.socket.context.members) {
-      if (u.id === msg.userId) { invokerRole = (u.role as any) || 'viewer'; break; }
-    }
+    logger.info('[RoomSession] Invoked', {
+      roomId: this.roomId,
+      displayName: msg.displayName,
+      raw,
+      userId: msg.userId,
+      invokerRole,
+      ownerId: this.socket.context.roomMetadata?.ownerId,
+      membersCount: this.socket.context.members.size,
+    });
 
     let cleanPrompt = raw.replace(/(?:^|\s)@(Chalkboard\s*Master|chalkboard-master|master|ai|agent)(?:\s|[:,])?/gi, '').replace(/^\/(ask|teach|draw|solve|master|ai|help)\s*/i, '').trim();
     if (!cleanPrompt) cleanPrompt = 'Hello! How can I assist with the chalkboard lesson today?';
@@ -107,17 +152,20 @@ export class RoomSession {
     this.isProcessing = true;
     this.state = 'ACTIVE_REASONING';
     try {
+      logger.info('[RoomSession] Reasoning start', { roomId: this.roomId, prompt: prompt.slice(0, 80), requestedBy: chatEntry.displayName, invokerRole });
       await this.executeReasoningTask(prompt, chatEntry.displayName, invokerRole as any);
+      logger.info('[RoomSession] Reasoning completed', { roomId: this.roomId });
     } catch (err: any) {
-      console.error(`[RoomSession] reasoning error ${this.roomId}:`, err);
+      logger.error('[RoomSession] reasoning error', { roomId: this.roomId, error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
       await this.socket.sendChatMessage(getFriendlyErrorMessage(chatEntry.displayName));
     } finally {
       this.isProcessing = false;
       this.state = 'IDLE_OBSERVING';
+      logger.debug('[RoomSession] State reset to IDLE_OBSERVING', { roomId: this.roomId });
     }
   }
 
-  async executeReasoningTask(prompt: string, requestedBy: string, invokerRole: 'owner'|'instructor'|'viewer' = 'viewer'): Promise<{ success: boolean; turns: number }> {
+  async executeReasoningTask(prompt: string, requestedBy: string, invokerRole: 'owner'|'instructor'|'viewer' = 'instructor'): Promise<{ success: boolean; turns: number }> {
     const geminiDeclarations = toGeminiFunctionDeclarations();
 
     const recentChat = this.socket.context.chat.slice(-8).map(c => `${c.displayName}: "${c.message}"`).join('\n');
@@ -137,7 +185,7 @@ export class RoomSession {
 - Current Strokes: ~${this.socket.context.strokeCount}
 - Recent Chat (last 8):
 ${recentChat || '(No recent chat)'}
-- Invocation: Chat mention from ${requestedBy} (role: ${invokerRole}) — inherit this role for permission checks. If viewer asks to draw/kick, refuse politely.
+- Invocation: Chat mention from ${requestedBy} (role: ${invokerRole}) — inherit this role for permission checks. If viewer asks to draw/kick, refuse politely. If instructor/owner asks to draw or teach, execute the tools.
 - Tools: 23 WebMCP tools (ground-level, no plugins). Use incremental word-by-word for write_text.`;
 
     const systemInstruction = this.baseSystemInstruction;
@@ -145,25 +193,37 @@ ${recentChat || '(No recent chat)'}
     const maxTurns = config.MAX_TURNS_PER_INSTRUCTION;
     let hasSentChat = false;
 
-    this.socket.broadcastActivity({ stage: 'thinking', thought: `Analyzing request from ${requestedBy}: "${prompt.slice(0,50)}${prompt.length>50?'...':''}"`, turnIndex:0, maxTurns });
+     logger.info('[RoomSession] Broadcast thinking', { roomId: this.roomId, prompt: prompt.slice(0, 80), requestedBy, invokerRole });
+     this.socket.broadcastActivity({ stage: 'thinking', thought: `Analyzing request from ${requestedBy}: "${prompt.slice(0,50)}${prompt.length>50?'...':''}"`, turnIndex:0, maxTurns });
 
     try {
+      logger.info('[RoomSession] Creating Gemini chat', { roomId: this.roomId, model: config.GEMINI_MODEL, thinkingBudget: config.THINKING_BUDGET, tools: geminiDeclarations.length });
+      const chatConfig: any = {
+        systemInstruction,
+        tools: [{ functionDeclarations: geminiDeclarations as any }],
+        temperature: 0.4,
+      };
+
+      if (typeof config.THINKING_BUDGET === 'number') {
+        chatConfig.thinkingConfig = { thinkingBudget: config.THINKING_BUDGET };
+      }
+
       let chat = this.ai.chats.create({
         model: config.GEMINI_MODEL,
-        config: {
-          systemInstruction,
-          tools: [{ functionDeclarations: geminiDeclarations as any }],
-          temperature: 0.4,
-        },
+        config: chatConfig,
       });
 
+      logger.debug('[RoomSession] Sending initial prompt to Gemini', { roomId: this.roomId, prompt });
       let currentResponse = await chat.sendMessage({
         message: `${runContext}\n\n${requestedBy} (${invokerRole}) asked: "${prompt}". Follow SYSTEM_INFO policies (modality matching, canvas restraint, incremental cursor, permission inheritance).`,
       });
+      logger.info('[RoomSession] Gemini initial response', { roomId: this.roomId, hasFunctionCalls: Boolean((currentResponse as any).functionCalls?.length), text: (currentResponse as any).text?.slice(0, 100) });
 
       while (turnCount < maxTurns) {
         turnCount++;
+        logger.info('[RoomSession] Turn start', { roomId: this.roomId, turn: turnCount, maxTurns });
         const functionCalls = (currentResponse as any).functionCalls;
+        logger.debug('[RoomSession] Function calls', { roomId: this.roomId, turn: turnCount, calls: functionCalls?.map((c:any)=> ({name:c.name, args:c.args})) });
         if (!functionCalls || functionCalls.length === 0) {
           const text = (currentResponse as any).text;
           if (text && !hasSentChat) {
@@ -171,13 +231,18 @@ ${recentChat || '(No recent chat)'}
             if (clean) await this.socket.sendChatMessage(clean);
           }
           this.socket.broadcastActivity({ stage: 'completed', thought: 'Completed.', turnIndex: turnCount, maxTurns });
-          setTimeout(() => this.socket.broadcastActivity({ stage: 'idle' }), 3000);
+          setTimeout(() => this.socket.broadcastActivity({ stage: 'idle' }), 1000);
           break;
         }
 
+        let isTerminalCall = false;
         const functionResponseParts: any[] = [];
         for (const call of functionCalls) {
           if (!call.name) continue;
+
+          if (call.name === 'chalkboard_send_chat' || call.name === 'chalkboard_speak_narration') {
+            isTerminalCall = true;
+          }
 
           // Auto-chunk write_text for live cursor
           if (call.name === 'chalkboard_write_text' && typeof (call.args as any)?.text === 'string') {
@@ -208,7 +273,7 @@ ${recentChat || '(No recent chat)'}
                   this.socket.broadcastActivity({ stage:'tool_result', toolName:call.name, toolAction, toolSummary:`Wrote "${chunkText}"`, resultSummary: cRes.isError?'Failed':'Executed', turnIndex:turnCount, maxTurns });
                 } catch (e:any) { chunkError=e; break; }
                 curX += chunkText.length * charW + gap;
-                if (idx < chunks.length-1) await new Promise(r=>setTimeout(r,85));
+                if (idx < chunks.length-1) await new Promise(r=>setTimeout(r, 35));
               }
               if (chunkError) {
                 functionResponseParts.push({ functionResponse: { name: call.name, response: { status:'failed', reason: 'That action could not be completed.' } } });
@@ -235,6 +300,13 @@ ${recentChat || '(No recent chat)'}
             functionResponseParts.push({ functionResponse: { name: call.name, response: { status:'failed', reason: 'That action could not be completed.' } } });
             this.socket.broadcastActivity({ stage:'tool_result', toolName:call.name, toolAction, toolSummary, resultSummary:'Failed', turnIndex:turnCount, maxTurns });
           }
+        }
+
+        // If the sole tool call was terminal chat/speech, complete without another full turn
+        if (isTerminalCall && functionCalls.length === 1) {
+          this.socket.broadcastActivity({ stage: 'completed', thought: 'Completed.', turnIndex: turnCount, maxTurns });
+          setTimeout(() => this.socket.broadcastActivity({ stage: 'idle' }), 1000);
+          break;
         }
 
         this.socket.broadcastActivity({ stage:'thinking', thought:'Processing tool results...', turnIndex:turnCount, maxTurns });

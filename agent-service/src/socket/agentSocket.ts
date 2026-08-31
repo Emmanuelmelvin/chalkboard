@@ -7,6 +7,7 @@
 
 import { io, Socket } from 'socket.io-client';
 import { config } from '../config.js';
+import { logger } from '../utils/logger.js';
 import type { RoomMetadata, Stroke, SavedLink } from '../types/index.js';
 
 export interface ChatEntry {
@@ -18,13 +19,21 @@ export interface ChatEntry {
   mentionedUserIds?: string[];
 }
 
+export interface RoomMember {
+  id: string;
+  userId?: string;
+  name: string;
+  role: 'owner' | 'instructor' | 'viewer';
+}
+
 export interface RoomContext {
   roomId: string;
   roomMetadata?: RoomMetadata | null;
   strokes: Stroke[];
   links: SavedLink[];
   chat: ChatEntry[]; // rolling 25
-  members: Map<string, { id: string; name: string; role: string }>; // socketId -> user
+  members: Map<string, RoomMember>; // socketId -> user
+  persistedMembers: Array<{ userId: string; role: string; displayName?: string }>;
   strokeCount: number;
   lastActivityAt: number;
 }
@@ -48,6 +57,7 @@ export class AgentRoomSocket {
       links: [],
       chat: [],
       members: new Map(),
+      persistedMembers: [],
       strokeCount: 0,
       lastActivityAt: Date.now(),
     };
@@ -70,6 +80,7 @@ export class AgentRoomSocket {
       });
 
       this.socket = socket;
+      this.attachListeners();
 
       const onConnect = () => {
         this.connected = true;
@@ -78,13 +89,22 @@ export class AgentRoomSocket {
           { roomId: this.roomId, color: '#a3e5ff', clientSessionId: `agent-${this.roomId}` },
           (res: any) => {
             if (res?.ok) {
-              if (res.room) this.roomMetadata = res.room;
-              if (res.role) console.log(`[AgentSocket] Joined ${this.roomId} as ${res.role}`);
-              this.context.roomMetadata = this.roomMetadata;
-              this.attachListeners();
+              if (res.room) {
+                this.roomMetadata = res.room;
+                this.context.roomMetadata = res.room;
+              }
+              if (res.role) logger.info('[AgentSocket] Joined', { roomId: this.roomId, role: res.role });
+              logger.debug('[AgentSocket] Context hydrated', {
+                roomId: this.roomId,
+                strokes: this.context.strokes.length,
+                links: this.context.links.length,
+                chat: this.context.chat.length,
+                membersCount: this.context.members.size,
+                ownerId: this.context.roomMetadata?.ownerId,
+              });
               resolve(true);
             } else {
-              console.warn(`[AgentSocket] join-room failed for ${this.roomId}:`, res?.error);
+              logger.warn('[AgentSocket] join-room failed', { roomId: this.roomId, error: res?.error });
               resolve(false);
             }
           }
@@ -92,7 +112,7 @@ export class AgentRoomSocket {
       };
 
       const onConnectError = (err: any) => {
-        console.error(`[AgentSocket] connect_error ${this.roomId}:`, err?.message || err);
+        logger.error('[AgentSocket] connect_error', { roomId: this.roomId, error: err?.message || String(err) });
         resolve(false);
       };
 
@@ -107,7 +127,7 @@ export class AgentRoomSocket {
 
       socket.on('disconnect', (reason: any) => {
         this.connected = false;
-        console.log(`[AgentSocket] disconnected ${this.roomId}: ${reason}`);
+        logger.warn('[AgentSocket] disconnected', { roomId: this.roomId, reason });
       });
     });
   }
@@ -150,7 +170,8 @@ export class AgentRoomSocket {
       this.context.members.clear();
       for (const [sid, u] of Object.entries(usersMap)) {
         this.context.members.set(sid, {
-          id: u.userId || sid,
+          id: sid,
+          userId: u.userId || sid,
           name: u.name || 'Classmate',
           role: u.role || 'viewer',
         });
@@ -186,7 +207,16 @@ export class AgentRoomSocket {
     });
     s.on('reaction:received', (payload: any) => this.emitLocal('reaction:received', payload));
     s.on('raised-hands:update', (payload: any) => this.emitLocal('raised-hands:update', payload));
-    s.on('room-members-updated', (payload: any) => this.emitLocal('room-members-updated', payload));
+    s.on('room-members-updated', (payload: any) => {
+      if (payload?.room) {
+        this.roomMetadata = payload.room;
+        this.context.roomMetadata = payload.room;
+      }
+      if (Array.isArray(payload?.members)) {
+        this.context.persistedMembers = payload.members;
+      }
+      this.emitLocal('room-members-updated', payload);
+    });
     s.on('agent:activity', (payload: any) => this.emitLocal('agent:activity', payload));
   }
 

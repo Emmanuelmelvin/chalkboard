@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { logger } from './logger.js';
 
 let cached: string | null = null;
 
@@ -38,13 +39,13 @@ export function loadSystemInfo(): string | null {
         if (raw && raw.trim().length > 0) {
           const trimmed = raw.trim();
           cached = trimmed;
-          console.log(`[loadSystemInfo] Loaded SYSTEM_INFO.md from ${candidate} (${trimmed.length} chars)`);
+          logger.info('[loadSystemInfo] Loaded', { candidate, chars: trimmed.length });
           return trimmed;
         }
       }
     } catch {}
   }
-  console.warn('[loadSystemInfo] SYSTEM_INFO.md not found in any candidate path — falling back to minimal invariants.');
+  logger.warn('[loadSystemInfo] SYSTEM_INFO.md not found — falling back to minimal invariants');
   return null;
 }
 

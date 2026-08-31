@@ -7,6 +7,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { config } from './config.js';
 import { RoomSession } from './agent/roomSession.js';
+import { logger } from './utils/logger.js';
 
 const app = express();
 app.use(cors());
@@ -71,7 +72,7 @@ app.post('/instruct', async (req: Request, res: Response) => {
   const session = roomSessions.get(roomId);
   if (session && session.state === 'IDLE_OBSERVING') {
     res.json({ ok: true, message: 'Chalkboard Master received instruction', roomId, prompt });
-    try { await session.executeReasoningTask(prompt, requestedBy || 'Classmate', 'instructor'); } catch (err) { console.error(`[Agent] instruct error ${roomId}:`, err); }
+    try { await session.executeReasoningTask(prompt, requestedBy || 'Classmate', 'instructor'); } catch (err) { logger.error('[Agent] instruct error', { roomId, error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined }); }
     return;
   }
   // If no session, create ephemeral one (still regular socket user)
@@ -79,7 +80,7 @@ app.post('/instruct', async (req: Request, res: Response) => {
   const started = await ephemeral.start();
   if (!started) { res.status(500).json({ error: 'Failed to join room' }); return; }
   res.json({ ok: true, message: 'Chalkboard Master joining and preparing lesson', roomId, prompt });
-  try { await ephemeral.executeReasoningTask(prompt, requestedBy || 'Classmate', 'instructor'); } catch (err) { console.error(`[Agent] ephemeral error ${roomId}:`, err); } finally { await ephemeral.stop(); }
+  try { await ephemeral.executeReasoningTask(prompt, requestedBy || 'Classmate', 'instructor'); } catch (err) { logger.error('[Agent] ephemeral error', { roomId, error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined }); } finally { await ephemeral.stop(); }
 });
 
 app.post('/stop', async (req: Request, res: Response) => {
@@ -91,7 +92,5 @@ app.post('/stop', async (req: Request, res: Response) => {
 });
 
 app.listen(config.PORT, () => {
-  console.log(`🚀 Chalkboard Master Agent Service (new way) running on port ${config.PORT}`);
-  console.log(`• Model: ${config.GEMINI_MODEL}`);
-  console.log(`• Backend Socket: ${config.MAIN_BACKEND_SOCKET_URL}`);
+  logger.info('Chalkboard Master Agent Service (new way) running', { port: config.PORT, model: config.GEMINI_MODEL, backendSocket: config.MAIN_BACKEND_SOCKET_URL });
 });

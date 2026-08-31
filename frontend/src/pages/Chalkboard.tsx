@@ -968,24 +968,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     initSession({ roomId, socket, userId, canEdit });
   }, [roomId, socket, userId, canEdit, initSession]);
 
-  // Initialize WebMCP bridge — registers tools with W3C document.modelContext and
-  // attaches Socket.IO MCP JSON-RPC listener so remote agents can discover and call them.
+  // Initialize WebMCP bridge — registers 23 tools on W3C document.modelContext (pure registry, no socket relay)
   useEffect(() => {
-    webMcp.setPluginExecutor(async (pluginId: string, commandId: string, formValues: Record<string, any>) => {
-      const localResult = await pluginRegistry.executeCommand(commandId, { formValues });
-      if (localResult) return true;
-      return publishedRuntime.execute(pluginId, commandId, { formValues });
-    });
-  }, [publishedRuntime]);
-
-  useEffect(() => {
-    if (!socket || !roomId) return;
-    webMcp.init(socket, roomId).then(() => {
+    webMcp.init().then(() => {
       console.log(
-        `[WebMCP] W3C document.modelContext & Socket.IO bridge active — ${webMcp.getStatus().registeredToolsCount} tools registered (${webMcp.getStatus().loadedPluginsCount || 0} plugins loaded).`
+        `[WebMCP] W3C document.modelContext active — ${webMcp.getStatus().registeredToolsCount} tools registered.`
       );
     });
-  }, [socket, roomId]);
+  }, []);
 
   // Interactive WebMCP reaction picker — allows chalkboard_send_reaction tool to animate UI
   useEffect(() => {

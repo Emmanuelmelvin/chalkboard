@@ -1,16 +1,13 @@
 /**
  * @file webMcpBridge.ts
- * @description Core bridge managing WebMCP registration, WebSocket client connections,
- * W3C document.modelContext standard polyfill/compatibility, and debug execution logs.
+ * @description Pure WebMCP tool registry — W3C document.modelContext polyfill and debug logs.
+ * No Socket.IO relay. Agent is a regular socket user; this registry only exposes the
+ * 23 classified tools to browser extensions and local console.
  */
 
 import { getAllChalkboardTools, ALL_CHALKBOARD_TOOLS } from './tools';
 import { ALL_CHALKBOARD_PROMPTS } from './prompts';
 import { ALL_CHALKBOARD_RESOURCES } from './resources';
-import { createWebMcpToolsFromManifest, type PluginCommandExecutor } from './pluginToolsBridge';
-import { installedPlugins } from '@/plugins/installedPlugins';
-import { pluginRegistry } from '@/plugins/registry';
-import type { PluginManifest } from '@/plugins/types';
 import type {
   WebMcpTool,
   WebMcpPrompt,
@@ -40,15 +37,11 @@ export class WebMcpBridge {
   private tools: Map<string, WebMcpTool> = new Map();
   private prompts: Map<string, WebMcpPrompt> = new Map();
   private resources: Map<string, WebMcpResource> = new Map();
-  private registeredPluginManifests: Map<string, PluginManifest> = new Map();
-  private pluginExecutor: PluginCommandExecutor | null = null;
 
   private logs: WebMcpExecutionLog[] = [];
   private listeners: Set<StatusListener> = new Set();
 
   private initialized = false;
-  private connected = false;
-  private token = '';
 
   private constructor() {
     this.registerDefaults();
@@ -72,105 +65,139 @@ export class WebMcpBridge {
     defaultTools.forEach((tool) => this.registerTool(tool));
     (ALL_CHALKBOARD_PROMPTS || []).forEach((prompt) => this.registerPrompt(prompt));
     (ALL_CHALKBOARD_RESOURCES || []).forEach((resource) => this.registerResource(resource));
-    // Auto-register installed built-in plugins
-    (installedPlugins || []).forEach((plugin) => this.registerPluginManifest(plugin.manifest));
+    // Eagerly expose modelContext so extensions see tools before any init
+    if (typeof document !== 'undefined') {
+      this.exposeModelContext();
+      this.dispatchToolChange();
+    }
   }
 
-  /**
-   * Initialize WebMCP runtime in the browser page.
-   * Polyfills/exposes standard document.modelContext and attaches Socket.IO MCP listeners.
-   */
-  public async init(socket?: any, roomId?: string): Promise<void> {
-    if (this.initialized && (!socket || this.connected)) return;
+  private modelContextTarget: EventTarget | null = null;
 
-    // 1. Expose the official W3C document.modelContext standard
-    if (typeof document !== 'undefined') {
-      const registry = this.tools;
-      const execute = (name: string, args: any) => this.executeTool(name, args);
+  private exposeModelContext() {
+    const registry = this.tools;
+    const execute = (name: string, args: any) => this.executeTool(name, args);
 
-      (document as any).modelContext = {
-        registerTool: async (tool: {
-          name: string;
-          description: string;
-          inputSchema?: any;
-          parameters?: any;
-          execute: (args: any) => Promise<any> | any;
-        }) => {
-          registry.set(tool.name, {
+    // 1. If Chrome native WebMCP exists (with flag + Origin-Agent-Cluster), use it — don't overwrite
+    const getNative = (): any | null => {
+      try {
+        // Check navigator.modelContext first per spec (navigator.modelContext is canonical)
+        const candidates = [
+          (globalThis as any)?.modelContext,
+          (navigator as any)?.modelContext,
+          (document as any)?.modelContext,
+          (window as any)?.modelContext,
+        ];
+        for (const cand of candidates) {
+          if (cand && typeof cand.registerTool === 'function' && typeof cand.getTools === 'function') {
+            // Native impl has [native code] in toString, polyfill doesn't
+            const isNative = cand.registerTool.toString().includes('[native code]');
+            if (isNative) return cand;
+            // If we already polyfilled earlier, reuse it
+            if (this.modelContextTarget && cand === (document as any).modelContext) return cand;
+          }
+        }
+      } catch {}
+      return null;
+    };
+
+    const native = getNative();
+    if (native) {
+      // Register all current tools into native registry
+      this.modelContextTarget = native as EventTarget;
+      for (const tool of registry.values()) {
+        try {
+          // Fire-and-forget, native will dispatch toolchange internally
+          void native.registerTool({
             name: tool.name,
             description: tool.description,
-            inputSchema: tool.inputSchema || tool.parameters || { type: 'object', properties: {} },
-            handler: tool.execute,
+            inputSchema: tool.inputSchema,
+            execute: async (args: any) => {
+              const res = await tool.handler(args);
+              // WebMCP expects string return; unwrap McpToolResult
+              const text = res.content?.[0]?.text ?? JSON.stringify(res);
+              if (res.isError) throw new Error(text);
+              return text;
+            },
           });
-          this.notify();
-        },
-        getTools: async () => {
-          return Array.from(registry.values()).map((t) => ({
-            name: t.name,
-            description: t.description,
-            inputSchema: t.inputSchema,
-          }));
-        },
-        executeTool: execute,
-      };
-
-      // Also mirror on window.modelContext & navigator.modelContext for maximum standard compatibility
-      if (typeof window !== 'undefined') {
-        (window as any).modelContext = (document as any).modelContext;
+        } catch {}
       }
-      if (typeof navigator !== 'undefined') {
-        (navigator as any).modelContext = (document as any).modelContext;
-      }
+      return;
     }
 
-    // 2. Attach Socket.IO MCP JSON-RPC Protocol Bridge
-    if (socket) {
-      this.attachSocketBridge(socket, roomId);
-      this.connected = true;
-    }
-
-    this.initialized = true;
-    this.token = this.generateSessionToken();
-    this.notify();
-  }
-
-  /**
-   * Attach Socket.IO listeners to respond to remote MCP requests (tools/list, tools/call).
-   */
-  public attachSocketBridge(socket: any, roomId?: string) {
-    if (!socket) return;
-
-    // Listen for MCP tools/list request from Cloud Run agent
-    socket.on('mcp:list_tools', (_payload: any, ack?: (res: any) => void) => {
-      const tools = Array.from(this.tools.values()).map((t) => ({
+    // 2. No native — create polyfill EventTarget
+    const eventTarget = new EventTarget() as any;
+    const modelContext: any = eventTarget;
+    modelContext.registerTool = async (
+      tool: {
+        name: string;
+        description: string;
+        inputSchema?: any;
+        parameters?: any;
+        execute: (args: any) => Promise<any> | any;
+      },
+      _opts?: { signal?: AbortSignal }
+    ) => {
+      registry.set(tool.name, {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema || tool.parameters || { type: 'object', properties: {} },
+        handler: tool.execute,
+      });
+      this.notify();
+      try { eventTarget.dispatchEvent(new Event('toolchange')); } catch {}
+    };
+    modelContext.getTools = async (_opts?: any) => {
+      return Array.from(registry.values()).map((t) => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
       }));
-
-      if (typeof ack === 'function') {
-        ack({ ok: true, tools });
-      } else {
-        socket.emit('mcp:tools_list_response', { roomId, tools });
+    };
+    modelContext.executeTool = async (toolOrName: any, input?: string, _opts?: any) => {
+      if (typeof toolOrName === 'string') return execute(toolOrName, input);
+      if (toolOrName && typeof toolOrName.name === 'string') {
+        const args = typeof input === 'string' ? JSON.parse(input) : input || {};
+        return execute(toolOrName.name, args);
       }
-    });
-
-    // Listen for MCP tools/call request from Cloud Run agent
-    socket.on(
-      'mcp:call_tool',
-      async (payload: { name: string; arguments?: any }, ack?: (res: any) => void) => {
-        const toolName = payload?.name;
-        const toolArgs = payload?.arguments || {};
-
-        const result = await this.executeTool(toolName, toolArgs);
-
-        if (typeof ack === 'function') {
-          ack({ ok: !result.isError, result });
-        } else {
-          socket.emit('mcp:tool_result_response', { roomId, result });
-        }
+      return execute(toolOrName, input);
+    };
+    this.modelContextTarget = eventTarget;
+    const define = (target: any) => {
+      try {
+        Object.defineProperty(target, 'modelContext', {
+          value: modelContext,
+          writable: true,
+          configurable: true,
+        });
+      } catch {
+        try { target.modelContext = modelContext; } catch {}
       }
-    );
+    };
+    define(document as any);
+    if (typeof window !== 'undefined') define(window as any);
+    if (typeof navigator !== 'undefined') define(navigator as any);
+    if (typeof globalThis !== 'undefined') {
+      try { (globalThis as any).modelContext = modelContext; } catch {}
+    }
+  }
+
+  private dispatchToolChange() {
+    if (this.modelContextTarget) {
+      try { this.modelContextTarget.dispatchEvent(new Event('toolchange')); } catch {}
+    }
+  }
+
+  /**
+   * Initialize WebMCP runtime — idempotent, just ensures modelContext is exposed.
+   */
+  public async init(): Promise<void> {
+    if (this.initialized) return;
+    if (typeof document !== 'undefined') {
+      this.exposeModelContext();
+    }
+    this.initialized = true;
+    this.notify();
   }
 
   /**
@@ -179,6 +206,7 @@ export class WebMcpBridge {
   public registerTool(tool: WebMcpTool): void {
     this.tools.set(tool.name, tool);
     this.notify();
+    this.dispatchToolChange();
   }
 
   /**
@@ -269,89 +297,16 @@ export class WebMcpBridge {
   }
 
   /**
-   * Set the active command executor for running plugin tools on the canvas.
-   */
-  public setPluginExecutor(executor: PluginCommandExecutor): void {
-    this.pluginExecutor = executor;
-  }
-
-  /**
-   * Register tools contributed by a plugin manifest into WebMCP.
-   */
-  public registerPluginManifest(manifest: PluginManifest, executor?: PluginCommandExecutor): WebMcpTool[] {
-    const exec: PluginCommandExecutor =
-      executor ||
-      this.pluginExecutor ||
-      (async (_pluginId, commandId, formValues) => {
-        return pluginRegistry.executeCommand(commandId, { formValues });
-      });
-
-    const tools = createWebMcpToolsFromManifest(manifest, exec);
-    tools.forEach((tool) => {
-      this.tools.set(tool.name, tool);
-    });
-
-    this.registeredPluginManifests.set(manifest.id, manifest);
-    this.notify();
-    return tools;
-  }
-
-  /**
-   * Unregister tools contributed by a plugin.
-   */
-  public unregisterPlugin(pluginId: string): void {
-    const slug = pluginId.replace(/^chalkboard\./i, '').replace(/[^a-zA-Z0-9_]/g, '_');
-    const prefix = `plugin_${slug}_`;
-    for (const toolName of Array.from(this.tools.keys())) {
-      if (toolName.startsWith(prefix)) {
-        this.tools.delete(toolName);
-      }
-    }
-    this.registeredPluginManifests.delete(pluginId);
-    this.notify();
-  }
-
-  /**
-   * Get all currently loaded plugin manifests.
-   */
-  public getLoadedPlugins(): PluginManifest[] {
-    return Array.from(this.registeredPluginManifests.values());
-  }
-
-  /**
-   * Check if a plugin is currently loaded in WebMCP.
-   */
-  public isPluginLoaded(pluginId: string): boolean {
-    return this.registeredPluginManifests.has(pluginId);
-  }
-
-  /**
-   * Generate a one-time connection token for Claude Desktop / Cursor CLI bridge.
-   */
-  public generateSessionToken(): string {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let res = 'CHALK-';
-    for (let i = 0; i < 6; i++) {
-      res += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    this.token = res;
-    this.notify();
-    return res;
-  }
-
-  /**
    * Get current bridge status.
    */
   public getStatus(): WebMcpBridgeStatus {
     return {
       initialized: this.initialized,
-      connected: this.connected || this.initialized,
-      token: this.token,
+      connected: this.initialized,
+      token: undefined,
       registeredToolsCount: this.tools.size,
       registeredPromptsCount: this.prompts.size,
       registeredResourcesCount: this.resources.size,
-      loadedPluginsCount: this.registeredPluginManifests.size,
-      loadedPluginIds: Array.from(this.registeredPluginManifests.keys()),
       lastActive: this.logs[0]?.timestamp,
       logs: [...this.logs],
     };

@@ -1032,57 +1032,6 @@ export async function attachSocket(server: any) {
       runSafely(socket, 'member:update-role', ack, () => handleMemberRoleUpdate(io, socket, payload, ack));
     });
 
-    // Model Context Protocol (MCP) tool discovery & execution relay
-    socket.on('mcp:list_tools', (payload, ack) => {
-      runSafely(socket, 'mcp:list_tools', ack, async () => {
-        const roomId = payload?.roomId || getSocketMeta(socket.id)?.roomId;
-        if (!roomId) return sendAck(ack, { ok: false, error: 'roomId required' });
-        const roomSockets = await io.in(roomId).fetchSockets();
-        const browserSocket = roomSockets.find((s: any) => !s.data?.user?.id?.startsWith('agent:'));
-        if (!browserSocket) {
-          return sendAck(ack, { ok: false, error: 'No active classroom browser connected in this room' });
-        }
-        try {
-          const localSocket = io.sockets.sockets.get(browserSocket.id);
-          if (localSocket) {
-            localSocket.emit('mcp:list_tools', payload, (res: any) => {
-              sendAck(ack, res);
-            });
-          } else {
-            const [res] = await (io.to(browserSocket.id) as any).timeout(10000).emitWithAck('mcp:list_tools', payload);
-            sendAck(ack, res);
-          }
-        } catch (err: any) {
-          sendAck(ack, { ok: false, error: err?.message || 'mcp:list_tools relay error' });
-        }
-      });
-    });
-
-    socket.on('mcp:call_tool', (payload, ack) => {
-      runSafely(socket, 'mcp:call_tool', ack, async () => {
-        const roomId = payload?.roomId || getSocketMeta(socket.id)?.roomId;
-        if (!roomId) return sendAck(ack, { ok: false, error: 'roomId required' });
-        const roomSockets = await io.in(roomId).fetchSockets();
-        const browserSocket = roomSockets.find((s: any) => !s.data?.user?.id?.startsWith('agent:'));
-        if (!browserSocket) {
-          return sendAck(ack, { ok: false, error: 'No active classroom browser connected in this room' });
-        }
-        try {
-          const localSocket = io.sockets.sockets.get(browserSocket.id);
-          if (localSocket) {
-            localSocket.emit('mcp:call_tool', payload, (res: any) => {
-              sendAck(ack, res);
-            });
-          } else {
-            const [res] = await (io.to(browserSocket.id) as any).timeout(15000).emitWithAck('mcp:call_tool', payload);
-            sendAck(ack, res);
-          }
-        } catch (err: any) {
-          sendAck(ack, { ok: false, error: err?.message || 'mcp:call_tool relay error' });
-        }
-      });
-    });
-
     // Relay agent thinking, stage, and tool activity telemetry to all room members
     socket.on('agent:activity', (payload, ack) => {
       runSafely(socket, 'agent:activity', ack, () => {

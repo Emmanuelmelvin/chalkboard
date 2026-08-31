@@ -45,6 +45,10 @@ export default defineConfig({
     },
   },
   server: {
+    headers: {
+      'Origin-Agent-Cluster': '?1',
+      'Permissions-Policy': 'tools=(self)',
+    },
     host: '0.0.0.0',
     allowedHosts: [
       'chalkboard.outray.app'

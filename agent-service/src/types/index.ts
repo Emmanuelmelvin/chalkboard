@@ -1,6 +1,6 @@
 /**
  * @file index.ts
- * @description Core types for the Chalkboard Agent Service microservice.
+ * @description Core types for the Chalkboard Agent Service (new way: regular socket user).
  */
 
 export interface Point {
@@ -131,4 +131,3 @@ export interface AgentActivityPayload {
   maxTurns?: number;
   timestamp?: string;
 }
-

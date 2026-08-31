@@ -1,7 +1,7 @@
 {
   "name": "chalkboard-agent-service",
-  "version": "1.0.0",
-  "description": "Autonomous AI Teaching Microservice (Chalkboard Master) powered by Google ADK and Gemini 3.5",
+  "version": "2.0.0",
+  "description": "Chalkboard Master — regular socket user with WebMCP tools (Gemini 3.6) — no MCP, no plugins",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@google/genai": "^2.19.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

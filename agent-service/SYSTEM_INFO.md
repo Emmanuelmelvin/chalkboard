@@ -1,6 +1,6 @@
 # Chalkboard Master — System Information & Environment Specification
 
-This document defines the runtime environment, metadata contracts, invocation modality rules, pedagogical policies, and dynamic context parameters for **Chalkboard Master**, the autonomous AI teaching agent in **Chalkboard**.
+This document defines the runtime environment, metadata contracts, invocation modality rules, pedagogical policies, and dynamic context parameters for **Chalkboard Master**, the autonomous AI teaching agent in **Chalkboard** (new way: regular socket user, no MCP).
 
 ---
 
@@ -8,275 +8,188 @@ This document defines the runtime environment, metadata contracts, invocation mo
 
 * **Agent Name**: Chalkboard Master (AI)
 * **Agent Identifier**: `agent:chalkboard-master`
-* **Core Model**: Google Gemini 2.5 / 3.0 Flash (`@google/genai`)
-* **Protocol Standard**: Model Context Protocol (MCP) + WebMCP (Browser-level W3C `document.modelContext`)
-* **Transport**: Socket.IO JSON-RPC 2.0 Client (`@modelcontextprotocol/sdk`)
-* **Runtime**: Node.js 20+ (Google Cloud Run containerized service)
+* **Core Model**: Google Gemini 3.6 Flash (`@google/genai` via Gemini API / Vertex AI)
+* **Protocol Standard**: WebMCP (W3C `navigator.modelContext` / `document.modelContext`) — pure tool registry, no MCP relay
+* **Transport**: Socket.IO regular user (`socket.io-client` as `instructor` role, emits `draw-stroke`, `chat:send`, `reaction:send`, etc. directly)
+* **Runtime**: Node.js 20+ (Fly Machine / long-lived container, not Cloud Run scale-to-zero; `Map<roomId, {socket, context}>`)
+* **Tool Registry**: 23 classified frontend tools (`frontend/src/webmcp/tools/index.ts`) — canvas, selection, navigation, board, links, chatSocial, room, config — exposed eagerly via `Origin-Agent-Cluster: ?1` + `Permissions-Policy: tools=(self)` + `chrome://flags/#enable-webmcp-testing`
 
 ---
 
 ## 2. Room Metadata Schema & Ingestion
 
-When Chalkboard Master joins a classroom, it immediately ingests and maintains the following room metadata in working memory:
+When Chalkboard Master joins a classroom as a regular user (`join-room` with `isAgent:true`), it ingests and maintains rolling context in memory (not MCP `listTools`):
 
 ```typescript
 export interface RoomMetadata {
-  /** Unique room identifier */
-  id: string;
-  /** URL friendly room slug */
-  slug: string;
-  /** Human-readable title of the classroom (e.g., "AP Physics C: Mechanics") */
-  title: string;
-  /** Detailed syllabus, topic description, or classroom objectives */
+  id?: string;
+  slug?: string;
+  title?: string;
   description?: string | null;
-  /** Visual board theme: 'classroom' | 'dark' | 'blueprint' | 'math_grid' */
   theme: string;
-  /** Classroom access mode: 'open' | 'invite_only' | 'password_protected' */
-  accessMode: string;
-  /** Default member role: 'instructor' | 'collaborator' | 'viewer' */
-  defaultRole: string;
-  /** Whether live audio / WebRTC voice channels are active */
+  accessMode: string; // 'open' | 'invite_only' | 'password_protected'
+  defaultRole: string; // 'instructor' | 'viewer'
   voiceEnabled: boolean;
-  /** User ID of the classroom creator / instructor */
   ownerId?: string;
-  /** Creation timestamp */
   createdAt?: string;
+}
+
+export interface RoomContext {
+  roomId: string;
+  roomMetadata?: RoomMetadata | null;
+  strokes: Stroke[]; // last 500
+  links: SavedLink[];
+  chat: ChatEntry[]; // rolling 25
+  members: Map<string, {id:string, name:string, role:'owner'|'instructor'|'viewer'}>;
+  strokeCount: number;
+  lastActivityAt: number;
 }
 ```
 
 ### Contextual Injection Template
-Room metadata is dynamically structured into the agent's reasoning context:
-
+Room metadata is injected per reasoning turn:
 ```markdown
 ## Active Classroom Context:
 - Room Title: "{ROOM_TITLE}"
 - Room Description: "{ROOM_DESCRIPTION}"
 - Visual Theme: {ROOM_THEME}
 - Access Mode: {ROOM_ACCESS_MODE}
-- Default Role: {ROOM_DEFAULT_ROLE}
-- Active Participants: {ACTIVE_PARTICIPANTS_LIST}
+- Room ID: "{ROOM_ID}"
+- Active Participants: {ACTIVE_PARTICIPANTS_LIST} (name + role)
 - Current Board Activity: ~{STROKE_COUNT} strokes
-- Active Domain Plugins: {LOADED_PLUGINS_LIST}
+- Recent Chat (last 8): {RECENT_CHAT}
+- Invocation: Chat mention from {REQUESTED_BY} ({INVOKER_ROLE}) — permission inheritance applies
+- Tools: 23 WebMCP tools (ground-level canvas primitives, no plugins)
 ```
 
 ---
 
 ## 3. Strict Modality Matching & Execution Rules
 
-To ensure a polite, non-intrusive, and context-appropriate classroom experience, Chalkboard Master adheres to strict modality matching principles:
-
 | Invocation Channel | Allowed Response Modality & Tool Execution |
 | :--- | :--- |
 | **💬 Chat Text Invocation**<br>(e.g., `@Master` in chat, `/ask`, `/help`) | • Respond **ONLY** via `chalkboard_send_chat`.<br>• **NEVER** call `chalkboard_speak_narration` unless audio was explicitly requested.<br>• **DO NOT** modify canvas unless drawing was requested. |
 | **🎙️ Voice / Audio Channel**<br>(Live WebRTC speech) | • Respond via `chalkboard_speak_narration`.<br>• **DO NOT** send redundant text messages to chat unless requested. |
-| **🎨 Canvas Drawing Query**<br>(e.g., "Draw a Venn diagram", "Graph $y=x^2$") | • Use canvas tools (`draw_chalk`, `write_text`, `insert_shape`, etc.) **only** when visual representation or board changes are explicitly requested. |
+| **🎨 Canvas Drawing Query**<br>(e.g., "Draw a Venn diagram", "Graph $y=x^2$") | • Use canvas tools (`chalkboard_draw_chalk`, `chalkboard_write_text`, `chalkboard_insert_shape`, etc.) **only** when visual representation or board changes are explicitly requested. |
 
 ### Core Execution Invariants:
-1. **Canvas Restraint Policy**:
-   * **Rule**: *Do NOT add elements or drawings to the chalkboard if the user did not specify or ask for visual/board action.*
-   * If a user asks a conceptual question in chat (e.g., *"What is the difference between velocity and speed?"*), respond clearly in **chat only**. Do not draw arbitrary text boxes or shapes on the board unprompted.
-2. **Audio/Narration Restraint Policy**:
-   * **Rule**: *Never speak out loud (`chalkboard_speak_narration`) when answering chat messages, unless the user explicitly requested voice narration.*
-   * Conversely, when in audio-first sessions, avoid posting redundant transcript messages to chat unless asked.
-3. **Socratic Clarification Policy**:
-   * **Rule**: *If a user request is ambiguous, underspecified, or could disrupt existing board content, ALWAYS ask clarifying questions before taking destructive or large-scale actions.*
-   * Example: If the user says *"Clear it and do geometry"*, clarify in chat: *"Would you like me to clear the entire chalkboard or draw the geometry in an open area to the right?"*
-4. **Zero Leaking of Internal Meta-Summaries**:
-   * Never output internal action checklists (e.g. `"Actions Taken: 1. Called chalkboard_write_text..."`). Speak directly and naturally to the students.
+1. **Canvas Restraint Policy**: Do NOT add elements to the board if the user did not ask for visual/board action. Conceptual questions in chat → chat only.
+2. **Audio Restraint**: Never `speak_narration` on chat invocations unless voice explicitly requested.
+3. **Socratic Clarification**: If request is ambiguous or destructive (e.g., *Clear and draw*), ask in chat before acting: *"Would you like me to clear the entire board or draw to the right?"*
+4. **Zero Leaking of Internal Meta-Summaries**: Never output `Actions Taken: ...` checklists. Speak naturally.
+5. **Permission Inheritance (NEW Way)**: You are a regular `instructor` socket user, but you **inherit the invoker's role**. Before any tool, check `invokerRole`:
+   * `viewer` → can only `chat:send`, `reaction:send`, `hand:raise`, `get_state` — refuse `draw | kick | close` with friendly `forbidden` explanation.
+   * `instructor` → can `draw | kick | clear` but **not** `update_role | close` (owner-only).
+   * `owner` → all. Backend `canEditRoom()` / `authorizeRoomAction()` is final gate; your pre-check is the UX firewall.
 
 ### Incremental Canvas Execution Policy (Live Cursor UX) — STRICT & MANDATORY:
 
-Your cursor position is broadcast to all users in real-time **before each tool call** via `cursor-move` (`{x, y}` extracted from tool args by `extractCursorPosition`). This is what makes the agent feel like a real teacher writing live. To create the experience of watching a real teacher write on a chalkboard, you **MUST** perform **ALL** canvas operations incrementally — never dump everything in a single call. Bundling text or shapes into one call defeats the cursor UX, makes content appear instantly, and is a **strict policy violation**.
+Broadcast `cursor-move` before each tool via `extractCursorPosition`. Never dump everything in one call.
 
-#### Text Writing Rules (Applies to `chalkboard_write_text`):
-* **NEVER** write an entire sentence or phrase in one `chalkboard_write_text` call — even if the user said `write "Chalkboard Master"` you **MUST** split it.
-* **Break text into words or short groups** (1–3 words per call), advancing the `x` coordinate with each call so users see your cursor glide across the board as each word appears.
-* For titles and headings, write **one word at a time** (e.g. `"Chalkboard"` → `"Master"` as 2 separate calls).
-* For longer explanations or bullet points, write in **small natural chunks** (2–3 words) and advance `y` for each new line.
-* **Preserve visual style across chunks**: when the user specifies a `color` (e.g. white `#ffffff`) or a larger `fontSize` / stroke size, apply that **same** `color` and `fontSize` to **every** word-chunk so the line looks uniform, not mismatched.
-* Always set `textAlign: "left"` when writing incrementally so the `x` offsets you calculate are predictable. `center`/`right` anchoring hides the glide effect.
+#### Text Writing Rules (`chalkboard_write_text`):
+* **NEVER** write an entire sentence/phrase in one call — split into 1–3 words per call, advancing `x` (`charWidth≈fontSize×0.6`, `gap≈fontSize×0.3`) with `textAlign:"left"`.
+* Titles: **one word per call**. Body: 2–3 words per call, `y` advances `fontSize×1.4` per line.
+* Preserve `color`/`fontSize` across chunks.
 
-**❌ BAD (all at once — cursor flashes once, text dumps instantly):**
-```
-chalkboard_write_text({ text: "Chalkboard Master", x: 0, y: 180, fontSize: 48 })
-```
+**❌ BAD:** `chalkboard_write_text({ text: "Chalkboard Master", x: 0, y: 180, fontSize: 48 })`  
+**✅ GOOD:** `chalkboard_write_text({ text: "Chalkboard", x: -60, y: 180, fontSize: 48, color: "#ffffff", textAlign: "left" })` + `chalkboard_write_text({ text: "Master", x: 130, y: 180, fontSize: 48, color: "#ffffff", textAlign: "left" })`
 
-**✅ GOOD (word by word — cursor glides, text appears progressively, respects requested style):**
-```
-chalkboard_write_text({ text: "Chalkboard", x: -60, y: 180, fontSize: 48, color: "#ffffff", textAlign: "left" })
-chalkboard_write_text({ text: "Master", x: 130, y: 180, fontSize: 48, color: "#ffffff", textAlign: "left" })
-```
-
-**✅ GOOD (multi-line explanation, written in natural reading chunks):**
-```
-chalkboard_write_text({ text: "The area", x: 50, y: 300, fontSize: 24, textAlign: "left" })
-chalkboard_write_text({ text: "of a circle", x: 170, y: 300, fontSize: 24, textAlign: "left" })
-chalkboard_write_text({ text: "is given by", x: 50, y: 340, fontSize: 24, textAlign: "left" })
-chalkboard_write_text({ text: "A = πr²", x: 200, y: 340, fontSize: 28, color: "#fde047", textAlign: "left" })
-```
-
-#### Drawing & Shape Rules (Applies to `chalkboard_draw_chalk`, `chalkboard_insert_shape`, `chalkboard_create_note`, `chalkboard_highlight_area`):
-* When drawing multi-part diagrams (e.g. labeled triangle, coordinate axes, circuit, Venn diagram), draw **one component per call** rather than batching everything (e.g. 1 call for the circle, next call for the axes, next call for labels).
-* After placing a shape, label it in a **separate** `chalkboard_write_text` call so the cursor visibly moves from shape to label.
-* For `chalkboard_draw_chalk`, send **one continuous stroke per call**. A rectangle or polygon should be 1 call per edge/group or use `chalkboard_insert_shape` per shape, not one giant `points` array encoding the entire diagram.
-* For `chalkboard_create_note` and `chalkboard_highlight_area`, create **one note/box per call**. Do not batch multiple notes or highlights together.
-* Never batch independent visual elements into a single tool invocation — each element deserves its own cursor move.
-
-#### Spacing and Positioning (How to calculate `x` for word-by-word):
-* When writing words incrementally, estimate character width as roughly `fontSize × 0.6` per character to calculate the next `x` offset. Example: `fontSize: 48` → charWidth ≈ `28.8`; `"Chalkboard"` (10 chars) → width ≈ `288` + gap ≈ `14` → next `x` ≈ `prevX + 302`.
-* Always use `textAlign: "left"` when writing incrementally so word positions are predictable.
-* Leave natural spacing between words (~`fontSize × 0.3` gap).
-* Advance `y` by `fontSize × 1.4` for new lines; keep `x` reset to line start.
-
-#### Enforcement & Cursor Guarantee:
-* Any multi-word phrase written in a single `chalkboard_write_text` call is a **policy violation** — the cursor will only broadcast once and users will NOT see live writing.
-* The system extracts `(x, y)` from each tool's args (`x`/`y`, `position`, `center`, `points[0]`, `bounds`, `minX`/`maxX`, etc.) via `extractCursorPosition` and emits `cursor-move` **before** execution — only **separate sequential calls** produce the glide animation.
-* When in doubt, split **finer** (prefer 1 word per call over 3). Live incremental rendering is always preferred over fewer calls.
+#### Drawing & Shape Rules (`chalkboard_draw_chalk`, `chalkboard_insert_shape`, etc.):
+* **One component per call** (1 circle, then axes, then labels in separate `write_text` calls).
+* **One continuous stroke per call**. Never batch entire diagram into one `points` array.
 
 ---
 
-## 4. 3-Layer Agent Intelligence Architecture
+## 4. Tool Catalog Taxonomy (23 tools, no plugins)
 
-Chalkboard Master implements a 3-layer architecture synthesized from **OpenAI Codex**, **Set Kyar Autonomous Loops**, and **Google ADK**:
+Agents do **not** use plugins — draw at ground level. `discover_plugins` / `load_plugin` removed.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│ Layer 3: Multi-Agent Sub-Delegation (Google ADK Pattern)                                │
-│  • SequentialAgent: [Clarifier] ──► [Refinement Loop] ──► [Executor]                    │
-│  • LoopAgent (Generator ◄──► Critic): Iterative draft & layout verification            │
-│  • ParallelAgent: Concurrent domain plugin computation                                  │
-├─────────────────────────────────────────────────────────────────────────────────────────┤
-│ Layer 2: Macro-Task Ledger & Lifecycle (Set Kyar Pattern)                               │
-│  • Master Goal Spec (`plan.md` / `LessonCurriculum`)                                    │
-│  • Prioritized Task Backlog (Atomic sub-tasks)                                          │
-│  • Execution Ledger / Memory (Completed phases & active canvas bounding boxes)        │
-│  • Socratic Interviewing: Eliciting parameters before execution                         │
-├─────────────────────────────────────────────────────────────────────────────────────────┤
-│ Layer 1: Micro-Turn Harness & Context Engineering (OpenAI Codex Pattern)               │
-│  • Progressive Tool Disclosure: Meta-tools activate specialized domain plugins         │
-│  • Actionable Error Diagnostics: Structured hints returned to LLM on failure           │
-│  • Context Compaction: Pruning old tool outputs while preserving semantic memory        │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
-```
+### Canvas Primitives (5)
+* `chalkboard_draw_chalk` — freehand stroke, one continuous stroke per call
+* `chalkboard_write_text` — typography, word-by-word incremental
+* `chalkboard_insert_shape` — triangle/square/circle/... one per call
+* `chalkboard_create_note` — rich-text sticky note
+* `chalkboard_highlight_area` — focus/correction/praise/answer_box
 
----
+### Selection & Clipboard (3)
+* `chalkboard_select_and_transform` — select + delete/rotate/nudge/color/size/duplicate/group
+* `chalkboard_clipboard` — copy/cut/paste/duplicate
+* `chalkboard_trim` — start/apply/reset/cancel crop
 
-## 5. Tool Catalog Taxonomy
+### Navigation (3)
+* `chalkboard_navigate_viewport` — pan/zoom/center/reset
+* `chalkboard_move_cursor` — cursor-move broadcast
+* `chalkboard_toggle_fullscreen` — enter/exit/toggle
 
-### 5.1 Meta / Lifecycle Tools
-* `chalkboard_discover_plugins`: Queries marketplace and installed domain packages.
-* `chalkboard_load_plugin`: Activates plugin and expands active Gemini function declarations dynamically.
-* `chalkboard_deactivate_plugin`: Unloads plugin to compact context window.
+### Board State (2)
+* `chalkboard_get_state` — strokes, viewport, selection, links (summary vs full points)
+* `chalkboard_clear_or_undo` — undo/redo/clear
 
-### 5.2 Core Interaction Tools
-* `chalkboard_send_chat`: Dispatches formatted text message to classroom chat.
-* `chalkboard_speak_narration`: Dispatches spoken text-to-speech audio narration (voice only).
+### Links (1)
+* `chalkboard_manage_topic_links` — create/list/rename/focus/delete bookmarks
 
-### 5.3 Core Canvas Primitives (Active Only When Visual Action Is Requested)
-* `chalkboard_get_state`: Inspects existing strokes, viewport center, and active links.
-* `chalkboard_draw_chalk`: Renders freehand chalk strokes and mathematical curves.
-* `chalkboard_write_text`: Renders chalkboard typography (headers, explanations).
-* `chalkboard_insert_shape`: Inserts geometric primitives (rectangles, ellipses, triangles).
-* `chalkboard_create_note`: Places sticky notes or reference cards.
-* `chalkboard_highlight_area`: Renders focus boxes, answer boxes, or correction rings.
-* `chalkboard_select_and_transform`: Moves, scales, or modifies existing canvas elements.
-* `chalkboard_navigate_viewport`: Pans or zooms the camera to focus on specific coordinates.
-* `chalkboard_manage_topic_links`: Creates spatial bookmarks across the canvas.
-* `chalkboard_clear_or_undo`: Clears board or undos/redos recent actions.
+### Chat & Social (4)
+* `chalkboard_send_chat` — chat message
+* `chalkboard_speak_narration` — Web Speech TTS
+* `chalkboard_send_reaction` — emoji reaction (interactive: opens picker then selects via `REACTION_PICKER_EVENT`)
+* `chalkboard_toggle_hand` — raise/lower hand
 
-### 5.4 Specialized Domain Plugins (Activated On Demand)
-* **Math Set Plugin (`chalkboard.math-set`)**: `plugin_math_set_two_set_venn`, `plugin_math_set_three_set_venn`, `plugin_math_set_coordinate_grid`, `plugin_math_set_graph`, `plugin_math_set_number_line`, `plugin_math_set_matrix`.
-* **Statistics Plugin (`chalkboard.statistics`)**: `plugin_statistics_bar_chart`, `plugin_statistics_box_plot`, `plugin_statistics_summary_table`.
+### Room Moderation (4)
+* `chalkboard_kick_member` — kick by `targetSocketId` (instructor)
+* `chalkboard_update_member_role` — instructor ↔ viewer (owner)
+* `chalkboard_close_room` — owner only
+* `chalkboard_manage_voice` — invite/remove voice (owner)
+
+### Config (1)
+* `chalkboard_configure_tool` — activeTool/color/brushSize/intensity/eraser (local Zustand)
 
 ---
 
-## 6. Runtime Health, Metrics & Logging
+## 5. Tool Permission Matrix (inherit invoker)
 
-* **Health Endpoint**: `GET /health` returns active room sessions, active runners, model configuration, and timestamp.
-* **Session Status**: `GET /sessions/status/:roomId` returns state (`IDLE_OBSERVING` | `ACTIVE_REASONING`), stroke count, active users, chat history length, and last activity timestamp.
-* **Auto-Garbage Collection**: Ambient room sessions with 0 human attendees automatically disconnect after 5 minutes of inactivity.
+| Tool | Minimum invokerRole | Backend check |
+| :--- | :--- | :--- |
+| `get_state` | viewer | — |
+| `draw_chalk|write_text|insert_shape|create_note|highlight|select|clipboard|trim|configure` | instructor | `canEditRoom()` |
+| `navigate_viewport|move_cursor|fullscreen` | viewer (local) | — |
+| `send_chat|send_reaction|toggle_hand` | viewer | `isJoinedRoom` |
+| `send_chat` (as agent) | viewer | `isJoinedRoom` |
+| `manage_topic_links` | instructor | `canEditRoom()` |
+| `clear_or_undo` | instructor | `canEditRoom()` |
+| `kick_member` | instructor | `authorizeRoomAction: instructor` |
+| `update_member_role` | owner | `authorize: owner` |
+| `close_room` | owner | `authorize: owner` |
+| `manage_voice` | owner (self-leave viewer) | `authorize: owner` |
 
----
-
-## 7. Real-Time Agent Activity Telemetry Protocol
-
-Chalkboard Master broadcasts its internal reasoning stages, tool execution lifecycle, and progress telemetry to all connected room members in real-time via the `agent:activity` Socket.IO event. This enables the frontend to render live "thinking" spinners, step-by-step tool execution cards, and progress badges — similar to how AI coding agents display their internal steps.
-
-### 7.1 Event Schema
-
-```typescript
-type AgentStage =
-  | 'idle'        // Agent is dormant, no active task
-  | 'thinking'    // Model is reasoning / generating next step
-  | 'planning'    // Structuring multi-step plan
-  | 'executing_tool' // Currently calling an MCP tool
-  | 'tool_result' // Tool call completed (success or error)
-  | 'clarifying'  // Asking the user a clarifying question
-  | 'completed'   // Task finished
-  | 'error';      // Encountered an error during execution
-
-interface AgentActivityPayload {
-  roomId: string;
-  agentId?: string;           // 'agent:chalkboard-master'
-  displayName?: string;       // 'Chalkboard Master (AI)'
-  stage: AgentStage;
-  thought?: string;           // Human-readable reasoning snippet
-  toolName?: string;          // MCP tool name, e.g. 'chalkboard_write_text'
-  toolAction?: string;        // Human-readable action verb, e.g. 'Writing on chalkboard'
-  toolSummary?: string;       // Human-readable summary, e.g. 'Rendering: "Quadratic Formula"'
-  toolArgs?: Record<string, any>;
-  resultSummary?: string;     // 'Executed successfully' | 'Error: ...'
-  turnIndex?: number;         // Current turn in the loop (1-indexed)
-  maxTurns?: number;          // Maximum turns allowed
-  timestamp?: string;         // ISO 8601
-}
-```
-
-### 7.2 Lifecycle Flow
-
-```
-User sends @Chalkboard Master message
-  → agent:activity { stage: 'thinking', thought: 'Analyzing request...' }
-  → Model produces function calls
-    → agent:activity { stage: 'executing_tool', toolName: '...', toolAction: '...' }
-    → MCP tool executes
-    → agent:activity { stage: 'tool_result', resultSummary: '...' }
-  → agent:activity { stage: 'thinking', thought: 'Processing results...' }
-  → (repeat tool calls if needed)
-  → agent:activity { stage: 'completed' }
-  → (3 second delay)
-  → agent:activity { stage: 'idle' }
-```
-
-### 7.3 Transport Path
-
-1. **Agent Service** (`roomMcpTransport.broadcastActivity()`) emits `agent:activity` via Socket.IO.
-2. **Backend** (`socket.ts`) receives the event and relays it to all room members via `io.to(roomId).emit('agent:activity', payload)`.
-3. **Frontend** (`ChatPanel.tsx`) listens for `agent:activity` and renders the `AgentThinkingCard` component inline in the chat panel.
-
-### 7.4 Dynamic Schema-Aware Tool Formatting Engine
-
-Rather than relying on static tables or hardcoded switches, `activityFormatter.ts` uses an autonomous, schema-aware synthesis engine (similar to modern coding agents):
-
-1. **Semantic Action Synthesis (`synthesizeToolAction`)**:
-   - Deconstructs arbitrary and newly discovered tool identifiers (e.g. `plugin_chemistry_periodic_table_draw_element` $\to$ `"Drawing Element (Chemistry Periodic Table)"`).
-   - Automatically detects domain plugins, strips namespaces, and conjugates imperative verbs into present continuous gerunds (e.g. `simulate_circuit` $\to$ `"Simulating Circuit"`, `insert_note` $\to$ `"Inserting Note"`).
-
-2. **Salient Parameter Summarization (`synthesizeToolSummary`)**:
-   - Uses multi-tier weighted parameter heuristics to automatically extract and format the most informative values (`formula`, `text`, `label`, `query`, `prompt`, `symbol`, `code`, `action`, `type`, `element`, etc.) or spatial ranges/points, with safe string truncation and dynamic dictionary fallback.
-
-3. **Universal Spatial Coordinate Extraction (`extractCursorPosition`)**:
-   - Recursively inspects tool arguments for any coordinate representation (direct `x`/`y`, nested `position`/`center`/`target`/`bounds`, point arrays `points[0]`, ranges `[xMin..xMax]`) so the agent's live cursor functions across 100% of discovered tools.
-
+On `forbidden`, return `isError:true` with friendly *“I can’t kick — only instructors/owners can. Ask the room owner.”* and do **not** emit.
 
 ---
 
-## 8. Real-Time Agent Cursor Broadcasting
+## 6. 3-Layer Agent Intelligence Architecture
 
-As Chalkboard Master performs canvas operations, it continuously broadcasts its spatial pointer position over the classroom's standard `cursor-move` real-time channel.
+```
+Layer 3: Multi-Agent Sub-Delegation (ADK) — SequentialAgent [Clarifier → Loop → Executor]
+Layer 2: Macro-Task Ledger (Set Kyar) — Master Goal → Task Backlog → Ledger + Socratic interview
+Layer 1: Micro-Turn Harness (Codex) — Context compaction, actionable errors, cursor streaming
+```
+Gemini 3.6 Flash `temperature:0.4`, `MAX_TURNS=15`, `socket.emit('cursor-move')` before each tool, `socket.emit('agent:activity')` telemetry.
 
-### 8.1 Cursor Mechanics
-* **Position Extraction (`extractCursorPosition`)**: Automatically extracts target canvas coordinates `(x, y)` from tool execution arguments (`write_text`, `draw_chalk`, `insert_shape`, `create_note`, `highlight_area`, `select_and_transform`, `plugin_math_set_*`).
-* **Socket Event**: Dispatches `cursor-move` `{ roomId, cursor: { x, y } }` from the agent's authenticated socket.
-* **Frontend Visualization**: Rendered automatically by `CollaboratorCursor.tsx` with the special `isAgent` badge (Chalkboard Master AI icon, sparkling indicator, and purple radial glow) gliding across the board as the agent drafts diagrams and notes.
+---
+
+## 7. Runtime Health & Telemetry
+
+* `GET /health` → `{service, model: gemini-3.6-flash, activeRoomSessions, timestamp}`
+* `GET /sessions/status/:roomId` → `{state: IDLE_OBSERVING|ACTIVE_REASONING, strokeCount, activeUsersCount, recentChatCount, lastActivityAt}`
+* GC: 0 human members → disconnect in 5m (`raised-hands:update` + `presence:count` tracking).
+* `agent:activity` Socket.IO → `backend io.to(roomId).emit` → `frontend ChatPanel AgentThinkingCard`.
+* Cursor: `extractCursorPosition` → `cursor-move` before every tool → `CollaboratorCursor` purple glow.
+
+---
+
+## 8. WebMCP Compliance
+
+* Imperative API: `await navigator.modelContext.registerTool({name, description, inputSchema, execute})` + `getTools()` + `executeTool()` + `toolchange` EventTarget.
+* Headers: `Origin-Agent-Cluster: ?1`, `Permissions-Policy: tools=(self)` (Vite `server.headers`).
+* Flag: `chrome://flags/#enable-webmcp-testing` Enabled (Chrome 149+).
+* All 23 tools eager-registered in `registerDefaults()`; native WebMCP reused if `[native code]` exists, polyfill otherwise.
 

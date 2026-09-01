@@ -1,3 +1,4 @@
+import { createServer, type Server } from 'node:http';
 import {
   Queue,
   Worker
@@ -20,7 +21,8 @@ import {
 import { sql } from '@/db/client';
 import {
   closeRedis,
-  initRedis
+  initRedis,
+  isRedisReady
 } from '@/config/redis';
 import { logger } from '@/utils/logger';
 import {
@@ -166,11 +168,35 @@ export async function startWorker() {
     });
     logger.info('Email worker started', { queueName: emailQueueName });
 
+    const healthServer: Server = createServer((req, res) => {
+      if (req.url === '/health' || req.url === '/' || req.url === '/ready') {
+        const ready = isRedisReady();
+        res.writeHead(ready ? 200 : 503, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            status: ready ? 'healthy' : 'unhealthy',
+            service: 'chalkboard-worker',
+            redis: ready ? 'connected' : 'disconnected',
+            uptime: Math.floor(process.uptime()),
+            timestamp: new Date().toISOString(),
+          }),
+        );
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+
+    healthServer.listen(env.PORT, env.HOST, () => {
+      logger.info('Worker health server listening for Cloud Run probes', { host: env.HOST, port: env.PORT });
+    });
+
     let shutdownPromise: Promise<void> | undefined;
     async function shutdown(signal: string) {
       if (shutdownPromise) return shutdownPromise;
       shutdownPromise = (async () => {
         logger.info('Worker graceful shutdown requested', { signal });
+        await new Promise<void>((resolveClose) => healthServer.close(() => resolveClose()));
         await emailWorker.close();
         await worker.close();
         await queue.close();

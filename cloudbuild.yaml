@@ -26,7 +26,7 @@ steps:
       - 'push'
       - 'gcr.io/${PROJECT_ID}/chalkboard-backend:latest'
 
-  # 3. Deploy the container image to Google Cloud Run
+  # 3. Deploy the backend API to Google Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -40,6 +40,26 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
+
+  # 4. Deploy the worker service to Google Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'chalkboard-worker'
+      - '--image'
+      - '$_IMAGE_NAME'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--no-allow-unauthenticated'
+      - '--min-instances'
+      - '1'
+      - '--no-cpu-throttling'
+      - '--update-env-vars'
+      - 'PROCESS_TYPE=worker'
 
 # Default substitutions (can be overridden in Cloud Build Trigger UI)
 substitutions:

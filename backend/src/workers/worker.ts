@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import {
   Queue,
   Worker
@@ -54,6 +55,25 @@ export async function startWorker() {
   initMonitoring();
   logBootMode();
   await initRedis();
+
+  // Cloud Run requires every service container to listen on $PORT to pass health probes
+  const healthServer = createServer((req, res) => {
+    if (req.url === '/health' || req.url === '/ready' || req.url === '/') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, process: 'worker' }));
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+
+  await new Promise<void>((resolveServer) => {
+    healthServer.listen(env.PORT, env.HOST, () => {
+      logger.info('Worker health check server listening', { host: env.HOST, port: env.PORT });
+      resolveServer();
+    });
+  });
+
   const queue = new Queue(queueName, { connection });
   try {
     await queue.add(cleanupJobName, {}, {
@@ -171,6 +191,7 @@ export async function startWorker() {
       if (shutdownPromise) return shutdownPromise;
       shutdownPromise = (async () => {
         logger.info('Worker graceful shutdown requested', { signal });
+        await new Promise<void>((resolveClose) => healthServer.close(() => resolveClose()));
         await emailWorker.close();
         await worker.close();
         await queue.close();

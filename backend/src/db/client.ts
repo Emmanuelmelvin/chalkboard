@@ -9,6 +9,11 @@ const connectionString = env.DATABASE_URL;
 function shouldUseSsl(urlStr: string): boolean | { rejectUnauthorized: boolean } {
   try {
     const parsed = new URL(urlStr);
+    const hostParam = parsed.searchParams.get('host');
+    if (hostParam && hostParam.startsWith('/')) {
+      return false;
+    }
+
     const sslMode = parsed.searchParams.get('sslmode')?.toLowerCase();
     if (sslMode === 'disable' || sslMode === 'allow' || sslMode === 'prefer') return false;
     if (sslMode === 'require' || sslMode === 'verify-ca' || sslMode === 'verify-full') {
@@ -45,11 +50,24 @@ function shouldUseSsl(urlStr: string): boolean | { rejectUnauthorized: boolean }
   }
 }
 
+function getSocketPath(urlStr: string): string | undefined {
+  try {
+    const parsed = new URL(urlStr);
+    const hostParam = parsed.searchParams.get('host');
+    if (hostParam && hostParam.startsWith('/')) {
+      return hostParam.endsWith('.s.PGSQL.5432') ? hostParam : `${hostParam}/.s.PGSQL.5432`;
+    }
+  } catch {}
+  return undefined;
+}
+
+const socketPath = getSocketPath(connectionString);
 const sslConfig = shouldUseSsl(connectionString);
 
 export const sql = postgres(connectionString, {
   max: env.PG_POOL_SIZE,
   ssl: sslConfig,
+  ...(socketPath ? { path: socketPath } : {}),
 });
 
 export const db = drizzle(sql, { schema });

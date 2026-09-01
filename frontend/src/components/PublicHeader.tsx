@@ -8,8 +8,26 @@ export interface PublicHeaderProps {
 }
 
 export default function PublicHeader({ activeRoute }: PublicHeaderProps) {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const currentRoute =
+    activeRoute ||
+    (location.startsWith('/guide')
+      ? 'guide'
+      : location.startsWith('/plans')
+      ? 'plans'
+      : location.startsWith('/docs')
+      ? 'docs'
+      : location.startsWith('/support')
+      ? 'support'
+      : location.startsWith('/dashboard')
+      ? 'dashboard'
+      : location.startsWith('/lobby')
+      ? 'lobby'
+      : location === '/'
+      ? 'home'
+      : undefined);
 
   useEffect(() => {
     if (!mobileMenuOpen) return undefined;
@@ -37,22 +55,46 @@ export default function PublicHeader({ activeRoute }: PublicHeaderProps) {
         </Link>
 
         <nav className="home-nav-links" aria-label="Main navigation">
-          <Link className={`home-nav-route${activeRoute === 'guide' ? ' is-active' : ''}`} href="/guide">
+          <Link
+            className={`home-nav-route${currentRoute === 'guide' ? ' is-active' : ''}`}
+            aria-current={currentRoute === 'guide' ? 'page' : undefined}
+            href="/guide"
+          >
             Guide
           </Link>
-          <Link className={`home-nav-route${activeRoute === 'plans' ? ' is-active' : ''}`} href="/plans">
+          <Link
+            className={`home-nav-route${currentRoute === 'plans' ? ' is-active' : ''}`}
+            aria-current={currentRoute === 'plans' ? 'page' : undefined}
+            href="/plans"
+          >
             Plans
           </Link>
-          <Link className={`home-nav-route${activeRoute === 'docs' ? ' is-active' : ''}`} href="/docs">
+          <Link
+            className={`home-nav-route${currentRoute === 'docs' ? ' is-active' : ''}`}
+            aria-current={currentRoute === 'docs' ? 'page' : undefined}
+            href="/docs"
+          >
             Docs
           </Link>
-          <Link className={`home-nav-route${activeRoute === 'support' ? ' is-active' : ''}`} href="/support">
+          <Link
+            className={`home-nav-route${currentRoute === 'support' ? ' is-active' : ''}`}
+            aria-current={currentRoute === 'support' ? 'page' : undefined}
+            href="/support"
+          >
             Support
           </Link>
-          <Link className={`home-nav-route${activeRoute === 'dashboard' ? ' is-active' : ''}`} href="/dashboard">
+          <Link
+            className={`home-nav-route${currentRoute === 'dashboard' ? ' is-active' : ''}`}
+            aria-current={currentRoute === 'dashboard' ? 'page' : undefined}
+            href="/dashboard"
+          >
             Dashboard
           </Link>
-          <Link className={`home-nav-route${activeRoute === 'lobby' ? ' is-active' : ''}`} href="/lobby">
+          <Link
+            className={`home-nav-route${currentRoute === 'lobby' ? ' is-active' : ''}`}
+            aria-current={currentRoute === 'lobby' ? 'page' : undefined}
+            href="/lobby"
+          >
             Lobby
           </Link>
           <button className="home-nav-cta" type="button" onClick={() => setLocation('/dashboard?tab=rooms')}>
@@ -96,25 +138,25 @@ export default function PublicHeader({ activeRoute }: PublicHeaderProps) {
           </button>
         </div>
         <nav className="home-mobile-drawer-nav" aria-label="Mobile navigation">
-          <Link className={activeRoute === 'home' ? 'is-active' : ''} href="/" onClick={closeMobileMenu}>
+          <Link className={currentRoute === 'home' ? 'is-active' : ''} aria-current={currentRoute === 'home' ? 'page' : undefined} href="/" onClick={closeMobileMenu}>
             Home
           </Link>
-          <Link className={activeRoute === 'guide' ? 'is-active' : ''} href="/guide" onClick={closeMobileMenu}>
+          <Link className={currentRoute === 'guide' ? 'is-active' : ''} aria-current={currentRoute === 'guide' ? 'page' : undefined} href="/guide" onClick={closeMobileMenu}>
             Guide
           </Link>
-          <Link className={activeRoute === 'plans' ? 'is-active' : ''} href="/plans" onClick={closeMobileMenu}>
+          <Link className={currentRoute === 'plans' ? 'is-active' : ''} aria-current={currentRoute === 'plans' ? 'page' : undefined} href="/plans" onClick={closeMobileMenu}>
             Plans
           </Link>
-          <Link className={activeRoute === 'docs' ? 'is-active' : ''} href="/docs" onClick={closeMobileMenu}>
+          <Link className={currentRoute === 'docs' ? 'is-active' : ''} aria-current={currentRoute === 'docs' ? 'page' : undefined} href="/docs" onClick={closeMobileMenu}>
             Docs
           </Link>
-          <Link className={activeRoute === 'support' ? 'is-active' : ''} href="/support" onClick={closeMobileMenu}>
+          <Link className={currentRoute === 'support' ? 'is-active' : ''} aria-current={currentRoute === 'support' ? 'page' : undefined} href="/support" onClick={closeMobileMenu}>
             Support
           </Link>
-          <Link className={activeRoute === 'dashboard' ? 'is-active' : ''} href="/dashboard" onClick={closeMobileMenu}>
+          <Link className={currentRoute === 'dashboard' ? 'is-active' : ''} aria-current={currentRoute === 'dashboard' ? 'page' : undefined} href="/dashboard" onClick={closeMobileMenu}>
             Dashboard
           </Link>
-          <Link className={activeRoute === 'lobby' ? 'is-active' : ''} href="/lobby" onClick={closeMobileMenu}>
+          <Link className={currentRoute === 'lobby' ? 'is-active' : ''} aria-current={currentRoute === 'lobby' ? 'page' : undefined} href="/lobby" onClick={closeMobileMenu}>
             Lobby
           </Link>
         </nav>

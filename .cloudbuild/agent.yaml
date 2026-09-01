@@ -1,0 +1,53 @@
+# Cloud Build configuration for Chalkboard Agent Service
+# Triggered when agent-service/** changes
+
+steps:
+  # 1. Build the agent-service container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'agent-service/Dockerfile'
+      - '-t'
+      - '$_AGENT_IMAGE_NAME'
+      - '-t'
+      - 'gcr.io/${PROJECT_ID}/chalkboard-agent-service:latest'
+      - 'agent-service'
+
+  # 2. Push the agent-service image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '$_AGENT_IMAGE_NAME'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/${PROJECT_ID}/chalkboard-agent-service:latest'
+
+  # 3. Deploy agent-service to Google Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'chalkboard-agent-service'
+      - '--image'
+      - '$_AGENT_IMAGE_NAME'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+
+# Default substitutions (can be overridden in Cloud Build Trigger UI)
+substitutions:
+  _REGION: 'us-central1'
+  _AGENT_IMAGE_NAME: 'gcr.io/${PROJECT_ID}/chalkboard-agent-service:${SHORT_SHA}'
+
+images:
+  - '$_AGENT_IMAGE_NAME'
+  - 'gcr.io/${PROJECT_ID}/chalkboard-agent-service:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

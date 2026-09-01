@@ -1,0 +1,74 @@
+# Cloud Build configuration for Chalkboard Backend & Worker
+# Triggered when backend/** or shared/** changes
+
+steps:
+  # 1. Build the backend container image using root (.) as the build context
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'backend/Dockerfile'
+      - '-t'
+      - '$_IMAGE_NAME'
+      - '-t'
+      - 'gcr.io/${PROJECT_ID}/chalkboard-backend:latest'
+      - '.'
+
+  # 2. Push the image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '$_IMAGE_NAME'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/${PROJECT_ID}/chalkboard-backend:latest'
+
+  # 3. Deploy the backend API to Google Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '$_SERVICE_NAME'
+      - '--image'
+      - '$_IMAGE_NAME'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+
+  # 4. Deploy the worker service to Google Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'chalkboard-worker'
+      - '--image'
+      - '$_IMAGE_NAME'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--no-allow-unauthenticated'
+      - '--min-instances'
+      - '1'
+      - '--no-cpu-throttling'
+      - '--update-env-vars'
+      - 'PROCESS_TYPE=worker'
+
+# Default substitutions (can be overridden in Cloud Build Trigger UI)
+substitutions:
+  _SERVICE_NAME: 'chalkboard-backend'
+  _REGION: 'us-central1'
+  _IMAGE_NAME: 'gcr.io/${PROJECT_ID}/chalkboard-backend:${SHORT_SHA}'
+
+images:
+  - '$_IMAGE_NAME'
+  - 'gcr.io/${PROJECT_ID}/chalkboard-backend:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

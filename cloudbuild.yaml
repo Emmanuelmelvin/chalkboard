@@ -1,0 +1,47 @@
+# Cloud Build configuration for Chalkboard Backend
+# This configuration builds the Docker image with the repository root as context,
+# allowing the Dockerfile to access the shared/ directory.
+
+steps:
+  # 1. Build the backend container image using root (.) as the build context
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'backend/Dockerfile'
+      - '-t'
+      - '$_IMAGE_NAME'
+      - '.'
+
+  # 2. Push the image to Container Registry / Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '$_IMAGE_NAME'
+
+  # 3. Deploy the container image to Google Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '$_SERVICE_NAME'
+      - '--image'
+      - '$_IMAGE_NAME'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+
+# Default substitutions (can be overridden in Cloud Build Trigger UI)
+substitutions:
+  _SERVICE_NAME: 'chalkboard-backend'
+  _REGION: 'us-central1'
+  _IMAGE_NAME: 'gcr.io/${PROJECT_ID}/chalkboard-backend:${SHORT_SHA}'
+
+images:
+  - '$_IMAGE_NAME'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

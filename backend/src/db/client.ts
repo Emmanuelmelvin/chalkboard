@@ -6,68 +6,90 @@ import { logger } from '@/utils/logger';
 
 const connectionString = env.DATABASE_URL;
 
-function shouldUseSsl(urlStr: string): boolean | { rejectUnauthorized: boolean } {
+function parsePostgresConfig(rawUrl: string, poolSize: number) {
+  let user: string | undefined;
+  let pass: string | undefined;
+  let host: string | undefined;
+  let port: number | undefined;
+  let database: string | undefined;
+  let socketPath: string | undefined;
+  let sslmode: string | undefined;
+
+  let normalized = rawUrl.trim();
+  // Fix WHATWG URL parser error if credentials exist without host (@/ -> @localhost/)
+  if (normalized.includes('@/') && !normalized.includes('@localhost/')) {
+    normalized = normalized.replace('@/', '@localhost/');
+  }
+
+  let parsedUrl: URL | undefined;
   try {
-    const parsed = new URL(urlStr);
-    const hostParam = parsed.searchParams.get('host');
+    parsedUrl = new URL(normalized);
+  } catch {}
+
+  if (parsedUrl) {
+    user = parsedUrl.username ? decodeURIComponent(parsedUrl.username) : undefined;
+    pass = parsedUrl.password ? decodeURIComponent(parsedUrl.password) : undefined;
+    database = parsedUrl.pathname ? parsedUrl.pathname.replace(/^\//, '') : undefined;
+    const hostParam = parsedUrl.searchParams.get('host');
+    sslmode = parsedUrl.searchParams.get('sslmode') || undefined;
+
     if (hostParam && hostParam.startsWith('/')) {
-      return false;
+      socketPath = hostParam.endsWith('.s.PGSQL.5432') ? hostParam : `${hostParam}/.s.PGSQL.5432`;
+    } else if (parsedUrl.hostname && parsedUrl.hostname.startsWith('/')) {
+      socketPath = parsedUrl.hostname.endsWith('.s.PGSQL.5432') ? parsedUrl.hostname : `${parsedUrl.hostname}/.s.PGSQL.5432`;
+    } else if (parsedUrl.hostname) {
+      host = parsedUrl.hostname;
+      port = parsedUrl.port ? Number(parsedUrl.port) : 5432;
     }
-
-    const sslMode = parsed.searchParams.get('sslmode')?.toLowerCase();
-    if (sslMode === 'disable' || sslMode === 'allow' || sslMode === 'prefer') return false;
-    if (sslMode === 'require' || sslMode === 'verify-ca' || sslMode === 'verify-full') {
-      return { rejectUnauthorized: sslMode === 'verify-full' };
-    }
-
-    if (process.env.PG_SSL === 'true' || process.env.PGSSLMODE === 'require') {
-      return { rejectUnauthorized: false };
-    }
-    if (process.env.PG_SSL === 'false' || process.env.PGSSLMODE === 'disable') {
-      return false;
-    }
-
-    const host = parsed.hostname.toLowerCase();
-    // Localhost, IP addresses, Docker container names (without dots) -> unencrypted
-    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || !host.includes('.')) {
-      return false;
-    }
-    // Private IPv4 ranges (10.x, 172.16-31.x, 192.168.x) -> unencrypted
-    const octets = host.split('.').map(Number);
-    if (octets.length === 4 && octets.every((o) => Number.isInteger(o) && o >= 0 && o <= 255)) {
-      if (octets[0] === 10 || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) || (octets[0] === 192 && octets[1] === 168)) {
-        return false;
+  } else {
+    // Regex fallback if URL parser fails
+    const match = rawUrl.match(/^(?:postgres(?:ql)?:\/\/)(?:([^:]+)(?::([^@]*))?@)?([^:/?#]+)?(?::(\d+))?(?:\/([^?#]*))?(?:\?(.*))?$/);
+    if (match) {
+      user = match[1] ? decodeURIComponent(match[1]) : undefined;
+      pass = match[2] ? decodeURIComponent(match[2]) : undefined;
+      host = match[3] || undefined;
+      port = match[4] ? Number(match[4]) : 5432;
+      database = match[5] || undefined;
+      if (match[6]) {
+        try {
+          const params = new URLSearchParams(match[6]);
+          const hostParam = params.get('host');
+          if (hostParam && hostParam.startsWith('/')) {
+            socketPath = hostParam.endsWith('.s.PGSQL.5432') ? hostParam : `${hostParam}/.s.PGSQL.5432`;
+          }
+          sslmode = params.get('sslmode') || undefined;
+        } catch {}
       }
     }
-
-    // Remote hosts with dots (e.g. Neon, Supabase, RDS)
-    return { rejectUnauthorized: false };
-  } catch (error) {
-    logger.error('Failed to determine SSL configuration for database URL', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return false;
   }
-}
 
-function getSocketPath(urlStr: string): string | undefined {
-  try {
-    const parsed = new URL(urlStr);
-    const hostParam = parsed.searchParams.get('host');
-    if (hostParam && hostParam.startsWith('/')) {
-      return hostParam.endsWith('.s.PGSQL.5432') ? hostParam : `${hostParam}/.s.PGSQL.5432`;
+  // Determine SSL configuration
+  let ssl: boolean | { rejectUnauthorized: boolean } = false;
+  if (!socketPath) {
+    if (sslmode === 'require' || sslmode === 'verify-ca' || sslmode === 'verify-full') {
+      ssl = { rejectUnauthorized: sslmode === 'verify-full' };
+    } else if (process.env.PG_SSL === 'true' || process.env.PGSSLMODE === 'require') {
+      ssl = { rejectUnauthorized: false };
+    } else if (process.env.PG_SSL === 'false' || process.env.PGSSLMODE === 'disable') {
+      ssl = false;
+    } else if (host && host.includes('.') && host !== 'localhost' && host !== '127.0.0.1') {
+      ssl = { rejectUnauthorized: false };
     }
-  } catch {}
-  return undefined;
+  }
+
+  return {
+    ...(socketPath ? { path: socketPath } : {}),
+    ...(host && !socketPath ? { host, port } : {}),
+    ...(user ? { user } : {}),
+    ...(pass ? { pass } : {}),
+    ...(database ? { database } : {}),
+    max: poolSize,
+    ssl,
+  };
 }
 
-const socketPath = getSocketPath(connectionString);
-const sslConfig = shouldUseSsl(connectionString);
+const postgresOptions = parsePostgresConfig(connectionString, env.PG_POOL_SIZE);
 
-export const sql = postgres(connectionString, {
-  max: env.PG_POOL_SIZE,
-  ssl: sslConfig,
-  ...(socketPath ? { path: socketPath } : {}),
-});
+export const sql = postgres(postgresOptions);
 
 export const db = drizzle(sql, { schema });

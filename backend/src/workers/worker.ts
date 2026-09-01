@@ -1,4 +1,3 @@
-import { createServer } from 'node:http';
 import {
   Queue,
   Worker
@@ -167,27 +166,11 @@ export async function startWorker() {
     });
     logger.info('Email worker started', { queueName: emailQueueName });
 
-    // Lightweight HTTP health check server for Cloud Run startup/liveness probes
-    const healthServer = createServer((req, res) => {
-      if (req.url === '/health' || req.url === '/' || req.url === '/ready') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', process: 'worker' }));
-      } else {
-        res.writeHead(404);
-        res.end();
-      }
-    });
-
-    healthServer.listen(env.PORT, env.HOST, () => {
-      logger.info('Worker health server listening', { host: env.HOST, port: env.PORT });
-    });
-
     let shutdownPromise: Promise<void> | undefined;
     async function shutdown(signal: string) {
       if (shutdownPromise) return shutdownPromise;
       shutdownPromise = (async () => {
         logger.info('Worker graceful shutdown requested', { signal });
-        await new Promise<void>((resolve) => healthServer.close(() => resolve()));
         await emailWorker.close();
         await worker.close();
         await queue.close();

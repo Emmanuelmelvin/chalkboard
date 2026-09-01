@@ -204,7 +204,7 @@ ${recentChat || '(No recent chat)'}
         temperature: 0.4,
       };
 
-      if (typeof config.THINKING_BUDGET === 'number') {
+      if (typeof config.THINKING_BUDGET === 'number' && config.THINKING_BUDGET > 0) {
         chatConfig.thinkingConfig = { thinkingBudget: config.THINKING_BUDGET };
       }
 

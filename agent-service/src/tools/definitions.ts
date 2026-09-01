@@ -222,7 +222,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     description: 'Closes room (owner only).',
     parameters: {
       type: 'OBJECT',
-      properties: {},
+      properties: {
+        reason: { type: 'STRING', description: 'Optional reason for closing room' },
+      },
     },
   },
   {

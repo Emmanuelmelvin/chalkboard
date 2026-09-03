@@ -56,6 +56,7 @@ export interface BoardState {
   // ── Navigation ─────────────────────────────────────────────────────────
   panOffset: Point;
   zoom: number;
+  userHasInteracted: boolean;
 
   // ── Trim / crop ────────────────────────────────────────────────────────
   trimState: TrimState;
@@ -97,6 +98,7 @@ export interface BoardState {
   setClipboard: (strokes: Stroke[]) => void;
   setPanOffset: (offset: Point | ((prev: Point) => Point)) => void;
   setZoom: (zoom: number | ((prev: number) => number)) => void;
+  setUserHasInteracted: (interacted: boolean) => void;
   setTrimState: (state: TrimState | ((prev: TrimState) => TrimState)) => void;
   setCursorPos: (pos: Point) => void;
   setCanvas: (canvas: HTMLCanvasElement | null) => void;
@@ -158,6 +160,7 @@ export const useBoardStore = create<BoardState>((set) => ({
 
   panOffset: { x: 0, y: 0 },
   zoom: DEFAULT_ZOOM,
+  userHasInteracted: false,
 
   trimState: { ...initialTrimState },
 
@@ -206,6 +209,7 @@ export const useBoardStore = create<BoardState>((set) => ({
     set((state) => ({
       zoom: clampZoom(typeof zoom === 'function' ? zoom(state.zoom) : zoom),
     })),
+  setUserHasInteracted: (userHasInteracted) => set({ userHasInteracted }),
   setTrimState: (trimState) =>
     set((state) => ({
       trimState: typeof trimState === 'function' ? trimState(state.trimState) : trimState,
@@ -261,6 +265,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       canEdit: true,
       panOffset: { x: 0, y: 0 },
       zoom: DEFAULT_ZOOM,
+      userHasInteracted: false,
       trimState: { ...initialTrimState },
       cursorPos: { x: 0, y: 0 },
       showInsertShapes: false,

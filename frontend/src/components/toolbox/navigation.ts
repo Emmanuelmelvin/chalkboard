@@ -8,6 +8,7 @@
 
 import { getBoard } from '@/stores/boardStore';
 import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
+import { getCombinedBoundingBox } from '@/lib/geometry';
 import type { Point } from '@/types';
 
 /** Default pan step used by arrow-key panning (CSS pixels). */
@@ -142,11 +143,40 @@ export function handleSetZoom(level: number): number {
  * handleResetPanZoom();
  * ```
  */
+/**
+ * Center the viewport on current content if strokes exist, or on origin (0, 0) if empty.
+ */
+export function handleCenterOnContentOrOrigin(): void {
+  const { canvas, zoom, strokes, setPanOffset } = getBoard();
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
+  const activeStrokes = strokes.filter((s) => s.tool !== 'eraser');
+  const box = getCombinedBoundingBox(activeStrokes);
+  const targetX = box ? (box.minX + box.maxX) / 2 : 0;
+  const targetY = box ? (box.minY + box.maxY) / 2 : 0;
+
+  setPanOffset({
+    x: rect.width / 2 - targetX * zoom,
+    y: rect.height / 2 - targetY * zoom,
+  });
+}
+
+/**
+ * Reset zoom to default and center on current content (or origin (0,0) if empty).
+ *
+ * @example
+ * ```ts
+ * import { handleResetPanZoom } from '@/components/toolbox';
+ * handleResetPanZoom();
+ * ```
+ */
 export function handleResetPanZoom(): void {
-  const { setZoom, setPanOffset, clearSelection } = getBoard();
+  const { setZoom, clearSelection } = getBoard();
   clearSelection();
   setZoom(DEFAULT_ZOOM);
-  setPanOffset({ x: 0, y: 0 });
+  handleCenterOnContentOrOrigin();
   if (typeof window !== 'undefined') {
     const url = new URL(window.location.href);
     if (url.searchParams.has('link')) {

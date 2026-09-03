@@ -276,6 +276,10 @@ export function useCanvasInteraction(
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    if (!useBoardStore.getState().userHasInteracted) {
+      useBoardStore.getState().setUserHasInteracted(true);
+    }
+
     if (!canEdit && e.pointerType === 'touch') {
       activeTouchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (activeTouchPoints.current.size === 2) {
@@ -744,6 +748,10 @@ export function useCanvasInteraction(
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    if (!useBoardStore.getState().userHasInteracted) {
+      useBoardStore.getState().setUserHasInteracted(true);
+    }
 
     const zoomIntensity = 0.1;
     const rect = canvas.getBoundingClientRect();

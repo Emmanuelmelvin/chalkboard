@@ -92,7 +92,7 @@ import { useBoardStore } from '@/stores/boardStore';
 import { toast } from '@/components/ui/Toast';
 import { webMcp } from '@/webmcp';
 import { useLoggerStore } from '@/stores/loggerStore';
-import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
+import { MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
 import { REACTION_EMOJIS, REACTION_PICKER_EVENT } from '@/constants/reactions';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
@@ -140,6 +140,8 @@ import {
   handleRenameLink,
   handleNavigateToLink,
   handleInsertShape as toolboxInsertShape,
+  handleResetPanZoom,
+  handleCenterOnContentOrOrigin,
 } from '@/components/toolbox';
 
 const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
@@ -491,13 +493,12 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     selectedStrokeIds, setSelectedStrokeIds,
     transformBox, setTransformBox,
     selectionRotation, setSelectionRotation,
-    clearSelection,
     activeColor, setActiveColor,
     brushSize, setBrushSize,
     brushIntensity, setBrushIntensity,
     eraserWidth, setEraserWidth,
     eraserHeight, setEraserHeight,
-    panOffset, setPanOffset,
+    panOffset,
     zoom, setZoom,
     strokes, setStrokes,
     redoStack,
@@ -1155,6 +1156,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const attachCanvas = useCallback((node: HTMLCanvasElement | null) => {
     canvasRef.current = node;
     setCanvas(node);
+    if (node) {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has('link') && !useBoardStore.getState().userHasInteracted) {
+        requestAnimationFrame(() => {
+          handleCenterOnContentOrOrigin();
+        });
+      }
+    }
   }, [setCanvas]);
 
   // Auto-apply crop/trim on tool change, and deselect when leaving select tool
@@ -1183,6 +1192,21 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     }
   }, [strokes.length, links]);
 
+  // Center viewport on room content (if strokes exist) or origin (0, 0)
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('link')) return;
+
+    if (useBoardStore.getState().userHasInteracted) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    handleCenterOnContentOrOrigin();
+  }, [strokes]);
+
   const handleCopyLink = () => {
     const inviteLink = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
     navigator.clipboard.writeText(inviteLink).then(() => {
@@ -1193,14 +1217,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   };
 
   const resetPanZoom = () => {
-    clearSelection();
-    setZoom(DEFAULT_ZOOM);
-    setPanOffset({ x: 0, y: 0 });
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('link')) {
-      url.searchParams.delete('link');
-      window.history.pushState({}, '', url.toString());
-    }
+    handleResetPanZoom();
   };
 
   const requestKickMember = (member: RoomMember, targetSocketId: string) => {

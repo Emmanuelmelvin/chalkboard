@@ -1194,10 +1194,26 @@ export function setZoom(level: number): CommandResult<number> {
  * ```
  */
 export function resetViewport(): CommandResult {
-    const { setZoom, setPanOffset, clearSelection } = getBoard();
+    const { setZoom, clearSelection, canvas, strokes, setPanOffset } = getBoard();
     clearSelection();
     setZoom(DEFAULT_ZOOM);
-    setPanOffset({ x: 0, y: 0 });
+    if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+            const activeStrokes = strokes.filter((s) => s.tool !== 'eraser');
+            const box = getCombinedBoundingBox(activeStrokes);
+            const targetX = box ? (box.minX + box.maxX) / 2 : 0;
+            const targetY = box ? (box.minY + box.maxY) / 2 : 0;
+            setPanOffset({
+                x: rect.width / 2 - targetX * DEFAULT_ZOOM,
+                y: rect.height / 2 - targetY * DEFAULT_ZOOM,
+            });
+        } else {
+            setPanOffset({ x: 0, y: 0 });
+        }
+    } else {
+        setPanOffset({ x: 0, y: 0 });
+    }
     if (typeof window !== 'undefined') {
         const url = new URL(window.location.href);
         if (url.searchParams.has('link')) {

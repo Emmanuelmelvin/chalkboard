@@ -54,6 +54,8 @@ export function useCanvasRenderer(
     trimState,
   ]);
 
+  const prevSizeRef = useRef<{ width: number; height: number } | null>(null);
+
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -62,6 +64,18 @@ export function useCanvasRenderer(
     const rect = canvas.getBoundingClientRect();
     canvas.width = Math.round(rect.width * dpr);
     canvas.height = Math.round(rect.height * dpr);
+
+    if (prevSizeRef.current && prevSizeRef.current.width > 0 && prevSizeRef.current.height > 0) {
+      const deltaX = (rect.width - prevSizeRef.current.width) / 2;
+      const deltaY = (rect.height - prevSizeRef.current.height) / 2;
+      if (deltaX !== 0 || deltaY !== 0) {
+        useBoardStore.getState().setPanOffset((prev) => ({
+          x: prev.x + deltaX,
+          y: prev.y + deltaY,
+        }));
+      }
+    }
+    prevSizeRef.current = { width: rect.width, height: rect.height };
     drawBoard();
   }, [canvasRef, drawBoard]);
 

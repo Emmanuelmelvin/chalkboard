@@ -1848,6 +1848,6 @@ export function moveCursor(x: number, y: number): CommandResult {
     const { socket, roomId } = getBoard();
     if (!socket) return { ok: false, error: 'no socket connection' };
 
-    socket.emit('cursor-move', { roomId, x, y });
+    socket.emit('cursor-move', { roomId, cursor: { x, y } });
     return { ok: true };
 }

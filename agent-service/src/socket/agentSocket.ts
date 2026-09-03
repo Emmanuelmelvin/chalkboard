@@ -252,7 +252,7 @@ export class AgentRoomSocket {
 
   broadcastCursor(x: number, y: number) {
     if (!this.socket) return;
-    this.socket.emit('cursor-move', { roomId: this.roomId, x, y });
+    this.socket.emit('cursor-move', { roomId: this.roomId, cursor: { x, y } });
   }
 
   isConnected() { return this.connected && Boolean(this.socket?.connected); }

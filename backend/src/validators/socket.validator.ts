@@ -172,10 +172,20 @@ export const strokeDrawSchema = z.object({
   point: pointSchema,
 });
 
-export const cursorMoveSchema = z.object({
-  roomId: roomIdSchema,
-  cursor: pointSchema,
-});
+export const cursorMoveSchema = z.union([
+  z.object({
+    roomId: roomIdSchema,
+    cursor: pointSchema,
+  }),
+  z.object({
+    roomId: roomIdSchema,
+    x: canvasNumber,
+    y: canvasNumber,
+  }).transform((val) => ({
+    roomId: val.roomId,
+    cursor: { x: val.x, y: val.y },
+  })),
+]);
 
 export const drawStrokeSchema = z.object({
   roomId: roomIdSchema,

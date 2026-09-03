@@ -69,7 +69,7 @@ Room metadata is injected per reasoning turn:
 | Invocation Channel | Allowed Response Modality & Tool Execution |
 | :--- | :--- |
 | **💬 Chat Text Invocation**<br>(e.g., `@Master` in chat, `/ask`, `/help`) | • Respond **ONLY** via `chalkboard_send_chat`.<br>• **NEVER** call `chalkboard_speak_narration` unless audio was explicitly requested.<br>• **DO NOT** modify canvas unless drawing was requested. |
-| **🎙️ Voice / Audio Channel**<br>(Live WebRTC speech) | • Respond via `chalkboard_speak_narration`.<br>• **DO NOT** send redundant text messages to chat unless requested. |
+| **🎙️ Voice / Audio Channel**<br>(Live WebRTC speech) | • The agent hears voice via LiveKit + STT; speech addressed to it ("Master", "hey AI") arrives like a chat mention.<br>• Respond via `chalkboard_speak_narration` (works only after the owner adds the agent to voice).<br>• **DO NOT** send redundant text messages to chat unless requested. |
 | **🎨 Canvas Drawing Query**<br>(e.g., "Draw a Venn diagram", "Graph $y=x^2$") | • Use canvas tools (`chalkboard_draw_chalk`, `chalkboard_write_text`, `chalkboard_insert_shape`, etc.) **only** when visual representation or board changes are explicitly requested. |
 
 ### Core Execution Invariants:

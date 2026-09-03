@@ -197,7 +197,7 @@ export function drawBoardOnCanvas(
 
       ctx.save();
       ctx.fillStyle = stroke.color;
-      ctx.font = `${fontSize}px "Comic Sans MS", "Chalkboard SE", cursive`;
+      ctx.font = `${fontSize}px "Architects Daughter", "Caveat", "Outfit", cursive, sans-serif`;
       ctx.textBaseline = 'top';
       ctx.textAlign = stroke.textAlign ?? 'left';
 

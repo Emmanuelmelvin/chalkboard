@@ -77,5 +77,12 @@ export function useCanvasRenderer(
     window.addEventListener('resize', resizeCanvas);
     return () => window.removeEventListener('resize', resizeCanvas);
   }, [resizeCanvas]);
+
+  // Re-draw once web fonts (Architects Daughter, etc.) are loaded
+  useEffect(() => {
+    document.fonts?.ready?.then(() => {
+      drawBoard();
+    });
+  }, [drawBoard]);
 }
 export default useCanvasRenderer;

@@ -9,7 +9,7 @@ import { config } from '../config.js';
 import { AgentRoomSocket, ChatEntry } from '../socket/agentSocket.js';
 import { TOOL_DEFINITIONS, toGeminiFunctionDeclarations } from '../tools/definitions.js';
 import { executeTool } from '../tools/executors.js';
-import { formatToolActivity, extractCursorPosition } from './activityFormatter.js';
+import { extractCursorPosition } from './activityFormatter.js';
 import { sanitizeChatMessage, getFriendlyErrorMessage } from './messageSanitizer.js';
 import { getStaticInstructions } from '../utils/loadSystemInfo.js';
 import { logger } from '../utils/logger.js';
@@ -193,8 +193,8 @@ ${recentChat || '(No recent chat)'}
     const maxTurns = config.MAX_TURNS_PER_INSTRUCTION;
     let hasSentChat = false;
 
-     logger.info('[RoomSession] Broadcast thinking', { roomId: this.roomId, prompt: prompt.slice(0, 80), requestedBy, invokerRole });
-     this.socket.broadcastActivity({ stage: 'thinking', thought: `Analyzing request from ${requestedBy}: "${prompt.slice(0,50)}${prompt.length>50?'...':''}"`, turnIndex:0, maxTurns });
+    logger.info('[RoomSession] Broadcast thinking', { roomId: this.roomId, prompt: prompt.slice(0, 80), requestedBy, invokerRole });
+    this.socket.broadcastActivity({ stage: 'thinking', thought: 'Thinking...' });
 
     try {
       logger.info('[RoomSession] Creating Gemini chat', { roomId: this.roomId, model: config.GEMINI_MODEL, thinkingBudget: config.THINKING_BUDGET, tools: geminiDeclarations.length });
@@ -204,7 +204,7 @@ ${recentChat || '(No recent chat)'}
         temperature: 0.4,
       };
 
-      if (typeof config.THINKING_BUDGET === 'number' && config.THINKING_BUDGET > 0) {
+      if (typeof config.THINKING_BUDGET === 'number') {
         chatConfig.thinkingConfig = { thinkingBudget: config.THINKING_BUDGET };
       }
 
@@ -230,8 +230,6 @@ ${recentChat || '(No recent chat)'}
             const clean = sanitizeChatMessage(text);
             if (clean) await this.socket.sendChatMessage(clean);
           }
-          this.socket.broadcastActivity({ stage: 'completed', thought: 'Completed.', turnIndex: turnCount, maxTurns });
-          setTimeout(() => this.socket.broadcastActivity({ stage: 'idle' }), 1000);
           break;
         }
 
@@ -263,14 +261,11 @@ ${recentChat || '(No recent chat)'}
               for (let idx=0; idx<chunks.length; idx++) {
                 const chunkText = chunks[idx];
                 const chunkArgs = { ...(call.args as any), text: chunkText, x: Math.round(curX), y: baseY, textAlign: 'left', fontSize, ...(baseColor?{color:baseColor}:{}) };
-                const { toolAction } = formatToolActivity(call.name, chunkArgs, TOOL_DEFINITIONS.find(t=>t.name===call.name));
-                this.socket.broadcastActivity({ stage:'executing_tool', toolName:call.name, toolAction:`${toolAction} (${idx+1}/${chunks.length})`, toolSummary:`Writing: "${chunkText}"`, toolArgs:chunkArgs, turnIndex:turnCount, maxTurns });
                 const cursor = extractCursorPosition(call.name, chunkArgs);
                 if (cursor) this.socket.broadcastCursor(cursor.x, cursor.y);
                 try {
                   const cRes = await executeTool(this.socket, call.name, chunkArgs, invokerRole);
                   allResults.push(cRes);
-                  this.socket.broadcastActivity({ stage:'tool_result', toolName:call.name, toolAction, toolSummary:`Wrote "${chunkText}"`, resultSummary: cRes.isError?'Failed':'Executed', turnIndex:turnCount, maxTurns });
                 } catch (e:any) { chunkError=e; break; }
                 curX += chunkText.length * charW + gap;
                 if (idx < chunks.length-1) await new Promise(r=>setTimeout(r, 35));
@@ -284,9 +279,6 @@ ${recentChat || '(No recent chat)'}
             }
           }
 
-          const toolDef = TOOL_DEFINITIONS.find(t=>t.name===call.name);
-          const { toolAction, toolSummary } = formatToolActivity(call.name, call.args, toolDef);
-          this.socket.broadcastActivity({ stage:'executing_tool', toolName:call.name, toolAction, toolSummary, toolArgs: call.args as any, turnIndex:turnCount, maxTurns });
           const cursorPos = extractCursorPosition(call.name, call.args);
           if (cursorPos) this.socket.broadcastCursor(cursorPos.x, cursorPos.y);
 
@@ -295,28 +287,24 @@ ${recentChat || '(No recent chat)'}
           try {
             const result = await executeTool(this.socket, call.name, call.args as any, invokerRole);
             functionResponseParts.push({ functionResponse: { name: call.name, response: { output: result } } });
-            this.socket.broadcastActivity({ stage:'tool_result', toolName:call.name, toolAction, toolSummary, resultSummary: result.isError?'Failed':'Executed', turnIndex:turnCount, maxTurns });
           } catch (err:any) {
             functionResponseParts.push({ functionResponse: { name: call.name, response: { status:'failed', reason: 'That action could not be completed.' } } });
-            this.socket.broadcastActivity({ stage:'tool_result', toolName:call.name, toolAction, toolSummary, resultSummary:'Failed', turnIndex:turnCount, maxTurns });
           }
         }
 
         // If the sole tool call was terminal chat/speech, complete without another full turn
         if (isTerminalCall && functionCalls.length === 1) {
-          this.socket.broadcastActivity({ stage: 'completed', thought: 'Completed.', turnIndex: turnCount, maxTurns });
-          setTimeout(() => this.socket.broadcastActivity({ stage: 'idle' }), 1000);
           break;
         }
 
-        this.socket.broadcastActivity({ stage:'thinking', thought:'Processing tool results...', turnIndex:turnCount, maxTurns });
         currentResponse = await chat.sendMessage({ message: functionResponseParts });
       }
 
       return { success:true, turns: turnCount };
     } catch (err:any) {
-      this.socket.broadcastActivity({ stage:'error', thought: err?.message || 'Error' });
       throw err;
+    } finally {
+      this.socket.broadcastActivity({ stage: 'idle' });
     }
   }
 

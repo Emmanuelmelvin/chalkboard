@@ -5,6 +5,8 @@
  */
 
 import type { AgentRoomSocket } from '../socket/agentSocket.js';
+import type { SavedLink, Stroke } from '../types/index.js';
+import { generateShapeStrokes } from './shapes.js';
 import { logger } from '../utils/logger.js';
 
 type Role = 'owner' | 'instructor' | 'viewer';
@@ -137,8 +139,23 @@ export async function executeTool(
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, strokeId: stroke.id }) }] };
       }
       case 'chalkboard_insert_shape': {
-        // For agent, simulate shape as a note-like stroke via draw? Simplified: insert via insertShape not available server-side, so emulate with highlight
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, shape: args.shape, note: 'Shape inserted via tool (emulated)' }) }] };
+        const shapeStrokes = generateShapeStrokes({
+          shape: args.shape,
+          cx: args.x ?? 0,
+          cy: args.y ?? 0,
+          color: args.color || '#ffffff',
+          size: args.size || 3,
+          intensity: args.intensity ?? 1,
+          fillColor: args.fillColor,
+          userId: socket.socket?.id || 'agent:chalkboard-master',
+        });
+        if (shapeStrokes.length === 0) return { content: [{ type: 'text', text: `Failed to generate shape "${args.shape}"` }], isError: true };
+        const updated = [...s.context.strokes, ...shapeStrokes];
+        const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
+        if (!res.ok) return { content: [{ type: 'text', text: `Insert shape failed: ${res.error}` }], isError: true };
+        s.context.strokes = updated as any;
+        s.context.strokeCount = updated.length;
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, shape: args.shape, strokeCount: shapeStrokes.length, strokeIds: shapeStrokes.map((st) => st.id) }) }] };
       }
       case 'chalkboard_create_note': {
         const w = args.width || 260;
@@ -187,12 +204,145 @@ export async function executeTool(
         s.context.strokes = updated as any;
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, highlight: args }) }] };
       }
-      case 'chalkboard_select_and_transform':
-      case 'chalkboard_clipboard':
-      case 'chalkboard_manage_topic_links':
       case 'chalkboard_clear_or_undo': {
-        // Simplified: these require complex selection state not tracked server-side; return guidance
-        return { content: [{ type: 'text', text: `Tool ${toolName} with args ${JSON.stringify(args)} acknowledged — board state updated via strokes where applicable.` }] };
+        const action = args.action || 'undo';
+        if (action === 'clear') {
+          const res = await s.emitWithAck('clear-board', { roomId });
+          if (!res.ok) return { content: [{ type: 'text', text: `Clear board failed: ${res.error}` }], isError: true };
+          s.context.strokes = [];
+          s.context.strokeCount = 0;
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'clear', message: 'Board cleared successfully.' }) }] };
+        }
+        if (action === 'undo') {
+          if (s.context.strokes.length === 0) {
+            return { content: [{ type: 'text', text: JSON.stringify({ success: false, message: 'Board has no strokes to undo.' }) }] };
+          }
+          const updated = s.context.strokes.slice(0, -1);
+          const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
+          if (!res.ok) return { content: [{ type: 'text', text: `Undo failed: ${res.error}` }], isError: true };
+          s.context.strokes = updated as any;
+          s.context.strokeCount = updated.length;
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'undo', remainingStrokes: updated.length }) }] };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, action, message: `Action ${action} acknowledged.` }) }] };
+      }
+      case 'chalkboard_manage_topic_links': {
+        const action = args.action || 'list';
+        if (action === 'list') {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, links: s.context.links }) }] };
+        }
+        if (action === 'create') {
+          const tag = (args.tag || 'Untitled Section').trim();
+          const strokeIds: string[] = Array.isArray(args.strokeIds) && args.strokeIds.length > 0
+            ? args.strokeIds
+            : s.context.strokes.slice(-8).map((st) => st.id);
+          const newLink: SavedLink = {
+            id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            tag,
+            strokeIds,
+            userId: socket.socket?.id || 'agent:chalkboard-master',
+          };
+          const updated = [...s.context.links, newLink];
+          const res = await s.emitWithAck('links-update', { roomId, links: updated });
+          if (!res.ok) return { content: [{ type: 'text', text: `Create link failed: ${res.error}` }], isError: true };
+          s.context.links = updated;
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'create', link: newLink }) }] };
+        }
+        if (action === 'delete') {
+          const updated = s.context.links.filter((l) => l.id !== args.linkId && l.tag !== args.tag);
+          const res = await s.emitWithAck('links-update', { roomId, links: updated });
+          if (!res.ok) return { content: [{ type: 'text', text: `Delete link failed: ${res.error}` }], isError: true };
+          s.context.links = updated;
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'delete', remainingCount: updated.length }) }] };
+        }
+        if (action === 'rename') {
+          const newTag = (args.newTag || args.tag || '').trim();
+          if (!newTag) return { content: [{ type: 'text', text: 'newTag is required for rename' }], isError: true };
+          const updated = s.context.links.map((l) => (l.id === args.linkId ? { ...l, tag: newTag } : l));
+          const res = await s.emitWithAck('links-update', { roomId, links: updated });
+          if (!res.ok) return { content: [{ type: 'text', text: `Rename link failed: ${res.error}` }], isError: true };
+          s.context.links = updated;
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'rename', linkId: args.linkId, newTag }) }] };
+        }
+        if (action === 'focus') {
+          const link = s.context.links.find((l) => l.id === args.linkId || l.tag === args.tag);
+          if (!link) return { content: [{ type: 'text', text: `Link "${args.linkId || args.tag}" not found` }], isError: true };
+          const matched = s.context.strokes.filter((st) => link.strokeIds.includes(st.id));
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, link, matchedStrokesCount: matched.length }) }] };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, action, links: s.context.links }) }] };
+      }
+      case 'chalkboard_select_and_transform': {
+        const action = args.action || 'select_only';
+        const targetIds = new Set<string>(Array.isArray(args.strokeIds) ? args.strokeIds : []);
+
+        if (action === 'delete') {
+          if (targetIds.size === 0) return { content: [{ type: 'text', text: 'No strokeIds specified for deletion' }], isError: true };
+          const updated = s.context.strokes.filter((st) => !targetIds.has(st.id));
+          const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
+          if (!res.ok) return { content: [{ type: 'text', text: `Delete failed: ${res.error}` }], isError: true };
+          s.context.strokes = updated as any;
+          s.context.strokeCount = updated.length;
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'delete', deletedCount: targetIds.size }) }] };
+        }
+        if (action === 'change_color') {
+          const color = args.color || '#ffffff';
+          const updated = s.context.strokes.map((st) => (targetIds.has(st.id) ? { ...st, color } : st));
+          const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
+          if (!res.ok) return { content: [{ type: 'text', text: `Change color failed: ${res.error}` }], isError: true };
+          s.context.strokes = updated as any;
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'change_color', updatedCount: targetIds.size, color }) }] };
+        }
+        if (action === 'nudge') {
+          const dx = args.dx ?? 0;
+          const dy = args.dy ?? 0;
+          const updated = s.context.strokes.map((st) => {
+            if (!targetIds.has(st.id)) return st;
+            return {
+              ...st,
+              points: st.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+            };
+          });
+          const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
+          if (!res.ok) return { content: [{ type: 'text', text: `Nudge failed: ${res.error}` }], isError: true };
+          s.context.strokes = updated as any;
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'nudge', dx, dy }) }] };
+        }
+        if (action === 'duplicate') {
+          const toDup = s.context.strokes.filter((st) => targetIds.has(st.id));
+          const offset = 25;
+          const duplicated: Stroke[] = toDup.map((st) => ({
+            ...st,
+            id: `agent-dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            points: st.points.map((p) => ({ x: p.x + offset, y: p.y + offset })),
+          }));
+          const updated = [...s.context.strokes, ...duplicated];
+          const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
+          if (!res.ok) return { content: [{ type: 'text', text: `Duplicate failed: ${res.error}` }], isError: true };
+          s.context.strokes = updated as any;
+          s.context.strokeCount = updated.length;
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'duplicate', count: duplicated.length }) }] };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, action, message: `Action ${action} executed.` }) }] };
+      }
+      case 'chalkboard_clipboard': {
+        const action = args.action || 'copy';
+        if (action === 'duplicate') {
+          const recent = s.context.strokes.slice(-1);
+          if (recent.length > 0) {
+            const dup: Stroke = {
+              ...recent[0],
+              id: `agent-clip-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              points: recent[0].points.map((p) => ({ x: p.x + 20, y: p.y + 20 })),
+            };
+            const updated = [...s.context.strokes, dup];
+            const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
+            if (!res.ok) return { content: [{ type: 'text', text: `Clipboard duplicate failed: ${res.error}` }], isError: true };
+            s.context.strokes = updated as any;
+            return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'duplicate', strokeId: dup.id }) }] };
+          }
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, action, note: 'Clipboard action acknowledged.' }) }] };
       }
       case 'chalkboard_send_chat': {
         if (!args.message) return { content: [{ type: 'text', text: 'message required' }], isError: true };

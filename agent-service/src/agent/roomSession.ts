@@ -5,11 +5,13 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { config } from '../config.js';
+import { config, getModelCandidateWaterfall } from '../config.js';
 import { AgentRoomSocket, ChatEntry } from '../socket/agentSocket.js';
 import { TOOL_DEFINITIONS, toGeminiFunctionDeclarations } from '../tools/definitions.js';
 import { executeTool } from '../tools/executors.js';
-import { extractCursorPosition } from './activityFormatter.js';
+import { extractCursorPosition, formatToolActivity } from './activityFormatter.js';
+import { ParallelCursorStreamer } from './cursorStreamer.js';
+import { formatSpatialLayoutPrompt } from './canvasLayout.js';
 import { sanitizeChatMessage, getFriendlyErrorMessage } from './messageSanitizer.js';
 import { getStaticInstructions } from '../utils/loadSystemInfo.js';
 import { logger } from '../utils/logger.js';
@@ -21,14 +23,19 @@ export class RoomSession {
   public state: SessionState = 'INITIALIZING';
   private ai: GoogleGenAI;
   private socket: AgentRoomSocket;
+  private cursorStreamer: ParallelCursorStreamer;
   private isProcessing = false;
   private idleGcTimeout: ReturnType<typeof setTimeout> | null = null;
   private readonly baseSystemInstruction: string;
+  private activeChat: any = null;
+  private chatTurnCount = 0;
+  private currentWorkingModel: string = config.GEMINI_MODEL;
 
   constructor(roomId: string) {
     this.roomId = roomId;
     this.ai = new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
     this.socket = new AgentRoomSocket(roomId);
+    this.cursorStreamer = new ParallelCursorStreamer(this.socket);
     this.baseSystemInstruction = getStaticInstructions();
   }
 
@@ -165,15 +172,106 @@ export class RoomSession {
     }
   }
 
-  async executeReasoningTask(prompt: string, requestedBy: string, invokerRole: 'owner'|'instructor'|'viewer' = 'instructor'): Promise<{ success: boolean; turns: number }> {
+  private createChatSession(modelName: string): any {
     const geminiDeclarations = toGeminiFunctionDeclarations();
+    const chatConfig: any = {
+      systemInstruction: this.baseSystemInstruction,
+      tools: [{ functionDeclarations: geminiDeclarations as any }],
+      temperature: 0.4,
+    };
 
+    if (typeof config.THINKING_BUDGET === 'number' && config.THINKING_BUDGET > 0) {
+      chatConfig.thinkingConfig = { thinkingBudget: config.THINKING_BUDGET };
+    }
+
+    return this.ai.chats.create({
+      model: modelName,
+      config: chatConfig,
+    });
+  }
+
+  private isFallbackTriggerError(err: any): boolean {
+    if (!err) return false;
+    const str = typeof err === 'string' ? err : err.message || JSON.stringify(err);
+    return (
+      str.includes('404') ||
+      str.includes('NOT_FOUND') ||
+      str.includes('no longer available') ||
+      str.includes('not found') ||
+      str.includes('503') ||
+      str.includes('UNAVAILABLE') ||
+      str.includes('high demand') ||
+      str.includes('429') ||
+      str.includes('RESOURCE_EXHAUSTED') ||
+      str.includes('Resource has been exhausted')
+    );
+  }
+
+  private async sendWithWaterfallCascade(
+    messagePayload: any,
+    preferredModel?: string
+  ): Promise<{ response: any; activeModel: string }> {
+    const candidates = getModelCandidateWaterfall();
+    const startModel = preferredModel || this.currentWorkingModel || config.GEMINI_MODEL;
+    const startIndex = candidates.indexOf(startModel);
+    const orderedModels = startIndex > 0
+      ? [...candidates.slice(startIndex), ...candidates.slice(0, startIndex)]
+      : candidates;
+
+    let lastError: any = null;
+
+    for (const model of orderedModels) {
+      logger.info('[RoomSession] Attempting model in waterfall cascade', { model });
+      const chat = this.createChatSession(model);
+      const maxRetries = config.MAX_RETRIES || 3;
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await chat.sendMessage(messagePayload);
+          this.activeChat = chat;
+          this.currentWorkingModel = model;
+          logger.info('[RoomSession] Model succeeded', { model });
+          return { response, activeModel: model };
+        } catch (err: any) {
+          lastError = err;
+          const shouldAdvance = this.isFallbackTriggerError(err);
+
+          logger.warn('[RoomSession] Model error in cascade', {
+            model,
+            attempt: attempt + 1,
+            shouldAdvance,
+            error: err?.message || String(err),
+          });
+
+          // If 404 (unavailable/deprecated) or 503 (high demand) or 429, advance immediately to next model
+          if (shouldAdvance) {
+            logger.info('[RoomSession] Advancing to next fallback model in cascade', {
+              failedModel: model,
+            });
+            break;
+          }
+
+          if (attempt >= maxRetries) {
+            break;
+          }
+
+          const delayMs = Math.min(4000, Math.pow(2, attempt) * 1000 + Math.random() * 300);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    throw lastError || new Error('All candidate models in the waterfall cascade failed.');
+  }
+
+  async executeReasoningTask(prompt: string, requestedBy: string, invokerRole: 'owner'|'instructor'|'viewer' = 'instructor'): Promise<{ success: boolean; turns: number }> {
     const recentChat = this.socket.context.chat.slice(-8).map(c => `${c.displayName}: "${c.message}"`).join('\n');
     const activeMembers = Array.from(this.socket.context.members.values()).map(u => `${u.name} (${u.role})`).join(', ') || 'No other participants';
     const meta = this.socket.context.roomMetadata || this.socket.roomMetadata;
     const roomTitle = meta?.title ? `"${meta.title}"` : 'General Classroom';
     const roomDesc = meta?.description ? `"${meta.description}"` : 'No description';
     const roomTheme = meta?.theme || 'classroom';
+    const spatialLayout = formatSpatialLayoutPrompt(this.socket.context.strokes);
 
     const runContext = `## Active Classroom Context (Live)
 - Room Title: ${roomTitle}
@@ -183,45 +281,39 @@ export class RoomSession {
 - Room ID: "${this.roomId}"
 - Active Participants: ${activeMembers}
 - Current Strokes: ~${this.socket.context.strokeCount}
+${spatialLayout}
 - Recent Chat (last 8):
 ${recentChat || '(No recent chat)'}
 - Invocation: Chat mention from ${requestedBy} (role: ${invokerRole}) — inherit this role for permission checks. If viewer asks to draw/kick, refuse politely. If instructor/owner asks to draw or teach, execute the tools.
 - Tools: 23 WebMCP tools (ground-level, no plugins). Use incremental word-by-word for write_text.`;
 
-    const systemInstruction = this.baseSystemInstruction;
     let turnCount = 0;
     const maxTurns = config.MAX_TURNS_PER_INSTRUCTION;
     let hasSentChat = false;
 
     logger.info('[RoomSession] Broadcast thinking', { roomId: this.roomId, prompt: prompt.slice(0, 80), requestedBy, invokerRole });
-    this.socket.broadcastActivity({ stage: 'thinking', thought: 'Thinking...' });
+    this.socket.broadcastActivity({ stage: 'thinking', thought: 'Analyzing classroom request...' });
 
     try {
-      logger.info('[RoomSession] Creating Gemini chat', { roomId: this.roomId, model: config.GEMINI_MODEL, thinkingBudget: config.THINKING_BUDGET, tools: geminiDeclarations.length });
-      const chatConfig: any = {
-        systemInstruction,
-        tools: [{ functionDeclarations: geminiDeclarations as any }],
-        temperature: 0.4,
-      };
+      let activeModel = this.currentWorkingModel || config.GEMINI_MODEL;
+      this.chatTurnCount++;
 
-      if (typeof config.THINKING_BUDGET === 'number') {
-        chatConfig.thinkingConfig = { thinkingBudget: config.THINKING_BUDGET };
-      }
+      logger.debug('[RoomSession] Sending prompt to Gemini via cascade', { roomId: this.roomId, prompt, preferredModel: activeModel });
+      const initResult = await this.sendWithWaterfallCascade(
+        {
+          message: `${runContext}\n\n${requestedBy} (${invokerRole}) asked: "${prompt}". Follow SYSTEM_INFO policies (modality matching, canvas restraint, incremental cursor, permission inheritance).`,
+        },
+        activeModel
+      );
+      let currentResponse = initResult.response;
+      activeModel = initResult.activeModel;
+      let chat = this.activeChat;
 
-      let chat = this.ai.chats.create({
-        model: config.GEMINI_MODEL,
-        config: chatConfig,
-      });
-
-      logger.debug('[RoomSession] Sending initial prompt to Gemini', { roomId: this.roomId, prompt });
-      let currentResponse = await chat.sendMessage({
-        message: `${runContext}\n\n${requestedBy} (${invokerRole}) asked: "${prompt}". Follow SYSTEM_INFO policies (modality matching, canvas restraint, incremental cursor, permission inheritance).`,
-      });
-      logger.info('[RoomSession] Gemini initial response', { roomId: this.roomId, hasFunctionCalls: Boolean((currentResponse as any).functionCalls?.length), text: (currentResponse as any).text?.slice(0, 100) });
+      logger.info('[RoomSession] Gemini initial response', { roomId: this.roomId, model: activeModel, hasFunctionCalls: Boolean((currentResponse as any).functionCalls?.length), text: (currentResponse as any).text?.slice(0, 100) });
 
       while (turnCount < maxTurns) {
         turnCount++;
-        logger.info('[RoomSession] Turn start', { roomId: this.roomId, turn: turnCount, maxTurns });
+        logger.info('[RoomSession] Turn start', { roomId: this.roomId, turn: turnCount, maxTurns, model: activeModel });
         const functionCalls = (currentResponse as any).functionCalls;
         logger.debug('[RoomSession] Function calls', { roomId: this.roomId, turn: turnCount, calls: functionCalls?.map((c:any)=> ({name:c.name, args:c.args})) });
         if (!functionCalls || functionCalls.length === 0) {
@@ -242,7 +334,24 @@ ${recentChat || '(No recent chat)'}
             isTerminalCall = true;
           }
 
-          // Auto-chunk write_text for live cursor
+          // Telemetry notification
+          const activity = formatToolActivity(call.name, call.args);
+          this.socket.broadcastActivity({
+            stage: 'executing_tool',
+            toolName: call.name,
+            toolAction: activity.toolAction,
+            toolSummary: activity.toolSummary,
+            thought: `${activity.toolAction}...`,
+            turnIndex: turnCount,
+            maxTurns,
+          });
+
+          // PARALLEL EXECUTION FLOW: Broadcast cursor concurrently ONLY if visual tool
+          if (this.cursorStreamer.shouldBroadcast(call.name)) {
+            void this.cursorStreamer.startParallelToolCursor(call.name, call.args);
+          }
+
+          // Auto-chunk write_text for live cursor writing
           if (call.name === 'chalkboard_write_text' && typeof (call.args as any)?.text === 'string') {
             const rawText: string = ((call.args as any).text as string).trim();
             const words = rawText.split(/\s+/).filter(Boolean);
@@ -261,8 +370,10 @@ ${recentChat || '(No recent chat)'}
               for (let idx=0; idx<chunks.length; idx++) {
                 const chunkText = chunks[idx];
                 const chunkArgs = { ...(call.args as any), text: chunkText, x: Math.round(curX), y: baseY, textAlign: 'left', fontSize, ...(baseColor?{color:baseColor}:{}) };
-                const cursor = extractCursorPosition(call.name, chunkArgs);
-                if (cursor) this.socket.broadcastCursor(cursor.x, cursor.y);
+                
+                // Glide cursor in parallel to each chunk position
+                void this.cursorStreamer.glideTo(chunkArgs.x, chunkArgs.y, 4, 15);
+                
                 try {
                   const cRes = await executeTool(this.socket, call.name, chunkArgs, invokerRole);
                   allResults.push(cRes);
@@ -279,9 +390,6 @@ ${recentChat || '(No recent chat)'}
             }
           }
 
-          const cursorPos = extractCursorPosition(call.name, call.args);
-          if (cursorPos) this.socket.broadcastCursor(cursorPos.x, cursorPos.y);
-
           if (call.name === 'chalkboard_send_chat') hasSentChat = true;
 
           try {
@@ -297,19 +405,41 @@ ${recentChat || '(No recent chat)'}
           break;
         }
 
-        currentResponse = await chat.sendMessage({ message: functionResponseParts });
+        let turnSucceeded = false;
+        const maxRetries = config.MAX_RETRIES || 3;
+        for (let turnAttempt = 0; turnAttempt <= maxRetries; turnAttempt++) {
+          try {
+            currentResponse = await chat.sendMessage({ message: functionResponseParts });
+            turnSucceeded = true;
+            break;
+          } catch (turnErr: any) {
+            logger.warn('[RoomSession] Turn response error', { turn: turnCount, attempt: turnAttempt + 1, error: turnErr?.message || String(turnErr) });
+            if (turnAttempt >= maxRetries) {
+              throw turnErr;
+            }
+            const delayMs = Math.min(4000, Math.pow(2, turnAttempt) * 1000 + Math.random() * 300);
+            await new Promise((r) => setTimeout(r, delayMs));
+          }
+        }
+        if (!turnSucceeded) break;
       }
 
+      this.socket.broadcastActivity({ stage: 'completed', thought: 'Done' });
       return { success:true, turns: turnCount };
     } catch (err:any) {
+      // Reset chat on error so next request starts fresh
+      this.activeChat = null;
       throw err;
     } finally {
+      this.cursorStreamer.cancelActiveStream();
       this.socket.broadcastActivity({ stage: 'idle' });
     }
   }
 
   async stop(): Promise<void> {
     if (this.idleGcTimeout) { clearTimeout(this.idleGcTimeout); this.idleGcTimeout=null; }
+    this.cursorStreamer.cancelActiveStream();
+    this.activeChat = null;
     this.state = 'DISCONNECTED';
     await this.socket.close();
   }

@@ -55,8 +55,8 @@ steps:
       - 'managed'
       - '--no-allow-unauthenticated'
       - '--min-instances'
-      - '1'
-      - '--no-cpu-throttling'
+      - '0'
+      - '--cpu-throttling'
       - '--update-env-vars'
       - 'PROCESS_TYPE=worker'
 

@@ -1,4 +1,15 @@
 {
+  "name": "chalkboard",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "npx --yes concurrently -n \"backend,agent,frontend\" -c \"blue.bold,magenta.bold,cyan.bold\" --kill-others \"npm run dev --prefix backend\" \"npm run dev --prefix agent-service\" \"npm run dev --prefix frontend\"",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:agent": "npm run dev --prefix agent-service",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "test": "npm test --prefix agent-service && npm test --prefix backend",
+    "build": "npm run build --prefix backend && npm run build --prefix agent-service && npm run build --prefix frontend"
+  },
   "devDependencies": {
     "typescript": "^7.0.2"
   }

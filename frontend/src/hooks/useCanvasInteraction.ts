@@ -13,6 +13,7 @@ import {
 import {
   transformStrokes,
   rotateStrokesTo,
+  eraseStrokePoints,
 } from '@/lib/strokes';
 import {
   hitTestTransformBox,
@@ -220,12 +221,56 @@ export function useCanvasInteraction(
     socket?.emit('stroke-end', { roomId });
 
     // Live stroke-start/stroke-draw packets are transient. Persist the
-    // completed stroke (chalk or eraser) through the full-stroke event so Redis
-    // keeps the complete room history for refreshes and later joins.
-    if (completedStroke && strokeId) {
+    // completed stroke through the full-stroke event so Redis keeps
+    // the complete room history for refreshes and later joins.
+    if (completedStroke?.tool === 'chalk' && strokeId) {
       socket?.emit('draw-stroke', { roomId, stroke: completedStroke });
     }
-  }, [isDrawing, roomId, socket]);
+
+    if (completedStroke?.tool === 'eraser' && strokeId) {
+      const eraserPoints = completedStroke.points;
+      const ew = completedStroke.eraserWidth ?? eraserWidth;
+      const eh = completedStroke.eraserHeight ?? eraserHeight;
+      const radius = ew && eh
+        ? Math.max(ew, eh) / 2
+        : (completedStroke.size || brushSize) * 2;
+
+      setStrokes((prevStrokes) => {
+        const updated: Stroke[] = [];
+        for (const stroke of prevStrokes) {
+          // Remove the completed eraser stroke and any previous eraser strokes
+          if (stroke.id === strokeId || stroke.tool === 'eraser') continue;
+
+          if (eraserPoints.length === 0) {
+            updated.push(stroke);
+          } else {
+            const sliced = eraseStrokePoints(stroke, eraserPoints, radius, ew, eh);
+            updated.push(...sliced);
+          }
+        }
+
+        socket?.emit('undo-stroke', { roomId, strokes: updated });
+        return updated;
+      });
+
+      // Clear or update selection if any currently selected strokes were erased
+      const store = useBoardStore.getState();
+      if (store.selectedStrokeIds.length > 0) {
+        const currentStrokes = store.strokes;
+        const remaining = currentStrokes.filter((s) => store.selectedStrokeIds.includes(s.id));
+        if (remaining.length !== store.selectedStrokeIds.length) {
+          const nextIds = remaining.map((s) => s.id);
+          store.setSelectedStrokeIds(nextIds);
+          if (nextIds.length > 0) {
+            store.setTransformBox(getSelectionBoundingBox(remaining));
+          } else {
+            store.setTransformBox(null);
+            store.setSelectionRotation(0);
+          }
+        }
+      }
+    }
+  }, [isDrawing, roomId, socket, setStrokes, eraserWidth, eraserHeight, brushSize]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -299,7 +344,7 @@ export function useCanvasInteraction(
         }
       }
 
-      const clickedStroke = strokes.find((s) => isStrokeInRect(s, {
+      const clickedStroke = strokes.find((s) => s.tool !== 'eraser' && isStrokeInRect(s, {
         minX: pos.x - 5 / zoom,
         minY: pos.y - 5 / zoom,
         maxX: pos.x + 5 / zoom,
@@ -648,7 +693,7 @@ export function useCanvasInteraction(
             maxY: Math.max(marquee.minY, marquee.maxY),
           };
 
-          const selected = strokes.filter((s) => isStrokeInRect(s, normMarquee));
+          const selected = strokes.filter((s) => s.tool !== 'eraser' && isStrokeInRect(s, normMarquee));
           const sIds = selected.map((s) => s.id);
 
           if (sIds.length > 0) {
@@ -671,7 +716,7 @@ export function useCanvasInteraction(
           maxY: Math.max(selectionMarquee.minY, selectionMarquee.maxY),
         };
 
-        const selected = strokes.filter((s) => isStrokeInRect(s, normMarquee));
+        const selected = strokes.filter((s) => s.tool !== 'eraser' && isStrokeInRect(s, normMarquee));
         const sIds = selected.map((s) => s.id);
 
         if (sIds.length > 0) {

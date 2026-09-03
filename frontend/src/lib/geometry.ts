@@ -128,8 +128,8 @@ export const getCombinedBoundingBox = (strokes: Stroke[]): Rect | null => {
 
 /** Tags annotate an object and do not contribute to its selection marquee. */
 export const getSelectionBoundingBox = (strokes: Stroke[]): Rect | null => {
-  const objectStrokes = strokes.filter((stroke) => stroke.pluginId !== 'chalkboard.tag');
-  return getCombinedBoundingBox(objectStrokes.length > 0 ? objectStrokes : strokes);
+  const objectStrokes = strokes.filter((stroke) => stroke.pluginId !== 'chalkboard.tag' && stroke.tool !== 'eraser');
+  return getCombinedBoundingBox(objectStrokes.length > 0 ? objectStrokes : strokes.filter((s) => s.tool !== 'eraser'));
 };
 
 /**

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { adminRouter } from '@/routers/admin.route';
+import { agentInternalRouter } from '@/routers/agent.internal.route';
 import { authRouter } from '@/routers/auth.route';
 import { billingRouter } from '@/routers/billing.route';
 import { feedbackRouter } from '@/routers/feedback.route';
@@ -18,6 +19,7 @@ api.get('/health', (c) => c.json({ ok: true }));
 api.use('*', globalRateLimit);
 
 api.route('/auth', authRouter);
+api.route('/internal/agent', agentInternalRouter);
 api.route('/plugins', pluginRouter);
 api.route('/admin', adminRouter);
 api.route('/billing', billingRouter);

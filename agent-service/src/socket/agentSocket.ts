@@ -9,6 +9,7 @@ import { io, Socket } from 'socket.io-client';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { RoomMetadata, Stroke, SavedLink } from '../types/index.js';
+import type { AgentVoiceClient } from '../voice/voiceClient.js';
 
 export interface ChatEntry {
   id: string;
@@ -96,6 +97,8 @@ export class AgentRoomSocket {
   private closed = false;
   private hasJoined = false;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  /** Attached by RoomSession — LiveKit voice presence for this room. */
+  public voice: AgentVoiceClient | null = null;
 
   constructor(roomId: string) {
     this.roomId = roomId;
@@ -394,6 +397,10 @@ export class AgentRoomSocket {
     });
     s.on('reaction:received', (payload: any) => this.emitLocal('reaction:received', payload));
     s.on('raised-hands:update', (payload: any) => this.emitLocal('raised-hands:update', payload));
+    // Voice membership — forwarded so RoomSession can gate the mic
+    s.on('voice:invited', (payload: any) => this.emitLocal('voice:invited', payload));
+    s.on('voice:removed', (payload: any) => this.emitLocal('voice:removed', payload));
+    s.on('voice:speaker-added', (payload: any) => this.emitLocal('voice:speaker-added', payload));
     s.on('room-members-updated', (payload: any) => {
       if (payload?.room) {
         this.roomMetadata = payload.room;

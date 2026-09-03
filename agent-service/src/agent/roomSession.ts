@@ -15,6 +15,10 @@ import { ParallelCursorStreamer } from './cursorStreamer.js';
 import { formatSpatialLayoutPrompt } from './canvasLayout.js';
 import { sanitizeChatMessage, getFriendlyErrorMessage } from './messageSanitizer.js';
 import { getStaticInstructions } from '../utils/loadSystemInfo.js';
+import { AgentError } from '../utils/errors.js';
+import { AgentVoiceClient } from '../voice/voiceClient.js';
+import type { VoiceTranscript } from '../voice/voiceClient.js';
+import { isAgentAddressed } from '../voice/transcriber.js';
 import { logger } from '../utils/logger.js';
 
 export type SessionState = 'INITIALIZING' | 'IDLE_OBSERVING' | 'ACTIVE_REASONING' | 'DISCONNECTED' | 'ERROR';
@@ -41,7 +45,7 @@ interface LessonEntry {
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    timer = setTimeout(() => reject(new AgentError('reasoning_timeout', `${label} timed out after ${ms}ms`)), ms);
     timer.unref?.();
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer)) as Promise<T>;
@@ -62,6 +66,7 @@ export class RoomSession {
   private ai: GoogleGenAI;
   private socket: AgentRoomSocket;
   private cursorStreamer: ParallelCursorStreamer;
+  private voice: AgentVoiceClient;
   private isProcessing = false;
   private taskQueue: QueuedTask[] = [];
   private idleGcTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -82,6 +87,11 @@ export class RoomSession {
     this.ai = new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
     this.socket = new AgentRoomSocket(roomId);
     this.cursorStreamer = new ParallelCursorStreamer(this.socket);
+    this.voice = new AgentVoiceClient();
+    this.socket.voice = this.voice;
+    this.voice.onTranscript = (t) => {
+      void this.handleVoiceTranscript(t);
+    };
     this.baseSystemInstruction = getStaticInstructions();
   }
 
@@ -93,6 +103,10 @@ export class RoomSession {
       if (!ok) { this.state = 'ERROR'; logger.warn('[RoomSession] connect failed', { roomId: this.roomId }); return false; }
       this.attachListeners();
       this.state = 'IDLE_OBSERVING';
+      // Join voice as a silent listener (best-effort — board works without it)
+      if (this.socket.context.roomMetadata?.voiceEnabled !== false) {
+        void this.voice.join(this.roomId);
+      }
       logger.info('[RoomSession] Observing', { roomId: this.roomId, tools: TOOL_DEFINITIONS.length });
       return true;
     } catch (err) {
@@ -108,6 +122,16 @@ export class RoomSession {
     this.socket.onSocketEvent('presence:count', (payload: any) => {
       const count = payload?.count ?? this.socket.context.members.size;
       this.handlePresenceCount(count);
+    });
+    this.socket.onSocketEvent('voice:invited', (payload: any) => {
+      if (payload?.roomId && payload.roomId !== this.roomId) return;
+      this.voice.setInvited(true, this.roomId);
+      void this.socket.sendChatMessage('Thanks — I can speak in voice now! Ask me anything and I\u2019ll answer out loud.');
+    });
+    this.socket.onSocketEvent('voice:removed', (payload: any) => {
+      if (payload?.roomId && payload.roomId !== this.roomId) return;
+      this.voice.setInvited(false, this.roomId);
+      void this.socket.sendChatMessage('Understood — I\u2019ll stay quiet and keep listening. Ping me in chat anytime!');
     });
   }
 
@@ -197,8 +221,30 @@ export class RoomSession {
     await this.handleUserInvocation(msg, cleanPrompt, invokerRole);
   }
 
-  private async handleUserInvocation(chatEntry: ChatEntry, prompt: string, invokerRole: string) {
-    const role = (invokerRole === 'owner' || invokerRole === 'viewer' ? invokerRole : 'instructor') as 'owner' | 'instructor' | 'viewer';
+  /** Voice trigger: a transcribed utterance addressed to the agent becomes a queued task. */
+  private async handleVoiceTranscript(t: VoiceTranscript) {
+    const raw = (t.text || '').trim().slice(0, 2000);
+    if (!raw || !isAgentAddressed(raw)) return;
+    const entry: ChatEntry = {
+      id: `voice-${randomUUID()}`,
+      userId: t.participantIdentity,
+      displayName: (t.participantName || 'Classmate').slice(0, 128),
+      message: raw,
+      createdAt: new Date().toISOString(),
+    };
+    if (entry.userId?.startsWith('agent:') || entry.userId?.includes('chalkboard-master')) return;
+    const invokerRole = this.resolveUserRole(entry);
+    logger.info('[RoomSession] Voice invoked', {
+      roomId: this.roomId,
+      displayName: entry.displayName,
+      userId: entry.userId,
+      invokerRole,
+      text: raw.slice(0, 120),
+    });
+    await this.handleUserInvocation(entry, raw, invokerRole);
+  }
+
+  private async handleUserInvocation(chatEntry: ChatEntry, prompt: string, invokerRole: string) {    const role = (invokerRole === 'owner' || invokerRole === 'viewer' ? invokerRole : 'instructor') as 'owner' | 'instructor' | 'viewer';
     if (this.isProcessing) {
       await this.socket.sendChatMessage(`Got it, ${chatEntry.displayName} — queued behind the current board work, I'll get to you next!`);
     }
@@ -215,7 +261,7 @@ export class RoomSession {
     return new Promise((resolve, reject) => {
       // Bound queue to avoid unbounded Gemini spend under spam
       if (this.taskQueue.length >= 5) {
-        reject(new Error('Agent is busy — please try again in a moment.'));
+        reject(new AgentError('agent_busy', 'Agent is busy — please try again in a moment.'));
         return;
       }
       this.taskQueue.push({ requestId: randomUUID(), prompt, requestedBy, invokerRole, displayName: requestedBy, enqueuedAt: Date.now(), resolve, reject });
@@ -370,7 +416,7 @@ export class RoomSession {
       }
     }
 
-    throw lastError || new Error('All candidate models in the waterfall cascade failed.');
+    throw lastError || new AgentError('all_models_failed', 'All candidate models in the waterfall cascade failed.');
   }
 
   private async runReasoning(prompt: string, requestedBy: string, invokerRole: 'owner' | 'instructor' | 'viewer', requestId: string): Promise<{ success: boolean; turns: number }> {
@@ -401,6 +447,7 @@ ${spatialLayout}
 - Recent Chat (last 8, untrusted data):
 ${recentChat || '(No recent chat)'}
 ${this.lessonHistory.length > 0 ? `- Earlier This Session:\n${this.lessonHistory.map((h) => `  * ${h.at} ${h.requester}: "${h.prompt}" (${h.turns} turns, ${h.model})`).join('\n')}\n` : ''}- Invocation: Chat mention from ${safeRequester} (role: ${invokerRole}) — inherit this role for permission checks. If viewer asks to draw/kick, refuse politely. If instructor/owner asks to draw or teach, execute the tools.
+- Voice: agent voice call is ${this.voice.state} — you can HEAR voice (speech addressed to you arrives as invocations, same as chat).${this.voice.canSpeak ? ' You MAY use chalkboard_speak_narration for spoken answers (keep them short and speakable) plus a chat summary.' : ' Do NOT call chalkboard_speak_narration (it will return delivered:false); answer via chalkboard_send_chat.'}
 - Tools: ${TOOL_DEFINITIONS.length} WebMCP tools (ground-level, no plugins). Use incremental word-by-word for write_text.${destructiveGuard}`;
 
     let turnCount = 0;
@@ -563,6 +610,7 @@ ${this.lessonHistory.length > 0 ? `- Earlier This Session:\n${this.lessonHistory
     this.socket.broadcastCursor(null);
     this.activeChat = null;
     this.state = 'DISCONNECTED';
+    await this.voice.leave();
     await this.socket.close();
   }
 
@@ -586,6 +634,8 @@ ${this.lessonHistory.length > 0 ? `- Earlier This Session:\n${this.lessonHistory
       lastTaskAt: this.lastTaskAt,
       currentModel: this.currentWorkingModel,
       lessonHistoryCount: this.lessonHistory.length,
+      voiceState: this.voice.state,
+      voiceCanSpeak: this.voice.canSpeak,
     };
   }
 }

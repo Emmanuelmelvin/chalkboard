@@ -683,7 +683,10 @@ async function handleVoiceMembershipAction(
     return;
   }
 
-  const targetMember = roomDetails.members.find((member: { userId: string; displayName?: string }) => member.userId === data.targetUserId);
+  const isAgentTarget = data.targetUserId === 'agent:chalkboard-master' || data.targetUserId?.includes('chalkboard-master');
+  const targetMember = isAgentTarget
+    ? { userId: data.targetUserId, displayName: 'Chalkboard Master (AI)' }
+    : roomDetails.members.find((member: { userId: string; displayName?: string }) => member.userId === data.targetUserId);
   if (!targetMember) {
     rejectEvent(socket, event, 'target_not_found', ack, data.roomId);
     return;

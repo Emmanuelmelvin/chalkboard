@@ -6,6 +6,7 @@
 
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import { AgentError } from './utils/errors.js';
 import { logger } from './utils/logger.js';
 
 dotenv.config();
@@ -40,7 +41,7 @@ if (!parsed.success) {
   if (process.env.NODE_ENV === 'production') {
     // Fail fast in production — starting with a placeholder key only
     // produces confusing Gemini errors at request time.
-    throw new Error('Invalid environment variables for Agent Service (see log above). Refusing to start in production.');
+    throw new AgentError('invalid_config', 'Invalid environment variables for Agent Service (see log above). Refusing to start in production.');
   }
   if (!process.env.GEMINI_API_KEY) {
     logger.warn('GEMINI_API_KEY is not set. Set it in .env to enable real AI generation.');

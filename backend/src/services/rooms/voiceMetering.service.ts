@@ -24,13 +24,25 @@ import { add, metricNames, record } from '@/utils/metrics';
  */
 
 /**
+ * The AI agent (agent:chalkboard-master) is not a row in `users`, and every
+ * voice_sessions/voice_usage user_id column is a uuid FK. Metering the agent
+ * would both crash (invalid uuid syntax) and bill the owner for a bot, so the
+ * agent is explicitly unmetered: token issuance still checks the owner's
+ * headroom, but no session rows are written for it.
+ */
+export function isAgentUserId(userId: string | undefined | null): boolean {
+  return Boolean(userId && (userId.startsWith('agent:') || userId.includes('chalkboard-master')));
+}
+
+/**
  * Insert a voice_sessions row and return its id.
  *
  * Called from `createRoomVoiceToken` after the quota check passes. The session
  * stays open until the participant disconnects or the reconciliation pass closes
- * it as abandoned.
+ * it as abandoned. No-op (null) for the AI agent — see above.
  */
 export async function startVoiceSession(roomId: string, userId: string) {
+  if (isAgentUserId(userId)) return null;
   const [row] = await db
     .insert(voiceSessions)
     .values({ roomId, userId })
@@ -46,6 +58,9 @@ export async function startVoiceSession(roomId: string, userId: string) {
  * Idempotent: sessions already closed are not touched again.
  */
 export async function closeVoiceSessions(roomId: string, userId: string) {
+  // The agent never has session rows (see startVoiceSession) — and passing a
+  // non-uuid id into the uuid column would throw. Skip silently.
+  if (isAgentUserId(userId)) return;
   // Lock-and-read the open sessions so concurrent close attempts cannot
   // double-count the same interval.
   const openSessions = await db

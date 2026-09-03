@@ -78,7 +78,7 @@ describe('Honest stub tools (P1d)', () => {
     assert.equal(res.isError, undefined);
     const parsed = JSON.parse(res.content[0].text);
     assert.equal(parsed.delivered, false);
-    assert.match(parsed.note, /browser-only/i);
+    assert.match(JSON.stringify(parsed), /chalkboard_send_chat/);
   });
 });
 

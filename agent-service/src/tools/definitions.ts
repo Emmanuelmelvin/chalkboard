@@ -149,13 +149,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'chalkboard_speak_narration',
-    description: 'Browser-only TTS intent (NOT spoken by the service). Only call if the user explicitly asked for voice; otherwise use chalkboard_send_chat. Always returns delivered:false.',
+    description: 'Speaks text aloud in the LiveKit voice call via Edge TTS — ONLY works after the owner adds the agent to voice. Returns delivered:true when actually spoken, delivered:false otherwise (then use chalkboard_send_chat). Only call if voice was explicitly requested.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        text: { type: 'STRING', description: 'Text to speak' },
-        rate: { type: 'NUMBER', description: 'Rate 0.5-1.5' },
-        pitch: { type: 'NUMBER', description: 'Pitch 0.5-1.5' },
+        text: { type: 'STRING', description: 'Text to speak (max ~1000 chars)' },
+        rate: { type: 'NUMBER', description: 'Rate 0.5-1.5 (currently informational)' },
+        pitch: { type: 'NUMBER', description: 'Pitch 0.5-1.5 (currently informational)' },
       },
       required: ['text'],
     },

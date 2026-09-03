@@ -389,9 +389,16 @@ export async function executeTool(
       }
       case 'chalkboard_speak_narration': {
         if (!args.text || typeof args.text !== 'string') return { content: [{ type: 'text', text: 'text required' }], isError: true };
-        // TTS renders in the browser only — the service can't speak. Report
-        // honestly so the model falls back to send_chat unless voice was asked.
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, delivered: false, spokenText: args.text.slice(0, 500), note: 'TTS is browser-only and was not spoken by the service. Use chalkboard_send_chat for text unless voice was explicitly requested.' }) }] };
+        // LiveKit voice when the owner has added the agent; honest otherwise.
+        const voice = (s as any).voice;
+        if (!voice || !voice.connected) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, delivered: false, note: 'Voice call not connected. Use chalkboard_send_chat for text unless voice was explicitly requested.' }) }] };
+        }
+        if (!voice.canSpeak) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, delivered: false, note: 'Not added to voice — only the room owner can invite the agent to speak. Use chalkboard_send_chat.' }) }] };
+        }
+        const spoken = await voice.speak(args.text, roomId);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, delivered: spoken.delivered, ...(spoken.reason ? { reason: spoken.reason } : {}) }) }] };
       }
       case 'chalkboard_send_reaction': {
         const res = await s.emitWithAck('reaction:send', { roomId, emoji: args.emoji });

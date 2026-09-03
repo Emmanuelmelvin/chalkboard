@@ -1769,19 +1769,17 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                                 </div>
 
                                 <div className="room-member-actions">
-                                  {!isAgent && (
-                                    <RoomMemberVoiceControls
-                                      memberUserId={member.userId}
-                                      effectiveRole={effectiveRole}
-                                      currentUserId={userId}
-                                      socket={socket}
-                                      roomId={roomId}
-                                      voiceEnabled={roomQuery.data?.room.voiceEnabled ?? false}
-                                      isOnline={isOnline}
-                                      memberName={member.displayName}
-                                      voiceConnected={voiceConnected}
-                                    />
-                                  )}
+                                  <RoomMemberVoiceControls
+                                    memberUserId={member.userId}
+                                    effectiveRole={effectiveRole}
+                                    currentUserId={userId}
+                                    socket={socket}
+                                    roomId={roomId}
+                                    voiceEnabled={roomQuery.data?.room.voiceEnabled ?? false}
+                                    isOnline={isOnline}
+                                    memberName={displayName}
+                                    voiceConnected={voiceConnected}
+                                  />
                                   {isAgent ? (
                                     <RoleDropdown
                                       role="instructor"

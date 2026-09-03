@@ -175,7 +175,7 @@ export const strokeDrawSchema = z.object({
 export const cursorMoveSchema = z.union([
   z.object({
     roomId: roomIdSchema,
-    cursor: pointSchema,
+    cursor: pointSchema.nullable(),
   }),
   z.object({
     roomId: roomIdSchema,

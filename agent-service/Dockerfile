@@ -11,5 +11,6 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/SYSTEM_INFO.md ./SYSTEM_INFO.md
 EXPOSE 8080
 CMD ["node", "dist/index.js"]

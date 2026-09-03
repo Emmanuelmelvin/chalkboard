@@ -55,7 +55,7 @@ describe('Tool Executors & Permissions', () => {
     assert.equal(chatRes.isError, undefined);
   });
 
-  it('chalkboard_insert_shape should generate strokes and emit undo-stroke', async () => {
+  it('chalkboard_insert_shape should generate strokes and emit draw-stroke (append-only)', async () => {
     const mock = createMockSocket();
     const res = await executeTool(
       mock as any,
@@ -69,8 +69,8 @@ describe('Tool Executors & Permissions', () => {
     assert.equal(mock.context.strokes[0].tool, 'chalk');
     assert.equal(mock.context.strokes[0].color, '#f59e0b');
 
-    const emittedUndo = mock._emitted.find((e) => e.event === 'undo-stroke');
-    assert.ok(emittedUndo, 'Should emit undo-stroke event with updated strokes');
+    const emittedUndo = mock._emitted.find((e) => e.event === 'draw-stroke');
+    assert.ok(emittedUndo, 'Should emit draw-stroke event with single stroke (append-only, no history replace)');
   });
 
   it('chalkboard_clear_or_undo clear should emit clear-board and reset strokes', async () => {

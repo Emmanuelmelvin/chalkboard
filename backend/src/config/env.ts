@@ -97,6 +97,7 @@ const envSchema = z.object({
 
   // Chalkboard Master Agent Service (Cloud Run / Local)
   AGENT_SERVICE_URL: z.string().default('http://localhost:8080'),
+  AGENT_SERVICE_SECRET: z.string().default('chalkboard_agent_internal_secret_key_2026'),
   ENABLE_AGENT_ALL_ROOMS: booleanEnv(true),
 
 

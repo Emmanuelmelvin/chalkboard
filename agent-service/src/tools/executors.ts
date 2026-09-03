@@ -8,6 +8,7 @@ import type { AgentRoomSocket } from '../socket/agentSocket.js';
 import type { SavedLink, Stroke } from '../types/index.js';
 import { generateShapeStrokes } from './shapes.js';
 import { logger } from '../utils/logger.js';
+import { randomUUID } from 'node:crypto';
 
 type Role = 'owner' | 'instructor' | 'viewer';
 
@@ -51,6 +52,36 @@ function forbiddenMessage(tool: string, invokerRole: Role): string {
   return `Permission denied for ${tool} with role ${invokerRole}.`;
 }
 
+// Single-append writer. Uses backend `draw-stroke` (append-only) instead of
+// `undo-stroke` full-history replace, so concurrent human strokes are never
+// overwritten and payloads stay O(1 stroke) instead of O(500).
+function makeStrokeId(socket: AgentRoomSocket, suffix: string): string {
+  const sid = (socket.socket?.id || 'agent').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48);
+  return `${sid}-${suffix}-${Date.now()}-${randomUUID().slice(0, 8)}`;
+}
+
+function isValidPoints(points: any): boolean {
+  return (
+    Array.isArray(points) &&
+    points.length >= 1 &&
+    points.length <= 10_000 &&
+    points.every((p: any) => Number.isFinite(p?.x) && Number.isFinite(p?.y))
+  );
+}
+
+async function appendSingleStroke(
+  s: AgentRoomSocket,
+  stroke: Stroke
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await s.emitWithAck('draw-stroke', { roomId: s.roomId, stroke });
+  if (!res?.ok) return { ok: false, error: String(res?.error || 'draw-stroke rejected') };
+  s.context.strokes.push(stroke);
+  if (s.context.strokes.length > 500) s.context.strokes.shift();
+  s.context.strokeCount += 1;
+  s.context.lastActivityAt = Date.now();
+  return { ok: true };
+}
+
 export async function executeTool(
   socket: AgentRoomSocket,
   toolName: string,
@@ -90,9 +121,9 @@ export async function executeTool(
         return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
       }
       case 'chalkboard_draw_chalk': {
-        if (!args.points || args.points.length === 0) return { content: [{ type: 'text', text: 'points required' }], isError: true };
+        if (!isValidPoints(args.points)) return { content: [{ type: 'text', text: 'points required (1-10000 finite {x,y})' }], isError: true };
         const stroke = {
-          id: `${socket.socket?.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: makeStrokeId(socket, 'chalk'),
           userId: socket.socket?.id || 'agent:chalkboard-master',
           tool: 'chalk' as const,
           color: args.color || '#ffffff',
@@ -104,11 +135,8 @@ export async function executeTool(
           points: args.points,
           agentId: 'chalkboard-master',
         };
-        const updated = [...s.context.strokes, stroke];
-        const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
-        if (!res.ok) return { content: [{ type: 'text', text: `Draw failed: ${res.error}` }], isError: true };
-        s.context.strokes = updated as any;
-        s.context.strokeCount = updated.length;
+        const res = await appendSingleStroke(s, stroke as any);
+        if (!res.ok) return { content: [{ type: 'text', text: `Draw failed: ${(res as any).error}` }], isError: true };
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, strokeId: stroke.id }) }] };
       }
       case 'chalkboard_write_text': {
@@ -119,7 +147,7 @@ export async function executeTool(
         const x = args.x ?? 0;
         const y = args.y ?? 0;
         const stroke = {
-          id: `${socket.socket?.id}-txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: makeStrokeId(socket, 'txt'),
           userId: socket.socket?.id || 'agent:chalkboard-master',
           tool: 'chalk' as const,
           color: args.color || '#ffffff',
@@ -131,11 +159,8 @@ export async function executeTool(
           points: [{ x, y }, { x: x + textWidth, y }],
           agentId: 'chalkboard-master',
         } as any;
-        const updated = [...s.context.strokes, stroke];
-        const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
-        if (!res.ok) return { content: [{ type: 'text', text: `Write failed: ${res.error}` }], isError: true };
-        s.context.strokes = updated as any;
-        s.context.strokeCount = updated.length;
+        const res = await appendSingleStroke(s, stroke);
+        if (!res.ok) return { content: [{ type: 'text', text: `Write failed: ${(res as any).error}` }], isError: true };
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, strokeId: stroke.id }) }] };
       }
       case 'chalkboard_insert_shape': {
@@ -150,18 +175,19 @@ export async function executeTool(
           userId: socket.socket?.id || 'agent:chalkboard-master',
         });
         if (shapeStrokes.length === 0) return { content: [{ type: 'text', text: `Failed to generate shape "${args.shape}"` }], isError: true };
-        const updated = [...s.context.strokes, ...shapeStrokes];
-        const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
-        if (!res.ok) return { content: [{ type: 'text', text: `Insert shape failed: ${res.error}` }], isError: true };
-        s.context.strokes = updated as any;
-        s.context.strokeCount = updated.length;
+        // Append each component stroke individually so a concurrent human edit
+        // between components can't be clobbered.
+        for (const st of shapeStrokes) {
+          const res = await appendSingleStroke(s, st);
+          if (!res.ok) return { content: [{ type: 'text', text: `Insert shape failed: ${(res as any).error}` }], isError: true };
+        }
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, shape: args.shape, strokeCount: shapeStrokes.length, strokeIds: shapeStrokes.map((st) => st.id) }) }] };
       }
       case 'chalkboard_create_note': {
         const w = args.width || 260;
         const h = args.height || 160;
         const stroke = {
-          id: `${socket.socket?.id}-note-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: makeStrokeId(socket, 'note'),
           userId: socket.socket?.id || 'agent:chalkboard-master',
           tool: 'chalk' as const,
           color: args.textColor || '#f8fafc',
@@ -175,10 +201,8 @@ export async function executeTool(
           points: [{ x: args.x, y: args.y }, { x: args.x + w, y: args.y }, { x: args.x + w, y: args.y + h }, { x: args.x, y: args.y + h }],
           agentId: 'chalkboard-master',
         };
-        const updated = [...s.context.strokes, stroke];
-        const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
-        if (!res.ok) return { content: [{ type: 'text', text: `Create note failed: ${res.error}` }], isError: true };
-        s.context.strokes = updated as any;
+        const res = await appendSingleStroke(s, stroke as any);
+        if (!res.ok) return { content: [{ type: 'text', text: `Create note failed: ${(res as any).error}` }], isError: true };
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, strokeId: stroke.id }) }] };
       }
       case 'chalkboard_highlight_area': {
@@ -190,7 +214,7 @@ export async function executeTool(
           { x: args.minX, y: args.minY },
         ];
         const stroke = {
-          id: `${socket.socket?.id}-hl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: makeStrokeId(socket, 'hl'),
           userId: socket.socket?.id || 'agent:chalkboard-master',
           tool: 'chalk' as const,
           color: '#38bdf8',
@@ -198,10 +222,8 @@ export async function executeTool(
           points,
           agentId: 'chalkboard-master',
         };
-        const updated = [...s.context.strokes, stroke];
-        const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
-        if (!res.ok) return { content: [{ type: 'text', text: `Highlight failed: ${res.error}` }], isError: true };
-        s.context.strokes = updated as any;
+        const res = await appendSingleStroke(s, stroke as any);
+        if (!res.ok) return { content: [{ type: 'text', text: `Highlight failed: ${(res as any).error}` }], isError: true };
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, highlight: args }) }] };
       }
       case 'chalkboard_clear_or_undo': {
@@ -224,7 +246,8 @@ export async function executeTool(
           s.context.strokeCount = updated.length;
           return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'undo', remainingStrokes: updated.length }) }] };
         }
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, action, message: `Action ${action} acknowledged.` }) }] };
+        // No redo stack exists server-side — be honest instead of fake-acking.
+        return { content: [{ type: 'text', text: `Unsupported clear_or_undo action "${action}". Supported: undo, clear. Redo is not supported by the board history API.` }], isError: true };
       }
       case 'chalkboard_manage_topic_links': {
         const action = args.action || 'list';
@@ -237,7 +260,7 @@ export async function executeTool(
             ? args.strokeIds
             : s.context.strokes.slice(-8).map((st) => st.id);
           const newLink: SavedLink = {
-            id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            id: `link-${Date.now()}-${randomUUID().slice(0, 8)}`,
             tag,
             strokeIds,
             userId: socket.socket?.id || 'agent:chalkboard-master',
@@ -276,6 +299,16 @@ export async function executeTool(
         const action = args.action || 'select_only';
         const targetIds = new Set<string>(Array.isArray(args.strokeIds) ? args.strokeIds : []);
 
+        // Local-only selection state — no board mutation, report honestly.
+        if (action === 'select_only' || action === 'deselect') {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action, delivered: false, note: 'Selection is local UI state only; no board change was made.' }) }] };
+        }
+        // Not implemented server-side — fail loudly so the model replans
+        // instead of believing a fake success.
+        if (action === 'rotate' || action === 'change_size' || action === 'group' || action === 'ungroup') {
+          return { content: [{ type: 'text', text: `Unsupported select_and_transform action "${action}". Supported: delete, change_color, nudge, duplicate (plus local-only select_only/deselect).` }], isError: true };
+        }
+
         if (action === 'delete') {
           if (targetIds.size === 0) return { content: [{ type: 'text', text: 'No strokeIds specified for deletion' }], isError: true };
           const updated = s.context.strokes.filter((st) => !targetIds.has(st.id));
@@ -310,20 +343,24 @@ export async function executeTool(
         }
         if (action === 'duplicate') {
           const toDup = s.context.strokes.filter((st) => targetIds.has(st.id));
+          if (toDup.length === 0) return { content: [{ type: 'text', text: 'No matching strokeIds to duplicate' }], isError: true };
           const offset = 25;
-          const duplicated: Stroke[] = toDup.map((st) => ({
-            ...st,
-            id: `agent-dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            points: st.points.map((p) => ({ x: p.x + offset, y: p.y + offset })),
-          }));
-          const updated = [...s.context.strokes, ...duplicated];
-          const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
-          if (!res.ok) return { content: [{ type: 'text', text: `Duplicate failed: ${res.error}` }], isError: true };
-          s.context.strokes = updated as any;
-          s.context.strokeCount = updated.length;
-          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'duplicate', count: duplicated.length }) }] };
+          // Append-only: one draw-stroke per duplicate so concurrent human
+          // strokes can't be clobbered by a full-history replace.
+          const newIds: string[] = [];
+          for (const st of toDup) {
+            const dup: Stroke = {
+              ...st,
+              id: `agent-dup-${Date.now()}-${randomUUID().slice(0, 8)}`,
+              points: st.points.map((p) => ({ x: p.x + offset, y: p.y + offset })),
+            };
+            const res = await appendSingleStroke(s, dup);
+            if (!res.ok) return { content: [{ type: 'text', text: `Duplicate failed: ${(res as any).error}` }], isError: true };
+            newIds.push(dup.id);
+          }
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'duplicate', count: newIds.length, strokeIds: newIds }) }] };
         }
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, action, message: `Action ${action} executed.` }) }] };
+        return { content: [{ type: 'text', text: `Unsupported select_and_transform action "${action}". Supported: delete, change_color, nudge, duplicate (plus local-only select_only/deselect).` }], isError: true };
       }
       case 'chalkboard_clipboard': {
         const action = args.action || 'copy';
@@ -332,17 +369,17 @@ export async function executeTool(
           if (recent.length > 0) {
             const dup: Stroke = {
               ...recent[0],
-              id: `agent-clip-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              id: makeStrokeId(socket, 'clip'),
               points: recent[0].points.map((p) => ({ x: p.x + 20, y: p.y + 20 })),
             };
-            const updated = [...s.context.strokes, dup];
-            const res = await s.emitWithAck('undo-stroke', { roomId, strokes: updated });
-            if (!res.ok) return { content: [{ type: 'text', text: `Clipboard duplicate failed: ${res.error}` }], isError: true };
-            s.context.strokes = updated as any;
+            const res = await appendSingleStroke(s, dup);
+            if (!res.ok) return { content: [{ type: 'text', text: `Clipboard duplicate failed: ${(res as any).error}` }], isError: true };
             return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'duplicate', strokeId: dup.id }) }] };
           }
+          return { content: [{ type: 'text', text: 'Board is empty, nothing to duplicate' }], isError: true };
         }
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, action, note: 'Clipboard action acknowledged.' }) }] };
+        // copy/cut/paste are local UI clipboard ops with no board mutation.
+        return { content: [{ type: 'text', text: `Clipboard action "${action}" is a local UI operation with no board effect. Only "duplicate" mutates the board.` }], isError: true };
       }
       case 'chalkboard_send_chat': {
         if (!args.message) return { content: [{ type: 'text', text: 'message required' }], isError: true };
@@ -351,8 +388,10 @@ export async function executeTool(
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: args.message }) }] };
       }
       case 'chalkboard_speak_narration': {
-        // TTS is browser-only; acknowledge
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, spokenText: args.text, note: 'TTS is browser-only, acknowledged' }) }] };
+        if (!args.text || typeof args.text !== 'string') return { content: [{ type: 'text', text: 'text required' }], isError: true };
+        // TTS renders in the browser only — the service can't speak. Report
+        // honestly so the model falls back to send_chat unless voice was asked.
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, delivered: false, spokenText: args.text.slice(0, 500), note: 'TTS is browser-only and was not spoken by the service. Use chalkboard_send_chat for text unless voice was explicitly requested.' }) }] };
       }
       case 'chalkboard_send_reaction': {
         const res = await s.emitWithAck('reaction:send', { roomId, emoji: args.emoji });

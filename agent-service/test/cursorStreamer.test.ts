@@ -72,4 +72,21 @@ describe('Parallel Cursor Broadcaster', () => {
     void streamer.glideTo(500, 500, 10, 50);
     assert.doesNotThrow(() => streamer.cancelActiveStream());
   });
+
+  it('returnToDefaultDock should hide cursor without drifting off-canvas', async () => {
+    const broadcasts: Array<{ x: number | null; y: number | null }> = [];
+    const mockSocket: any = {
+      broadcastCursor: (x: number | null, y?: number | null) => {
+        broadcasts.push({ x, y: y ?? null });
+      },
+    };
+    const streamer = new ParallelCursorStreamer(mockSocket);
+    streamer.setPosition(100, 100);
+    const before = broadcasts.length;
+    await streamer.returnToDefaultDock();
+    // Dock = single hide, no +250/+250 drift glide
+    assert.equal(broadcasts.length, before + 1);
+    const last = broadcasts[broadcasts.length - 1];
+    assert.equal(last.x, null);
+  });
 });

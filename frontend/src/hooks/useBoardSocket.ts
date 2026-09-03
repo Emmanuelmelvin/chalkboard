@@ -275,14 +275,14 @@ export function useBoardSocket(
       setRedoStack([]);
     };
 
-    const handleCursorMove = ({ userId, cursor }: { userId: string; cursor: Point }) => {
+    const handleCursorMove = ({ userId, cursor }: { userId: string; cursor: Point | null }) => {
       setCollaborators((prev) => {
         if (!prev[userId] || prev[userId].role === 'viewer') return prev;
         return {
           ...prev,
           [userId]: {
             ...prev[userId],
-            cursor,
+            cursor: cursor || undefined,
           },
         };
       });

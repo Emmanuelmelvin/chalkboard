@@ -32,6 +32,7 @@ export class ParallelCursorStreamer {
   private currentX = 0;
   private currentY = 0;
   private activeAbortController: AbortController | null = null;
+  private generation = 0;
 
   constructor(socket: AgentRoomSocket) {
     this.socket = socket;
@@ -48,16 +49,23 @@ export class ParallelCursorStreamer {
    * Immediately update known cursor position without glide.
    */
   setPosition(x: number, y: number): void {
-    this.currentX = x;
-    this.currentY = y;
-    this.socket.broadcastCursor(x, y);
+    const cx = clampCoord(x);
+    const cy = clampCoord(y);
+    this.currentX = cx;
+    this.currentY = cy;
+    this.socket.broadcastCursor(cx, cy);
   }
 
   /**
    * Smoothly glide cursor from current position to target coordinates in parallel.
    * Runs in the background and resolves without blocking callers.
+   * A newer glide/stream cancels the previous one via generation token —
+   * stale timers can never overwrite a newer position.
    */
   glideTo(targetX: number, targetY: number, steps = 8, intervalMs = 25): Promise<void> {
+    const tx = clampCoord(targetX);
+    const ty = clampCoord(targetY);
+    const myGeneration = ++this.generation;
     this.cancelActiveStream();
 
     const controller = new AbortController();
@@ -66,20 +74,26 @@ export class ParallelCursorStreamer {
 
     const startX = this.currentX;
     const startY = this.currentY;
-    const dx = targetX - startX;
-    const dy = targetY - startY;
+    const dx = tx - startX;
+    const dy = ty - startY;
+
+    const finish = () => {
+      if (this.activeAbortController === controller) this.activeAbortController = null;
+    };
 
     // If already very close, jump directly
     if (Math.hypot(dx, dy) < 5) {
-      this.setPosition(targetX, targetY);
+      this.setPosition(tx, ty);
+      finish();
       return Promise.resolve();
     }
 
     return new Promise<void>((resolve) => {
       let step = 0;
       const timer = setInterval(() => {
-        if (signal.aborted) {
+        if (signal.aborted || myGeneration !== this.generation) {
           clearInterval(timer);
+          finish();
           resolve();
           return;
         }
@@ -97,6 +111,7 @@ export class ParallelCursorStreamer {
 
         if (progress >= 1 || step >= steps) {
           clearInterval(timer);
+          finish();
           resolve();
         }
       }, intervalMs);
@@ -110,26 +125,36 @@ export class ParallelCursorStreamer {
   streamPath(points: Point[], maxSamplePoints = 16, intervalMs = 30): Promise<void> {
     if (!points || points.length === 0) return Promise.resolve();
 
+    const myGeneration = ++this.generation;
     this.cancelActiveStream();
     const controller = new AbortController();
     this.activeAbortController = controller;
     const signal = controller.signal;
 
-    // Subsample points to avoid flooding the websocket
+    const finish = () => {
+      if (this.activeAbortController === controller) this.activeAbortController = null;
+    };
+
+    // Subsample + clamp points to avoid flooding the websocket
     const stepSize = Math.max(1, Math.floor(points.length / maxSamplePoints));
     const sampled: Point[] = [];
     for (let i = 0; i < points.length; i += stepSize) {
-      sampled.push(points[i]);
+      const p = points[i];
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+        sampled.push({ x: clampCoord(p.x), y: clampCoord(p.y) });
+      }
     }
-    if (sampled[sampled.length - 1] !== points[points.length - 1]) {
-      sampled.push(points[points.length - 1]);
+    if (sampled.length === 0) {
+      finish();
+      return Promise.resolve();
     }
 
     return new Promise<void>((resolve) => {
       let idx = 0;
       const timer = setInterval(() => {
-        if (signal.aborted || idx >= sampled.length) {
+        if (signal.aborted || myGeneration !== this.generation || idx >= sampled.length) {
           clearInterval(timer);
+          finish();
           resolve();
           return;
         }
@@ -142,6 +167,7 @@ export class ParallelCursorStreamer {
 
         if (idx >= sampled.length) {
           clearInterval(timer);
+          finish();
           resolve();
         }
       }, intervalMs);
@@ -180,4 +206,21 @@ export class ParallelCursorStreamer {
       this.activeAbortController = null;
     }
   }
+
+  /**
+   * Dock = hide. Previously this glided +250/+250 on every task, drifting
+   * unboundedly off-canvas across tasks. Now it just cancels and hides.
+   */
+  async returnToDefaultDock(): Promise<void> {
+    this.generation++;
+    this.cancelActiveStream();
+    this.socket.broadcastCursor(null);
+  }
+}
+
+const MAX_COORD = 10_000_000;
+
+function clampCoord(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(-MAX_COORD, Math.min(MAX_COORD, Math.round(n)));
 }

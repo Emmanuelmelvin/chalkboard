@@ -100,9 +100,10 @@ Broadcast `cursor-move` before each tool via `extractCursorPosition`. Never dump
 
 ---
 
-## 4. Tool Catalog Taxonomy (23 tools, no plugins)
+## 4. Tool Catalog Taxonomy (18 socket tools + 5 UI-local = 23 WebMCP, no plugins)
 
 Agents do **not** use plugins — draw at ground level. `discover_plugins` / `load_plugin` removed.
+Agent-service exposes 18 socket-emitting tools; `navigate_viewport`, `move_cursor`, `toggle_fullscreen`, `trim`, `configure_tool` are UI-local only.
 
 ### Canvas Primitives (5)
 * `chalkboard_draw_chalk` — freehand stroke, one continuous stroke per call

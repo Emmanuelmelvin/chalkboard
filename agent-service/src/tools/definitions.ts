@@ -107,17 +107,17 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'chalkboard_select_and_transform',
-    description: 'Selects strokes and transforms: delete/rotate/nudge/color/size/duplicate/group/ungroup/deselect.',
+    description: 'Mutates existing strokes: delete/nudge/change_color/duplicate. select_only/deselect are local-only (no board change). rotate/change_size/group/ungroup are NOT supported and return errors.',
     parameters: {
       type: 'OBJECT',
       properties: {
         strokeIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Stroke IDs' },
-        action: { type: 'STRING', enum: ['select_only','delete','rotate','nudge','change_color','change_size','duplicate','group','ungroup','deselect'] },
-        rotationDegrees: { type: 'NUMBER', description: 'Degrees' },
+        action: { type: 'STRING', enum: ['select_only','delete','nudge','change_color','duplicate','deselect'] },
+        rotationDegrees: { type: 'NUMBER', description: 'Degrees (unsupported, will error)' },
         dx: { type: 'NUMBER', description: 'Nudge dx' },
         dy: { type: 'NUMBER', description: 'Nudge dy' },
         color: { type: 'STRING', description: 'Hex for change_color' },
-        size: { type: 'NUMBER', description: 'Size for change_size' },
+        size: { type: 'NUMBER', description: 'Size for change_size (unsupported, will error)' },
       },
       required: ['strokeIds','action'],
     },
@@ -149,7 +149,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'chalkboard_speak_narration',
-    description: 'Speaks text via Web Speech TTS (only if voice explicitly requested).',
+    description: 'Browser-only TTS intent (NOT spoken by the service). Only call if the user explicitly asked for voice; otherwise use chalkboard_send_chat. Always returns delivered:false.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -162,11 +162,11 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'chalkboard_clear_or_undo',
-    description: 'Undo/redo/clear board.',
+    description: 'Undo last stroke or clear the whole board. Redo is NOT supported — returns an error.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        action: { type: 'STRING', enum: ['undo','redo','clear'] },
+        action: { type: 'STRING', enum: ['undo','clear'] },
       },
       required: ['action'],
     },
@@ -241,11 +241,11 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'chalkboard_clipboard',
-    description: 'Clipboard: copy/cut/paste/duplicate selection.',
+    description: 'Duplicates the most recent stroke. copy/cut/paste are local UI ops with no board effect and return errors — only duplicate mutates the board.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        action: { type: 'STRING', enum: ['copy','cut','paste','duplicate'] },
+        action: { type: 'STRING', enum: ['duplicate'] },
       },
       required: ['action'],
     },

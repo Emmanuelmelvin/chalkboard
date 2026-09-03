@@ -6,6 +6,7 @@
  */
 
 import type { Point, Stroke } from '../types/index.js';
+import { randomUUID } from 'node:crypto';
 
 export const BASE_RADIUS = 80;
 
@@ -69,7 +70,7 @@ function createBaseStroke(
   suffix = '',
   extra: Partial<Stroke> = {}
 ): Stroke {
-  const id = `agent-shape-${Date.now()}-${Math.random().toString(36).slice(2, 6)}${suffix}`;
+  const id = `agent-shape-${Date.now()}-${randomUUID().slice(0, 8)}${suffix}`;
   return {
     id,
     userId: opts.userId || 'agent:chalkboard-master',

@@ -30,13 +30,19 @@ const envSchema = z.object({
   MAIN_BACKEND_SOCKET_URL: z.string().default('http://localhost:3000'),
   AGENT_SECRET: z.string().default('chalkboard_agent_internal_secret_key_2026'),
   MAX_TURNS_PER_INSTRUCTION: z.string().default('15').transform((val: string) => parseInt(val, 10)),
+  REASONING_TIMEOUT_MS: z.string().default('120000').transform((val: string) => parseInt(val, 10)),
 });
 
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
   logger.error('❌ Invalid environment variables for Agent Service', { error: parsed.error.format() });
-  if (process.env.NODE_ENV !== 'production' && !process.env.GEMINI_API_KEY) {
+  if (process.env.NODE_ENV === 'production') {
+    // Fail fast in production — starting with a placeholder key only
+    // produces confusing Gemini errors at request time.
+    throw new Error('Invalid environment variables for Agent Service (see log above). Refusing to start in production.');
+  }
+  if (!process.env.GEMINI_API_KEY) {
     logger.warn('GEMINI_API_KEY is not set. Set it in .env to enable real AI generation.');
   }
 }
@@ -58,6 +64,7 @@ export const config = parsed.success
       MAIN_BACKEND_SOCKET_URL: process.env.MAIN_BACKEND_SOCKET_URL || 'http://localhost:3000',
       AGENT_SECRET: process.env.AGENT_SECRET || 'chalkboard_agent_internal_secret_key_2026',
       MAX_TURNS_PER_INSTRUCTION: parseInt(process.env.MAX_TURNS_PER_INSTRUCTION || '15', 10),
+      REASONING_TIMEOUT_MS: parseInt(process.env.REASONING_TIMEOUT_MS || '120000', 10),
     };
 
 /**

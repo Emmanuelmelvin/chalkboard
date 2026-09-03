@@ -59,7 +59,7 @@ export async function notifyAgentToJoinRoom(roomId: string): Promise<boolean> {
 
     const res = await fetch(`${env.AGENT_SERVICE_URL.replace(/\/$/, '')}/sessions/join`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-agent-secret': env.AGENT_SERVICE_SECRET },
       body: JSON.stringify({ roomId }),
       signal: controller.signal,
     });
@@ -100,7 +100,7 @@ export async function notifyAgentToLeaveRoom(roomId: string): Promise<boolean> {
 
     await fetch(`${env.AGENT_SERVICE_URL.replace(/\/$/, '')}/sessions/leave`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-agent-secret': env.AGENT_SERVICE_SECRET },
       body: JSON.stringify({ roomId }),
       signal: controller.signal,
     });

@@ -154,8 +154,28 @@ async function executeChunkedWriteText(ctx: AgentBuildContext, args: any): Promi
 
 let cachedInstruction: string | null = null;
 
+/**
+ * ADK treats every `{identifier}` in the instruction as a session-state
+ * template variable and THROWS (`Context variable not found`) when it is
+ * absent — even lowercase ones like `{x}`. SYSTEM_INFO.md documents its
+ * context format with placeholders like `{ROOM_TITLE}` (values are injected
+ * per-turn via the user message, not the instruction), so those braces must
+ * be rendered inert. Anything shaped like a state key becomes `[key]`,
+ * which reads identically to the model; everything else is untouched.
+ */
+export function neutralizeAdkTemplates(instruction: string): string {
+  return instruction.replace(/\{+[^{}]*\}+/g, (raw) => {
+    const inner = raw.replace(/^\{+/, '').replace(/\}+$/, '').trim();
+    const key = inner.endsWith('?') ? inner.slice(0, -1) : inner;
+    if (/^(artifact\.[A-Za-z_]\w*|[A-Za-z_]\w*(?::[A-Za-z_]\w*)?)$/.test(key)) {
+      return `[${inner}]`;
+    }
+    return raw;
+  });
+}
+
 function getInstruction(): string {
-  if (!cachedInstruction) cachedInstruction = getStaticInstructions();
+  if (!cachedInstruction) cachedInstruction = neutralizeAdkTemplates(getStaticInstructions());
   return cachedInstruction;
 }
 

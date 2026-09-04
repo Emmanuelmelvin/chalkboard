@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMasterAgent, geminiSchemaToZod } from '../src/agent/masterAgent.js';
+import { buildMasterAgent, geminiSchemaToZod, neutralizeAdkTemplates } from '../src/agent/masterAgent.js';
 import { TOOL_DEFINITIONS } from '../src/tools/definitions.js';
+import { getStaticInstructions } from '../src/utils/loadSystemInfo.js';
 
 function createMockSocket() {
   return {
@@ -88,5 +89,23 @@ describe('Master ADK agent', () => {
     const b = mk();
     assert.notEqual(a.agent, b.agent);
     assert.notEqual(a.stats, b.stats);
+  });
+});
+
+describe('ADK instruction templates', () => {
+  it('neutralizes every {state-key} placeholder so ADK never throws', () => {
+    assert.equal(neutralizeAdkTemplates('Room Title: "{ROOM_TITLE}"'), 'Room Title: "[ROOM_TITLE]"');
+    assert.equal(neutralizeAdkTemplates('at ({x}, {y})'), 'at ({x}, {y})'.replace('{x}', '[x]').replace('{y}', '[y]'));
+    // Non-identifier braces (JSON, code) are left byte-identical
+    assert.equal(neutralizeAdkTemplates('{"role": "user"}'), '{"role": "user"}');
+    assert.equal(neutralizeAdkTemplates('{ x: 0, y: 80 }'), '{ x: 0, y: 80 }');
+  });
+
+  it('the real system instruction contains no resolvable ADK template', () => {
+    const neutralized = neutralizeAdkTemplates(getStaticInstructions());
+    const leftovers = [...neutralized.matchAll(/\{+[^{}]*\}+/g)]
+      .map((m) => m[0].replace(/^\{+/, '').replace(/\}+$/, '').trim().replace(/\?$/, ''))
+      .filter((key) => /^(artifact\.[A-Za-z_]\w*|[A-Za-z_]\w*(?::[A-Za-z_]\w*)?)$/.test(key));
+    assert.deepEqual(leftovers, []);
   });
 });

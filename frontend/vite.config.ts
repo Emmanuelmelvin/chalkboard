@@ -38,6 +38,13 @@ const sharedDir = fs.existsSync(path.resolve(__dirname, '../shared'))
 
 export default defineConfig({
   plugins: [react(), ...sentryPlugins],
+  // @ts-ignore - vitest types augment vite config
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    setupFiles: [],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

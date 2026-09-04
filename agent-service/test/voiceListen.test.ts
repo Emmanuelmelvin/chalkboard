@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { UtteranceSegmenter, frameRms } from '../src/voice/utteranceSegmenter.js';
-import { encodeWav, isAgentAddressed } from '../src/voice/transcriber.js';
+import { encodeWav, isAgentAddressed, transcribeUtterance } from '../src/voice/transcriber.js';
+import { AgentError } from '../src/utils/errors.js';
 
 function loudFrame(n = 160, amp = 8000): Int16Array {
   const f = new Int16Array(n);
@@ -62,5 +63,17 @@ describe('Transcriber helpers', () => {
     assert.equal(isAgentAddressed('please solve number five'), false);
     assert.equal(isAgentAddressed('I think the answer is x'), false);
     assert.equal(isAgentAddressed(''), false);
+  });
+
+  it('transcribeUtterance short-circuits without network (too short / too large)', async () => {
+    // <0.5s of audio → null, no API call
+    assert.equal(await transcribeUtterance(new Int16Array(100), 16000), null);
+    // >2MB wav → AgentError before any API call
+    const big = new Int16Array(1_500_000);
+    await assert.rejects(transcribeUtterance(big, 16000), (err: any) => {
+      assert.ok(err instanceof AgentError);
+      assert.equal(err.code, 'utterance_too_large');
+      return true;
+    });
   });
 });

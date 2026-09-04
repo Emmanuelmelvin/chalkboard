@@ -1,13 +1,15 @@
 /**
  * @file transcriber.ts
- * @description Speech-to-text for voice utterances via the Gemini audio API.
+ * @description Speech-to-text for voice utterances via a minimal ADK agent.
  * PCM is WAV-encoded in-process (no ffmpeg needed for this direction) and
- * sent as inline audio. Pure helpers are unit-tested; the live call is not.
+ * sent as inline audio through the ADK Runner. Pure helpers are
+ * unit-tested; the live call is not.
  */
 
-import { GoogleGenAI } from '@google/genai';
-import { config, getModelCandidateWaterfall } from '../config.js';
+import { InMemorySessionService, LlmAgent, Runner, isFinalResponse } from '@google/adk';
+import { getModelCandidateWaterfall } from '../config.js';
 import { AgentError } from '../utils/errors.js';
+import { ensureAdkAuth } from '../agent/adkEnv.js';
 import { logger } from '../utils/logger.js';
 
 /** Spoken triggers equivalent to an @Master chat mention. */
@@ -37,11 +39,22 @@ export function encodeWav(pcm: Int16Array, sampleRate: number): Buffer {
   return Buffer.concat([header, Buffer.from(pcm.buffer, pcm.byteOffset, dataBytes)]);
 }
 
-let sharedAi: GoogleGenAI | null = null;
+let sharedSessions: InMemorySessionService | null = null;
 
-function getAi(): GoogleGenAI {
-  if (!sharedAi) sharedAi = new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
-  return sharedAi;
+function getSessions(): InMemorySessionService {
+  if (!sharedSessions) sharedSessions = new InMemorySessionService();
+  return sharedSessions;
+}
+
+function buildTranscriber(model: string): LlmAgent {
+  ensureAdkAuth();
+  return new LlmAgent({
+    name: 'voice_transcriber',
+    description: 'Transcribes classroom voice utterances exactly.',
+    model,
+    instruction: 'Transcribe the attached classroom audio exactly. Reply with only the transcription, no commentary. If there is no intelligible speech, reply exactly NO_SPEECH.',
+    tools: [],
+  });
 }
 
 /**
@@ -58,21 +71,32 @@ export async function transcribeUtterance(pcm: Int16Array, sampleRate: number): 
   let lastError: any = null;
   for (const model of candidates.slice(0, 2)) {
     try {
-      const response = await getAi().models.generateContent({
-        model,
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: 'Transcribe this classroom audio exactly. Reply with only the transcription, no commentary. If there is no intelligible speech, reply exactly NO_SPEECH.' },
-              { inlineData: { mimeType: 'audio/wav', data: wav.toString('base64') } },
-            ],
-          },
-        ],
+      const runner = new Runner({ appName: 'chalkboard', agent: buildTranscriber(model), sessionService: getSessions() });
+      const stream = runner.runEphemeral({
+        userId: 'voice-transcriber',
+        newMessage: {
+          parts: [{ inlineData: { mimeType: 'audio/wav', data: wav.toString('base64') } }],
+        } as any,
       });
-      const text = (response as any).text?.trim();
-      if (!text || text === 'NO_SPEECH') return null;
-      return text;
+      let finalText = '';
+      let lastText = '';
+      for await (const event of stream) {
+        const parts = (event as any)?.content?.parts;
+        const text = Array.isArray(parts)
+          ? parts.map((p: any) => (typeof p?.text === 'string' ? p.text : '')).join('')
+          : '';
+        if (text) lastText = text;
+        let isFinal = false;
+        try {
+          isFinal = isFinalResponse(event as any);
+        } catch {
+          isFinal = false;
+        }
+        if (isFinal && text) finalText = text;
+      }
+      const out = (finalText || lastText).trim();
+      if (!out || out === 'NO_SPEECH') return null;
+      return out;
     } catch (err: any) {
       lastError = err;
       logger.warn('[Voice] transcription attempt failed', { model, error: err?.message || String(err) });

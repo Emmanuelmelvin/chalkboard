@@ -8,6 +8,7 @@
 
 import { InMemorySessionService, LlmAgent, Runner, isFinalResponse } from '@google/adk';
 import { config, getModelCandidateWaterfall } from '../config.js';
+import { brainClient } from '../http/httpClient.js';
 import { AgentError } from '../utils/errors.js';
 import { ensureAdkAuth } from '../agent/adkEnv.js';
 import { logger } from '../utils/logger.js';
@@ -114,26 +115,20 @@ export async function transcribeUtterance(pcm: Int16Array, sampleRate: number): 
 
 /** Bedrock path: Amazon Transcribe via the agent-brain (Bedrock LLMs take no audio). */
 async function transcribeViaBrain(wav: Buffer): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000);
   try {
-    const res = await fetch(`${config.BRAIN_URL.replace(/\/$/, '')}/transcribe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-agent-secret': config.AGENT_SECRET },
-      body: JSON.stringify({ wavBase64: wav.toString('base64') }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
+    const res = await brainClient().post(
+      '/transcribe',
+      { wavBase64: wav.toString('base64') },
+      { timeout: 60000 }
+    );
+    if (res.status !== 200) {
       logger.warn('[Voice] brain transcribe failed', { status: res.status });
       return null;
     }
-    const data = (await res.json()) as { ok?: boolean; text?: string | null };
-    const text = (data.text || '').trim();
+    const text = ((res.data as any)?.text || '').trim();
     return text || null;
   } catch (err: any) {
     logger.warn('[Voice] brain transcribe error', { error: err?.message || String(err) });
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }

@@ -19,6 +19,7 @@ import { AgentVoiceClient } from '../voice/voiceClient.js';
 import type { VoiceTranscript } from '../voice/voiceClient.js';
 import { isAgentAddressed } from '../voice/transcriber.js';
 import { buildMasterAgent } from './masterAgent.js';
+import { brainClient } from '../http/httpClient.js';
 import { createBoardToolStats, runBoardTool } from './boardToolRunner.js';
 import { createLessonStore, mergeLessons } from '../memory/lessonStore.js';
 import type { LessonEntry, LessonStore } from '../memory/lessonStore.js';
@@ -555,25 +556,22 @@ export class RoomSession {
     requestId: string
   ): Promise<{ turns: number; finalText: string; chatSent: boolean }> {
     logger.debug('[RoomSession] Sending prompt to agent-brain', { roomId: this.roomId, requestId, brain: config.BRAIN_URL });
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), config.REASONING_TIMEOUT_MS);
     try {
-      const res = await fetch(`${config.BRAIN_URL.replace(/\/$/, '')}/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-agent-secret': config.AGENT_SECRET },
-        body: JSON.stringify({
+      const res = await brainClient().post(
+        '/run',
+        {
           roomId: this.roomId,
           message,
           invokerRole,
           requestId,
           maxTurns: config.MAX_TURNS_PER_INSTRUCTION,
-        }),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
+        },
+        { timeout: config.REASONING_TIMEOUT_MS }
+      );
+      if (res.status !== 200) {
         throw new AgentError('brain_failed', `agent-brain returned ${res.status}`);
       }
-      const data = (await res.json()) as {
+      const data = res.data as {
         finalText?: string; turns?: number; chatSent?: boolean; toolCalls?: number; model?: string;
       };
       this.currentWorkingModel = data.model || 'bedrock';
@@ -581,12 +579,10 @@ export class RoomSession {
       logger.info('[RoomSession] Brain run completed', { roomId: this.roomId, requestId, turns: data.turns, model: data.model });
       return { turns: data.turns || 0, finalText: data.finalText || '', chatSent: Boolean(data.chatSent) };
     } catch (err: any) {
-      if (err?.name === 'AbortError') {
+      if (err instanceof AgentError && err.code === 'http_timeout') {
         throw new AgentError('reasoning_timeout', 'agent-brain run timed out');
       }
       throw err;
-    } finally {
-      clearTimeout(timer);
     }
   }
 

@@ -23,7 +23,7 @@ import {
 import type { Participant, Track } from '@livekit/rtc-node';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 import ffmpegPath from 'ffmpeg-static';
-import { config } from '../config.js';
+import { backendClient } from '../http/httpClient.js';
 import { AgentError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { UtteranceSegmenter } from './utteranceSegmenter.js';
@@ -124,17 +124,16 @@ export class AgentVoiceClient {
   async join(roomId: string): Promise<boolean> {
     if (this.connected && this.room) return true;
     try {
-      const res = await fetch(`${config.MAIN_BACKEND_HTTP_URL.replace(/\/$/, '')}/api/internal/agent/voice-token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-agent-secret': config.AGENT_SECRET },
-        body: JSON.stringify({ roomId }),
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!res.ok) {
+      const res = await backendClient().post(
+        '/api/internal/agent/voice-token',
+        { roomId },
+        { timeout: 10000 }
+      );
+      if (res.status !== 200) {
         logger.warn('[Voice] token fetch failed', { roomId, status: res.status });
         return false;
       }
-      const { url, token } = (await res.json()) as { url: string; token: string };
+      const { url, token } = res.data as { url: string; token: string };
       if (!url || !token) {
         logger.warn('[Voice] token response incomplete', { roomId });
         return false;

@@ -26,6 +26,21 @@ log = logging.getLogger("brain")
 
 TYPE_MAP = {"str": str, "float": float, "bool": bool, "list": list, "dict": dict}
 
+
+def summarize_args(tool_name: str, args: dict) -> dict:
+    """Compact, log-safe summary of tool args (points arrays collapse to counts)."""
+    summary = {}
+    for key, value in (args or {}).items():
+        if isinstance(value, list) and value and isinstance(value[0], dict) and "x" in value[0]:
+            summary[key] = f"[{len(value)} points]"
+        elif isinstance(value, str) and len(value) > 80:
+            summary[key] = value[:80] + "..."
+        elif isinstance(value, (dict, list)):
+            summary[key] = f"<{type(value).__name__} len={len(value)}>"
+        else:
+            summary[key] = value
+    return summary
+
 # Same neutralization as agent-service/src/agent/masterAgent.ts: ADK throws
 # `Context variable not found` for any {identifier} in the instruction.
 _TEMPLATE_RE = re.compile(r"\{+[^{}]*\}+")
@@ -65,11 +80,16 @@ class NodeCaller:
         self._request_id = request_id
         self.tool_calls = 0
         self.chat_sent = False
+        self.trace: list = []
 
     def __call__(self, tool_name: str, args: dict) -> Any:
         self.tool_calls += 1
         if tool_name == "chalkboard_send_chat":
             self.chat_sent = True
+        summary = summarize_args(tool_name, args)
+        self.trace.append({"tool": tool_name, "args": summary})
+        log.info("brain tool call", extra={"tool": tool_name, "tool_args": summary,
+                                           "request": self._request_id, "n": self.tool_calls})
         body = json.dumps({
             "roomId": self._room_id,
             "tool": tool_name,
@@ -181,9 +201,9 @@ async def run_master(message: str, user_id: str, room_id: str, invoker_role: str
                 final_text = last_text
             if final_text:
                 turns += 1
-            log.info("brain model succeeded %s turns=%d", model, turns)
+            log.info("brain model succeeded %s turns=%d tools=%d", model, turns, caller.tool_calls)
             return {"finalText": final_text, "turns": turns, "chatSent": caller.chat_sent,
-                    "toolCalls": caller.tool_calls, "model": model}
+                    "toolCalls": caller.tool_calls, "trace": caller.trace, "model": model}
         except Exception as exc:  # noqa: BLE001 — fall through the model list
             last_error = exc
             log.warning("brain model failed %s: %s", model, str(exc)[:300])

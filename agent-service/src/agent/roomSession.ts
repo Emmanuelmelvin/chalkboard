@@ -573,10 +573,23 @@ export class RoomSession {
       }
       const data = res.data as {
         finalText?: string; turns?: number; chatSent?: boolean; toolCalls?: number; model?: string;
+        trace?: Array<{ tool?: string; args?: unknown }>;
       };
       this.currentWorkingModel = data.model || 'bedrock';
       this.toolCalls += data.toolCalls || 0;
       logger.info('[RoomSession] Brain run completed', { roomId: this.roomId, requestId, turns: data.turns, model: data.model });
+      if (Array.isArray(data.trace)) {
+        for (const [i, step] of data.trace.entries()) {
+          logger.info('[RoomSession] Brain tool trace', {
+            roomId: this.roomId,
+            requestId,
+            n: i + 1,
+            of: data.trace.length,
+            tool: step?.tool,
+            args: JSON.stringify(step?.args).slice(0, 300),
+          });
+        }
+      }
       return { turns: data.turns || 0, finalText: data.finalText || '', chatSent: Boolean(data.chatSent) };
     } catch (err: any) {
       if (err instanceof AgentError && err.code === 'http_timeout') {

@@ -5,7 +5,10 @@ import base64
 import logging
 import os
 
+from dotenv import load_dotenv
 from flask import Flask, jsonify, request
+
+load_dotenv()  # local dev only: real deployments inject env directly (never overridden)
 
 from master import run_master
 from stt import transcribe_pcm
@@ -18,7 +21,7 @@ app = Flask(__name__)
 
 SECRET = os.environ.get("AGENT_SECRET", "")
 MODELS = [m.strip() for m in os.environ.get(
-    "BEDROCK_MODELS", "bedrock/anthropic.claude-3-5-haiku-20241022-v1:0").split(",") if m.strip()]
+    "BEDROCK_MODELS", "bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0").split(",") if m.strip()]
 RUN_TIMEOUT_S = float(os.environ.get("BRAIN_RUN_TIMEOUT_S", "110"))
 
 

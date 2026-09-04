@@ -6,7 +6,7 @@ import unittest
 sys.path.insert(0, ".")
 
 from app import app
-from master import build_agent, neutralize_templates
+from master import NodeCaller, build_agent, neutralize_templates, summarize_args
 from toolspec import EXPECTED_TOOL_NAMES, TOOL_SPECS
 
 
@@ -53,6 +53,62 @@ class TestNeutralize(unittest.TestCase):
 
     def test_code_braces_untouched(self):
         self.assertEqual(neutralize_templates('{"role": "user"}'), '{"role": "user"}')
+
+
+class TestSummarizeArgs(unittest.TestCase):
+    def test_points_collapse_to_counts(self):
+        out = summarize_args("chalkboard_draw_chalk", {
+            "points": [{"x": 1, "y": 2}] * 40, "color": "#fff"})
+        self.assertEqual(out["points"], "[40 points]")
+        self.assertEqual(out["color"], "#fff")
+
+    def test_long_strings_truncate(self):
+        out = summarize_args("chalkboard_send_chat", {"message": "x" * 200})
+        self.assertTrue(out["message"].endswith("..."))
+        self.assertEqual(len(out["message"]), 83)
+
+
+class TestNodeCallerTrace(unittest.TestCase):
+    def test_records_trace_and_stats_against_stub_node(self):
+        import json
+        import threading
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+
+        seen = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", 0))
+                seen.append(json.loads(self.rfile.read(length) or b"{}"))
+                body = json.dumps({"ok": True, "result": {"ok": True}}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            caller = NodeCaller(f"http://127.0.0.1:{server.server_port}",
+                                "s3cret", "room-1", "instructor", "req-1")
+            caller("chalkboard_insert_shape", {"shape": "circle", "x": 0, "y": 0})
+            caller("chalkboard_send_chat", {"message": "done"})
+        finally:
+            server.shutdown()
+
+        self.assertEqual(caller.tool_calls, 2)
+        self.assertTrue(caller.chat_sent)
+        self.assertEqual([t["tool"] for t in caller.trace],
+                         ["chalkboard_insert_shape", "chalkboard_send_chat"])
+        self.assertEqual(caller.trace[0]["args"]["shape"], "circle")
+        # Payload contract Node expects
+        self.assertEqual(seen[0]["roomId"], "room-1")
+        self.assertEqual(seen[0]["invokerRole"], "instructor")
+        self.assertEqual(seen[0]["requestId"], "req-1")
 
 
 class TestRoutes(unittest.TestCase):

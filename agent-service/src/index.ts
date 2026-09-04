@@ -33,6 +33,13 @@ const instructSchema = z.object({
   level: z.string().max(64).optional(),
   style: z.string().max(64).optional(),
 });
+const toolExecuteSchema = z.object({
+  roomId: roomIdSchema,
+  tool: z.string().min(1).max(128),
+  args: z.record(z.string(), z.any()).optional().default({}),
+  invokerRole: z.enum(['owner', 'instructor', 'viewer']).default('instructor'),
+  requestId: z.string().max(128).optional(),
+});
 
 // --- Internal auth: backend must send AGENT_SECRET ---
 function requireInternalAuth(req: Request, res: Response, next: NextFunction) {
@@ -70,6 +77,8 @@ app.get('/health', (_req: Request, res: Response) => {
     status: 'healthy',
     service: 'chalkboard-agent-service',
     model: config.GEMINI_MODEL,
+    provider: config.LLM_PROVIDER,
+    brainUrl: config.LLM_PROVIDER === 'bedrock' ? config.BRAIN_URL : undefined,
     activeRoomSessions: roomSessions.size,
     timestamp: new Date().toISOString(),
   });
@@ -144,6 +153,26 @@ app.post('/stop', requireInternalAuth, rateLimit(30), async (req: Request, res: 
   const session = roomSessions.get(roomId);
   if (session) { await session.stop(); roomSessions.delete(roomId); }
   res.json({ ok: true, message: `Agent stopped in ${roomId}` });
+});
+
+// Tool execution for the Python agent-brain (Bedrock path). Same AGENT_SECRET
+// auth; runs the identical boardToolRunner as the in-process ADK tools.
+app.post('/tools/execute', requireInternalAuth, rateLimit(120), async (req: Request, res: Response) => {
+  const parsed = toolExecuteSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ ok: false, error: 'invalid tool call' }); return; }
+  const { roomId, tool, args, invokerRole, requestId } = parsed.data;
+  const session = roomSessions.get(roomId);
+  if (!session || session.state === 'DISCONNECTED' || session.state === 'ERROR') {
+    res.status(404).json({ ok: false, error: 'no_active_session' });
+    return;
+  }
+  try {
+    const result = await session.executeBoardTool(tool, args, invokerRole, requestId || 'brain');
+    res.json({ ok: true, result });
+  } catch (err) {
+    logger.error('[Agent] tool execute error', { roomId, tool, error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ ok: false, error: 'tool_failed' });
+  }
 });
 
 app.listen(config.PORT, () => {

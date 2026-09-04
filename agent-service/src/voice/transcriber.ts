@@ -7,7 +7,7 @@
  */
 
 import { InMemorySessionService, LlmAgent, Runner, isFinalResponse } from '@google/adk';
-import { getModelCandidateWaterfall } from '../config.js';
+import { config, getModelCandidateWaterfall } from '../config.js';
 import { AgentError } from '../utils/errors.js';
 import { ensureAdkAuth } from '../agent/adkEnv.js';
 import { logger } from '../utils/logger.js';
@@ -60,12 +60,19 @@ function buildTranscriber(model: string): LlmAgent {
 /**
  * Transcribe one utterance. Returns trimmed text, or null when there is no
  * speech / the call fails (caller skips quietly — voice must never crash).
+ *
+ * Provider switch: with LLM_PROVIDER=bedrock, audio goes to the agent-brain
+ * (Amazon Transcribe — Bedrock LLMs take no audio input). Otherwise the
+ * in-process ADK transcriber agent is used.
  */
 export async function transcribeUtterance(pcm: Int16Array, sampleRate: number): Promise<string | null> {
   if (!pcm || pcm.length < sampleRate / 2) return null; // <0.5s, ignore
   const wav = encodeWav(pcm, sampleRate);
   if (wav.length > 2 * 1024 * 1024) {
     throw new AgentError('utterance_too_large', 'Voice utterance exceeds transcription size limit');
+  }
+  if (config.LLM_PROVIDER === 'bedrock') {
+    return transcribeViaBrain(wav);
   }
   const candidates = getModelCandidateWaterfall();
   let lastError: any = null;
@@ -103,4 +110,30 @@ export async function transcribeUtterance(pcm: Int16Array, sampleRate: number): 
     }
   }
   throw lastError || new AgentError('transcription_failed', 'All transcription attempts failed');
+}
+
+/** Bedrock path: Amazon Transcribe via the agent-brain (Bedrock LLMs take no audio). */
+async function transcribeViaBrain(wav: Buffer): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    const res = await fetch(`${config.BRAIN_URL.replace(/\/$/, '')}/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-agent-secret': config.AGENT_SECRET },
+      body: JSON.stringify({ wavBase64: wav.toString('base64') }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      logger.warn('[Voice] brain transcribe failed', { status: res.status });
+      return null;
+    }
+    const data = (await res.json()) as { ok?: boolean; text?: string | null };
+    const text = (data.text || '').trim();
+    return text || null;
+  } catch (err: any) {
+    logger.warn('[Voice] brain transcribe error', { error: err?.message || String(err) });
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }

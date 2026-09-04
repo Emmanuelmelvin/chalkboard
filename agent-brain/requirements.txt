@@ -1,0 +1,6 @@
+# Chalkboard Master agent-brain: ADK reasoning on AWS Bedrock.
+google-adk>=1.30
+litellm>=1.80
+flask>=3.0
+boto3>=1.35
+amazon-transcribe>=0.6

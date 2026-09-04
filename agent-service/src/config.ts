@@ -32,6 +32,8 @@ const envSchema = z.object({
   AGENT_SECRET: z.string().default('chalkboard_agent_internal_secret_key_2026'),
   MAX_TURNS_PER_INSTRUCTION: z.string().default('15').transform((val: string) => parseInt(val, 10)),
   REASONING_TIMEOUT_MS: z.string().default('120000').transform((val: string) => parseInt(val, 10)),
+  LLM_PROVIDER: z.enum(['gemini', 'bedrock']).default('gemini'),
+  BRAIN_URL: z.string().default('http://localhost:8081'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -66,6 +68,8 @@ export const config = parsed.success
       AGENT_SECRET: process.env.AGENT_SECRET || 'chalkboard_agent_internal_secret_key_2026',
       MAX_TURNS_PER_INSTRUCTION: parseInt(process.env.MAX_TURNS_PER_INSTRUCTION || '15', 10),
       REASONING_TIMEOUT_MS: parseInt(process.env.REASONING_TIMEOUT_MS || '120000', 10),
+      LLM_PROVIDER: (process.env.LLM_PROVIDER === 'bedrock' ? 'bedrock' : 'gemini') as 'gemini' | 'bedrock',
+      BRAIN_URL: process.env.BRAIN_URL || 'http://localhost:8081',
     };
 
 /**

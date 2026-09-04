@@ -1,12 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { env } from '@/config/env';
+import { AGENT_DISPLAY_NAME, AGENT_USER_ID } from '@/config/agent';
+import { timingSafeStringEqual } from '@/utils/crypto';
 import { createRoomVoiceToken } from '@/services/rooms/rooms.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
-
-export const AGENT_USER_ID = 'agent:chalkboard-master';
-export const AGENT_DISPLAY_NAME = 'Chalkboard Master (AI)';
 
 /**
  * Internal agent endpoints — authenticated by AGENT_SERVICE_SECRET, NOT by
@@ -21,7 +20,7 @@ const voiceTokenSchema = z.object({
 
 function checkAgentSecret(c: any) {
   const provided = c.req.header('x-agent-secret');
-  if (!provided || provided !== env.AGENT_SERVICE_SECRET) {
+  if (!timingSafeStringEqual(provided, env.AGENT_SERVICE_SECRET)) {
     throw new APIError('unauthorized', 401);
   }
 }

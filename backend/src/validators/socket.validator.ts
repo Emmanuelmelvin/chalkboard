@@ -274,6 +274,31 @@ export const voiceOwnerConnectionSchema = z.object({
   connected: z.boolean(),
 });
 
+/**
+ * Agent telemetry relayed to room members. Only the authenticated agent can
+ * emit it, but the schema still bounds every field: the payload is broadcast
+ * verbatim to every room member's browser.
+ */
+export const agentActivitySchema = z.object({
+  roomId: roomIdSchema,
+  stage: z.enum(['idle', 'thinking', 'planning', 'executing_tool', 'tool_result', 'clarifying', 'completed', 'error']),
+  requestId: z.string().max(128).optional(),
+  thought: z.string().max(2_000).optional(),
+  toolName: z.string().max(128).optional(),
+  toolAction: z.string().max(256).optional(),
+  toolSummary: z.string().max(512).optional(),
+  toolArgs: z.record(z.string(), z.unknown()).optional(),
+  resultSummary: z.string().max(2_000).optional(),
+  turnIndex: finiteNumber.int().min(0).max(10_000).optional(),
+  maxTurns: finiteNumber.int().min(0).max(10_000).optional(),
+  agentId: z.string().max(128).optional(),
+  displayName: z.string().max(128).optional(),
+}).superRefine((value, ctx) => {
+  addByteLimitIssue(value, SOCKET_LIMITS.maxPluginPayloadBytes, ctx, 'agent activity is too large');
+});
+
+export type AgentActivityPayload = z.infer<typeof agentActivitySchema>;
+
 export type SocketPayload =
   | z.infer<typeof joinRoomSchema>
   | z.infer<typeof strokeStartSchema>
@@ -289,4 +314,5 @@ export type SocketPayload =
   | z.infer<typeof pluginEventSchema>
   | z.infer<typeof voiceInviteSchema>
   | z.infer<typeof voiceRemoveSchema>
-  | z.infer<typeof voiceOwnerConnectionSchema>;
+  | z.infer<typeof voiceOwnerConnectionSchema>
+  | AgentActivityPayload;

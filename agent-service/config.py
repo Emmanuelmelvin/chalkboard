@@ -42,7 +42,7 @@ MAX_RETRIES: int = _int("MAX_RETRIES", 3)
 THINKING_BUDGET: int = _int("THINKING_BUDGET", 0)
 MAIN_BACKEND_HTTP_URL: str = _str("MAIN_BACKEND_HTTP_URL", "http://localhost:3000").rstrip("/")
 MAIN_BACKEND_SOCKET_URL: str = _str("MAIN_BACKEND_SOCKET_URL", "http://localhost:3000").rstrip("/")
-AGENT_SECRET: str = _str("AGENT_SECRET", "chalkboard_agent_internal_secret_key_2026")
+AGENT_SECRET: str = os.environ.get("AGENT_SECRET", "").strip()
 MAX_TURNS_PER_INSTRUCTION: int = _int("MAX_TURNS_PER_INSTRUCTION", 15)
 REASONING_TIMEOUT_S: float = _int("REASONING_TIMEOUT_MS", 120000) / 1000.0
 
@@ -74,6 +74,14 @@ def validate_or_warn() -> None:
     import logging
 
     log = logging.getLogger("agent-service")
+    # Fail closed: this shared secret is the only thing authenticating the
+    # agent against the backend, so it must come from the environment and
+    # match the backend's AGENT_SERVICE_SECRET. Never ship a default.
+    if len(AGENT_SECRET) < 32:
+        raise RuntimeError(
+            "AGENT_SECRET is required (min 32 chars) and must match the backend's "
+            "AGENT_SERVICE_SECRET. Generate one with: openssl rand -hex 32"
+        )
     if LLM_PROVIDER == "gemini" and not GEMINI_API_KEY and NODE_ENV == "production":
         raise RuntimeError("GEMINI_API_KEY is required in production for LLM_PROVIDER=gemini")
     if LLM_PROVIDER == "gemini" and not GEMINI_API_KEY:

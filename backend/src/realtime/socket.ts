@@ -43,12 +43,15 @@ import { logger } from '@/utils/logger';
 import { captureSocketError } from '@/utils/monitoring';
 import { failed, hit, metricNames, record, timed } from '@/utils/metrics';
 import { env, isAllowedCorsOrigin } from '@/config/env';
+import { AGENT_DISPLAY_NAME, AGENT_USER_ID } from '@/config/agent';
+import { timingSafeStringEqual } from '@/utils/crypto';
 import { notifyAgentToJoinRoom } from '@/services/rooms/roomAgent.service';
 
 import { checkRateLimit } from '@/services/infra/rateLimiter.service';
 import { authenticateSocketSession } from '@/services/auth/auth.service';
 import {
   SOCKET_LIMITS,
+  agentActivitySchema,
   clearBoardSchema,
   chatMessageSchema,
   cursorMoveSchema,
@@ -68,6 +71,7 @@ import {
   voiceInviteSchema,
   voiceOwnerConnectionSchema,
   voiceRemoveSchema,
+  type AgentActivityPayload,
 } from '@/validators/socket.validator';
 
 type SocketAckResponse = {
@@ -245,11 +249,11 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     return;
   }
 
-  const isAgent = Boolean(
-    user.id?.startsWith('agent:') ||
-    user.id?.includes('chalkboard-master') ||
-    socket.handshake.auth?.isAgent
-  );
+  // Agent-ness comes only from the handshake middleware, which sets it after
+  // verifying the shared secret. Checking handshake.auth here instead would let
+  // any signed-in user skip join approval, passwords, and duplicate-session
+  // checks by sending isAgent: true.
+  const isAgent = socket.data.isAgent === true;
   let role: 'owner' | 'instructor' | 'viewer' = 'instructor';
 
   if (!isAgent) {
@@ -431,25 +435,22 @@ async function handleChatMessage(io: Server, socket: any, payload: unknown, ack?
   const actor = getSocketMeta(socket.id);
   const roomDetails = await getRoomWithMembers(data.roomId);
   const memberIds = new Set((roomDetails?.members ?? []).map((member: { userId: string }) => member.userId));
-  memberIds.add('agent:chalkboard-master');
+  memberIds.add(AGENT_USER_ID);
   memberIds.add('chalkboard-master');
 
   const mentionedUserIds = [...new Set(data.mentionedUserIds)]
     .filter((mentionedUserId) => mentionedUserId !== actor?.userId && (memberIds.has(mentionedUserId) || mentionedUserId === '__all__' || mentionedUserId.startsWith('agent:')));
 
   const user = socket.data.user;
-  const isAgentSender = Boolean(
-    actor?.userId?.startsWith('agent:') ||
-    user?.id?.startsWith('agent:') ||
-    actor?.userId?.includes('chalkboard-master') ||
-    socket.handshake.auth?.isAgent
-  );
+  // Same rule as join-room: only the middleware-verified agent socket may send
+  // chat under the agent identity, never a client that merely claims isAgent.
+  const isAgentSender = socket.data.isAgent === true;
 
   const message = {
     id: randomUUID(),
     roomId: data.roomId,
-    userId: isAgentSender ? 'agent:chalkboard-master' : (actor?.userId || user?.id),
-    displayName: isAgentSender ? 'Chalkboard Master (AI)' : (user?.displayName ?? 'Classmate'),
+    userId: isAgentSender ? AGENT_USER_ID : (actor?.userId || user?.id),
+    displayName: isAgentSender ? AGENT_DISPLAY_NAME : (user?.displayName ?? 'Classmate'),
     avatarUrl: isAgentSender ? null : (user?.avatarUrl ?? null),
 
     message: data.message,
@@ -683,9 +684,9 @@ async function handleVoiceMembershipAction(
     return;
   }
 
-  const isAgentTarget = data.targetUserId === 'agent:chalkboard-master' || data.targetUserId?.includes('chalkboard-master');
+  const isAgentTarget = data.targetUserId === AGENT_USER_ID || data.targetUserId?.includes('chalkboard-master');
   const targetMember = isAgentTarget
-    ? { userId: data.targetUserId, displayName: 'Chalkboard Master (AI)' }
+    ? { userId: data.targetUserId, displayName: AGENT_DISPLAY_NAME }
     : roomDetails.members.find((member: { userId: string; displayName?: string }) => member.userId === data.targetUserId);
   if (!targetMember) {
     rejectEvent(socket, event, 'target_not_found', ack, data.roomId);
@@ -855,14 +856,23 @@ export async function attachSocket(server: any) {
 
   io.use(async (socket, next) => {
     try {
-      // Support internal Chalkboard Agent Service connections
+      // Support internal Chalkboard Agent Service connections. An agent claim
+      // is honored only with the exact shared secret, compared in constant
+      // time; the identity is then pinned server-side. Handlers must derive
+      // agent-ness from socket.data.isAgent — never from handshake fields,
+      // which any connected client can set to arbitrary values.
       const auth = socket.handshake.auth;
-      if (auth?.isAgent && (auth?.token === env.AUTH_SESSION_SECRET || auth?.token === 'chalkboard_agent_internal_secret_key_2026')) {
+      if (auth?.isAgent) {
+        if (!timingSafeStringEqual(auth.token, env.AGENT_SERVICE_SECRET)) {
+          logger.warn('Socket agent authentication rejected', { socketId: socket.id });
+          failed(metricNames.socketConnected, { reason: 'agent_auth_failed' });
+          return next(new Error('unauthorized'));
+        }
+        socket.data.isAgent = true;
         socket.data.user = {
-          id: auth.agentId?.startsWith('agent:') ? auth.agentId : 'agent:chalkboard-master',
-          displayName: auth.displayName || 'Chalkboard Master (AI)',
+          id: AGENT_USER_ID,
+          displayName: AGENT_DISPLAY_NAME,
           email: 'agent@chalkboard.local',
-
           role: 'instructor',
           avatarUrl: null,
         };
@@ -1035,12 +1045,18 @@ export async function attachSocket(server: any) {
       runSafely(socket, 'member:update-role', ack, () => handleMemberRoleUpdate(io, socket, payload, ack));
     });
 
-    // Relay agent thinking, stage, and tool activity telemetry to all room members
+    // Relay agent thinking, stage, and tool activity telemetry to all room
+    // members. Locked to the authenticated agent socket and to rooms it has
+    // actually joined; the payload is schema-bounded before broadcast.
     socket.on('agent:activity', (payload, ack) => {
       runSafely(socket, 'agent:activity', ack, () => {
-        const roomId = payload?.roomId || getSocketMeta(socket.id)?.roomId;
-        if (!roomId) return sendAck(ack, { ok: false, error: 'roomId required' });
-        io.to(roomId).emit('agent:activity', payload);
+        if (socket.data.isAgent !== true) {
+          rejectEvent(socket, 'agent:activity', 'forbidden', ack);
+          return;
+        }
+        const data = parsePayload<AgentActivityPayload>(socket, 'agent:activity', agentActivitySchema, payload, ack);
+        if (!data || !isJoinedRoom(socket, data.roomId, 'agent:activity', ack)) return;
+        io.to(data.roomId).emit('agent:activity', data);
         sendAck(ack, { ok: true });
       });
     });

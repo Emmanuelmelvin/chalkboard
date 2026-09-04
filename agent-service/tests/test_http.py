@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import os
 
-os.environ.setdefault("AGENT_SECRET", "test-secret")
+os.environ.setdefault("AGENT_SECRET", "test-agent-secret-0123456789abcdef0123456789abcdef")
 os.environ.setdefault("LLM_PROVIDER", "gemini")
 
 import app as service

@@ -11,6 +11,7 @@ Rate limits: join/leave/stop 30/min, instruct 20/min (per IP+path, in-memory).
 
 from __future__ import annotations
 
+import hmac
 import re
 import threading
 import time
@@ -49,7 +50,10 @@ def require_auth(fn):
         provided = request.headers.get("x-agent-secret")
         auth = request.headers.get("authorization") or ""
         bearer = auth[7:] if auth.startswith("Bearer ") else None
-        if (provided or bearer) != config.AGENT_SECRET:
+        candidate = provided or bearer
+        if not isinstance(candidate, str) or not hmac.compare_digest(
+            candidate.encode("utf-8"), config.AGENT_SECRET.encode("utf-8")
+        ):
             return jsonify({"ok": False, "error": "unauthorized"}), 401
         return fn(*args, **kwargs)
     return _wrap

@@ -1,0 +1,2 @@
+# STT via Amazon Transcribe streaming (STT_BACKEND=aws, LLM_PROVIDER=bedrock)
+amazon-transcribe==0.6.3

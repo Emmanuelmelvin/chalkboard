@@ -158,13 +158,24 @@ def instruct():
     if not room_id or not prompt:
         return jsonify({"error": "roomId and prompt required"}), 400
     requested_by = str(body.get("requestedBy") or "Classmate").strip()[:128] or "Classmate"
-    session = sessions.get(room_id)
-    if session and session.state == "IDLE_OBSERVING":
-        threading.Thread(target=_run_instruct, args=(session, prompt, requested_by), daemon=True).start()
-        return jsonify({"ok": True, "message": "Chalkboard Master received instruction",
-                        "roomId": room_id, "prompt": prompt})
-    ephemeral = RoomSession(room_id)
+    # Reuse an existing usable session so /stop can reach it and concurrent
+    # instructs queue on the same session. Only when no usable session exists
+    # create a *tracked* ephemeral: stored in `sessions` so /stop and
+    # /sessions/status can see it, and with locked start/cleanup so a racing
+    # /stop cannot orphan it.
+    with _sessions_lock:
+        session = sessions.get(room_id)
+        if session and session.state not in ("DISCONNECTED", "ERROR"):
+            threading.Thread(target=_run_instruct, args=(session, prompt, requested_by), daemon=True).start()
+            return jsonify({"ok": True, "message": "Chalkboard Master received instruction",
+                            "roomId": room_id, "prompt": prompt})
+        # No usable session — create a tracked ephemeral.
+        ephemeral = RoomSession(room_id)
+        sessions[room_id] = ephemeral
     if not ephemeral.start():
+        with _sessions_lock:
+            if sessions.get(room_id) is ephemeral:
+                sessions.pop(room_id, None)
         return jsonify({"error": "Failed to join room"}), 500
     threading.Thread(target=_run_ephemeral, args=(ephemeral, prompt, requested_by), daemon=True).start()
     return jsonify({"ok": True, "message": "Chalkboard Master joining and preparing lesson",
@@ -188,6 +199,12 @@ def _run_ephemeral(session: RoomSession, prompt: str, requested_by: str) -> None
             session.stop()
         except Exception:
             pass
+        # Clean up the tracked ephemeral so a later /instruct or /sessions/join
+        # sees a fresh state, but only if the same object is still stored —
+        # avoids removing a newer session created after this ephemeral started.
+        with _sessions_lock:
+            if sessions.get(session.room_id) is session:
+                sessions.pop(session.room_id, None)
 
 
 @app.post("/stop")

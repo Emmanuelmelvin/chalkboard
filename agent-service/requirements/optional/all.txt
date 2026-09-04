@@ -1,0 +1,4 @@
+-r whisper.txt
+-r firestore.txt
+-r bedrock.txt
+-r transcribe.txt

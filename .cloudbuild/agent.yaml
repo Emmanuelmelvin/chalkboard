@@ -26,6 +26,12 @@ steps:
       - 'gcr.io/${PROJECT_ID}/chalkboard-agent-service:latest'
 
   # 3. Deploy agent-service to Google Cloud Run
+  # Security: agent-service exposes LLM-spending endpoints (/instruct, /sessions/join).
+  # It must NOT be public. --no-allow-unauthenticated + --ingress internal ensure only
+  # callers with run.invoker (the backend's service account) can reach it; the
+  # x-agent-secret header remains as a second, app-level layer. Do not revert to
+  # --allow-unauthenticated without also adding equivalent network/IAM protection
+  # and documenting the LLM cost risk.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -38,7 +44,11 @@ steps:
       - '$_REGION'
       - '--platform'
       - 'managed'
-      - '--allow-unauthenticated'
+      - '--no-allow-unauthenticated'
+      - '--ingress'
+      - 'internal'
+      - '--min-instances'
+      - '0'
 
 # Default substitutions (can be overridden in Cloud Build Trigger UI)
 substitutions:

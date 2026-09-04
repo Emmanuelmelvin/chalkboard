@@ -358,7 +358,9 @@ class AgentVoiceClient:
         mp3 = await _synthesize()
         if not mp3:
             raise RuntimeError("TTS returned no audio")
-        pcm = _decode_to_pcm48k(mp3)
+        # ffmpeg is a blocking subprocess — keep it off the voice loop so RX
+        # streams and concurrent publishes never stall behind a synthesis.
+        pcm = await asyncio.get_running_loop().run_in_executor(None, _decode_to_pcm48k, mp3)
         # pad ~200ms silence on both ends so nothing clips
         silence = b"\x00\x00" * SAMPLES_PER_FRAME * 20
         padded = silence + pcm + silence
@@ -440,18 +442,21 @@ class AgentVoiceClient:
                     except Exception:
                         pass
                     continue
-                # convert frame to int16 numpy array
+                # convert frame to int16 numpy array. frame.data is a
+                # memoryview over s16le samples — bytes() first so both real
+                # frames and test fakes convert identically.
                 try:
                     import numpy as _np  # type: ignore
 
-                    # frame.data is memoryview of int16 (h)
-                    # use numpy to copy - robust to both bytes and memoryview
                     try:
-                        arr = _np.array(frame.data, dtype=_np.int16)
+                        raw = bytes(frame.data)
                     except Exception:
-                        # fallback: bytes
-                        raw = bytes(frame.data) if hasattr(frame.data, "__bytes__") else bytes(memoryview(frame.data).cast("B"))
-                        arr = _np.frombuffer(raw, dtype=_np.int16).copy()
+                        raw = bytes(memoryview(frame.data).cast("B"))
+                    if len(raw) % 2:
+                        raw = raw[:-1]
+                    arr = _np.frombuffer(raw, dtype=_np.int16).copy()
+                    if arr.size == 0:
+                        continue
                 except Exception:
                     continue
 
@@ -498,8 +503,9 @@ class AgentVoiceClient:
             logger.warning("listen loop ended room=%s identity=%s: %s", room_id, identity, exc)
         finally:
             try:
-                # AudioStream cleanup - close if possible
-                if hasattr(stream, "close"):
+                if hasattr(stream, "aclose"):
+                    await stream.aclose()
+                elif hasattr(stream, "close"):
                     stream.close()
             except Exception:
                 pass

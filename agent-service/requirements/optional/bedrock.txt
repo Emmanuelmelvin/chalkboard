@@ -1,0 +1,4 @@
+# Bedrock LLM (LLM_PROVIDER=bedrock) + optional AWS STT
+boto3==1.43.88
+botocore==1.43.88
+litellm==1.99.0

@@ -3,12 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "npx --yes concurrently -n \"backend,agent,frontend\" -c \"blue.bold,magenta.bold,cyan.bold\" --kill-others \"npm run dev --prefix backend\" \"npm run dev --prefix agent-service\" \"npm run dev --prefix frontend\"",
+    "dev": "npx --yes concurrently -n \"backend,agent,frontend\" -c \"blue.bold,magenta.bold,cyan.bold\" --kill-others \"npm run dev --prefix backend\" \"python agent-service/app.py\" \"npm run dev --prefix frontend\"",
     "dev:backend": "npm run dev --prefix backend",
-    "dev:agent": "npm run dev --prefix agent-service",
+    "dev:agent": "python agent-service/app.py",
     "dev:frontend": "npm run dev --prefix frontend",
-    "test": "npm test --prefix agent-service && npm test --prefix backend",
-    "build": "npm run build --prefix backend && npm run build --prefix agent-service && npm run build --prefix frontend"
+    "test": "python -m pytest agent-service/tests -q && npm test --prefix backend",
+    "build": "npm run build --prefix backend && python -m compileall -q agent-service && npm run build --prefix frontend"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

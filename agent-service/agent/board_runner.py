@@ -13,6 +13,7 @@ from agent.activity import format_tool_activity
 from agent.cursor import (
     CHUNK_GLIDE_INTERVAL_MS,
     CHUNK_GLIDE_STEPS,
+    CHUNK_PAUSE_MS,
     GLIDE_HOLD_MS,
     GLIDE_INTERVAL_MS,
     GLIDE_STEPS,
@@ -174,7 +175,7 @@ def _execute_chunked_write_text(ctx: dict, args: dict):
             pass
         cur_x += len(chunk_text) * char_w + gap
         if idx < len(chunks) - 1:
-            time.sleep(0.18)
+            time.sleep(CHUNK_PAUSE_MS / 1000.0)
     import json
     return {"content": [{"type": "text", "text": json.dumps(
         {"success": True, "originalText": raw_text, "chunks": chunks, "results": results})}]}

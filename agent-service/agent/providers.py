@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import time
 from typing import Any, Optional
 
 import config
@@ -102,6 +103,7 @@ class DirectCaller:
             return run_board_tool(self._ctx, self._stats, tool_name, args)
         finally:
             _ms = int((_time.perf_counter() - _start) * 1000)
+            self._stats["toolMs"] = self._stats.get("toolMs", 0) + _ms
             logger.info("tool=%s args=%s %sms", tool_name, summary, _ms)
 
 
@@ -182,6 +184,7 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
     policy = get_policy_metadata()
     session_service = InMemorySessionService()
     last_error: Exception | None = None
+    _t0 = time.perf_counter()
 
     for model in candidates:
         logger.debug("attempting model=%s provider=%s", model, config.LLM_PROVIDER)
@@ -218,6 +221,12 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                     final_text = last_text
                 if final_text:
                     turns += 1
+                total_ms = int((time.perf_counter() - _t0) * 1000)
+                tool_ms = stats.get("toolMs", 0)
+                logger.info(
+                    "reasoning timing model=%s totalMs=%s toolMs=%s modelMs=%s toolCalls=%s turns=%s",
+                    model, total_ms, tool_ms, max(0, total_ms - tool_ms),
+                    stats.get("toolCalls", 0), turns)
                 logger.info("model succeeded model=%s turns=%s policy=%s/%s prompt_chars=%s",
                             model, turns, policy["version"], str(policy["sha256"])[:12], len(message))
                 return {"finalText": final_text, "turns": turns, "model": model,

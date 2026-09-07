@@ -7,6 +7,7 @@ glide_to / stream_path / start_parallel_tool_cursor remain for compat.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 
@@ -15,14 +16,33 @@ from agent.activity import extract_cursor_position
 MAX_COORD = 10_000_000
 
 # Human-like defaults — pen arrives, ink appears, brief hold.
+# CURSOR_SPEED scales every animation interval: 1.0 (default) = unchanged,
+# 2.0 = twice as fast, 0.5 = slower. Individual values can be tuned with the
+# env vars below; CURSOR_SPEED is the global knob (see THREADING.md sibling
+# agent-service/.env.example for documented values).
+def _cursor_speed() -> float:
+    try:
+        value = float(os.environ.get("CURSOR_SPEED", "1"))
+    except (TypeError, ValueError):
+        return 1.0
+    return max(0.25, min(8.0, value))
+
+
+_CURSOR_SPEED = _cursor_speed()
+
+
+def _ms(base_ms: int, floor_ms: int = 8) -> int:
+    return max(floor_ms, round(base_ms / _CURSOR_SPEED))
+
+
 GLIDE_STEPS = 20
-GLIDE_INTERVAL_MS = 48         # ~960ms total glide
-GLIDE_HOLD_MS = 120
-DRAW_INTERVAL_MS = 52          # ~19 pts/sec when tracing after emit
-POST_DRAW_INTERVAL_MS = 36     # faster flourish after ink
+GLIDE_INTERVAL_MS = _ms(48)         # ~960ms total glide at speed 1.0
+GLIDE_HOLD_MS = _ms(120, floor_ms=0)
+DRAW_INTERVAL_MS = _ms(52)          # ~19 pts/sec when tracing after emit
+POST_DRAW_INTERVAL_MS = _ms(36)     # faster flourish after ink
 CHUNK_GLIDE_STEPS = 14
-CHUNK_GLIDE_INTERVAL_MS = 42
-CHUNK_PAUSE_MS = 180
+CHUNK_GLIDE_INTERVAL_MS = _ms(42)
+CHUNK_PAUSE_MS = _ms(180, floor_ms=0)
 
 VISUAL_TOOLS = {
     "chalkboard_draw_chalk",

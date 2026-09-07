@@ -24,7 +24,7 @@ def _bare_socket() -> AgentRoomSocket:
     s._handlers = defaultdict(set)
     s.context_lock = threading.RLock()
     s._event_queue = __import__("queue").Queue()
-    s._dispatcher_started = False
+    s._dispatch_thread = None
     s._dispatcher_lock = threading.Lock()
     return s
 
@@ -86,3 +86,26 @@ def test_slow_handler_does_not_stall_socket_event_processing():
         "handlers are running on the socket thread again")
     assert arrived.wait(5), "queued event never dispatched"
     assert s.context["chat"][0]["id"] == "m1"
+
+
+def test_dispatcher_restarts_after_close():
+    """close() stops the dispatcher with a sentinel. If the same socket object
+    is reused afterwards (reconnect flow / session restart), the dispatcher
+    must come back — otherwise every chat mention queues forever and the agent
+    silently ignores the room."""
+    s = AgentRoomSocket("room-restart")
+    got = threading.Event()
+    s.on_socket_event("chat:message", lambda p: got.set())
+
+    s._emit_local("chat:message", {"first": True})
+    assert got.wait(5), "initial dispatch failed"
+    s.close()
+
+    # simulate a reconnect on the same instance: connect() + RoomSession.start()
+    # re-register handlers, just like session._attach() does
+    s._closed = False
+    s._connected = True
+    s.on_socket_event("chat:message", lambda p: got.set())
+    got.clear()
+    s._emit_local("chat:message", {"second": True})
+    assert got.wait(5), "dispatcher did not restart after close() — chat events are being dropped"

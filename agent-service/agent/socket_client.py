@@ -1,4 +1,4 @@
-"""Regular socket user daemon (mirrors src/socket/agentSocket.ts).
+"""Regular socket user daemon
 
 Joins a room as agent:chalkboard-master (instructor), listens to all room
 events, and maintains bounded context for reasoning. Uses python-socketio.
@@ -16,6 +16,9 @@ import config
 from logger import logger
 
 MAX_COORD = 10_000_000
+# How long an idle dispatcher thread waits before retiring itself after the
+# socket has been closed (see _dispatch_loop).
+DISPATCH_IDLE_TIMEOUT_S = 30.0
 
 
 def _with_context_lock(method):
@@ -91,7 +94,7 @@ class AgentRoomSocket:
         self._handlers: dict[str, set[Callable]] = defaultdict(set)
         self.context_lock = threading.RLock()
         self._event_queue: queue.Queue = queue.Queue()
-        self._dispatcher_started = False
+        self._dispatch_thread: threading.Thread | None = None
         self._dispatcher_lock = threading.Lock()
         self._connected = False
         self._closed = False
@@ -224,7 +227,6 @@ class AgentRoomSocket:
                 pass
             self._heartbeat = None
         self._handlers.clear()
-        self._event_queue.put((None, None))
         if self.sio is not None:
             try:
                 self.sio.disconnect()
@@ -254,25 +256,50 @@ class AgentRoomSocket:
         self._event_queue.put((event, payload))
 
     def _ensure_dispatcher(self) -> None:
-        if self._dispatcher_started:
+        """Start (or restart) the dispatcher thread.
+
+        The dispatcher retires itself when the socket is closed and idle. If
+        this socket object is reused afterwards (reconnect flow, session
+        restart), the thread must come back — otherwise every _emit_local
+        event queues forever and the session silently stops reacting to chat
+        mentions.
+        """
+        t = self._dispatch_thread
+        if t is not None and t.is_alive():
             return
         with self._dispatcher_lock:
-            if self._dispatcher_started:
+            t = self._dispatch_thread
+            if t is not None and t.is_alive():
                 return
-            self._dispatcher_started = True
-            threading.Thread(target=self._dispatch_loop, daemon=True,
-                             name="socket-event-dispatch").start()
+            self._dispatch_thread = threading.Thread(
+                target=self._dispatch_loop, daemon=True, name="socket-event-dispatch")
+            self._dispatch_thread.start()
 
     def _dispatch_loop(self) -> None:
+        current = threading.current_thread()
         while True:
-            event, payload = self._event_queue.get()
-            if event is None:
-                return
+            try:
+                event, payload = self._event_queue.get(timeout=DISPATCH_IDLE_TIMEOUT_S)
+            except queue.Empty:
+                # Idle. Retire only when the socket is closed and nothing is
+                # pending, under the same lock _ensure_dispatcher uses — that
+                # closes the race where a dying consumer strands queued events.
+                with self._dispatcher_lock:
+                    if (self._closed and self._event_queue.empty()
+                            and self._dispatch_thread is current):
+                        self._dispatch_thread = None
+                        return
+                    continue
+            if event is None:  # defensive: ignore poison placeholders
+                continue
             for h in list(self._handlers.get(event, ())):
                 try:
                     h(payload)
                 except Exception:
-                    pass
+                    # Never silent: a raising handler must be diagnosable from
+                    # logs alone, since it runs off-thread with no caller.
+                    logger.exception("local event handler failed event=%s room=%s",
+                                     event, getattr(self, "room_id", "?"))
 
     def _push_full_stroke(self, stroke: dict) -> None:
         if any(st.get("id") == stroke.get("id") for st in self.context["strokes"]):

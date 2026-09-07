@@ -26,7 +26,11 @@ Each thread waited on something only the other could release.
 2. **Local event handlers run on the `socket-event-dispatch` thread, never
    under `context_lock`.** `AgentRoomSocket._emit_local` only enqueues;
    `_dispatch_loop` invokes handlers. Keep it that way — a blocking handler
-   must cost one stalled event, not the whole session.
+   must cost one stalled event, not the whole session. The dispatcher retires
+   itself only when the socket is closed AND idle, and `_ensure_dispatcher`
+   restarts it on the next event — never assume it is dead, and never poison
+   its queue with stop sentinels (a FIFO sentinel strands every event queued
+   behind it).
 3. **`enqueue_reasoning_task` is fire-and-forget by default.** Only pass
    `wait=True` from a thread that holds no locks and genuinely needs the
    result (currently only the ephemeral-session lifecycle in `app.py`).
@@ -40,6 +44,8 @@ Each thread waited on something only the other could release.
   enqueue must return immediately while the caller holds `context_lock`.
 - `tests/test_socket_events.py::test_emit_local_does_not_run_handlers_under_context_lock`
 - `tests/test_socket_events.py::test_slow_handler_does_not_stall_socket_event_processing`
+- `tests/test_socket_events.py::test_dispatcher_restarts_after_close` —
+  chat events must flow again after close() + reconnect on the same socket.
 
 If a change fails one of these, the change is re-introducing the deadlock —
 fix the design, do not loosen the test.

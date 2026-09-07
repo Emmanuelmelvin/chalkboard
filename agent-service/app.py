@@ -274,6 +274,25 @@ def tools_execute():
 
 
 if __name__ == "__main__":
+    # Windows allows a second dev server to silently double-bind the same port
+    # (Werkzeug sets SO_REUSEADDR), which splits rooms across old and new
+    # processes. Refuse to start when another agent-service already answers.
+    try:
+        import urllib.request
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{config.PORT}/health", timeout=2) as resp:
+            import json
+            body = json.loads(resp.read() or b"{}")
+        if body.get("service") == "chalkboard-agent-service":
+            logger.error(
+                "Another chalkboard-agent-service is already running on port %s — "
+                "kill the old process (netstat -ano | findstr :%s) or set a "
+                "different PORT, then start again.", config.PORT, config.PORT)
+            raise SystemExit(1)
+    except SystemExit:
+        raise
+    except Exception:
+        pass  # nothing answered — the port is ours
     policy = get_policy_metadata()
     logger.info("Chalkboard Master Agent Service (python) running port=%s provider=%s backend=%s",
                 config.PORT, config.LLM_PROVIDER, config.MAIN_BACKEND_SOCKET_URL)

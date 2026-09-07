@@ -220,8 +220,8 @@ export function drawBoardOnCanvas(
       }
       if (stroke.tool === 'chalk') drawChalkStroke(ctx, stroke);
       else {
-        if (pts.length === 1) drawEraserSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
-        else for (let i = 1; i < pts.length; i++) drawEraserSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
+        if (pts.length === 1) drawEraserSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight, zoom, panOffset, dpr);
+        else for (let i = 1; i < pts.length; i++) drawEraserSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight, zoom, panOffset, dpr);
       }
     });
     drawSelectionOverlay();

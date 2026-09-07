@@ -48,7 +48,7 @@ TOOL_SPECS: list[tuple[str, str, list[tuple[str, str, bool]]]] = [
      "Undo last stroke or clear the whole board. Redo is NOT supported — returns an error.",
      [("action", "str", True)]),
     ("chalkboard_send_reaction",
-     "Sends emoji reaction (visible to all).",
+     "Sends emoji reaction (visible to all). Allowed: 👍 👏 😂 😮 ❤️ 🎉 — any other will be rejected.",
      [("emoji", "str", True)]),
     ("chalkboard_toggle_hand",
      "Raises or lowers hand.",

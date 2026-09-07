@@ -50,10 +50,11 @@ class FirestoreLessonStore:
     backend = "firestore"
 
     def __init__(self, project_id: str):
-        from firebase_admin import credentials, firestore, initialize_app, get_apps  # type: ignore
+        import firebase_admin
+        from firebase_admin import credentials, firestore, initialize_app  # type: ignore
 
         database_id = (os.environ.get("FIRESTORE_DATABASE_ID") or "(default)").strip() or "(default)"
-        if not get_apps():
+        if not firebase_admin._apps:
             inline = os.environ.get("FIRESTORE_SERVICE_ACCOUNT_JSON")
             if inline:
                 import json as _json

@@ -222,22 +222,54 @@ export const drawEraserSegment = (
   y1: number,
   size: number,
   eraserWidth?: number,
-  eraserHeight?: number
+  eraserHeight?: number,
+  zoom?: number,
+  panOffset?: { x: number; y: number },
+  dpr?: number
 ) => {
   ctx.save();
   ctx.globalCompositeOperation = 'destination-out';
 
   if (eraserWidth && eraserHeight) {
-    // Rectangular eraser: stamp the rect at every step along the segment
+    // Rectangular eraser: stamp the rect densely so the live preview
+    // (destination-out) exactly matches the swept-rect test used by
+    // eraseStrokePoints. Previously steps = ceil(dist/min*2) left ~10px
+    // gaps for a 40x20 eraser, causing the live hole and the final
+    // sliced gap to differ and flash as an "after effect" on mouse-up.
+    // When zoom/pan/dpr are known we also snap the rect to whole device
+    // pixels so its edges land on physical pixels and don't leave a
+    // 1px semi-transparent fringe (antialiased ghost) after erasing.
     const dx = x1 - x0;
     const dy = y1 - y0;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const steps = Math.max(1, Math.ceil(dist / Math.min(eraserWidth, eraserHeight) * 2));
+    const steps = Math.max(1, Math.ceil(dist / 2)); // 2px spacing → dense, gap-free
+    const snapX = (v: number) =>
+      zoom !== undefined && panOffset && dpr
+        ? (Math.round((v * zoom + panOffset.x) * dpr) / dpr - panOffset.x) / zoom
+        : v;
+    const snapY = (v: number) =>
+      zoom !== undefined && panOffset && dpr
+        ? (Math.round((v * zoom + panOffset.y) * dpr) / dpr - panOffset.y) / zoom
+        : v;
     for (let i = 0; i <= steps; i++) {
       const t = steps === 0 ? 0 : i / steps;
       const cx = x0 + dx * t;
       const cy = y0 + dy * t;
-      ctx.fillRect(cx - eraserWidth / 2, cy - eraserHeight / 2, eraserWidth, eraserHeight);
+      let rx = cx - eraserWidth / 2;
+      let ry = cy - eraserHeight / 2;
+      let rw = eraserWidth;
+      let rh = eraserHeight;
+      if (zoom !== undefined && panOffset && dpr) {
+        const sx = snapX(rx);
+        const sy = snapY(ry);
+        const ex = snapX(rx + rw);
+        const ey = snapY(ry + rh);
+        rx = sx;
+        ry = sy;
+        rw = ex - sx;
+        rh = ey - sy;
+      }
+      ctx.fillRect(rx, ry, rw, rh);
     }
   } else {
     ctx.beginPath();

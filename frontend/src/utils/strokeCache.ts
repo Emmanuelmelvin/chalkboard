@@ -123,8 +123,8 @@ function renderStrokesToOffscreen(
     if (stroke.tool === 'chalk') drawChalkStroke(ctx, stroke);
     else {
       const pts = stroke.points;
-      if (pts.length === 1) drawEraserSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
-      else for (let i = 1; i < pts.length; i++) drawEraserSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
+      if (pts.length === 1) drawEraserSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight, zoom, panOffset, dpr);
+      else for (let i = 1; i < pts.length; i++) drawEraserSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight, zoom, panOffset, dpr);
     }
   }
   ctx.restore();
@@ -165,8 +165,17 @@ export function drawCachedBoard(
     cachedPanY = panOffset.y;
     cachedDpr = dpr;
   }
-  // Composite cached strokes layer (already scaled for dpr/zoom/pan)
-  if (cachedOffscreen) ctx.drawImage(cachedOffscreen, 0, 0);
+  // Composite cached strokes layer (already scaled for dpr/zoom/pan).
+  // The offscreen was rendered with zoom*dpr + pan baked in, so blit it at
+  // identity — otherwise the outer canvas transform (also zoom*dpr+pan) would
+  // apply a second time and offsets chalk/eraser from the cursor and shifts
+  // the selection marquee away from the strokes.
+  if (cachedOffscreen) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(cachedOffscreen, 0, 0);
+    ctx.restore();
+  }
   // Overlay: selection marquee, transform box, handles (cheap, per-frame is fine)
   drawOverlay();
 }

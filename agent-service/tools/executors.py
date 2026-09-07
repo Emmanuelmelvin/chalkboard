@@ -76,7 +76,49 @@ def _err_text(msg: str) -> dict:
     return {"content": [{"type": "text", "text": msg}], "isError": True}
 
 
+def _clean_stroke(stroke: dict) -> dict:
+    """Drop None optionals (backend zod .optional() rejects null) + clamp ranges."""
+    cleaned = {k: v for k, v in (stroke or {}).items() if v is not None}
+    # points must be [{x, y}] finite numbers within backend limits
+    pts = []
+    for p in cleaned.get("points") or []:
+        try:
+            x, y = float(p.get("x")), float(p.get("y"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if x != x or y != y:  # NaN
+            continue
+        pts.append({"x": max(-10_000_000, min(10_000_000, x)),
+                    "y": max(-10_000_000, min(10_000_000, y))})
+    cleaned["points"] = pts
+    try:
+        size = float(cleaned.get("size", 4))
+    except (TypeError, ValueError):
+        size = 4
+    cleaned["size"] = max(0.1, min(1_000, size))
+    if "intensity" in cleaned:
+        try:
+            inten = float(cleaned["intensity"])
+        except (TypeError, ValueError):
+            inten = 1
+        cleaned["intensity"] = max(0, min(1, inten))
+    for key in ("color", "fillColor", "noteTextColor", "noteBackgroundColor"):
+        if isinstance(cleaned.get(key), str):
+            cleaned[key] = cleaned[key][:64]
+    for key in ("id", "userId"):
+        if isinstance(cleaned.get(key), str):
+            cleaned[key] = cleaned[key][:256]
+    if isinstance(cleaned.get("text"), str):
+        cleaned["text"] = cleaned["text"][:64 * 1024]
+    if isinstance(cleaned.get("noteHtml"), str):
+        cleaned["noteHtml"] = cleaned["noteHtml"][:64 * 1024]
+    return cleaned
+
+
 def _append_single_stroke(s, stroke: dict) -> dict:
+    stroke = _clean_stroke(stroke)
+    if not stroke.get("points"):
+        return {"ok": False, "error": "draw-stroke rejected: no valid points"}
     res = s.emit_with_ack("draw-stroke", {"roomId": s.room_id, "stroke": stroke})
     if not res.get("ok"):
         return {"ok": False, "error": str(res.get("error") or "draw-stroke rejected")}
@@ -333,10 +375,15 @@ def execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) -
                 payload["reason"] = spoken["reason"]
             return _ok_text(payload)
         if tool_name == "chalkboard_send_reaction":
-            res = s.emit_with_ack("reaction:send", {"roomId": room_id, "emoji": args.get("emoji")})
+            allowed = {"👍", "👏", "😂", "😮", "❤️", "🎉"}
+            emoji = args.get("emoji")
+            if emoji not in allowed:
+                # Model tried 🚀 which backend rejects as invalid_payload
+                return _err_text(f"Unsupported reaction \"{emoji}\". Allowed: 👍 👏 😂 😮 ❤️ 🎉 — use one of these.")
+            res = s.emit_with_ack("reaction:send", {"roomId": room_id, "emoji": emoji})
             if not res.get("ok"):
                 return _err_text(f"Reaction failed: {res.get('error')}")
-            return _ok_text({"success": True, "emoji": args.get("emoji")})
+            return _ok_text({"success": True, "emoji": emoji})
         if tool_name == "chalkboard_toggle_hand":
             res = s.emit_with_ack("hand:raise", {"roomId": room_id, "raised": bool(args.get("raised"))})
             if not res.get("ok"):

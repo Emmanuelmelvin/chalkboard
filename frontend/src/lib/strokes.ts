@@ -341,7 +341,11 @@ export const eraseStrokePoints = (
       ) {
         currentPoints.push(lastUnErasedPoint);
       }
-      if (currentPoints.length >= 2) {
+      // Keep single-point fragments as dots (drawChalkStroke handles
+      // length===1). Previously >=2 discarded isolated dots, leaving a
+      // faint "after effect" where a dot that should remain vanished and
+      // the live destination-out hole and final sliced gap mismatched.
+      if (currentPoints.length >= 1) {
         newStrokes.push({
           ...stroke,
           id: `${stroke.id}-split-${newStrokes.length}-${Date.now()}`,

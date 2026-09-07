@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
 COPY requirements.txt ./
 COPY requirements ./requirements
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements/optional/firestore.txt
 # Uncomment to bake heavy optional deps into the image:
 # RUN pip install --no-cache-dir -r requirements/optional/all.txt
 COPY app.py config.py errors.py logger.py system_info.py http_client.py requirements.txt ./

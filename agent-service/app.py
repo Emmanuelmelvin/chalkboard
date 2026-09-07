@@ -98,6 +98,30 @@ def _headers(resp):
     return resp
 
 
+_warmup_started = False
+
+
+def start_reasoning_warmup() -> None:
+    """Kick off a one-shot background import of the ADK/LiteLLM reasoning
+    stack. Without it the first classroom request pays multi-second lazy
+    import cost (google-adk + litellm + google-genai) on its critical path.
+    Idempotent; safe to call from every entrypoint."""
+    global _warmup_started
+    if _warmup_started:
+        return
+    _warmup_started = True
+
+    def _run():
+        try:
+            from agent.providers import warm_up
+            warm_up()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("reasoning stack warmup failed: %s", exc)
+
+    threading.Thread(target=_run, name="reasoning-warmup", daemon=True).start()
+
+
+
 @app.get("/health")
 def health():
     models = config.get_model_waterfall()
@@ -114,6 +138,7 @@ def health():
 @require_auth
 @rate_limit(30)
 def sessions_join():
+    start_reasoning_warmup()
     body = request.get_json(force=True, silent=True) or {}
     room_id = _valid_room_id(body.get("roomId"))
     if not room_id:
@@ -168,6 +193,7 @@ def sessions_status(room_id: str):
 @require_auth
 @rate_limit(20)
 def instruct():
+    start_reasoning_warmup()
     body = request.get_json(force=True, silent=True) or {}
     room_id = _valid_room_id(body.get("roomId"))
     prompt = body.get("prompt") if isinstance(body.get("prompt"), str) else ""
@@ -297,4 +323,5 @@ if __name__ == "__main__":
     logger.info("Chalkboard Master Agent Service (python) running port=%s provider=%s backend=%s",
                 config.PORT, config.LLM_PROVIDER, config.MAIN_BACKEND_SOCKET_URL)
     logger.info("Model policy version=%s sha256=%s", policy["version"], str(policy["sha256"])[:12])
+    start_reasoning_warmup()
     app.run(host="0.0.0.0", port=config.PORT, threaded=True)

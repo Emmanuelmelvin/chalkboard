@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import threading
 import time
 from typing import Any, Optional
 
@@ -45,6 +46,41 @@ def get_instruction() -> str:
 def ensure_env_auth() -> None:
     if not os.environ.get("GOOGLE_GENAI_API_KEY") and config.GEMINI_API_KEY:
         os.environ["GOOGLE_GENAI_API_KEY"] = config.GEMINI_API_KEY
+
+
+_warm_state = {"done": False}
+_warm_lock = threading.Lock()
+
+
+def warm_up() -> dict:
+    """Pre-import the heavy reasoning stack once, off the request path.
+
+    google-adk, google-genai and LiteLLM are imported lazily inside
+    run_reasoning/build_agent, so the FIRST classroom request pays the whole
+    import cost (multi-second on cold Windows disks) on its critical path.
+    warm_up runs those imports at service startup in a background thread.
+    The remaining first-call cost is then only TLS handshake + credential
+    chain resolution. Idempotent.
+    """
+    with _warm_lock:
+        if _warm_state["done"]:
+            return {"alreadyWarm": True}
+        started = time.perf_counter()
+        from google.adk.agents import LlmAgent  # noqa: F401
+        from google.adk.agents.run_config import RunConfig  # noqa: F401
+        from google.adk.runners import Runner  # noqa: F401
+        from google.adk.sessions import InMemorySessionService  # noqa: F401
+        from google.adk.tools import FunctionTool  # noqa: F401
+        from google.genai import types as genai_types  # noqa: F401
+        if config.LLM_PROVIDER == "bedrock":
+            from google.adk.models.lite_llm import LiteLlm  # noqa: F401
+        ensure_env_auth()
+        get_instruction()
+        warmup_ms = int((time.perf_counter() - started) * 1000)
+        _warm_state["done"] = True
+        logger.info("reasoning stack warmed up in %sms provider=%s",
+                    warmup_ms, config.LLM_PROVIDER)
+        return {"warmupMs": warmup_ms}
 
 
 def summarize_args(args: dict) -> dict:
@@ -190,8 +226,15 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
         logger.debug("attempting model=%s provider=%s", model, config.LLM_PROVIDER)
         for attempt in range(max(1, config.MAX_RETRIES) + 1):
             try:
+                build_started = time.perf_counter()
                 caller = DirectCaller(ctx, stats)
                 agent = build_agent(model, caller)
+                agent_build_ms = int((time.perf_counter() - build_started) * 1000)
+                if agent_build_ms > 250:
+                    # First call per process: build_agent triggers the lazy
+                    # google-adk/litellm imports. warm_up() removes this cost.
+                    logger.info("agent build took %sms model=%s (lazy import cost, first call only)",
+                                agent_build_ms, model)
                 runner = Runner(agent=agent, app_name="chalkboard",
                                 session_service=session_service, auto_create_session=True)
                 turns = 0
@@ -241,8 +284,8 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                 total_ms = int((time.perf_counter() - _t0) * 1000)
                 tool_ms = stats.get("toolMs", 0)
                 logger.info(
-                    "reasoning timing model=%s totalMs=%s toolMs=%s modelMs=%s toolCalls=%s turns=%s",
-                    model, total_ms, tool_ms, max(0, total_ms - tool_ms),
+                    "reasoning timing model=%s totalMs=%s toolMs=%s modelMs=%s agentBuildMs=%s toolCalls=%s turns=%s",
+                    model, total_ms, tool_ms, max(0, total_ms - tool_ms), agent_build_ms,
                     stats.get("toolCalls", 0), turns)
                 logger.info("model succeeded model=%s turns=%s policy=%s/%s prompt_chars=%s",
                             model, turns, policy["version"], str(policy["sha256"])[:12], len(message))

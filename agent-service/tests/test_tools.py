@@ -6,14 +6,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.definitions import EXPECTED_TOOL_NAMES, TOOL_SPECS
-from tools.executors import TOOL_MIN_ROLE, can_invoker, forbidden_message
+from tools.executors import TOOL_MIN_ROLE, can_invoker, forbidden_message, valid_points
 
 
-def test_tool_count_is_19():
-    assert len(TOOL_SPECS) == 19
-    assert len(EXPECTED_TOOL_NAMES) == 19
-    assert len(set(EXPECTED_TOOL_NAMES)) == 19
+def test_tool_count_is_20():
+    assert len(TOOL_SPECS) == 20
+    assert len(EXPECTED_TOOL_NAMES) == 20
+    assert len(set(EXPECTED_TOOL_NAMES)) == 20
     assert "chalkboard_respond" in EXPECTED_TOOL_NAMES
+
+
+def test_shape_and_cursor_controls_are_registered():
+    specs = {name: params for name, _, params in TOOL_SPECS}
+    assert {"radius", "color", "size", "intensity", "fillColor"} <= {name for name, _, _ in specs["chalkboard_insert_shape"]}
+    assert {name for name, _, required in specs["chalkboard_move_cursor"] if required} == {"x", "y"}
 
 
 def test_write_text_requires_text_x_y():
@@ -30,6 +36,15 @@ def test_viewer_cannot_draw():
     assert not can_invoker("viewer", "chalkboard_write_text")
     assert can_invoker("viewer", "chalkboard_send_chat")
     assert can_invoker("viewer", "chalkboard_get_state")
+    assert not can_invoker("viewer", "chalkboard_move_cursor")
+
+
+def test_canvas_points_match_backend_finite_coordinate_contract():
+    assert valid_points([{"x": -10_000_000, "y": 10_000_000}])
+    assert not valid_points([{"x": float("nan"), "y": 0}])
+    assert not valid_points([{"x": float("inf"), "y": 0}])
+    assert not valid_points([{"x": 10_000_001, "y": 0}])
+    assert not valid_points([{"x": True, "y": 0}])
 
 
 def test_owner_only_tools():

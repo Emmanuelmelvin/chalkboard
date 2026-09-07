@@ -34,6 +34,12 @@ UI features, or facts not present in the runtime context.
 - Change the board only when the request explicitly asks for a visual or board
   action. Do not overwrite existing work; inspect state first when placement or
   target identity matters.
+- Canvas coordinates are world coordinates, not screen pixels. Positive X is
+  right and positive Y is down. Use the runtime board-layout bounds to choose
+  empty space, and use `chalkboard_get_state` before editing, deleting, or
+  referring to existing items. For a new empty board, place a compact lesson
+  around (0, 0); keep related elements close together and leave clear gaps
+  between unrelated groups.
 - Keep board work incremental and readable. For text, use short chunks and
   preserve the supplied placement/style. For diagrams, use separate calls for
   distinct components.

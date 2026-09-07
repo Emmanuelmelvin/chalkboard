@@ -7,6 +7,7 @@ minimum role; the invoker role is pre-checked before emitting.
 from __future__ import annotations
 
 import json
+import math
 import time
 import uuid
 from typing import Any
@@ -21,6 +22,7 @@ TOOL_MIN_ROLE: dict[str, str] = {
     "chalkboard_draw_chalk": "instructor",
     "chalkboard_write_text": "instructor",
     "chalkboard_insert_shape": "instructor",
+    "chalkboard_move_cursor": "instructor",
     "chalkboard_create_note": "instructor",
     "chalkboard_highlight_area": "instructor",
     "chalkboard_select_and_transform": "instructor",
@@ -64,8 +66,26 @@ def _make_stroke_id(socket, suffix: str) -> str:
 def _valid_points(points: Any) -> bool:
     if not isinstance(points, list) or not (1 <= len(points) <= 10_000):
         return False
-    return all(isinstance(p, dict) and isinstance(p.get("x"), (int, float))
-               and isinstance(p.get("y"), (int, float)) for p in points)
+    return all(
+        isinstance(point, dict)
+        and _valid_coordinate(point.get("x"))
+        and _valid_coordinate(point.get("y"))
+        for point in points
+    )
+
+
+def _valid_coordinate(value: Any) -> bool:
+    """Match the backend's finite, bounded canvas-number contract."""
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value) and -10_000_000 <= value <= 10_000_000)
+
+
+def _coordinate_or(value: Any, default: float = 0) -> float:
+    return value if _valid_coordinate(value) else default
+
+
+def _positive_coordinate_or(value: Any, default: float) -> float:
+    return value if _valid_coordinate(value) and value > 0 else default
 
 
 def _ok_text(payload: Any) -> dict:
@@ -86,7 +106,7 @@ def _clean_stroke(stroke: dict) -> dict:
             x, y = float(p.get("x")), float(p.get("y"))
         except (TypeError, ValueError, AttributeError):
             continue
-        if x != x or y != y:  # NaN
+        if not math.isfinite(x) or not math.isfinite(y):
             continue
         pts.append({"x": max(-10_000_000, min(10_000_000, x)),
                     "y": max(-10_000_000, min(10_000_000, y))})
@@ -175,7 +195,9 @@ def build_chalk_stroke(socket, args: dict) -> dict:
 
 def build_shape_strokes(socket, args: dict) -> list[dict]:
     return generate_shape_strokes({
-        "shape": args.get("shape"), "cx": args.get("x", 0) or 0, "cy": args.get("y", 0) or 0,
+        "shape": args.get("shape"), "cx": _coordinate_or(args.get("x")),
+        "cy": _coordinate_or(args.get("y")),
+        "radius": _positive_coordinate_or(args.get("radius"), 80),
         "color": args.get("color") or "#ffffff", "size": args.get("size") or 3,
         "intensity": args.get("intensity", 1), "fillColor": args.get("fillColor"),
         "userId": getattr(socket, "socket_id", "") or "agent:chalkboard-master"})
@@ -223,6 +245,12 @@ def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) 
                              "strokes": strokes if include_details else summary,
                              "links": s.context.get("links", []),
                              "members": [{"socketId": sid, **u} for sid, u in s.context.get("members", {}).items()]})
+        if tool_name == "chalkboard_move_cursor":
+            x, y = args.get("x"), args.get("y")
+            if not _valid_coordinate(x) or not _valid_coordinate(y):
+                return _err_text("x and y must be finite canvas coordinates within +/-10000000")
+            s.broadcast_cursor(x, y)
+            return _ok_text({"success": True, "cursor": {"x": x, "y": y}})
         if tool_name == "chalkboard_draw_chalk":
             if not _valid_points(args.get("points")):
                 return _err_text("points required (1-10000 finite {x,y})")

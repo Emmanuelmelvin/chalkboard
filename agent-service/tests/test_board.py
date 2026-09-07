@@ -90,6 +90,16 @@ def test_viewer_draw_forbidden():
     assert res.get("isError") is True
 
 
+def test_move_cursor_broadcasts_exact_canvas_position():
+    sock = FakeSocket()
+    positions = []
+    sock.broadcast_cursor = lambda x, y=None: positions.append((x, y))
+    stats = create_board_tool_stats()
+    res = run_board_tool(_ctx(sock), stats, "chalkboard_move_cursor", {"x": -120, "y": 45})
+    assert res.get("isError") is None
+    assert positions[-1] == (-120, 45)
+
+
 def test_chunked_write_text():
     sock = FakeSocket()
     stats = create_board_tool_stats()

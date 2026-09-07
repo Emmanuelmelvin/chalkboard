@@ -274,7 +274,10 @@ class ParallelCursorStreamer:
         # The pen is already at the exact start (the glide ended there) —
         # mark it as the first ink point so the persisted stroke keeps it.
         traced = [{"x": _clampf(pts[0][0]), "y": _clampf(pts[0][1])}]
-        self._emit_position(pts[0][0], pts[0][1])
+        # A glide ends with a forced broadcast.  Force this first pen-down
+        # position as well: otherwise the normal throttle can suppress the
+        # cursor while the callback sends the first live ink packet.
+        self._emit_position(pts[0][0], pts[0][1], final=True)
         if on_ink is not None:
             on_ink(pts[0][0], pts[0][1])
         if len(pts) == 1 or total < 0.5:
@@ -324,16 +327,6 @@ class ParallelCursorStreamer:
         threading.Thread(
             target=self.stream_path_blocking, args=(points, max_samples, interval_ms), daemon=True
         ).start()
-
-    def start_parallel_tool_cursor(self, tool_name: str, args: dict) -> None:
-        if not self.should_broadcast(tool_name):
-            return
-        if isinstance((args or {}).get("points"), list) and len(args["points"]) > 1:
-            self.stream_path(args["points"])
-            return
-        target = extract_cursor_position(tool_name, args or {})
-        if target:
-            self.glide_to(target["x"], target["y"])
 
     def cancel_active_stream(self) -> None:
         with self._lock:

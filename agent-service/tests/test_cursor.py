@@ -154,6 +154,19 @@ def test_trace_follows_actual_path_and_fires_ink_in_lockstep():
         assert pos is not None and _on_path(pos, pts)  # cursor never leaves the ink
 
 
+def test_trace_forces_cursor_at_pen_down_after_a_glide():
+    """The first live ink packet must not outrun a throttled cursor update."""
+    sock = PenSocket()
+    streamer = ParallelCursorStreamer(sock)
+    streamer.set_position(0, 0)
+    streamer.glide_to_blocking(120, 0)
+    before = len(sock.cursor_positions)
+    ink = []
+    streamer.trace_path_blocking([{"x": 120, "y": 0}], on_ink=lambda x, y: ink.append((x, y)))
+    assert ink == [(120, 0)]
+    assert sock.cursor_positions[before:] == [(120.0, 0.0)]
+
+
 def test_trace_paces_by_path_length_not_point_count():
     sock = PenSocket()
     streamer = ParallelCursorStreamer(sock)

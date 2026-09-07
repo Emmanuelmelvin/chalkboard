@@ -17,6 +17,7 @@ COPY voice ./voice
 COPY memory ./memory
 ENV NODE_ENV=production
 EXPOSE 8080
-# Production: gunicorn (not Flask's dev server) with sync workers.
+# Production: gunicorn (not Flask's dev server).  Sessions live in process;
+# using multiple workers would split the registry and create duplicate agents.
 # Dev still uses `python app.py` via `make dev` / `npm run dev:agent`.
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "4", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "4", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]

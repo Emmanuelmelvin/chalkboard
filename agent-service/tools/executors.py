@@ -147,6 +147,17 @@ def _append_single_stroke(s, stroke: dict) -> dict:
 
 
 def execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) -> dict:
+    # Socket callbacks also update this in-memory mirror.  Keep each board
+    # operation atomic with respect to those callbacks so full-list updates
+    # (undo/delete/links) cannot overwrite a concurrently received update.
+    lock = getattr(socket, "context_lock", None)
+    if lock is None:
+        return _execute_tool(socket, tool_name, args, invoker_role)
+    with lock:
+        return _execute_tool(socket, tool_name, args, invoker_role)
+
+
+def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) -> dict:
     args = dict(args or {})
     logger.debug("Tool invoked tool=%s room=%s",
                 tool_name, socket.room_id)

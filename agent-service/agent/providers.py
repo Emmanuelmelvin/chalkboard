@@ -16,6 +16,7 @@ import re
 from typing import Any, Optional
 
 import config
+from errors import AgentError
 from logger import logger
 from system_info import get_static_instructions
 from tools.definitions import TOOL_SPECS
@@ -82,12 +83,36 @@ class DirectCaller:
         self._ctx = ctx
         self._stats = stats
         self.trace: list[dict] = []
+        self._seen_chats: set[str] = set()
 
     def __call__(self, tool_name: str, args: dict) -> Any:
         from agent.board_runner import run_board_tool
         import time as _time
+        cancel_event = self._ctx.get("cancelEvent")
+        if cancel_event is not None and cancel_event.is_set():
+            raise AgentError("agent_stopped", "Agent session stopped before tool execution")
         summary = summarize_args(args)
         self.trace.append({"tool": tool_name, "args": summary})
+        # Circuit breaker: Nova sometimes loops same clarification
+        # (e.g., 16x "are you sure you want me to remove the circle?")
+        # Return an error so the model is forced to try a different tool
+        # instead of burning all max_turns.
+        if tool_name == "chalkboard_send_chat":
+            msg = str((args or {}).get("message") or "").strip()
+            if msg and msg in self._seen_chats:
+                logger.warning("duplicate chat blocked tool=%s", tool_name)
+                return {"content": [{"type": "text",
+                                     "text": "You already sent that exact chat message in this turn. Do NOT repeat it. "
+                                             "If the request was to remove/delete a single shape like 'the circle', "
+                                             "call chalkboard_get_state to list strokes, identify its id, then "
+                                             "chalkboard_select_and_transform with action=delete. "
+                                             "Only ask for confirmation for bulk destructive actions (clear all / kick all)."}],
+                        "isError": True}
+            if msg:
+                self._seen_chats.add(msg)
+                # keep set small
+                if len(self._seen_chats) > 20:
+                    self._seen_chats.pop()
         _start = _time.perf_counter()
         try:
             return run_board_tool(self._ctx, self._stats, tool_name, args)
@@ -212,6 +237,8 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                 return {"finalText": final_text, "turns": turns, "model": model, "trace": caller.trace}
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
+                if ctx.get("cancelEvent") is not None and ctx["cancelEvent"].is_set():
+                    raise AgentError("agent_stopped", "Agent session stopped") from exc
                 msg = str(exc)
                 retryable = any(s in msg for s in ("404", "NOT_FOUND", "not found", "503",
                                                   "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "exhausted"))

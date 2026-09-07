@@ -15,7 +15,7 @@ import hmac
 import re
 import threading
 import time
-from collections import defaultdict
+from collections import OrderedDict, deque
 from datetime import datetime, timezone
 from functools import wraps
 
@@ -31,7 +31,12 @@ config.validate_or_warn()
 app = Flask(__name__)
 sessions: dict[str, RoomSession] = {}
 _sessions_lock = threading.Lock()
-_rate_buckets: dict[str, list[float]] = defaultdict(list)
+# This process owns live Socket.IO sessions, so its rate limiter intentionally
+# has the same single-process scope.  Keep it bounded: unlike the old
+# defaultdict(list), arbitrary source addresses cannot retain memory forever.
+_rate_buckets: OrderedDict[str, deque[float]] = OrderedDict()
+_rate_lock = threading.Lock()
+_MAX_RATE_BUCKETS = 10_000
 
 _CONTROL_CHARS = re.compile(r"[\u0000-\u001f\u007f]")
 
@@ -65,11 +70,20 @@ def rate_limit(max_per_minute: int):
         def _wrap(*args, **kwargs):
             key = f"{request.remote_addr}:{request.path}"
             now = time.time()
-            hits = [t for t in _rate_buckets[key] if t > now - 60]
-            if len(hits) >= max_per_minute:
-                return jsonify({"ok": False, "error": "rate_limited"}), 429
-            hits.append(now)
-            _rate_buckets[key] = hits
+            with _rate_lock:
+                hits = _rate_buckets.get(key)
+                if hits is None:
+                    if len(_rate_buckets) >= _MAX_RATE_BUCKETS:
+                        _rate_buckets.popitem(last=False)
+                    hits = deque()
+                    _rate_buckets[key] = hits
+                else:
+                    _rate_buckets.move_to_end(key)
+                while hits and hits[0] <= now - 60:
+                    hits.popleft()
+                if len(hits) >= max_per_minute:
+                    return jsonify({"ok": False, "error": "rate_limited"}), 429
+                hits.append(now)
             return fn(*args, **kwargs)
         return _wrap
     return _deco

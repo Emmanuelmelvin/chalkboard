@@ -17,6 +17,14 @@ from logger import logger
 MAX_COORD = 10_000_000
 
 
+def _with_context_lock(method):
+    """Serialize socket state callbacks with board-tool state mutations."""
+    def _wrapped(self, *args, **kwargs):
+        with self.context_lock:
+            return method(self, *args, **kwargs)
+    return _wrapped
+
+
 def _finite_coord(n: Any) -> bool:
     return isinstance(n, (int, float)) and n == n and abs(n) <= MAX_COORD
 
@@ -71,6 +79,7 @@ class AgentRoomSocket:
                               "strokeCount": 0, "lastActivityAt": int(time.time() * 1000)}
         self.voice = None
         self._handlers: dict[str, set[Callable]] = defaultdict(set)
+        self.context_lock = threading.RLock()
         self._connected = False
         self._closed = False
         self._joined = False
@@ -233,6 +242,7 @@ class AgentRoomSocket:
         self.context["strokeCount"] += 1
         self.context["lastActivityAt"] = int(time.time() * 1000)
 
+    @_with_context_lock
     def _on_room_history(self, payload) -> None:
         strokes = payload if isinstance(payload, list) else (payload or {}).get("strokes")
         if isinstance(strokes, list):
@@ -242,6 +252,7 @@ class AgentRoomSocket:
             self.context["lastActivityAt"] = int(time.time() * 1000)
             self._live_counts.clear()
 
+    @_with_context_lock
     def _on_room_state(self, payload) -> None:
         if isinstance((payload or {}).get("strokes"), list):
             valid = [st for st in (normalize_full_stroke(s) for s in payload["strokes"]) if st]
@@ -261,11 +272,13 @@ class AgentRoomSocket:
                 "createdAt": m.get("createdAt") or "",
                 "mentionedUserIds": [x for x in (m.get("mentionedUserIds") or []) if isinstance(x, str)][:32]}
 
+    @_with_context_lock
     def _on_chat_history(self, messages) -> None:
         if isinstance(messages, list):
             cleaned = [c for c in (self._clean_chat(m) for m in messages) if c]
             self.context["chat"] = cleaned[-25:]
 
+    @_with_context_lock
     def _on_chat_message(self, msg) -> None:
         clean = self._clean_chat(msg or {})
         if not clean:
@@ -278,6 +291,7 @@ class AgentRoomSocket:
         self.context["lastActivityAt"] = int(time.time() * 1000)
         self._emit_local("chat:message", clean)
 
+    @_with_context_lock
     def _on_update_users(self, users_map) -> None:
         if not users_map:
             return
@@ -289,6 +303,7 @@ class AgentRoomSocket:
         self.context["members"] = members
         self._emit_local("update-users", users_map)
 
+    @_with_context_lock
     def _on_stroke_start(self, payload) -> None:
         self.context["lastActivityAt"] = int(time.time() * 1000)
         full = normalize_full_stroke(payload or {})
@@ -302,6 +317,7 @@ class AgentRoomSocket:
             self.context["strokeCount"] += 1
         self._emit_local("stroke-start", payload)
 
+    @_with_context_lock
     def _on_undo(self, payload) -> None:
         if isinstance((payload or {}).get("strokes"), list):
             valid = [st for st in (normalize_full_stroke(s) for s in payload["strokes"]) if st]
@@ -310,17 +326,20 @@ class AgentRoomSocket:
             self._live_counts.clear()
         self._emit_local("undo-stroke", payload)
 
+    @_with_context_lock
     def _on_clear(self, _payload=None) -> None:
         self.context["strokes"] = []
         self.context["strokeCount"] = 0
         self._live_counts.clear()
         self._emit_local("clear-board", {})
 
+    @_with_context_lock
     def _on_links(self, payload) -> None:
         if isinstance((payload or {}).get("links"), list):
             self.context["links"] = [lnk for lnk in payload["links"] if isinstance(lnk, dict)][:1000]
         self._emit_local("links-update", payload)
 
+    @_with_context_lock
     def _on_members_updated(self, payload) -> None:
         if isinstance((payload or {}).get("room"), dict):
             self.room_metadata = payload["room"]

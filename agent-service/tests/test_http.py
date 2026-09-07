@@ -52,3 +52,23 @@ def test_status_404_and_bearer_auth():
     assert res.status_code == 404
     res = c.post("/stop", json={"roomId": "x"}, headers=_BEARER)
     assert res.status_code == 200
+
+
+def test_rate_limiter_bounds_bucket_count():
+    # Keep the test independent of earlier requests and prove untrusted IPs
+    # cannot make the in-memory limiter grow without a ceiling.
+    old_cap = service._MAX_RATE_BUCKETS
+    try:
+        service._MAX_RATE_BUCKETS = 2
+        with service._rate_lock:
+            service._rate_buckets.clear()
+        for address in ("10.0.0.1", "10.0.0.2", "10.0.0.3"):
+            res = _client().post("/stop", json={"roomId": "rate-test"}, headers=_HDR,
+                                 environ_overrides={"REMOTE_ADDR": address})
+            assert res.status_code == 200
+        with service._rate_lock:
+            assert len(service._rate_buckets) == 2
+    finally:
+        service._MAX_RATE_BUCKETS = old_cap
+        with service._rate_lock:
+            service._rate_buckets.clear()

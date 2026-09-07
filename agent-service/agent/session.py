@@ -51,6 +51,8 @@ class RoomSession:
         self._queue: list[dict] = []
         self._gc_timer: threading.Timer | None = None
         self._lock = threading.Lock()
+        self._stopped = False
+        self._active_task: dict | None = None
         self.current_model = (config.get_model_waterfall() or [""])[0]
         self.tasks_completed = 0
         self.tasks_failed = 0
@@ -63,6 +65,8 @@ class RoomSession:
 
     def start(self) -> bool:
         try:
+            with self._lock:
+                self._stopped = False
             self.state = "INITIALIZING"
             logger.info("RoomSession starting room=%s", self.room_id)
             if not self.socket.connect():
@@ -84,6 +88,18 @@ class RoomSession:
             return False
 
     def stop(self) -> None:
+        # asyncio tasks cannot be safely killed from this thread.  Mark active
+        # and queued work cancelled so no further model-selected tool can
+        # mutate the room after /stop has returned.
+        with self._lock:
+            self._stopped = True
+            for task in self._queue:
+                task["cancelEvent"].set()
+                task["error"] = AgentError("agent_stopped", "Agent session stopped")
+                task["done"].set()
+            self._queue.clear()
+            if self._active_task is not None:
+                self._active_task["cancelEvent"].set()
         if self._gc_timer is not None:
             try:
                 self._gc_timer.cancel()
@@ -178,21 +194,18 @@ class RoomSession:
             return "owner"
         for u in self.socket.context.get("members", {}).values():
             match_id = bool(msg.get("userId") and (u.get("userId") == msg["userId"] or u.get("id") == msg["userId"]))
-            match_name = bool(msg.get("displayName") and str(u.get("name") or "").strip().lower()
-                              == str(msg["displayName"]).strip().lower())
-            if (match_id or match_name) and u.get("role") in ("owner", "instructor", "viewer"):
+            if match_id and u.get("role") in ("owner", "instructor", "viewer"):
                 return u["role"]
         for m in self.socket.context.get("persistedMembers", []) or []:
             if not isinstance(m, dict):
                 continue
-            if (msg.get("userId") and m.get("userId") == msg["userId"]) or (
-                    msg.get("displayName") and str(m.get("displayName") or "").strip().lower()
-                    == str(msg["displayName"]).strip().lower()):
+            if msg.get("userId") and m.get("userId") == msg["userId"]:
                 if m.get("role") in ("owner", "instructor", "viewer"):
                     return m["role"]
-        if meta.get("defaultRole") in ("owner", "instructor", "viewer"):
-            return meta["defaultRole"]
-        return "instructor"
+        # Room events are untrusted until their stable user ID can be matched
+        # against room membership.  Never promote based on a display name or a
+        # room-wide default role.
+        return "viewer"
 
     def _handle_chat(self, msg: dict) -> None:
         if not (msg or {}).get("message"):
@@ -242,14 +255,18 @@ class RoomSession:
     def enqueue_reasoning_task(self, prompt: str, requested_by: str,
                                invoker_role: str = "instructor", modality: str = "chat") -> dict:
         with self._lock:
+            if self._stopped or self.state in ("DISCONNECTED", "ERROR"):
+                raise AgentError("agent_stopped", "Agent session is not active")
             if len(self._queue) >= 5:
                 raise AgentError("agent_busy", "Agent is busy — please try again in a moment.")
             task = {"requestId": uuid.uuid4().hex, "prompt": prompt, "requestedBy": requested_by,
                     "invokerRole": invoker_role, "modality": modality,
-                    "enqueuedAt": time.time(), "done": threading.Event(), "result": None, "error": None}
+                    "enqueuedAt": time.time(), "done": threading.Event(), "result": None, "error": None,
+                    "cancelEvent": threading.Event()}
             self._queue.append(task)
         threading.Thread(target=self._pump, daemon=True).start()
         if not task["done"].wait(timeout=config.REASONING_TIMEOUT_S + 30):
+            task["cancelEvent"].set()
             raise AgentError("reasoning_timeout", "Reasoning task timed out")
         if task["error"] is not None:
             raise task["error"]
@@ -260,13 +277,25 @@ class RoomSession:
             if self._processing or not self._queue:
                 return
             task = self._queue.pop(0)
-            self._processing = True
-            self.state = "ACTIVE_REASONING"
+            if task["cancelEvent"].is_set() or self._stopped:
+                task["error"] = AgentError("agent_stopped", "Agent session stopped")
+                task["done"].set()
+                more = bool(self._queue)
+                task = None
+            else:
+                more = False
+                self._processing = True
+                self._active_task = task
+                self.state = "ACTIVE_REASONING"
+        if task is None:
+            if more:
+                self._pump()
+            return
         try:
             logger.debug("reasoning start room=%s", self.room_id)
             result = asyncio.run(asyncio.wait_for(
                 self._run_reasoning(task["prompt"], task["requestedBy"], task["invokerRole"],
-                                    task["requestId"], task["modality"]),
+                                    task["requestId"], task["modality"], task["cancelEvent"]),
                 timeout=config.REASONING_TIMEOUT_S))
             self.tasks_completed += 1
             self.total_turns += result.get("turns", 0)
@@ -286,7 +315,9 @@ class RoomSession:
             task["done"].set()
             with self._lock:
                 self._processing = False
-                self.state = "IDLE_OBSERVING"
+                self._active_task = None
+                if not self._stopped:
+                    self.state = "IDLE_OBSERVING"
                 more = bool(self._queue)
             if more:
                 self._pump()
@@ -301,7 +332,8 @@ class RoomSession:
     # ---- reasoning ----
 
     async def _run_reasoning(self, prompt: str, requested_by: str, invoker_role: str,
-                             request_id: str, modality: str = "chat") -> dict:
+                             request_id: str, modality: str = "chat",
+                             task_cancel_event: threading.Event | None = None) -> dict:
         from agent import providers
         message, safe_requester = self._build_prompt(prompt, requested_by, invoker_role, modality)
         logger.debug("reasoning with provider=%s room=%s", config.LLM_PROVIDER, self.room_id)
@@ -313,9 +345,12 @@ class RoomSession:
         try:
             stats = create_board_tool_stats()
             ctx = {"socket": self.socket, "cursorStreamer": self.cursor, "invokerRole": invoker_role,
-                   "requestId": request_id, "maxTurns": config.MAX_TURNS_PER_INSTRUCTION}
+                   "requestId": request_id, "maxTurns": config.MAX_TURNS_PER_INSTRUCTION,
+                   "cancelEvent": task_cancel_event}
             outcome = await providers.run_reasoning(message, safe_requester, ctx, stats, request_id,
                                                     config.MAX_TURNS_PER_INSTRUCTION)
+            if task_cancel_event is not None and task_cancel_event.is_set():
+                raise AgentError("agent_stopped", "Agent session stopped")
             self.current_model = outcome.get("model") or self.current_model
             self.tool_calls += stats.get("toolCalls", 0)
             final_text = outcome.get("finalText") or ""
@@ -359,6 +394,10 @@ class RoomSession:
                  "clarify via chalkboard_send_chat and MUST NOT call chalkboard_clear_or_undo(clear)/"
                  "chalkboard_kick_member/chalkboard_close_room in this turn."
                  if _DESTRUCTIVE.search(safe_prompt) else "")
+        guard += ("\n- ANTI-LOOP: Never send the same chat message twice in one turn. For targeted deletions "
+                  "like 'remove the circle' do NOT ask for confirmation — call chalkboard_get_state to find the "
+                  "stroke id, then chalkboard_select_and_transform with action=delete. Only confirm for bulk "
+                  "actions (clear all / kick all / close room).")
         history = ""
         if self.lesson_history:
             lines = "\n".join(f"  * {h.get('at')} {h.get('requester')}: \"{h.get('prompt')}\" "

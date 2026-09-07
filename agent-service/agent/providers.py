@@ -76,9 +76,15 @@ class DirectCaller:
 
     def __call__(self, tool_name: str, args: dict) -> Any:
         from agent.board_runner import run_board_tool
-        self.trace.append({"tool": tool_name, "args": summarize_args(args)})
-        logger.debug("tool call tool=%s", tool_name)
-        return run_board_tool(self._ctx, self._stats, tool_name, args)
+        import time as _time
+        summary = summarize_args(args)
+        self.trace.append({"tool": tool_name, "args": summary})
+        _start = _time.perf_counter()
+        try:
+            return run_board_tool(self._ctx, self._stats, tool_name, args)
+        finally:
+            _ms = int((_time.perf_counter() - _start) * 1000)
+            logger.info("tool=%s args=%s %sms", tool_name, summary, _ms)
 
 
 def make_tool(name: str, description: str, params: list, caller: DirectCaller):

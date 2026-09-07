@@ -22,6 +22,7 @@ from agent.socket_client import AgentRoomSocket
 from errors import AgentError
 from logger import logger
 from memory.store import create_lesson_store, merge_lessons
+from system_info import get_policy_metadata
 from tools.definitions import TOOL_SPECS
 from voice.transcriber import is_agent_addressed
 
@@ -414,6 +415,7 @@ class RoomSession:
         )
 
     def get_status(self) -> dict:
+        policy = get_policy_metadata()
         return {"roomId": self.room_id, "roomMetadata": self.socket.context.get("roomMetadata"),
                 "state": self.state, "isProcessing": self._processing, "queuedTasks": len(self._queue),
                 "connected": self.socket.is_connected(), "toolsCount": len(TOOL_SPECS),
@@ -427,4 +429,5 @@ class RoomSession:
                 "toolCalls": self.tool_calls, "totalTurns": self.total_turns,
                 "lastTaskAt": self.last_task_at, "currentModel": self.current_model,
                 "lessonHistoryCount": len(self.lesson_history), "memoryBackend": self._lessons.backend,
-                "voiceState": self.voice.state, "voiceCanSpeak": self.voice.can_speak}
+                "voiceState": self.voice.state, "voiceCanSpeak": self.voice.can_speak,
+                "policy": {"version": policy["version"], "sha256": policy["sha256"]}}

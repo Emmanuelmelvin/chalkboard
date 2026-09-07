@@ -25,6 +25,7 @@ import config
 from agent.session import RoomSession
 from errors import AgentError
 from logger import logger
+from system_info import get_policy_metadata
 
 config.validate_or_warn()
 
@@ -100,9 +101,11 @@ def _headers(resp):
 @app.get("/health")
 def health():
     models = config.get_model_waterfall()
+    policy = get_policy_metadata()
     return jsonify({"status": "healthy", "service": "chalkboard-agent-service",
                     "model": models[0] if models else "", "models": models,
                     "provider": config.LLM_PROVIDER,
+                    "policy": {"version": policy["version"], "sha256": policy["sha256"]},
                     "activeRoomSessions": len(sessions),
                     "timestamp": datetime.now(timezone.utc).isoformat()})
 
@@ -269,6 +272,8 @@ def tools_execute():
 
 
 if __name__ == "__main__":
+    policy = get_policy_metadata()
     logger.info("Chalkboard Master Agent Service (python) running port=%s provider=%s backend=%s",
                 config.PORT, config.LLM_PROVIDER, config.MAIN_BACKEND_SOCKET_URL)
+    logger.info("Model policy version=%s sha256=%s", policy["version"], str(policy["sha256"])[:12])
     app.run(host="0.0.0.0", port=config.PORT, threaded=True)

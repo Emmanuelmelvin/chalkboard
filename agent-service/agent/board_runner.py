@@ -31,10 +31,32 @@ from tools.executors import (
     valid_points,
 )
 
+CANVAS_MUTATION_TOOLS = frozenset({
+    "chalkboard_draw_chalk",
+    "chalkboard_write_text",
+    "chalkboard_insert_shape",
+    "chalkboard_create_note",
+    "chalkboard_highlight_area",
+})
+
 
 def create_board_tool_stats() -> dict:
     return {"toolCalls": 0, "chatSent": False, "chatDelivered": False,
-            "voiceDelivered": False, "finalAnswer": None}
+            "voiceDelivered": False, "finalAnswer": None,
+            "canvasMutationSucceeded": False}
+
+
+def _record_canvas_result(stats: dict, tool_name: str, result: Any) -> Any:
+    """Record only backend-accepted visual mutations as completed work.
+
+    The model can describe its intent in prose, but a visual request is only
+    complete once one of the canvas mutation tools returns success.  This
+    state gates `chalkboard_respond` so users never receive a false “drawn”
+    confirmation when no stroke reached the room.
+    """
+    if tool_name in CANVAS_MUTATION_TOOLS and isinstance(result, dict) and not result.get("isError"):
+        stats["canvasMutationSucceeded"] = True
+    return result
 
 
 def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any:
@@ -59,7 +81,7 @@ def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any
     if tool_name == "chalkboard_write_text" and isinstance(args.get("text"), str):
         chunked = _execute_chunked_write_text(ctx, args)
         if chunked is not None:
-            return chunked
+            return _record_canvas_result(stats, tool_name, chunked)
 
     # Pen-synced cursor paths handle their own movement (glide -> pen down ->
     # trace ink -> pen up); the generic pre-glide only covers simple tools.
@@ -80,18 +102,23 @@ def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any
             pass
 
     if tool_name == "chalkboard_draw_chalk" and (is_draw_path or isinstance(args.get("points"), list)):
-        return _execute_draw_with_pen(ctx, args)
+        return _record_canvas_result(stats, tool_name, _execute_draw_with_pen(ctx, args))
 
     if tool_name == "chalkboard_insert_shape":
-        return _execute_shape_with_pen(ctx, args)
+        return _record_canvas_result(stats, tool_name, _execute_shape_with_pen(ctx, args))
 
     if tool_name == "chalkboard_highlight_area":
-        return _execute_highlight_with_pen(ctx, args)
+        return _record_canvas_result(stats, tool_name, _execute_highlight_with_pen(ctx, args))
 
     if tool_name == "chalkboard_respond":
         return _record_final_answer(ctx, stats, args)
 
     if tool_name == "chalkboard_send_chat" and isinstance(args.get("message"), str):
+        if ctx.get("requiresCanvasMutation") and not stats.get("canvasMutationSucceeded"):
+            return {"content": [{"type": "text",
+                                 "text": "Do the requested canvas action before sending a completion message. "
+                                         "Do not tell the room it was drawn or changed until a canvas tool succeeds."}],
+                    "isError": True}
         stripped = strip_narration(args["message"])
         if not stripped:
             logger.warning("blocked narration-only chat message room=%s", socket.room_id)
@@ -121,7 +148,7 @@ def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any
                 cursor.hold(GLIDE_HOLD_MS)
             except Exception:
                 pass
-        return result
+        return _record_canvas_result(stats, tool_name, result)
     except Exception as exc:  # noqa: BLE001
         logger.warning("board tool exception tool=%s: %s", tool_name, exc)
         return {"content": [{"type": "text", "text": "That action could not be completed."}], "isError": True}
@@ -137,6 +164,11 @@ def _record_final_answer(ctx: dict, stats: dict, args: dict):
     exactly once through the approved channel. Nothing is emitted here.
     """
     socket = ctx["socket"]
+    if ctx.get("requiresCanvasMutation") and not stats.get("canvasMutationSucceeded"):
+        return {"content": [{"type": "text",
+                             "text": "This request requires a visible board change, but no canvas action has succeeded. "
+                                     "Call the appropriate draw, write, shape, note, or highlight tool now. Do not claim "
+                                     "the board was changed unless that tool succeeds."}], "isError": True}
     message = args.get("message")
     stripped = strip_narration(message) if isinstance(message, str) else None
     clean = sanitize_chat_message(stripped) if stripped else None

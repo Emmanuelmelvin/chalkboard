@@ -28,6 +28,14 @@ from voice.transcriber import is_agent_addressed
 
 _MENTION = re.compile(r"(?:^|\s)@(Chalkboard\s*Master|chalkboard-master|master|ai|agent)(?:\s|$|[:,])", re.I)
 _SLASH = re.compile(r"^/(ask|teach|draw|solve|master|ai|help)\b", re.I)
+_CANVAS_REQUEST = re.compile(r"\b(draw|sketch|write|insert|create|add|place|highlight|diagram|chart|graph)\b", re.I)
+_CANVAS_NEGATION = re.compile(r"\b(?:don't|do not|without|avoid)\s+(?:[a-z]+\s+){0,2}"
+                              r"(?:draw|sketch|write|insert|create|add|place|highlight)\b", re.I)
+
+
+def requires_canvas_mutation(prompt: str) -> bool:
+    """Conservatively identify direct requests that promise visible work."""
+    return bool(_CANVAS_REQUEST.search(prompt or "")) and not bool(_CANVAS_NEGATION.search(prompt or ""))
 
 
 class RoomSession:
@@ -370,7 +378,8 @@ class RoomSession:
             stats = create_board_tool_stats()
             ctx = {"socket": self.socket, "cursorStreamer": self.cursor, "invokerRole": invoker_role,
                    "requestId": request_id, "maxTurns": config.MAX_TURNS_PER_INSTRUCTION,
-                   "cancelEvent": task_cancel_event, "promptMetadata": prompt_metadata}
+                   "cancelEvent": task_cancel_event, "promptMetadata": prompt_metadata,
+                   "requiresCanvasMutation": requires_canvas_mutation(prompt)}
             outcome = await providers.run_reasoning(message, safe_requester, ctx, stats, request_id,
                                                     config.MAX_TURNS_PER_INSTRUCTION)
             if task_cancel_event is not None and task_cancel_event.is_set():

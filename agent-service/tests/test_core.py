@@ -13,7 +13,7 @@ from agent.activity import extract_cursor_position, format_tool_activity
 from agent.layout import analyze_canvas_layout, format_spatial_layout_prompt
 from agent.providers import DirectCaller, get_instruction
 from agent.sanitize import sanitize_chat_message, strip_narration
-from agent.session import RoomSession
+from agent.session import RoomSession, requires_canvas_mutation
 from errors import AgentError
 from voice.transcriber import VOICE_WAKE_PATTERN, is_agent_addressed
 
@@ -66,6 +66,12 @@ def test_activity_and_cursor_extract():
     assert "Drawing" in act["toolAction"]
     assert extract_cursor_position("chalkboard_write_text", {"x": 10, "y": 20}) == {"x": 10, "y": 20}
     assert extract_cursor_position("chalkboard_send_chat", {"message": "hi"}) is None
+
+
+def test_explicit_canvas_requests_require_a_successful_mutation_before_completion():
+    assert requires_canvas_mutation("Draw a triangle on the board")
+    assert requires_canvas_mutation("Please add a diagram")
+    assert not requires_canvas_mutation("Do not draw anything; just explain the triangle")
 
 
 def test_model_policy_contains_no_runtime_templates():

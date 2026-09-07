@@ -122,6 +122,35 @@ def test_respond_records_final_answer_without_sending():
     assert sock.chats == []
 
 
+def test_visual_request_cannot_be_claimed_complete_without_canvas_success():
+    sock = FakeSocket()
+    stats = create_board_tool_stats()
+    ctx = {**_ctx(sock), "requiresCanvasMutation": True}
+    res = run_board_tool(ctx, stats, "chalkboard_respond", {"message": "Triangle drawn on the board."})
+    assert res.get("isError") is True
+    assert stats["finalAnswer"] is None
+
+
+def test_visual_request_cannot_bypass_completion_gate_through_chat():
+    sock = FakeSocket()
+    stats = create_board_tool_stats()
+    ctx = {**_ctx(sock), "requiresCanvasMutation": True}
+    res = run_board_tool(ctx, stats, "chalkboard_send_chat", {"message": "Triangle drawn on the board."})
+    assert res.get("isError") is True
+    assert sock.chats == []
+
+
+def test_visual_request_can_respond_after_canvas_success():
+    sock = FakeSocket()
+    stats = create_board_tool_stats()
+    ctx = {**_ctx(sock), "requiresCanvasMutation": True}
+    draw = run_board_tool(ctx, stats, "chalkboard_insert_shape", {"shape": "triangle", "x": 0, "y": 0})
+    assert draw.get("isError") is None
+    assert stats["canvasMutationSucceeded"] is True
+    response = run_board_tool(ctx, stats, "chalkboard_respond", {"message": "Triangle drawn on the board."})
+    assert response.get("isError") is None
+
+
 def test_respond_narration_only_rejected():
     sock = FakeSocket()
     stats = create_board_tool_stats()

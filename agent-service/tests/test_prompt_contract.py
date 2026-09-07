@@ -20,13 +20,15 @@ def _context_payload(message: str) -> dict:
 def test_policy_is_bounded_versioned_and_has_no_stale_tool_catalog():
     policy = get_static_instructions()
     metadata = get_policy_metadata()
-    assert metadata["version"] == "2026-09-07.1"
+    assert metadata["version"] == "2026-09-07.2"
     assert len(metadata["sha256"]) == 64
     assert metadata["chars"] == len(policy)
     assert len(policy) < 6_000
     assert "WebMCP" not in policy
     assert "23 tools" not in policy
     assert "{" not in policy and "}" not in policy
+    # The structured final-answer channel must stay in the policy contract.
+    assert "chalkboard_respond" in policy
 
 
 def test_runtime_context_is_bounded_json_and_minimizes_participant_data():

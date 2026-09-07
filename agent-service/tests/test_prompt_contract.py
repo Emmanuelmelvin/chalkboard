@@ -20,7 +20,7 @@ def _context_payload(message: str) -> dict:
 def test_policy_is_bounded_versioned_and_has_no_stale_tool_catalog():
     policy = get_static_instructions()
     metadata = get_policy_metadata()
-    assert metadata["version"] == "2026-09-07.2"
+    assert metadata["version"] == "2026-09-07.3"
     assert len(metadata["sha256"]) == 64
     assert metadata["chars"] == len(policy)
     assert len(policy) < 6_000

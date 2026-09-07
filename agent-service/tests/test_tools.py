@@ -1,4 +1,4 @@
-"""Tool table parity + RBAC (mirrors test/executors.test.ts intent)."""
+"""Tool table parity + RBAC"""
 
 import sys
 from pathlib import Path
@@ -37,3 +37,13 @@ def test_owner_only_tools():
     assert not can_invoker("instructor", "chalkboard_update_member_role")
     assert can_invoker("owner", "chalkboard_close_room")
     assert "owner" in forbidden_message("chalkboard_close_room", "viewer")
+
+
+def test_toggle_hand_description_claims_participant_capability():
+    """Regression: the terse 'Raises or lowers hand.' description made Nova
+    refuse with 'I can't raise my hand' without calling the tool. The
+    description must explicitly state the agent itself has a hand."""
+    spec = dict((n, (d, p)) for n, d, p in TOOL_SPECS)["chalkboard_toggle_hand"]
+    description = spec[0].lower()
+    assert "your own hand" in description
+    assert "never claim you cannot" in description

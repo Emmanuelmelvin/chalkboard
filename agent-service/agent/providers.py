@@ -211,12 +211,18 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                     text = _event_text(event)
                     if text:
                         last_text = text
-                    # Structured final answer: stop as soon as
-                    # chalkboard_respond has executed and its response event
-                    # came back (no further calls in flight). The answer is
-                    # recorded in stats and delivered exactly once.
-                    if stats.get("finalAnswer") and not calls:
-                        break
+                    # Structured final answer: once chalkboard_respond has
+                    # executed, ignore every further event and let the
+                    # generator finish on its own. Breaking out of run_async
+                    # mid-span makes ADK's telemetry generators raise
+                    # GeneratorExit, logging noisy OpenTelemetry errors
+                    # ("Failed to detach context ... created in a different
+                    # Context") plus a spurious "Root node was cancelled" on
+                    # every task. The remaining events are only the model's
+                    # post-respond wrap-up turn and are deliberately ignored;
+                    # stats["finalAnswer"] is the delivered answer.
+                    if stats.get("finalAnswer"):
+                        continue
 
                     try:
                         is_final = event.is_final_response()

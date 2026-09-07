@@ -55,7 +55,7 @@ TOOL_SPECS: list[tuple[str, str, list[tuple[str, str, bool]]]] = [
      "Sends emoji reaction (visible to all). Allowed: 👍 👏 😂 😮 ❤️ 🎉 — any other will be rejected.",
      [("emoji", "str", True)]),
     ("chalkboard_toggle_hand",
-     "Raises or lowers hand.",
+     "Raises or lowers YOUR OWN hand — you are a full room participant and your hand is visible to everyone. When a user asks you to raise your hand, call this with raised=true; to lower it, raised=false. Never claim you cannot raise your hand.",
      [("raised", "bool", True)]),
     ("chalkboard_kick_member",
      "Kicks participant by socketId (instructor).",

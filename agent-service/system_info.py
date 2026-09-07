@@ -13,7 +13,7 @@ from pathlib import Path
 _cached: str | None = None
 _cached_sha256: str | None = None
 _MAX_POLICY_CHARS = 12_000
-POLICY_VERSION = "2026-09-07.2"
+POLICY_VERSION = "2026-09-07.3"
 
 
 def _policy_path() -> Path:

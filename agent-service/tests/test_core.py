@@ -76,3 +76,27 @@ def test_cancelled_task_cannot_invoke_a_tool():
     caller = DirectCaller({"cancelEvent": cancelled}, {})
     with pytest.raises(AgentError, match="stopped"):
         caller("chalkboard_send_chat", {"message": "should not send"})
+
+
+def test_final_delivery_uses_exactly_one_approved_channel():
+    class Socket:
+        def __init__(self):
+            self.messages = []
+
+        def send_chat_message(self, message):
+            self.messages.append(message)
+            return True
+
+    class Voice:
+        can_speak = False
+
+    session = RoomSession.__new__(RoomSession)
+    session.room_id = "room-1"
+    session.socket = Socket()
+    session.voice = Voice()
+    assert session._deliver_final_response("Fractions split a whole into equal parts.",
+                                           {"chatDelivered": False}, "chat", "Learner") == "chat"
+    assert session.socket.messages == ["Fractions split a whole into equal parts."]
+    assert session._deliver_final_response("This must not be duplicated.",
+                                           {"chatDelivered": True}, "chat", "Learner") == "chat-tool"
+    assert len(session.socket.messages) == 1

@@ -9,10 +9,11 @@ from tools.definitions import EXPECTED_TOOL_NAMES, TOOL_SPECS
 from tools.executors import TOOL_MIN_ROLE, can_invoker, forbidden_message
 
 
-def test_tool_count_is_18():
-    assert len(TOOL_SPECS) == 18
-    assert len(EXPECTED_TOOL_NAMES) == 18
-    assert len(set(EXPECTED_TOOL_NAMES)) == 18
+def test_tool_count_is_19():
+    assert len(TOOL_SPECS) == 19
+    assert len(EXPECTED_TOOL_NAMES) == 19
+    assert len(set(EXPECTED_TOOL_NAMES)) == 19
+    assert "chalkboard_respond" in EXPECTED_TOOL_NAMES
 
 
 def test_write_text_requires_text_x_y():

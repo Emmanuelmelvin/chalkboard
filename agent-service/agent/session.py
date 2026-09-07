@@ -377,7 +377,7 @@ class RoomSession:
                 raise AgentError("agent_stopped", "Agent session stopped")
             self.current_model = outcome.get("model") or self.current_model
             self.tool_calls += stats.get("toolCalls", 0)
-            final_text = outcome.get("finalText") or ""
+            final_text = stats.get("finalAnswer") or outcome.get("finalText") or ""
             delivery = self._deliver_final_response(final_text, stats, modality, safe_requester)
             try:
                 self.socket.broadcast_activity({"stage": "completed", "thought": "Done", "requestId": request_id})

@@ -83,3 +83,33 @@ def test_chunked_write_text():
     text = res["content"][0]["text"]
     assert "originalText" in text
     assert len(sock.context["strokes"]) >= 3
+
+
+def test_respond_records_final_answer_without_sending():
+    """chalkboard_respond is the structured final-answer channel: the message
+    is recorded for once-only delivery and never sent to chat directly."""
+    sock = FakeSocket()
+    stats = create_board_tool_stats()
+    res = run_board_tool(_ctx(sock), stats, "chalkboard_respond",
+                         {"message": "The board is currently empty."})
+    assert res.get("isError") is None
+    assert stats["finalAnswer"] == "The board is currently empty."
+    assert sock.chats == []
+
+
+def test_respond_narration_only_rejected():
+    sock = FakeSocket()
+    stats = create_board_tool_stats()
+    res = run_board_tool(_ctx(sock), stats, "chalkboard_respond",
+                         {"message": "I can confirm this information to the requester."})
+    assert res.get("isError") is True
+    assert not stats["finalAnswer"]
+
+
+def test_respond_duplicate_rejected():
+    sock = FakeSocket()
+    stats = create_board_tool_stats()
+    run_board_tool(_ctx(sock), stats, "chalkboard_respond", {"message": "First answer."})
+    res = run_board_tool(_ctx(sock), stats, "chalkboard_respond", {"message": "Second answer."})
+    assert res.get("isError") is True
+    assert stats["finalAnswer"] == "First answer."

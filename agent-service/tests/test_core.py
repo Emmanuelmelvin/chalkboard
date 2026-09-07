@@ -30,6 +30,29 @@ def test_strip_narration_removes_meta():
     assert strip_narration("I should respond directly in the chat.") is None
 
 
+def test_strip_narration_removes_requester_monologue():
+    """Regression: a real leak delivered the model's full planning monologue
+    to the room. Only the user-facing sentence must survive."""
+    leaked = ("The requester wants to know what is currently on the board. "
+              "According to the board state in the runtime context, the board is "
+              "currently empty with no strokes. I will confirm this to the "
+              "requester. The board is currently empty with no strokes.")
+    out = strip_narration(leaked)
+    assert out == "The board is currently empty with no strokes."
+    assert "requester" not in out
+    assert "runtime context" not in out
+
+
+def test_strip_narration_keeps_legit_answers():
+    # Friendly first-person answers must NOT be stripped.
+    assert strip_narration("I drew the triangle in the center of the board.") == \
+        "I drew the triangle in the center of the board."
+    assert strip_narration("Sure! Let me know what to add next.") is not None
+    # The mixed case keeps the answer sentence.
+    out = strip_narration("I will confirm this to the requester. The board is empty.")
+    assert out == "The board is empty."
+
+
 def test_layout_empty_and_occupied():
     assert analyze_canvas_layout([])["bounds"] is None
     assert "Clean/Empty" in format_spatial_layout_prompt([])
@@ -56,6 +79,19 @@ def test_voice_wake():
     assert is_agent_addressed("ok ai explain this")
     assert not is_agent_addressed("hello everyone")
     assert VOICE_WAKE_PATTERN.search("computer, help me")
+
+
+def test_strip_narration_removes_live_room_leaks():
+    """Regression: real messages delivered to a live classroom. Only the
+    user-facing sentence must survive each one."""
+    out = strip_narration("I can confirm this information to the requester. "
+                          "Your role in this room is the instructor.")
+    assert out == "Your role in this room is the instructor."
+    assert strip_narration(
+        "I should provide a summary of my capabilities based on the available tools.") is None
+    out = strip_narration("The toolResult indicates that the hand has been "
+                          "successfully lowered. Lowered my hand as requested.")
+    assert out == "Lowered my hand as requested."
 
 
 def test_unresolved_or_display_name_only_user_is_viewer():

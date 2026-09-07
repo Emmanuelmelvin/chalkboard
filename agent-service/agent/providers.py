@@ -4,7 +4,7 @@ LLM_PROVIDER switch (config.LLM_PROVIDER):
   gemini  -> google-adk LlmAgent on Gemini API (GEMINI_MODEL waterfall)
   bedrock -> google-adk LlmAgent + LiteLlm on AWS Bedrock (BEDROCK_MODELS waterfall)
 
-Both build the same 18 FunctionTools whose closures call run_board_tool
+Both build the same registered FunctionTools whose closures call run_board_tool
 directly — no NODE_URL/BRAIN_URL HTTP hop, no /tools/execute callback.
 """
 
@@ -211,6 +211,13 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                     text = _event_text(event)
                     if text:
                         last_text = text
+                    # Structured final answer: stop as soon as
+                    # chalkboard_respond has executed and its response event
+                    # came back (no further calls in flight). The answer is
+                    # recorded in stats and delivered exactly once.
+                    if stats.get("finalAnswer") and not calls:
+                        break
+
                     try:
                         is_final = event.is_final_response()
                     except Exception:
@@ -219,6 +226,10 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                         final_text = text
                 if not (final_text or "").strip():
                     final_text = last_text
+                # The structured final-answer channel (chalkboard_respond)
+                # always wins over any free text the model produced.
+                if stats.get("finalAnswer"):
+                    final_text = stats["finalAnswer"]
                 if final_text:
                     turns += 1
                 total_ms = int((time.perf_counter() - _t0) * 1000)

@@ -19,14 +19,14 @@ from agent.cursor import (
     GLIDE_STEPS,
     POST_DRAW_INTERVAL_MS,
 )
-from agent.sanitize import strip_narration
+from agent.sanitize import sanitize_chat_message, strip_narration
 from logger import logger
 from tools.executors import execute_tool
 
 
 def create_board_tool_stats() -> dict:
     return {"toolCalls": 0, "chatSent": False, "chatDelivered": False,
-            "voiceDelivered": False}
+            "voiceDelivered": False, "finalAnswer": None}
 
 
 def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any:
@@ -76,6 +76,9 @@ def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any
     if tool_name == "chalkboard_draw_chalk" and is_draw_path:
         return _execute_draw_with_pen(ctx, args)
 
+    if tool_name == "chalkboard_respond":
+        return _record_final_answer(ctx, stats, args)
+
     if tool_name == "chalkboard_send_chat" and isinstance(args.get("message"), str):
         stripped = strip_narration(args["message"])
         if not stripped:
@@ -110,6 +113,35 @@ def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any
     except Exception as exc:  # noqa: BLE001
         logger.warning("board tool exception tool=%s: %s", tool_name, exc)
         return {"content": [{"type": "text", "text": "That action could not be completed."}], "isError": True}
+
+
+def _record_final_answer(ctx: dict, stats: dict, args: dict):
+    """Structured final-answer channel (chalkboard_respond).
+
+    Only the `message` argument of chalkboard_respond is ever delivered to the
+    classroom; all other model output is scratch reasoning. The message passes
+    the same narration-strip + sanitize gates as chat, is stored in
+    stats["finalAnswer"], and RoomSession._deliver_final_response delivers it
+    exactly once through the approved channel. Nothing is emitted here.
+    """
+    socket = ctx["socket"]
+    message = args.get("message")
+    stripped = strip_narration(message) if isinstance(message, str) else None
+    clean = sanitize_chat_message(stripped) if stripped else None
+    if not clean:
+        logger.warning("blocked narration-only respond message room=%s", socket.room_id)
+        return {"content": [{"type": "text",
+                             "text": "That message contained only internal reasoning, not a user-facing answer. "
+                                     "Call chalkboard_respond again with ONLY the final answer the requester should read."}],
+                "isError": True}
+    if stats.get("finalAnswer"):
+        logger.warning("duplicate respond blocked room=%s", socket.room_id)
+        return {"content": [{"type": "text",
+                             "text": "Final answer already recorded. Do not call chalkboard_respond again. End your turn now."}],
+                "isError": True}
+    stats["finalAnswer"] = clean
+    return {"content": [{"type": "text",
+                         "text": "Final answer recorded for delivery. Do not repeat it as text. End your turn now."}]}
 
 
 def _execute_draw_with_pen(ctx: dict, args: dict):

@@ -1,4 +1,8 @@
-"""18 socket-emitting tool definitions (mirrors src/tools/definitions.ts).
+"""Model-facing tool definitions.
+
+18 tools emit to the socket via tools/executors.py; `chalkboard_respond` is the
+structured final-answer channel handled locally in agent/board_runner.py (it is
+never emitted to the socket — RoomSession delivers its message exactly once).
 
 Each entry: (name, description, [(arg, type, required)]).
 Types: str | float | bool | list | dict.
@@ -68,6 +72,9 @@ TOOL_SPECS: list[tuple[str, str, list[tuple[str, str, bool]]]] = [
     ("chalkboard_clipboard",
      "Duplicates the most recent stroke. copy/cut/paste are local UI ops with no board effect and return errors — only duplicate mutates the board.",
      [("action", "str", True)]),
+    ("chalkboard_respond",
+     "MANDATORY FINAL STEP for every request: deliver the answer. Call exactly once, after all other tool calls, with the complete polished user-facing answer as the message. Plain text output is never delivered — only this message reaches the requester. The message must stand alone: no plans, reasoning, or tool commentary.",
+     [("message", "str", True)]),
 ]
 
 EXPECTED_TOOL_NAMES: list[str] = [name for name, _, _ in TOOL_SPECS]

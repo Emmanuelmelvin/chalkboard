@@ -85,3 +85,18 @@ html[data-theme='light'] .error-fallback {
   --dashboard-gold: #b0873e;
   --dashboard-gold-bright: #946a26;
 }
+
+/* The shared .btn-secondary (index.css) is styled for the dark theme — light
+   text on a near-transparent white fill — so it vanishes against the warm
+   paper card. Give it a readable outline + ink text in light mode. */
+html[data-theme='light'] .error-fallback .btn-secondary {
+  background: rgba(41, 39, 34, 0.08);
+  border: 1px solid rgba(41, 39, 34, 0.28);
+  color: #292722;
+}
+
+html[data-theme='light'] .error-fallback .btn-secondary:hover {
+  background: rgba(41, 39, 34, 0.14);
+  border-color: rgba(41, 39, 34, 0.38);
+  color: #1c1917;
+}

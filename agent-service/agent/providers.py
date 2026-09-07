@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import inspect
 import os
-import re
 from typing import Any, Optional
 
 import config
 from errors import AgentError
 from logger import logger
-from system_info import get_static_instructions
+from system_info import get_policy_metadata, get_static_instructions
 from tools.definitions import TOOL_SPECS
 
 try:
@@ -32,28 +31,13 @@ except Exception:
 
 _TYPE_MAP = {"str": str, "float": float, "bool": bool, "list": list, "dict": dict}
 
-_TEMPLATE_RE = re.compile(r"\{+[^{}]*\}+")
-_STATE_KEY_RE = re.compile(r"^(artifact\.[A-Za-z_]\w*|[A-Za-z_]\w*(?::[A-Za-z_]\w*)?)\??$")
-
 _instruction_cache: str | None = None
-
-
-def neutralize_templates(instruction: str) -> str:
-    def _sub(m: re.Match) -> str:
-        raw = m.group(0)
-        inner = raw.strip("{}").strip()
-        key = inner[:-1] if inner.endswith("?") else inner
-        if _STATE_KEY_RE.match(key):
-            return f"[{inner}]"
-        return raw
-
-    return _TEMPLATE_RE.sub(_sub, instruction)
 
 
 def get_instruction() -> str:
     global _instruction_cache
     if _instruction_cache is None:
-        _instruction_cache = neutralize_templates(get_static_instructions())
+        _instruction_cache = get_static_instructions()
     return _instruction_cache
 
 
@@ -195,6 +179,7 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
     from google.genai import types as genai_types
 
     candidates = config.get_model_waterfall()
+    policy = get_policy_metadata()
     session_service = InMemorySessionService()
     last_error: Exception | None = None
 
@@ -233,8 +218,10 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                     final_text = last_text
                 if final_text:
                     turns += 1
-                logger.info("model succeeded model=%s turns=%s", model, turns)
-                return {"finalText": final_text, "turns": turns, "model": model, "trace": caller.trace}
+                logger.info("model succeeded model=%s turns=%s policy=%s/%s prompt_chars=%s",
+                            model, turns, policy["version"], str(policy["sha256"])[:12], len(message))
+                return {"finalText": final_text, "turns": turns, "model": model,
+                        "trace": caller.trace, "policy": policy, "promptChars": len(message)}
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
                 if ctx.get("cancelEvent") is not None and ctx["cancelEvent"].is_set():

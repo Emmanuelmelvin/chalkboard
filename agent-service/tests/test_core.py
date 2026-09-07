@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agent.activity import extract_cursor_position, format_tool_activity
 from agent.layout import analyze_canvas_layout, format_spatial_layout_prompt
-from agent.providers import DirectCaller, neutralize_templates
+from agent.providers import DirectCaller, get_instruction
 from agent.sanitize import sanitize_chat_message, strip_narration
 from agent.session import RoomSession
 from errors import AgentError
@@ -44,9 +44,10 @@ def test_activity_and_cursor_extract():
     assert extract_cursor_position("chalkboard_send_chat", {"message": "hi"}) is None
 
 
-def test_neutralize_templates():
-    assert neutralize_templates('Room "{ROOM_TITLE}" ok') == 'Room "[ROOM_TITLE]" ok'
-    assert neutralize_templates('no braces') == 'no braces'
+def test_model_policy_contains_no_runtime_templates():
+    instruction = get_instruction()
+    assert "{" not in instruction and "}" not in instruction
+    assert "registered function tools" in instruction
 
 
 def test_voice_wake():

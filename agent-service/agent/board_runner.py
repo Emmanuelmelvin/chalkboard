@@ -24,7 +24,8 @@ from tools.executors import execute_tool
 
 
 def create_board_tool_stats() -> dict:
-    return {"toolCalls": 0, "chatSent": False}
+    return {"toolCalls": 0, "chatSent": False, "chatDelivered": False,
+            "voiceDelivered": False}
 
 
 def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any:
@@ -83,11 +84,21 @@ def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any
                                          "Write ONLY the final answer the user should read."}], "isError": True}
         args["message"] = stripped
 
-    if tool_name == "chalkboard_send_chat":
-        stats["chatSent"] = True
-
     try:
         result = execute_tool(socket, tool_name, args, ctx.get("invokerRole", "instructor"))
+        if tool_name == "chalkboard_send_chat" and not result.get("isError"):
+            # A delivery is counted only after the backend accepted it. This
+            # keeps the final-response fallback available after a failed send.
+            stats["chatSent"] = True
+            stats["chatDelivered"] = True
+        if tool_name == "chalkboard_speak_narration" and not result.get("isError"):
+            try:
+                import json
+                content = (result.get("content") or [{}])[0]
+                payload = json.loads(content.get("text") or "{}")
+                stats["voiceDelivered"] = bool(payload.get("delivered"))
+            except Exception:
+                pass
         # Brief hold so pen lingers where ink landed — visible sync.
         if cursor.should_broadcast(tool_name):
             try:

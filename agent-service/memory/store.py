@@ -1,4 +1,4 @@
-"""Persistent lesson memory (mirrors src/memory/lessonStore.ts).
+"""Persistent lesson memory.
 
 Firestore when FIRESTORE_ENABLED=true with a project configured, otherwise
 in-memory. Write methods never throw; read failures mean "no memory".

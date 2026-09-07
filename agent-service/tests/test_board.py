@@ -34,6 +34,9 @@ class FakeSocket:
 
 
 class FakeCursor:
+    def __init__(self):
+        self.glides = []
+
     def should_broadcast(self, tool):
         return tool in ("chalkboard_draw_chalk", "chalkboard_write_text")
 
@@ -41,6 +44,18 @@ class FakeCursor:
         pass
 
     def glide_to(self, x, y, a=4, b=15):
+        pass
+
+    def glide_to_blocking(self, x, y, steps=None, interval_ms=None):
+        self.glides.append((x, y))
+
+    def trace_path_blocking(self, points, on_ink=None):
+        return [p for p in points if isinstance(p, dict)]
+
+    def hold(self, duration_ms=120):
+        pass
+
+    def cancel_active_stream(self):
         pass
 
 

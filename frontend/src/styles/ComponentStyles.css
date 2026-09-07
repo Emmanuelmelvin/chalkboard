@@ -390,6 +390,14 @@
   background-color: attr(data-color type(<color>), #64748b);
 }
 
+/* Agent cursors arrive at ~30Hz over the wire; a short linear transform
+   transition interpolates between updates so Chalkboard Master glides
+   instead of stepping. Human cursors (60Hz+ pointer events) are unaffected
+   because they don't get this class. */
+.collaborator-cursor-agent {
+  transition: transform 50ms linear;
+}
+
 .dust-puff {
   left: attr(data-left px);
   top: attr(data-top px);

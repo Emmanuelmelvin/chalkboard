@@ -146,6 +146,51 @@ def _append_single_stroke(s, stroke: dict) -> dict:
     return {"ok": True}
 
 
+def append_stroke_locked(socket, stroke: dict) -> dict:
+    """Persist a stroke via draw-stroke (Redis + full-stroke relay) while
+    holding the context lock, so in-memory history stays consistent with
+    concurrent socket callbacks."""
+    lock = getattr(socket, "context_lock", None)
+    if lock is None:
+        return _append_single_stroke(socket, stroke)
+    with lock:
+        return _append_single_stroke(socket, stroke)
+
+
+def valid_points(points: Any) -> bool:
+    return _valid_points(points)
+
+
+def build_chalk_stroke(socket, args: dict) -> dict:
+    """Pure chalk stroke builder (shared by the executor and the pen-synced
+    draw path — the SAME coordinates feed cursor and canvas)."""
+    return {"id": _make_stroke_id(socket, "chalk"),
+            "userId": getattr(socket, "socket_id", "") or "agent:chalkboard-master",
+            "tool": "chalk", "color": args.get("color") or "#ffffff",
+            "size": args.get("size") or 4, "intensity": args.get("intensity", 1),
+            "pathType": args.get("pathType") or "smooth",
+            "closed": args.get("closed"), "fillColor": args.get("fillColor"),
+            "points": args["points"], "agentId": "chalkboard-master"}
+
+
+def build_shape_strokes(socket, args: dict) -> list[dict]:
+    return generate_shape_strokes({
+        "shape": args.get("shape"), "cx": args.get("x", 0) or 0, "cy": args.get("y", 0) or 0,
+        "color": args.get("color") or "#ffffff", "size": args.get("size") or 3,
+        "intensity": args.get("intensity", 1), "fillColor": args.get("fillColor"),
+        "userId": getattr(socket, "socket_id", "") or "agent:chalkboard-master"})
+
+
+def build_highlight_stroke(socket, args: dict) -> dict:
+    points = [{"x": args["minX"], "y": args["minY"]}, {"x": args["maxX"], "y": args["minY"]},
+              {"x": args["maxX"], "y": args["maxY"]}, {"x": args["minX"], "y": args["maxY"]},
+              {"x": args["minX"], "y": args["minY"]}]
+    return {"id": _make_stroke_id(socket, "hl"),
+            "userId": getattr(socket, "socket_id", "") or "agent:chalkboard-master",
+            "tool": "chalk", "color": "#38bdf8", "size": 3,
+            "points": points, "agentId": "chalkboard-master"}
+
+
 def execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) -> dict:
     # Socket callbacks also update this in-memory mirror.  Keep each board
     # operation atomic with respect to those callbacks so full-list updates
@@ -181,13 +226,7 @@ def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) 
         if tool_name == "chalkboard_draw_chalk":
             if not _valid_points(args.get("points")):
                 return _err_text("points required (1-10000 finite {x,y})")
-            stroke = {"id": _make_stroke_id(socket, "chalk"),
-                      "userId": getattr(socket, "socket_id", "") or "agent:chalkboard-master",
-                      "tool": "chalk", "color": args.get("color") or "#ffffff",
-                      "size": args.get("size") or 4, "intensity": args.get("intensity", 1),
-                      "pathType": args.get("pathType") or "smooth",
-                      "closed": args.get("closed"), "fillColor": args.get("fillColor"),
-                      "points": args["points"], "agentId": "chalkboard-master"}
+            stroke = build_chalk_stroke(socket, args)
             res = _append_single_stroke(s, stroke)
             if not res["ok"]:
                 return _err_text(f"Draw failed: {res['error']}")
@@ -210,11 +249,7 @@ def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) 
                 return _err_text(f"Write failed: {res['error']}")
             return _ok_text({"success": True, "strokeId": stroke["id"]})
         if tool_name == "chalkboard_insert_shape":
-            shape_strokes = generate_shape_strokes({
-                "shape": args.get("shape"), "cx": args.get("x", 0) or 0, "cy": args.get("y", 0) or 0,
-                "color": args.get("color") or "#ffffff", "size": args.get("size") or 3,
-                "intensity": args.get("intensity", 1), "fillColor": args.get("fillColor"),
-                "userId": getattr(socket, "socket_id", "") or "agent:chalkboard-master"})
+            shape_strokes = build_shape_strokes(socket, args)
             if not shape_strokes:
                 return _err_text(f"Failed to generate shape \"{args.get('shape')}\"")
             for st in shape_strokes:
@@ -240,14 +275,7 @@ def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) 
                 return _err_text(f"Create note failed: {res['error']}")
             return _ok_text({"success": True, "strokeId": stroke["id"]})
         if tool_name == "chalkboard_highlight_area":
-            points = [{"x": args["minX"], "y": args["minY"]}, {"x": args["maxX"], "y": args["minY"]},
-                      {"x": args["maxX"], "y": args["maxY"]}, {"x": args["minX"], "y": args["maxY"]},
-                      {"x": args["minX"], "y": args["minY"]}]
-            stroke = {"id": _make_stroke_id(socket, "hl"),
-                      "userId": getattr(socket, "socket_id", "") or "agent:chalkboard-master",
-                      "tool": "chalk", "color": "#38bdf8", "size": 3,
-                      "points": points, "agentId": "chalkboard-master"}
-            res = _append_single_stroke(s, stroke)
+            res = _append_single_stroke(s, build_highlight_stroke(socket, args))
             if not res["ok"]:
                 return _err_text(f"Highlight failed: {res['error']}")
             return _ok_text({"success": True, "highlight": args})

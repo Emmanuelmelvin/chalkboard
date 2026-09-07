@@ -53,7 +53,7 @@ export const CollaboratorCursor: React.FC<CollaboratorCursorProps> = ({
 
   return (
     <div
-      className={`collaborator-cursor${isDefaultPosition ? ' collaborator-cursor-default' : ''}`}
+      className={`collaborator-cursor${isAgent ? ' collaborator-cursor-agent' : ''}${isDefaultPosition ? ' collaborator-cursor-default' : ''}`}
       data-left={isDefaultPosition ? undefined : x}
       data-top={isDefaultPosition ? undefined : y}
       style={

@@ -208,7 +208,9 @@ def _run_instruct(session: RoomSession, prompt: str, requested_by: str) -> None:
 
 def _run_ephemeral(session: RoomSession, prompt: str, requested_by: str) -> None:
     try:
-        session.enqueue_reasoning_task(prompt, requested_by, "instructor")
+        # wait=True: this thread holds no locks, and the session must not be
+        # stopped until the queued task has actually finished (or timed out).
+        session.enqueue_reasoning_task(prompt, requested_by, "instructor", wait=True)
     except Exception as exc:  # noqa: BLE001
         logger.exception("ephemeral error room=%s: %s", session.room_id, exc)
     finally:

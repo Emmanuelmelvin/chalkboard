@@ -2,6 +2,7 @@
 
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -100,3 +101,58 @@ def test_final_delivery_uses_exactly_one_approved_channel():
     assert session._deliver_final_response("This must not be duplicated.",
                                            {"chatDelivered": True}, "chat", "Learner") == "chat-tool"
     assert len(session.socket.messages) == 1
+
+
+def test_enqueue_does_not_block_on_context_lock():
+    """Regression: invocations ran on the socket dispatch thread while that
+    thread held socket.context_lock (@_with_context_lock). enqueue_reasoning_task
+    then blocked on task completion, so the pump could never acquire the lock
+    it needs to build the prompt — every invocation timed out after
+    REASONING_TIMEOUT_S + 30 with 'Reasoning task timed out'."""
+    class Socket:
+        context = {}
+
+        def __init__(self):
+            self.context_lock = threading.RLock()
+
+    session = RoomSession.__new__(RoomSession)
+    session.room_id = "room-1"
+    session.socket = Socket()
+    session._lock = threading.Lock()
+    session._queue = []
+    session._processing = False
+    session._active_task = None
+    session._stopped = False
+    session._gc_timer = None
+    session.state = "IDLE_OBSERVING"
+    session.tasks_completed = 0
+    session.tasks_failed = 0
+    session.total_turns = 0
+    session.current_model = ""
+    session.last_task_at = None
+    session.lesson_history = []
+    session._persist_memory = lambda entry: None
+
+    reasoning_reached_lock = threading.Event()
+
+    async def fake_reasoning(*args, **kwargs):
+        # _build_prompt and every board tool acquire socket.context_lock.
+        with session.socket.context_lock:
+            reasoning_reached_lock.set()
+        return {"success": True, "turns": 1}
+
+    session._run_reasoning = fake_reasoning
+
+    lock = session.socket.context_lock
+    lock.acquire()
+    try:
+        started = time.monotonic()
+        result = session.enqueue_reasoning_task("draw a circle", "Tester")
+        elapsed = time.monotonic() - started
+    finally:
+        lock.release()
+    assert result.get("queued") is True
+    assert elapsed < 5.0, (
+        f"enqueue blocked the caller for {elapsed:.1f}s while context_lock was "
+        "held — the socket-thread deadlock is back")
+    assert reasoning_reached_lock.wait(10), "pump never reached the reasoning task"

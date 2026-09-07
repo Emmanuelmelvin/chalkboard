@@ -6,6 +6,7 @@ events, and maintains bounded context for reasoning. Uses python-socketio.
 
 from __future__ import annotations
 
+import queue
 import threading
 import time
 from collections import defaultdict
@@ -20,8 +21,17 @@ MAX_COORD = 10_000_000
 def _with_context_lock(method):
     """Serialize socket state callbacks with board-tool state mutations."""
     def _wrapped(self, *args, **kwargs):
+        started = time.monotonic()
         with self.context_lock:
-            return method(self, *args, **kwargs)
+            try:
+                return method(self, *args, **kwargs)
+            finally:
+                held = time.monotonic() - started
+                if held > 2.0:
+                    # A blocking call inside a locked callback starves the
+                    # reasoning pump and the socket event loop (THREADING.md).
+                    logger.warning("context_lock held %.1fs by %s room=%s",
+                                   held, method.__name__, getattr(self, "room_id", "?"))
     return _wrapped
 
 
@@ -80,6 +90,9 @@ class AgentRoomSocket:
         self.voice = None
         self._handlers: dict[str, set[Callable]] = defaultdict(set)
         self.context_lock = threading.RLock()
+        self._event_queue: queue.Queue = queue.Queue()
+        self._dispatcher_started = False
+        self._dispatcher_lock = threading.Lock()
         self._connected = False
         self._closed = False
         self._joined = False
@@ -211,6 +224,7 @@ class AgentRoomSocket:
                 pass
             self._heartbeat = None
         self._handlers.clear()
+        self._event_queue.put((None, None))
         if self.sio is not None:
             try:
                 self.sio.disconnect()
@@ -227,11 +241,38 @@ class AgentRoomSocket:
         self._handlers[event].add(handler)
 
     def _emit_local(self, event: str, payload: Any) -> None:
-        for h in list(self._handlers.get(event, ())):
-            try:
-                h(payload)
-            except Exception:
-                pass
+        """Queue a local event for the dispatcher thread and return immediately.
+
+        Handlers must NEVER run on the thread that produced the event: the
+        socket callbacks are wrapped in @_with_context_lock, so a blocking
+        handler would run while context_lock is held and deadlock the
+        reasoning pump, which needs that same lock to build prompts and run
+        board tools (see THREADING.md — the 'Reasoning task timed out'
+        incident). The single dispatcher thread preserves event ordering.
+        """
+        self._ensure_dispatcher()
+        self._event_queue.put((event, payload))
+
+    def _ensure_dispatcher(self) -> None:
+        if self._dispatcher_started:
+            return
+        with self._dispatcher_lock:
+            if self._dispatcher_started:
+                return
+            self._dispatcher_started = True
+            threading.Thread(target=self._dispatch_loop, daemon=True,
+                             name="socket-event-dispatch").start()
+
+    def _dispatch_loop(self) -> None:
+        while True:
+            event, payload = self._event_queue.get()
+            if event is None:
+                return
+            for h in list(self._handlers.get(event, ())):
+                try:
+                    h(payload)
+                except Exception:
+                    pass
 
     def _push_full_stroke(self, stroke: dict) -> None:
         if any(st.get("id") == stroke.get("id") for st in self.context["strokes"]):

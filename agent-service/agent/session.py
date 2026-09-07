@@ -237,7 +237,8 @@ class RoomSession:
             except Exception:
                 pass
         try:
-            self.enqueue_reasoning_task(prompt, chat_entry.get("displayName") or "Classmate", role, modality)
+            self.enqueue_reasoning_task(prompt, chat_entry.get("displayName") or "Classmate", role, modality,
+                                        notify_on_failure=True)
         except Exception as exc:  # noqa: BLE001
             logger.exception("reasoning error room=%s: %s", self.room_id, exc)
             try:
@@ -248,7 +249,18 @@ class RoomSession:
     # ---- queue ----
 
     def enqueue_reasoning_task(self, prompt: str, requested_by: str,
-                               invoker_role: str = "instructor", modality: str = "chat") -> dict:
+                               invoker_role: str = "instructor", modality: str = "chat",
+                               wait: bool = False, notify_on_failure: bool = False) -> dict:
+        """Queue one reasoning task. Returns immediately by default.
+
+        Invocation handlers run on the socket event-dispatch thread while that
+        thread holds socket.context_lock (see @_with_context_lock in
+        socket_client.py). Blocking here deadlocks the pump: _build_prompt and
+        every board tool need that same lock, so the reasoning task cannot
+        start until the caller's wait expires (~REASONING_TIMEOUT_S + 30).
+        Only opt-in callers that hold no locks (ephemeral session lifecycle in
+        app.py) may pass wait=True.
+        """
         with self._lock:
             if self._stopped or self.state in ("DISCONNECTED", "ERROR"):
                 raise AgentError("agent_stopped", "Agent session is not active")
@@ -256,16 +268,19 @@ class RoomSession:
                 raise AgentError("agent_busy", "Agent is busy — please try again in a moment.")
             task = {"requestId": uuid.uuid4().hex, "prompt": prompt, "requestedBy": requested_by,
                     "invokerRole": invoker_role, "modality": modality,
+                    "notifyOnFailure": notify_on_failure,
                     "enqueuedAt": time.time(), "done": threading.Event(), "result": None, "error": None,
                     "cancelEvent": threading.Event()}
             self._queue.append(task)
         threading.Thread(target=self._pump, daemon=True).start()
-        if not task["done"].wait(timeout=config.REASONING_TIMEOUT_S + 30):
-            task["cancelEvent"].set()
-            raise AgentError("reasoning_timeout", "Reasoning task timed out")
-        if task["error"] is not None:
-            raise task["error"]
-        return task["result"] or {"success": True, "turns": 0}
+        if wait:
+            if not task["done"].wait(timeout=config.REASONING_TIMEOUT_S + 30):
+                task["cancelEvent"].set()
+                raise AgentError("reasoning_timeout", "Reasoning task timed out")
+            if task["error"] is not None:
+                raise task["error"]
+            return task["result"] or {"success": True, "turns": 0}
+        return {"requestId": task["requestId"], "queued": True}
 
     def _pump(self) -> None:
         with self._lock:
@@ -306,6 +321,14 @@ class RoomSession:
             self.tasks_failed += 1
             logger.exception("reasoning failed room=%s req=%s: %s", self.room_id, task["requestId"], exc)
             task["error"] = exc
+            # The invoking thread no longer waits on the result, so failure
+            # notification to the room moves here. Skipped when the task was
+            # cancelled via /stop — nobody wants a chat bubble after that.
+            if task.get("notifyOnFailure") and not task["cancelEvent"].is_set():
+                try:
+                    self.socket.send_chat_message(get_friendly_error_message(task["requestedBy"]))
+                except Exception:
+                    pass
         finally:
             task["done"].set()
             with self._lock:

@@ -10,6 +10,14 @@ import time
 from typing import Any
 
 from agent.activity import format_tool_activity
+from agent.cursor import (
+    CHUNK_GLIDE_INTERVAL_MS,
+    CHUNK_GLIDE_STEPS,
+    GLIDE_HOLD_MS,
+    GLIDE_INTERVAL_MS,
+    GLIDE_STEPS,
+    POST_DRAW_INTERVAL_MS,
+)
 from agent.sanitize import strip_narration
 from logger import logger
 from tools.executors import execute_tool
@@ -37,16 +45,34 @@ def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any
     except Exception:
         pass
 
-    if cursor.should_broadcast(tool_name):
-        try:
-            cursor.start_parallel_tool_cursor(tool_name, args)
-        except Exception:
-            pass
-
+    # Chunked write handles its own pen-synced glides — don't pre-glide.
     if tool_name == "chalkboard_write_text" and isinstance(args.get("text"), str):
         chunked = _execute_chunked_write_text(ctx, args)
         if chunked is not None:
             return chunked
+
+    # Pen-synced cursor: glide arrives where ink appears, then hold.
+    # For draw_chalk with a path, the generic pre-glide is skipped — the
+    # draw path (below) already does: glide to start -> emit -> trace rest.
+    is_draw_path = (
+        tool_name == "chalkboard_draw_chalk"
+        and isinstance(args.get("points"), list)
+        and len(args["points"]) > 1
+    )
+    if cursor.should_broadcast(tool_name) and not is_draw_path:
+        try:
+            from agent.activity import extract_cursor_position
+            target = extract_cursor_position(tool_name, args)
+            if target:
+                cursor.glide_to_blocking(
+                    target["x"], target["y"],
+                    steps=GLIDE_STEPS, interval_ms=GLIDE_INTERVAL_MS,
+                )
+        except Exception:
+            pass
+
+    if tool_name == "chalkboard_draw_chalk" and is_draw_path:
+        return _execute_draw_with_pen(ctx, args)
 
     if tool_name == "chalkboard_send_chat" and isinstance(args.get("message"), str):
         stripped = strip_narration(args["message"])
@@ -61,10 +87,45 @@ def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any
         stats["chatSent"] = True
 
     try:
-        return execute_tool(socket, tool_name, args, ctx.get("invokerRole", "instructor"))
+        result = execute_tool(socket, tool_name, args, ctx.get("invokerRole", "instructor"))
+        # Brief hold so pen lingers where ink landed — visible sync.
+        if cursor.should_broadcast(tool_name):
+            try:
+                cursor.hold(GLIDE_HOLD_MS)
+            except Exception:
+                pass
+        return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("board tool exception tool=%s: %s", tool_name, exc)
         return {"content": [{"type": "text", "text": "That action could not be completed."}], "isError": True}
+
+
+def _execute_draw_with_pen(ctx: dict, args: dict):
+    """Pen-synced draw: glide to start -> emit (ink appears under pen) -> trace rest -> hold."""
+    socket = ctx["socket"]
+    cursor = ctx["cursorStreamer"]
+    points = args.get("points") or []
+    # Glide to first point so pen is at stroke start when ink appears
+    try:
+        first = points[0] if isinstance(points[0], dict) else None
+        if first and isinstance(first.get("x"), (int, float)):
+            cursor.glide_to_blocking(first["x"], first.get("y", 0),
+                                     steps=GLIDE_STEPS, interval_ms=GLIDE_INTERVAL_MS)
+    except Exception:
+        pass
+    try:
+        result = execute_tool(socket, "chalkboard_draw_chalk", args, ctx.get("invokerRole", "instructor"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("board tool exception tool=%s: %s", "chalkboard_draw_chalk", exc)
+        return {"content": [{"type": "text", "text": "That action could not be completed."}], "isError": True}
+    # Trace remaining points over the fresh ink so pen path matches stroke
+    try:
+        if len(points) > 1:
+            cursor.stream_path_blocking(points[1:], max_samples=24, interval_ms=POST_DRAW_INTERVAL_MS)
+            cursor.hold(GLIDE_HOLD_MS)
+    except Exception:
+        pass
+    return result
 
 
 def _execute_chunked_write_text(ctx: dict, args: dict):
@@ -80,11 +141,15 @@ def _execute_chunked_write_text(ctx: dict, args: dict):
     char_w = font_size * 0.6
     gap = font_size * 0.3
     results = []
+    cursor = ctx["cursorStreamer"]
     for idx, chunk_text in enumerate(chunks):
         chunk_args = {**args, "text": chunk_text, "x": round(cur_x), "y": base_y,
                       "textAlign": "left", "fontSize": font_size}
+        # Pen arrives where chunk will appear — then ink
         try:
-            ctx["cursorStreamer"].glide_to(chunk_args["x"], chunk_args["y"], 4, 15)
+            cursor.glide_to_blocking(chunk_args["x"], chunk_args["y"],
+                                     steps=CHUNK_GLIDE_STEPS,
+                                     interval_ms=CHUNK_GLIDE_INTERVAL_MS)
         except Exception:
             pass
         try:
@@ -92,9 +157,13 @@ def _execute_chunked_write_text(ctx: dict, args: dict):
             results.append(_exec(ctx["socket"], "chalkboard_write_text", chunk_args, ctx.get("invokerRole", "instructor")))
         except Exception:
             return {"content": [{"type": "text", "text": "That action could not be completed."}], "isError": True}
+        try:
+            cursor.hold(GLIDE_HOLD_MS)
+        except Exception:
+            pass
         cur_x += len(chunk_text) * char_w + gap
         if idx < len(chunks) - 1:
-            time.sleep(0.035)
+            time.sleep(0.18)
     import json
     return {"content": [{"type": "text", "text": json.dumps(
         {"success": True, "originalText": raw_text, "chunks": chunks, "results": results})}]}

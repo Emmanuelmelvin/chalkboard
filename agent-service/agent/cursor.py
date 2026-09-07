@@ -1,4 +1,9 @@
-"""Parallel cursor broadcasting engine (mirrors src/agent/cursorStreamer.ts)."""
+"""Cursor broadcasting engine — human-speed, pen-synced (mirrors src/agent/cursorStreamer.ts).
+
+A (blocking) path: glide_to_blocking / stream_path_blocking / hold are
+sequential so the pen arrives where ink appears. Legacy async
+glide_to / stream_path / start_parallel_tool_cursor remain for compat.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +13,16 @@ import time
 from agent.activity import extract_cursor_position
 
 MAX_COORD = 10_000_000
+
+# Human-like defaults — pen arrives, ink appears, brief hold.
+GLIDE_STEPS = 20
+GLIDE_INTERVAL_MS = 48         # ~960ms total glide
+GLIDE_HOLD_MS = 120
+DRAW_INTERVAL_MS = 52          # ~19 pts/sec when tracing after emit
+POST_DRAW_INTERVAL_MS = 36     # faster flourish after ink
+CHUNK_GLIDE_STEPS = 14
+CHUNK_GLIDE_INTERVAL_MS = 42
+CHUNK_PAUSE_MS = 180
 
 VISUAL_TOOLS = {
     "chalkboard_draw_chalk",
@@ -50,36 +65,38 @@ class ParallelCursorStreamer:
         self._x, self._y = cx, cy
         self._socket.broadcast_cursor(cx, cy)
 
-    def glide_to(self, tx, ty, steps: int = 8, interval_ms: int = 25) -> None:
+    # --- blocking (pen-synced) primitives ---
+
+    def glide_to_blocking(self, tx, ty, steps: int = GLIDE_STEPS,
+                          interval_ms: int = GLIDE_INTERVAL_MS) -> None:
+        """Eased glide that blocks until the pen arrives."""
+        import math
         tx, ty = _clamp(tx), _clamp(ty)
         with self._lock:
             self._generation += 1
             gen = self._generation
             sx, sy = self._x, self._y
-
-        def _run():
-            import math
-            if math.hypot(tx - sx, ty - sy) < 5:
-                self.set_position(tx, ty)
-                return
-            for step in range(1, steps + 1):
-                with self._lock:
-                    if gen != self._generation:
-                        return
-                progress = min(1.0, step / steps)
-                ease = 1 - (1 - progress) ** 3
-                x = round(sx + (tx - sx) * ease)
-                y = round(sy + (ty - sy) * ease)
-                self._x, self._y = x, y
-                try:
-                    self._socket.broadcast_cursor(x, y)
-                except Exception:
+        if math.hypot(tx - sx, ty - sy) < 5:
+            self.set_position(tx, ty)
+            return
+        for step in range(1, steps + 1):
+            with self._lock:
+                if gen != self._generation:
                     return
-                time.sleep(interval_ms / 1000.0)
+            progress = min(1.0, step / steps)
+            ease = 1 - (1 - progress) ** 3
+            x = round(sx + (tx - sx) * ease)
+            y = round(sy + (ty - sy) * ease)
+            self._x, self._y = x, y
+            try:
+                self._socket.broadcast_cursor(x, y)
+            except Exception:
+                return
+            time.sleep(interval_ms / 1000.0)
 
-        threading.Thread(target=_run, daemon=True).start()
-
-    def stream_path(self, points: list, max_samples: int = 16, interval_ms: int = 30) -> None:
+    def stream_path_blocking(self, points: list, max_samples: int = 24,
+                             interval_ms: int = DRAW_INTERVAL_MS) -> None:
+        """Trace a sampled path blocking — used after ink to show where pen went."""
         if not points:
             return
         step = max(1, len(points) // max_samples)
@@ -90,20 +107,32 @@ class ParallelCursorStreamer:
         with self._lock:
             self._generation += 1
             gen = self._generation
-
-        def _run():
-            for p in sampled:
-                with self._lock:
-                    if gen != self._generation:
-                        return
-                self._x, self._y = _clamp(p["x"]), _clamp(p.get("y", 0))
-                try:
-                    self._socket.broadcast_cursor(self._x, self._y)
-                except Exception:
+        for p in sampled:
+            with self._lock:
+                if gen != self._generation:
                     return
-                time.sleep(interval_ms / 1000.0)
+            self._x, self._y = _clamp(p["x"]), _clamp(p.get("y", 0))
+            try:
+                self._socket.broadcast_cursor(self._x, self._y)
+            except Exception:
+                return
+            time.sleep(interval_ms / 1000.0)
 
-        threading.Thread(target=_run, daemon=True).start()
+    def hold(self, duration_ms: int = GLIDE_HOLD_MS) -> None:
+        if duration_ms > 0:
+            time.sleep(duration_ms / 1000.0)
+
+    # --- legacy async (kept for compat) ---
+
+    def glide_to(self, tx, ty, steps: int = 8, interval_ms: int = 25) -> None:
+        threading.Thread(
+            target=self.glide_to_blocking, args=(tx, ty, steps, interval_ms), daemon=True
+        ).start()
+
+    def stream_path(self, points: list, max_samples: int = 16, interval_ms: int = 30) -> None:
+        threading.Thread(
+            target=self.stream_path_blocking, args=(points, max_samples, interval_ms), daemon=True
+        ).start()
 
     def start_parallel_tool_cursor(self, tool_name: str, args: dict) -> None:
         if not self.should_broadcast(tool_name):

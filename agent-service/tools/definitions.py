@@ -22,7 +22,7 @@ TOOL_SPECS: list[tuple[str, str, list[tuple[str, str, bool]]]] = [
      [("text", "str", True), ("x", "float", True), ("y", "float", True),
       ("fontSize", "float", False), ("color", "str", False), ("textAlign", "str", False)]),
     ("chalkboard_insert_shape",
-     "Inserts one geometric shape at canvas coordinate (x,y). Supported shapes: triangle, square, rectangle, diamond, circle, star, line, arrow, cross, heart, pentagon, hexagon, heptagon, octagon, nonagon, decagon. One shape per call. radius controls its size (default 80 canvas units); use color, size, intensity, and fillColor to match the board.",
+     "Inserts one geometric shape at canvas coordinate (x,y). Supported shapes: triangle, square, rectangle, diamond, circle, star, line, arrow, cross, heart, pentagon, hexagon, heptagon, octagon, nonagon, decagon. One shape per call. Give BOTH x and y to control placement; if neither is supplied, the service picks clear space beside existing agent content. radius controls its size (default 80 canvas units); use color, size, intensity, and fillColor to match the board.",
      [("shape", "str", True), ("x", "float", False), ("y", "float", False),
       ("radius", "float", False), ("color", "str", False), ("size", "float", False),
       ("intensity", "float", False), ("fillColor", "str", False)]),

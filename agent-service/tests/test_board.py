@@ -151,6 +151,18 @@ def test_visual_request_can_respond_after_canvas_success():
     assert response.get("isError") is None
 
 
+def test_unspecified_agent_shapes_are_placed_in_clear_space():
+    sock = FakeSocket()
+    stats = create_board_tool_stats()
+    ctx = _ctx(sock)
+    first = run_board_tool(ctx, stats, "chalkboard_insert_shape", {"shape": "triangle"})
+    second = run_board_tool(ctx, stats, "chalkboard_insert_shape", {"shape": "rectangle"})
+    assert first.get("isError") is None and second.get("isError") is None
+    first_max_x = max(point["x"] for point in sock.context["strokes"][0]["points"])
+    second_min_x = min(point["x"] for point in sock.context["strokes"][1]["points"])
+    assert second_min_x > first_max_x
+
+
 def test_respond_narration_only_rejected():
     sock = FakeSocket()
     stats = create_board_tool_stats()

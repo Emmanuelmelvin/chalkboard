@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.definitions import EXPECTED_TOOL_NAMES, TOOL_SPECS
 from tools.executors import TOOL_MIN_ROLE, can_invoker, forbidden_message, valid_points
+from tools.shapes import generate_shape_strokes
 
 
 def test_tool_count_is_20():
@@ -62,3 +63,21 @@ def test_toggle_hand_description_claims_participant_capability():
     description = spec[0].lower()
     assert "your own hand" in description
     assert "never claim you cannot" in description
+
+
+def test_agent_shape_math_matches_frontend_geometry_contract():
+    """Regression guard for the Python port of frontend/components/shapes."""
+    rectangle = generate_shape_strokes({"shape": "rectangle", "cx": 100, "cy": 200, "radius": 80})[0]
+    assert rectangle["points"] == [
+        {"x": 36.0, "y": 160.0}, {"x": 164.0, "y": 160.0},
+        {"x": 164.0, "y": 240.0}, {"x": 36.0, "y": 240.0},
+    ]
+    diamond = generate_shape_strokes({"shape": "diamond", "cx": 0, "cy": 0, "radius": 80})[0]
+    assert diamond["points"] == [
+        {"x": 0, "y": -80}, {"x": 52.0, "y": 0},
+        {"x": 0, "y": 80}, {"x": -52.0, "y": 0},
+    ]
+    circle = generate_shape_strokes({"shape": "circle", "cx": 0, "cy": 0, "radius": 80})[0]
+    heart = generate_shape_strokes({"shape": "heart", "cx": 0, "cy": 0, "radius": 80})[0]
+    assert len(circle["points"]) == len(heart["points"]) == 48
+    assert generate_shape_strokes({"shape": "not-a-shape"}) == []

@@ -19,6 +19,7 @@ from typing import Any
 
 from agent.activity import format_tool_activity
 from agent.cursor import CHUNK_PAUSE_MS, GLIDE_HOLD_MS, stroke_gap_s
+from agent.layout import analyze_canvas_layout
 from agent.sanitize import sanitize_chat_message, strip_narration
 from logger import logger
 from tools.executors import (
@@ -38,6 +39,8 @@ CANVAS_MUTATION_TOOLS = frozenset({
     "chalkboard_create_note",
     "chalkboard_highlight_area",
 })
+DEFAULT_SHAPE_RADIUS = 80
+SHAPE_CLEARANCE = 80
 
 
 def create_board_tool_stats() -> dict:
@@ -57,6 +60,30 @@ def _record_canvas_result(stats: dict, tool_name: str, result: Any) -> Any:
     if tool_name in CANVAS_MUTATION_TOOLS and isinstance(result, dict) and not result.get("isError"):
         stats["canvasMutationSucceeded"] = True
     return result
+
+
+def _place_unspecified_shape(ctx: dict, args: dict) -> dict:
+    """Choose a non-overlapping center when the model omitted both axes.
+
+    Browser users default a new shape to their own viewport center.  The agent
+    has no viewport, so using a hard-coded ``(0, 0)`` made every unspecified
+    agent shape overlap.  Instead, preserve an explicit center exactly and,
+    only when both coordinates are absent, place the next shape to the right
+    of the current world-space bounds with enough room for its radius.
+    """
+    if isinstance(args.get("x"), (int, float)) or isinstance(args.get("y"), (int, float)):
+        return args
+    radius = args.get("radius")
+    radius = radius if isinstance(radius, (int, float)) and radius > 0 else DEFAULT_SHAPE_RADIUS
+    layout = analyze_canvas_layout(ctx["socket"].context.get("strokes") or [])
+    bounds = layout.get("bounds")
+    if not bounds:
+        return {**args, "x": 0, "y": 0}
+    return {
+        **args,
+        "x": bounds["maxX"] + radius + SHAPE_CLEARANCE,
+        "y": (bounds["minY"] + bounds["maxY"]) / 2,
+    }
 
 
 def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any:
@@ -105,6 +132,7 @@ def run_board_tool(ctx: dict, stats: dict, tool_name: str, raw_args: Any) -> Any
         return _record_canvas_result(stats, tool_name, _execute_draw_with_pen(ctx, args))
 
     if tool_name == "chalkboard_insert_shape":
+        args = _place_unspecified_shape(ctx, args)
         return _record_canvas_result(stats, tool_name, _execute_shape_with_pen(ctx, args))
 
     if tool_name == "chalkboard_highlight_area":

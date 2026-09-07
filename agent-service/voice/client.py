@@ -387,7 +387,7 @@ class AgentVoiceClient:
             )
             await self._audio_source.capture_frame(frame)
             await asyncio.sleep(0.01)  # pace in real time (10ms)
-        logger.info("utterance published room=%s chars=%d pcmBytes=%d frames=%d", room_id, len(text), len(padded), frames)
+        logger.debug("utterance published room=%s", room_id)
         self._suppress_until = time.time() + 1.0
 
     # -- listening (remote audio -> VAD -> STT) --
@@ -410,7 +410,7 @@ class AgentVoiceClient:
         if not identity or "chalkboard-master" in identity or identity.startswith("agent:"):
             return
         generation = self._generation
-        logger.info("voice subscribed to speaker room=%s identity=%s", room_id, identity)
+        logger.debug("voice subscribed room=%s", room_id)
 
         # Use 16kHz mono resampling - AudioStream does resampling internally
         try:
@@ -483,7 +483,7 @@ class AgentVoiceClient:
                         None, lambda _pcm=pcm: transcribe_utterance_blocking(_pcm, 16000)
                     )
                     if text:
-                        logger.info("voice transcript room=%s identity=%s chars=%d text=%s", room_id, identity, len(text), text[:120])
+                        logger.info("voice transcript room=%s", room_id)
                         try:
                             if self.on_transcript:
                                 self.on_transcript({
@@ -494,13 +494,13 @@ class AgentVoiceClient:
                         except Exception:
                             pass
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("transcription failed, skipping utterance room=%s: %s", room_id, exc)
+                    logger.warning("transcription failed room=%s", room_id)
                 finally:
                     self._transcribing = False
         except asyncio.CancelledError:
             pass
         except Exception as exc:  # noqa: BLE001
-            logger.warning("listen loop ended room=%s identity=%s: %s", room_id, identity, exc)
+            logger.debug("listen loop ended room=%s", room_id)
         finally:
             try:
                 if hasattr(stream, "aclose"):

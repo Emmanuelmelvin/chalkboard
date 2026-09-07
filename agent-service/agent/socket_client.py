@@ -94,7 +94,7 @@ class AgentRoomSocket:
                 "agentId": "agent:chalkboard-master", "displayName": "Chalkboard Master (AI)",
             }, transports=["websocket", "polling"], wait_timeout=10)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("socket connect failed room=%s: %s", self.room_id, exc)
+            logger.warning("socket connect failed room=%s", self.room_id)
             return False
         deadline = time.time() + 15
         while time.time() < deadline:
@@ -117,7 +117,7 @@ class AgentRoomSocket:
 
         @sio.event
         def connect_error(err):
-            logger.warning("socket connect_error room=%s: %s", self.room_id, err)
+            logger.warning("socket connect_error room=%s", self.room_id)
             if "unauthorized" in str(err).lower():
                 logger.error(
                     "Agent socket unauthorized room=%s. Check that AGENT_SECRET in agent-service/.env "
@@ -167,7 +167,7 @@ class AgentRoomSocket:
             self.sio.emit("join-room", {"roomId": self.room_id, "color": "#a3e5ff",
                                         "clientSessionId": f"agent-{self.room_id}"}, callback=_ack)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("join-room failed room=%s: %s", self.room_id, exc)
+            logger.warning("join-room failed room=%s", self.room_id)
 
     def _resync(self) -> None:
         try:

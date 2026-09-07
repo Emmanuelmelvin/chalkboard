@@ -5,13 +5,24 @@ import os
 
 _configured = False
 
+_QUIET_LIBS = (
+    "socketio",
+    "engineio",
+    "litellm",
+    "LiteLLM",
+    "boto3",
+    "botocore",
+    "urllib3",
+    "google",
+    "genai",
+    "werkzeug",
+)
+
 
 def get_logger(name: str = "agent-service") -> logging.Logger:
     global _configured
-    level_name = os.environ.get("LOG_LEVEL", "").upper()
-    if not level_name:
-        level_name = "INFO" if os.environ.get("NODE_ENV") == "production" else "DEBUG"
-    level = getattr(logging, level_name, logging.DEBUG)
+    level_name = os.environ.get("LOG_LEVEL", "").upper() or "INFO"
+    level = getattr(logging, level_name, logging.INFO)
     logger = logging.getLogger(name)
     if not _configured:
         handler = logging.StreamHandler()
@@ -19,8 +30,14 @@ def get_logger(name: str = "agent-service") -> logging.Logger:
         root = logging.getLogger()
         if not root.handlers:
             root.addHandler(handler)
-        root.setLevel(level)
+        # Keep our service at LOG_LEVEL, but never let third-party
+        # libs inherit DEBUG from development defaults.
+        root.setLevel(logging.WARNING)
         logger.setLevel(level)
+        logger.propagate = False
+        logger.addHandler(handler)
+        for lib in _QUIET_LIBS:
+            logging.getLogger(lib).setLevel(logging.WARNING)
         _configured = True
     return logger
 

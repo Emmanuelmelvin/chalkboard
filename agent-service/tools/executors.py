@@ -90,8 +90,8 @@ def _append_single_stroke(s, stroke: dict) -> dict:
 
 def execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) -> dict:
     args = dict(args or {})
-    logger.info("Tool invoked tool=%s role=%s room=%s args=%s",
-                tool_name, invoker_role, socket.room_id, json.dumps(args)[:200])
+    logger.debug("Tool invoked tool=%s room=%s",
+                tool_name, socket.room_id)
     if not can_invoker(invoker_role, tool_name):
         msg = forbidden_message(tool_name, invoker_role)
         logger.warning("Permission denied tool=%s role=%s room=%s", tool_name, invoker_role, socket.room_id)

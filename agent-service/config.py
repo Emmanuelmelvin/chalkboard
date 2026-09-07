@@ -56,21 +56,21 @@ if LLM_PROVIDER not in ("gemini", "bedrock"):
     LLM_PROVIDER = "gemini"
 
 BEDROCK_MODELS: list[str] = _list(
-    "BEDROCK_MODELS", "bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    "BEDROCK_MODELS", "bedrock/us.amazon.nova-lite-v1:0"
 )
 AWS_REGION: str = _str("AWS_REGION", "us-east-1")
 STT_BACKEND: str = os.environ.get("STT_BACKEND", "local").strip().lower()  # local|aws
 STT_MODEL: str = _str("STT_MODEL", "base")
 STT_LANGUAGE: str = os.environ.get("STT_LANGUAGE", "en").strip() or "en"
 TTS_VOICE: str = _str("TTS_VOICE", "en-US-AriaNeural")
-LOG_LEVEL: str = _str("LOG_LEVEL", "info" if NODE_ENV == "production" else "debug")
+LOG_LEVEL: str = _str("LOG_LEVEL", "info")
 
 
 def get_model_waterfall() -> list[str]:
     """Ordered model candidates for the active provider."""
     if LLM_PROVIDER == "bedrock":
         seen = list(dict.fromkeys(BEDROCK_MODELS))
-        return seen or ["bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0"]
+        return seen or ["bedrock/us.amazon.nova-lite-v1:0"]
     models = [GEMINI_MODEL, *FALLBACK_GEMINI_MODELS]
     return list(dict.fromkeys(m for m in models if m))
 

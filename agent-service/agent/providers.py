@@ -77,7 +77,7 @@ class DirectCaller:
     def __call__(self, tool_name: str, args: dict) -> Any:
         from agent.board_runner import run_board_tool
         self.trace.append({"tool": tool_name, "args": summarize_args(args)})
-        logger.info("tool call tool=%s args=%s", tool_name, summarize_args(args))
+        logger.debug("tool call tool=%s", tool_name)
         return run_board_tool(self._ctx, self._stats, tool_name, args)
 
 
@@ -154,7 +154,7 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
     last_error: Exception | None = None
 
     for model in candidates:
-        logger.info("attempting model=%s request=%s provider=%s", model, request_id, config.LLM_PROVIDER)
+        logger.debug("attempting model=%s provider=%s", model, config.LLM_PROVIDER)
         for attempt in range(max(1, config.MAX_RETRIES) + 1):
             try:
                 caller = DirectCaller(ctx, stats)
@@ -188,15 +188,15 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                     final_text = last_text
                 if final_text:
                     turns += 1
-                logger.info("model succeeded model=%s turns=%s tools=%s", model, turns, stats.get("toolCalls"))
+                logger.info("model succeeded model=%s turns=%s", model, turns)
                 return {"finalText": final_text, "turns": turns, "model": model, "trace": caller.trace}
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
                 msg = str(exc)
                 retryable = any(s in msg for s in ("404", "NOT_FOUND", "not found", "503",
                                                   "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "exhausted"))
-                logger.warning("model error model=%s attempt=%s advance=%s: %s",
-                               model, attempt + 1, retryable, msg[:300])
+                logger.warning("model error model=%s: %s",
+                               model, msg[:150])
                 if retryable:
                     break
                 if attempt >= config.MAX_RETRIES:

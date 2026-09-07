@@ -205,7 +205,7 @@ class RoomSession:
         if not (mentioned or _MENTION.search(raw) or _SLASH.search(raw)):
             return
         role = self._resolve_role(msg)
-        logger.info("invoked room=%s user=%s role=%s text=%s", self.room_id, msg.get("displayName"), role, raw[:80])
+        logger.info("invoked room=%s user=%s", self.room_id, msg.get("displayName"))
         clean = _MENTION.sub(" ", raw)
         clean = _SLASH.sub("", clean).strip()[:2000] or "Hello! How can I assist with the chalkboard lesson today?"
         self._handle_invocation(msg, clean, role, "chat")
@@ -263,8 +263,7 @@ class RoomSession:
             self._processing = True
             self.state = "ACTIVE_REASONING"
         try:
-            logger.info("reasoning start room=%s req=%s prompt=%s", self.room_id,
-                        task["requestId"], task["prompt"][:80])
+            logger.debug("reasoning start room=%s", self.room_id)
             result = asyncio.run(asyncio.wait_for(
                 self._run_reasoning(task["prompt"], task["requestedBy"], task["invokerRole"],
                                     task["requestId"], task["modality"]),
@@ -305,7 +304,7 @@ class RoomSession:
                              request_id: str, modality: str = "chat") -> dict:
         from agent import providers
         message, safe_requester = self._build_prompt(prompt, requested_by, invoker_role, modality)
-        logger.info("broadcast thinking room=%s req=%s provider=%s", self.room_id, request_id, config.LLM_PROVIDER)
+        logger.debug("reasoning with provider=%s room=%s", config.LLM_PROVIDER, self.room_id)
         try:
             self.socket.broadcast_activity({"stage": "thinking", "thought": "Analyzing classroom request...",
                                             "requestId": request_id})

@@ -37,7 +37,13 @@ def get_logger(name: str = "agent-service") -> logging.Logger:
         logger.propagate = False
         logger.addHandler(handler)
         for lib in _QUIET_LIBS:
-            logging.getLogger(lib).setLevel(logging.WARNING)
+            # LiteLLM factory warning is noisy even with modify_params,
+            # keep it at ERROR unless debugging
+            lvl = logging.ERROR if lib.lower() == "litellm" else logging.WARNING
+            logging.getLogger(lib).setLevel(lvl)
+        # also silence the explicit LiteLLM factory logger name
+        logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+        logging.getLogger("litellm").setLevel(logging.ERROR)
         _configured = True
     return logger
 

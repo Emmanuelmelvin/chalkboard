@@ -20,6 +20,15 @@ from logger import logger
 from system_info import get_static_instructions
 from tools.definitions import TOOL_SPECS
 
+try:
+    import litellm as _litellm_global
+
+    # Bedrock Converse requires alternating roles; without this LiteLLM
+    # just merges consecutive user/tool blocks and warns factory.py:4435.
+    _litellm_global.modify_params = True
+except Exception:
+    pass
+
 _TYPE_MAP = {"str": str, "float": float, "bool": bool, "list": list, "dict": dict}
 
 _TEMPLATE_RE = re.compile(r"\{+[^{}]*\}+")
@@ -128,6 +137,11 @@ def build_agent(model: str, caller: DirectCaller):
         generate_config["thinkingConfig"] = {"thinkingBudget": config.THINKING_BUDGET}
     if config.LLM_PROVIDER == "bedrock":
         from google.adk.models.lite_llm import LiteLlm
+        import litellm as _litellm
+        # Bedrock Converse requires alternating roles; consecutive
+        # user/tool blocks would error without a dummy assistant turn.
+        # This is a litellm global, not a Bedrock API param.
+        _litellm.modify_params = True
         return LlmAgent(name="chalkboard_master",
                         description="Autonomous AI teaching assistant for the Chalkboard classroom.",
                         model=LiteLlm(model=model),

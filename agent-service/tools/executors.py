@@ -104,7 +104,15 @@ def _clean_stroke(stroke: dict) -> dict:
         cleaned["intensity"] = max(0, min(1, inten))
     for key in ("color", "fillColor", "noteTextColor", "noteBackgroundColor"):
         if isinstance(cleaned.get(key), str):
-            cleaned[key] = cleaned[key][:64]
+            v = cleaned[key].strip()[:64]
+            # model sometimes sends '>#000000' or 'fill:#fff' — extract hex
+            if key in ("color", "fillColor") and v and v[0] not in ("#",):
+                import re as _re
+                m = _re.search(r"#[0-9a-fA-F]{3,8}", v)
+                v = m.group(0) if m else ""
+            cleaned[key] = v or None
+            if not cleaned[key]:
+                cleaned.pop(key, None)
     for key in ("id", "userId"):
         if isinstance(cleaned.get(key), str):
             cleaned[key] = cleaned[key][:256]
@@ -112,7 +120,15 @@ def _clean_stroke(stroke: dict) -> dict:
         cleaned["text"] = cleaned["text"][:64 * 1024]
     if isinstance(cleaned.get("noteHtml"), str):
         cleaned["noteHtml"] = cleaned["noteHtml"][:64 * 1024]
-    return cleaned
+    # backend allows only smooth|linear
+    if cleaned.get("pathType") not in ("smooth", "linear"):
+        cleaned["pathType"] = "smooth"
+    # closed must be bool, drop if not
+    if "closed" in cleaned and not isinstance(cleaned["closed"], bool):
+        cleaned["closed"] = bool(cleaned["closed"]) if isinstance(cleaned["closed"], (int, float)) else None
+        if cleaned["closed"] is None:
+            cleaned.pop("closed", None)
+    return {k: v for k, v in cleaned.items() if v is not None}
 
 
 def _append_single_stroke(s, stroke: dict) -> dict:

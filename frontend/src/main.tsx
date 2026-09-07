@@ -4,6 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import * as Sentry from '@sentry/react'
 import { queryClient } from '@/api/queryClient'
 import { initUserJot } from '@/lib/userjot'
+import { ErrorFallback } from '@/components/ErrorFallback'
 import './index.css'
 import './styles/ComponentStyles.css'
 import App from './App.tsx'
@@ -25,7 +26,7 @@ initUserJot();
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <Sentry.ErrorBoundary fallback={<p>Something went wrong.</p>}>
+      <Sentry.ErrorBoundary fallback={({ resetError }) => <ErrorFallback onReset={resetError} />}>
         <App />
       </Sentry.ErrorBoundary>
     </QueryClientProvider>

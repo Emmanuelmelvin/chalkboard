@@ -1,0 +1,87 @@
+/* Full-page error fallback rendered by the Sentry ErrorBoundary.
+   Follows the public / dashboard design language (dark ink surface, gold trim)
+   from PublicPages.css — the same palette used across the dashboard, not the
+   slate-chalkboard room. Tokens mirror --dashboard-* on .dashboard-page. */
+
+.error-fallback {
+  --dashboard-black: #090909;
+  --dashboard-black-soft: #111110;
+  --dashboard-white: #f5f2ea;
+  --dashboard-muted: #a6a29a;
+  --dashboard-line: rgba(245, 242, 234, 0.14);
+  --dashboard-gold: #c7a258;
+  --dashboard-gold-bright: #e3c77e;
+
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 72% 12%, rgba(199, 162, 88, 0.13), transparent 26rem),
+    radial-gradient(circle at 8% 40%, rgba(245, 242, 234, 0.04), transparent 30rem),
+    var(--dashboard-black);
+  color: var(--dashboard-white);
+  font-family: var(--font-sans);
+  user-select: auto;
+}
+
+.error-fallback-card {
+  display: flex;
+  width: min(100%, 460px);
+  flex-direction: column;
+  align-items: center;
+  gap: 17px;
+  padding: 32px 28px;
+  border: 1px solid var(--dashboard-line);
+  background: var(--dashboard-black-soft);
+  box-shadow: 18px 18px 0 rgba(199, 162, 88, 0.08);
+  text-align: center;
+}
+
+.error-fallback-mark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border: 1px solid rgba(199, 162, 88, 0.45);
+  border-radius: 50%;
+  color: var(--dashboard-gold-bright);
+  font-family: Georgia, serif;
+  font-size: 26px;
+  font-style: italic;
+}
+
+.error-fallback-title {
+  font-family: Georgia, serif;
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--dashboard-white);
+}
+
+.error-fallback-message {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--dashboard-muted);
+  max-width: 44ch;
+}
+
+.error-fallback-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Follow the user's selected light theme (mirrors the .dashboard-page override
+   in PublicPages.css). Dark is the default, so only light is overridden. */
+html[data-theme='light'] .error-fallback {
+  --dashboard-black: #f6f3eb;
+  --dashboard-black-soft: #ece7dc;
+  --dashboard-white: #292722;
+  --dashboard-muted: #6d685f;
+  --dashboard-line: rgba(41, 39, 34, 0.17);
+  --dashboard-gold: #b0873e;
+  --dashboard-gold-bright: #946a26;
+}

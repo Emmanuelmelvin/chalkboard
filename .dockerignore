@@ -1,0 +1,17 @@
+# Root context — must allow backend/, frontend/, shared/ to be sent
+# Keep ignores minimal so shared/plans.ts is included
+**/node_modules
+**/dist
+**/.data
+**/.env
+**/.env.*
+!backend/.env.example
+!frontend/.env.example
+**/*.log
+.git
+.gitignore
+.vscode
+demo-video
+pitch-deck
+plugin-artifacts
+scripts

@@ -53,6 +53,14 @@ export interface Stroke {
   clipBox?: Rect;
   /** Original points before a destructive crop — used to restore with Reset Crop */
   originalPoints?: Point[];
+  /** Original closure flag before a destructive crop, so Reset Crop can restore it */
+  originalClosed?: boolean;
+  /** Original path type before a destructive crop, so Reset Crop can restore it */
+  originalPathType?: 'smooth' | 'linear';
+  /** AI agent identifier if drawn/created by an autonomous agent (e.g. 'chalkboard-master') */
+  agentId?: string;
+  /** User ID of the editor/student who requested or initiated the AI action */
+  requestedBy?: string;
 }
 
 /** Represents a link reference to a canvas area */
@@ -139,6 +147,13 @@ export interface ChatMessage {
   message: string;
   mentionedUserIds: string[];
   createdAt: string;
+  agentId?: string;
+  requestedBy?: string;
+}
+
+export interface LeaveRoomOptions {
+  /** Ask for session feedback on the dashboard after leaving. */
+  promptSessionFeedback?: boolean;
 }
 
 export interface ChalkboardProps {
@@ -147,7 +162,7 @@ export interface ChalkboardProps {
   userName: string;
   socket: Socket;
   roomPassword?: string;
-  onLeaveRoom: () => void;
+  onLeaveRoom: (options?: LeaveRoomOptions) => void;
 }
 
 export interface LobbyProps {
@@ -215,3 +230,30 @@ export type ShapeType =
   | 'arrow'
   | 'cross'
   | 'heart';
+
+export type AgentStage =
+  | 'idle'
+  | 'thinking'
+  | 'planning'
+  | 'executing_tool'
+  | 'tool_result'
+  | 'clarifying'
+  | 'completed'
+  | 'error';
+
+export interface AgentActivityPayload {
+  roomId: string;
+  agentId?: string;
+  displayName?: string;
+  stage: AgentStage;
+  thought?: string;
+  toolName?: string;
+  toolAction?: string;
+  toolSummary?: string;
+  toolArgs?: Record<string, any>;
+  resultSummary?: string;
+  turnIndex?: number;
+  maxTurns?: number;
+  timestamp?: string;
+}
+

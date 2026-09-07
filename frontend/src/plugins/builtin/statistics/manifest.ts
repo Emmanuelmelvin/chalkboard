@@ -13,6 +13,7 @@ export const statisticsManifest: PluginManifest = {
   version: '1.0.0',
   description: 'Build datasets, calculate summary statistics, and insert charts on the canvas.',
   author: 'Chalkboard Labs',
+  preview: true,
   permissions: ['board:write', 'selection:write', 'room:sync'],
   contributes: {
     tools: [

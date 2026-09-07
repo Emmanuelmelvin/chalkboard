@@ -1,10 +1,24 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback
+} from 'react';
 import { useBoardStore } from '@/stores/boardStore';
-import { useLinksStore, type SavedLink } from '@/stores/linksStore';
+import {
+  useLinksStore,
+  type SavedLink
+} from '@/stores/linksStore';
 import { useLoggerStore } from '@/stores/loggerStore';
 import { getRandomColor } from '@/utils/colors';
 import type { Socket } from 'socket.io-client';
-import type { Point, Stroke, Collaborator, RoomMember, ChatMessage } from '@/types';
+import type {
+  Point,
+  Stroke,
+  Collaborator,
+  RoomMember,
+  ChatMessage
+} from '@/types';
 
 type StrokeStartPayload = Partial<Stroke> & {
   /** Present on live stroke-start relays; full redo payloads also include `id`. */
@@ -79,6 +93,9 @@ export function useBoardSocket(
   const {
     setStrokes,
     setRedoStack,
+    setSelectedStrokeIds,
+    setTransformBox,
+    setSelectionRotation,
   } = useBoardStore();
 
   const { setLinks } = useLinksStore();
@@ -86,10 +103,12 @@ export function useBoardSocket(
   const [collaborators, setCollaborators] = useState<Record<string, Collaborator>>({});
   const [currentRole, setCurrentRole] = useState<RoomMember['role']>('viewer');
   const [onlineCount, setOnlineCount] = useState(0);
+  const [ownerVoiceConnected, setOwnerVoiceConnected] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatUnreadMentions, setChatUnreadMentions] = useState(0);
   const [userCursorColor] = useState<string>(() => getRandomColor());
   const previousUsersRef = useRef<Map<string, string> | null>(null);
+  const lobbyRedirectHandledRef = useRef(false);
   const [clientSessionId] = useState(() => getClientSessionId());
 
   useEffect(() => {
@@ -146,7 +165,7 @@ export function useBoardSocket(
               avatarUrl: user.avatarUrl,
               color: user.color,
               role: user.role,
-              cursor: prev[sid]?.cursor,
+              cursor: user.role === 'viewer' ? undefined : prev[sid]?.cursor,
             };
           }
         });
@@ -165,6 +184,13 @@ export function useBoardSocket(
 
     const handlePresenceCount = ({ count }: { roomId?: string; count?: number }) => {
       if (typeof count === 'number') setOnlineCount(Math.max(0, count));
+    };
+
+    const handleOwnerVoiceConnectionChanged = ({
+      roomId: eventRoomId,
+      connected,
+    }: { roomId?: string; connected?: boolean }) => {
+      if (eventRoomId === roomId && typeof connected === 'boolean') setOwnerVoiceConnected(connected);
     };
 
     const handleConnectError = (error: Error) => {
@@ -237,6 +263,11 @@ export function useBoardSocket(
 
     const handleUndoStroke = ({ strokes: newStrokes }: { strokes: Stroke[] }) => {
       setStrokes(newStrokes);
+      // Clear selection when another user modifies strokes, since the
+      // previously selected strokes may have moved, been deleted, or changed.
+      setSelectedStrokeIds([]);
+      setTransformBox(null);
+      setSelectionRotation(0);
     };
 
     const handleClearBoard = () => {
@@ -244,14 +275,14 @@ export function useBoardSocket(
       setRedoStack([]);
     };
 
-    const handleCursorMove = ({ userId, cursor }: { userId: string; cursor: Point }) => {
+    const handleCursorMove = ({ userId, cursor }: { userId: string; cursor: Point | null }) => {
       setCollaborators((prev) => {
-        if (!prev[userId]) return prev;
+        if (!prev[userId] || prev[userId].role === 'viewer') return prev;
         return {
           ...prev,
           [userId]: {
             ...prev[userId],
-            cursor,
+            cursor: cursor || undefined,
           },
         };
       });
@@ -277,8 +308,21 @@ export function useBoardSocket(
         color: userCursorColor,
         password,
         clientSessionId,
-      }, (response: { ok?: boolean; error?: string; role?: RoomMember['role'] }) => {
+      }, (response: { ok?: boolean; error?: string; role?: RoomMember['role']; ownerVoiceConnected?: boolean }) => {
         if (!response?.ok) {
+          // A guest who lands directly on /room/:roomId (e.g. from a shared
+          // invite link) has no lobby to present a password or submit an
+          // approval request. Send them there instead of leaving them in the
+          // room with only a toast. The guard keeps a reconnect from bouncing
+          // an already-connected user back to the lobby.
+          const gateError = response?.error === 'bad_password'
+            || response?.error === 'approval_required'
+            || response?.error === 'join_denied';
+          if (gateError && !lobbyRedirectHandledRef.current) {
+            lobbyRedirectHandledRef.current = true;
+            window.location.assign(`/lobby/${encodeURIComponent(roomId)}`);
+            return;
+          }
           const errorMessage = response?.error === 'already_joined'
             ? 'You have already joined this room on another device.'
             : response?.error === 'unauthorized'
@@ -287,6 +331,8 @@ export function useBoardSocket(
           useLoggerStore.getState().notify(errorMessage, 'error', 5000);
           return;
         }
+        if (response.role) setCurrentRole(response.role);
+        setOwnerVoiceConnected(response.ownerVoiceConnected === true);
         socket.emit('room:sync', { roomId });
       });
     };
@@ -302,6 +348,7 @@ export function useBoardSocket(
     socket.on('update-users', handleUsersUpdate);
     socket.on('room:user-joined', handleRoomUserJoined);
     socket.on('presence:count', handlePresenceCount);
+    socket.on('voice:owner-connection-changed', handleOwnerVoiceConnectionChanged);
     socket.on('stroke-start', handleStrokeStart);
     socket.on('stroke-draw', handleStrokeDraw);
     socket.on('undo-stroke', handleUndoStroke);
@@ -334,6 +381,7 @@ export function useBoardSocket(
       socket.off('update-users', handleUsersUpdate);
       socket.off('room:user-joined', handleRoomUserJoined);
       socket.off('presence:count', handlePresenceCount);
+      socket.off('voice:owner-connection-changed', handleOwnerVoiceConnectionChanged);
       socket.off('stroke-start', handleStrokeStart);
       socket.off('stroke-draw', handleStrokeDraw);
       socket.off('undo-stroke', handleUndoStroke);
@@ -346,7 +394,7 @@ export function useBoardSocket(
       setOnlineCount(0);
       previousUsersRef.current = null;
     };
-  }, [socket, roomId, userName, userId, password, userCursorColor, clientSessionId, setStrokes, setRedoStack, setLinks]);
+  }, [socket, roomId, userName, userId, password, userCursorColor, clientSessionId, setStrokes, setRedoStack, setLinks, setSelectedStrokeIds, setSelectionRotation, setTransformBox]);
 
   const clearChatNotifications = useCallback(() => setChatUnreadMentions(0), []);
 
@@ -355,6 +403,7 @@ export function useBoardSocket(
     userCursorColor,
     currentRole,
     onlineCount,
+    ownerVoiceConnected,
     chatMessages,
     chatUnreadMentions,
     clearChatNotifications,

@@ -1,12 +1,20 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+.venv/
+venv/
+__pycache__/
+*.pyc
 
 # Environment and secrets
 .env
 .env.*
 !.env.example
 !.env.*.example
+# GCP service-account key files must never be committed
+*service-account*.json
+*service_account*.json
+*-key.json
 
 # Build output and generated coverage
 dist/

@@ -1,4 +1,8 @@
-import { useRef, useEffect, useCallback } from 'react';
+import {
+  useRef,
+  useEffect,
+  useCallback
+} from 'react';
 import { useBoardStore } from '@/stores/boardStore';
 import { drawBoardOnCanvas } from '@/utils/canvasRenderer';
 
@@ -27,7 +31,7 @@ export function useCanvasRenderer(
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
+
     drawBoardOnCanvas(ctx, canvas.width, canvas.height, dprRef.current, {
       strokes,
       zoom,
@@ -50,6 +54,8 @@ export function useCanvasRenderer(
     trimState,
   ]);
 
+  const prevSizeRef = useRef<{ width: number; height: number } | null>(null);
+
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -58,6 +64,18 @@ export function useCanvasRenderer(
     const rect = canvas.getBoundingClientRect();
     canvas.width = Math.round(rect.width * dpr);
     canvas.height = Math.round(rect.height * dpr);
+
+    if (prevSizeRef.current && prevSizeRef.current.width > 0 && prevSizeRef.current.height > 0) {
+      const deltaX = (rect.width - prevSizeRef.current.width) / 2;
+      const deltaY = (rect.height - prevSizeRef.current.height) / 2;
+      if (deltaX !== 0 || deltaY !== 0) {
+        useBoardStore.getState().setPanOffset((prev) => ({
+          x: prev.x + deltaX,
+          y: prev.y + deltaY,
+        }));
+      }
+    }
+    prevSizeRef.current = { width: rect.width, height: rect.height };
     drawBoard();
   }, [canvasRef, drawBoard]);
 
@@ -73,5 +91,12 @@ export function useCanvasRenderer(
     window.addEventListener('resize', resizeCanvas);
     return () => window.removeEventListener('resize', resizeCanvas);
   }, [resizeCanvas]);
+
+  // Re-draw once web fonts (Architects Daughter, etc.) are loaded
+  useEffect(() => {
+    document.fonts?.ready?.then(() => {
+      drawBoard();
+    });
+  }, [drawBoard]);
 }
 export default useCanvasRenderer;

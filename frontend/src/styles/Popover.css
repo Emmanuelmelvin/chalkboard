@@ -1,0 +1,271 @@
+/**
+ * @file Popover.css
+ * @description Astryx Popover Design System styling.
+ * Complies with Astryx Popover specification (https://astryx.atmeta.com/components/Popover)
+ * Pure white background, ash typography, smooth shadows, animations, and clean arrows.
+ */
+
+.astryx-popover-content {
+  z-index: 2500;
+  min-width: max-content;
+  max-width: min(380px, calc(100vw - 32px));
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 12px 30px -4px rgba(0, 0, 0, 0.14),
+    0 4px 12px -2px rgba(0, 0, 0, 0.08);
+  color: #475569;
+  outline: none;
+  pointer-events: auto;
+  transform-origin: var(--radix-popover-content-transform-origin);
+  animation: astryxPopoverIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.astryx-popover-content[data-state='closed'] {
+  animation: astryxPopoverOut 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.astryx-popover-inner {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+.astryx-popover-arrow {
+  fill: #ffffff;
+  stroke: rgba(0, 0, 0, 0.08);
+  stroke-width: 1px;
+}
+
+.astryx-popover-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.astryx-popover-close:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* Chalk & Tool settings styling within Astryx Popover */
+.chalk-settings-flyout.astryx-popover-content,
+.astryx-popover-content.chalk-settings-flyout {
+  width: 230px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  box-shadow:
+    0 14px 34px -4px rgba(0, 0, 0, 0.15),
+    0 4px 12px -2px rgba(0, 0, 0, 0.08);
+  color: #475569;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chalk-settings-flyout .settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.chalk-settings-flyout .settings-label {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chalk-settings-flyout .settings-divider {
+  width: 100%;
+  height: 1px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.chalk-settings-flyout .color-picker-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.chalk-settings-flyout .swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.chalk-settings-flyout .color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1.5px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.chalk-settings-flyout .color-swatch:hover {
+  transform: scale(1.1);
+  border-color: #94a3b8;
+}
+
+.chalk-settings-flyout .color-swatch.active {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.25);
+  transform: scale(1.08);
+}
+
+.chalk-settings-flyout .native-color-picker {
+  width: 100%;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  cursor: pointer;
+  padding: 1px;
+}
+
+.chalk-settings-flyout .slider-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.chalk-settings-flyout .slider-input {
+  flex: 1;
+  accent-color: #4f46e5;
+  height: 6px;
+  border-radius: 3px;
+  background: #e2e8f0;
+  cursor: pointer;
+}
+
+.chalk-settings-flyout .number-input {
+  width: 44px;
+  height: 24px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  outline: none;
+  transition: all 0.12s ease;
+}
+
+.chalk-settings-flyout .number-input:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.chalk-settings-flyout .chalk-settings-arrow,
+.chalk-settings-flyout .astryx-popover-arrow {
+  fill: #ffffff;
+  stroke: rgba(0, 0, 0, 0.08);
+  stroke-width: 1px;
+}
+
+/* Eraser Preview area inside Popover */
+.chalk-settings-flyout .eraser-flyout-header,
+.eraser-settings-flyout .eraser-flyout-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chalk-settings-flyout .eraser-flyout-icon,
+.eraser-settings-flyout .eraser-flyout-icon {
+  font-size: 13px;
+  line-height: 1;
+  color: #64748b;
+}
+
+.chalk-settings-flyout .eraser-flyout-title,
+.eraser-settings-flyout .eraser-flyout-title {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chalk-settings-flyout .settings-label,
+.eraser-settings-flyout .settings-label {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chalk-settings-flyout .eraser-preview-area,
+.eraser-settings-flyout .eraser-preview-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 64px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 2px 0;
+}
+
+.chalk-settings-flyout .eraser-preview-rect,
+.eraser-settings-flyout .eraser-preview-rect {
+  background: #ffffff;
+  border: 1.5px solid #64748b;
+  border-radius: 3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: width 0.1s ease, height 0.1s ease;
+  max-width: 90%;
+  max-height: 90%;
+  min-width: 12px;
+  min-height: 6px;
+}
+
+@keyframes astryxPopoverIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes astryxPopoverOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+}

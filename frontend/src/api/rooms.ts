@@ -1,5 +1,16 @@
 import { apiRequest } from '@/api/client';
-import type { CreateRoomRequest, CreateRoomResponse, DeleteResponse, JoinRoomRequest, JoinRoomResponse, ListJoinRequestsResponse, ListRoomsResponse, ResetRoomPasswordResponse, ResolveJoinRequestResponse, RoomDetailsResponse } from '@/api/types';
+import type {
+  CreateRoomRequest,
+  CreateRoomResponse,
+  DeleteResponse,
+  JoinRoomRequest,
+  JoinRoomResponse,
+  ListJoinRequestsResponse,
+  ListRoomsResponse,
+  ResetRoomPasswordResponse,
+  ResolveJoinRequestResponse,
+  RoomDetailsResponse
+} from '@/api/types';
 
 export function listRooms() {
   return apiRequest<ListRoomsResponse>({ url: '/rooms', method: 'GET' });

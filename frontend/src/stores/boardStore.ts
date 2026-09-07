@@ -1,7 +1,16 @@
 import { create } from 'zustand';
 import type { Socket } from 'socket.io-client';
-import type { NoteEditorRequest, Point, Rect, Stroke, TrimState } from '@/types';
-import { clampZoom, DEFAULT_ZOOM } from '@/lib/zoom';
+import type {
+  NoteEditorRequest,
+  Point,
+  Rect,
+  Stroke,
+  TrimState
+} from '@/types';
+import {
+  clampZoom,
+  DEFAULT_ZOOM
+} from '@/lib/zoom';
 
 /**
  * Core chalkboard board state shared by the UI and the agent-callable toolbox.
@@ -47,6 +56,7 @@ export interface BoardState {
   // ── Navigation ─────────────────────────────────────────────────────────
   panOffset: Point;
   zoom: number;
+  userHasInteracted: boolean;
 
   // ── Trim / crop ────────────────────────────────────────────────────────
   trimState: TrimState;
@@ -59,7 +69,8 @@ export interface BoardState {
 
   // ── UI helpers used by some tools ──────────────────────────────────────
   showInsertShapes: boolean;
-  insertShapesTab: 'shapes' | 'links' | 'plugins';
+  insertShapesTab: 'shapes' | 'plugins';
+  linksPanelOpen: boolean;
   highlightedLinkId: string | null;
   isCopied: boolean;
   spacePressed: boolean;
@@ -87,11 +98,13 @@ export interface BoardState {
   setClipboard: (strokes: Stroke[]) => void;
   setPanOffset: (offset: Point | ((prev: Point) => Point)) => void;
   setZoom: (zoom: number | ((prev: number) => number)) => void;
+  setUserHasInteracted: (interacted: boolean) => void;
   setTrimState: (state: TrimState | ((prev: TrimState) => TrimState)) => void;
   setCursorPos: (pos: Point) => void;
   setCanvas: (canvas: HTMLCanvasElement | null) => void;
   setShowInsertShapes: (show: boolean | ((prev: boolean) => boolean)) => void;
-  setInsertShapesTab: (tab: 'shapes' | 'links' | 'plugins') => void;
+  setInsertShapesTab: (tab: 'shapes' | 'plugins') => void;
+  setLinksPanelOpen: (open: boolean) => void;
   setHighlightedLinkId: (id: string | null) => void;
   setIsCopied: (copied: boolean) => void;
   setSpacePressed: (spacePressed: boolean) => void;
@@ -147,6 +160,7 @@ export const useBoardStore = create<BoardState>((set) => ({
 
   panOffset: { x: 0, y: 0 },
   zoom: DEFAULT_ZOOM,
+  userHasInteracted: false,
 
   trimState: { ...initialTrimState },
 
@@ -155,6 +169,7 @@ export const useBoardStore = create<BoardState>((set) => ({
 
   showInsertShapes: false,
   insertShapesTab: 'shapes',
+  linksPanelOpen: false,
   highlightedLinkId: null,
   isCopied: false,
   spacePressed: false,
@@ -194,6 +209,7 @@ export const useBoardStore = create<BoardState>((set) => ({
     set((state) => ({
       zoom: clampZoom(typeof zoom === 'function' ? zoom(state.zoom) : zoom),
     })),
+  setUserHasInteracted: (userHasInteracted) => set({ userHasInteracted }),
   setTrimState: (trimState) =>
     set((state) => ({
       trimState: typeof trimState === 'function' ? trimState(state.trimState) : trimState,
@@ -208,12 +224,13 @@ export const useBoardStore = create<BoardState>((set) => ({
           : showInsertShapes,
     })),
   setInsertShapesTab: (insertShapesTab) => set({ insertShapesTab }),
+  setLinksPanelOpen: (linksPanelOpen) => set({ linksPanelOpen }),
   setHighlightedLinkId: (highlightedLinkId) => set({ highlightedLinkId }),
   setIsCopied: (isCopied) => set({ isCopied }),
   setSpacePressed: (spacePressed) => set({ spacePressed }),
   setShowSelectionToolbox: (showSelectionToolbox) =>
     set((state) => ({
-        showSelectionToolbox:
+      showSelectionToolbox:
         typeof showSelectionToolbox === 'function'
           ? showSelectionToolbox(state.showSelectionToolbox)
           : showSelectionToolbox,
@@ -225,6 +242,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       selectedStrokeIds: [],
       transformBox: null,
       selectionRotation: 0,
+      selectionMarquee: null,
     }),
 
   initSession: ({ roomId, socket, userId, canEdit }) =>
@@ -247,10 +265,12 @@ export const useBoardStore = create<BoardState>((set) => ({
       canEdit: true,
       panOffset: { x: 0, y: 0 },
       zoom: DEFAULT_ZOOM,
+      userHasInteracted: false,
       trimState: { ...initialTrimState },
       cursorPos: { x: 0, y: 0 },
       showInsertShapes: false,
       insertShapesTab: 'shapes',
+      linksPanelOpen: false,
       highlightedLinkId: null,
       isCopied: false,
       activeTool: 'chalk',

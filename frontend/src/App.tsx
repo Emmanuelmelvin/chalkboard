@@ -1,21 +1,38 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Route, Switch, useLocation } from 'wouter';
-import Chalkboard from '@/pages/Chalkboard';
-import Home from '@/pages/Home';
-import Login from '@/pages/Login';
-import Dashboard from '@/pages/Dashboard';
-import Docs from '@/pages/Docs';
-import Guide from '@/pages/Guide';
-import Lobby from '@/pages/Lobby';
+import { Redirect, Route, Switch, useLocation } from 'wouter';
+
+const Chalkboard = lazy(() => import('@/pages/Chalkboard'));
+const Home = lazy(() => import('@/pages/Home'));
+const Login = lazy(() => import('@/pages/Login'));
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Docs = lazy(() => import('@/pages/Docs'));
+const Guide = lazy(() => import('@/pages/Guide'));
+const Lobby = lazy(() => import('@/pages/Lobby'));
+const Plans = lazy(() => import('@/pages/Plans'));
+const BillingReturn = lazy(() => import('@/pages/BillingReturn'));
+const Support = lazy(() => import('@/pages/Support'));
+const SupportThankYou = lazy(() => import('@/pages/SupportThankYou'));
+const InviteAccept = lazy(() => import('@/pages/InviteAccept'));
+
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';
+import FeedbackWidget from '@/components/FeedbackWidget';
+import { ToastProvider } from '@/components/ui/Toast';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserProfile } from '@/stores/authStore';
+import { identifyUserJot } from '@/lib/userjot';
+import { markSessionFeedbackPending } from '@/lib/sessionFeedback';
+import { resolveSocketUrl } from '@/api/client';
+import type { LeaveRoomOptions } from '@/types';
 import '@/styles/PublicPages.css';
 
+// In production the frontend is static on chalkboard.click and the API is on
+// api.chalkboard.click — VITE_API_URL configures the target backend.
+const socketBackendUrl = resolveSocketUrl(import.meta.env.VITE_API_URL);
+
 // Initialize a single socket client that can be activated on demand
-const socket: Socket = io({
+const socket: Socket = io(socketBackendUrl, {
   autoConnect: false,
   // Allow polling to establish the session when a LAN proxy or firewall does
   // not support WebSocket upgrades, then let Socket.IO upgrade when possible.
@@ -66,10 +83,18 @@ function RequireAuth({ children }: { children: (profile: UserProfile) => ReactNo
 
 function App() {
   const [location, setLocation] = useLocation();
-  const { hydrate } = useAuthStore();
+  const { hydrate, status, profile } = useAuthStore();
   const [roomPassword, setRoomPassword] = useState<string | undefined>();
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const isRoomRoute = location.startsWith('/room/');
+
+  // Tie every signed-in user's feedback actions back to their Chalkboard
+  // profile, and clear it when the session ends. Inert when UserJot is not
+  // configured for this build.
+  useEffect(() => {
+    if (status === 'authenticated' && profile) identifyUserJot(profile);
+    else if (status === 'unauthenticated') identifyUserJot(null);
+  }, [status, profile]);
 
   useEffect(() => {
     const activeTheme = isRoomRoute ? 'dark' : theme;
@@ -89,85 +114,127 @@ function App() {
     setLocation(targetPath);
   };
 
-  const handleLeaveRoom = () => {
+  const handleLeaveRoom = (options?: LeaveRoomOptions) => {
     socket.disconnect();
     setRoomPassword(undefined);
+    if (options?.promptSessionFeedback && location.startsWith('/room/')) {
+      const slug = location.replace('/room/', '').split('?')[0];
+      markSessionFeedbackPending(slug);
+    }
     setLocation('/dashboard?tab=rooms');
   };
 
   return (
-    <>
+    <ToastProvider>
       {!isRoomRoute && <ThemeToggle theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />}
-      <Switch>
-      {/* Dynamic room route */}
-      <Route path="/room/:roomId">
-        {(params: { roomId: string }) => {
-          const roomId = params.roomId.toLowerCase();
-          return (
+      {!isRoomRoute && status === 'authenticated' && <FeedbackWidget />}
+      <Suspense fallback={<AuthLoading />}>
+        <Switch>
+          {/* Dynamic room route */}
+          <Route path="/room/:roomId">
+            {(params: { roomId: string }) => {
+              const roomId = params.roomId.toLowerCase();
+              return (
+                <RequireAuth>
+                  {(user) => (
+                    <Chalkboard
+                      roomId={roomId}
+                      userId={user.id}
+                      userName={user.displayName}
+                      socket={socket}
+                      roomPassword={roomPassword}
+                      onLeaveRoom={handleLeaveRoom}
+                    />
+                  )}
+                </RequireAuth>
+              );
+            }}
+          </Route>
+
+          {/* Public authentication route */}
+          <Route path="/login">
+            <Login />
+          </Route>
+
+          {/* Signed-in workspace dashboard */}
+          <Route path="/dashboard">
             <RequireAuth>
               {(user) => (
-                <Chalkboard
-                  roomId={roomId}
-                  userId={user.id}
-                  userName={user.displayName}
-                  socket={socket}
-                  roomPassword={roomPassword}
-                  onLeaveRoom={handleLeaveRoom}
+                <Dashboard
+                  profile={user}
+                  onJoinRoom={handleJoinRoom}
                 />
               )}
             </RequireAuth>
-          );
-        }}
-      </Route>
+          </Route>
 
-      {/* Public authentication route */}
-      <Route path="/login">
-        <Login />
-      </Route>
+          {/* Public plugin documentation */}
+          <Route path="/docs">
+            <Docs />
+          </Route>
 
-      {/* Signed-in workspace dashboard */}
-      <Route path="/dashboard">
-        <RequireAuth>
-          {(user) => <Dashboard profile={user} onJoinRoom={handleJoinRoom} />}
-        </RequireAuth>
-      </Route>
+          {/* Public end-user guide */}
+          <Route path="/guide">
+            <Guide />
+          </Route>
 
-      {/* Public plugin documentation */}
-      <Route path="/docs">
-        <Docs />
-      </Route>
+          {/* Public pricing and developer revenue explainer */}
+          <Route path="/plans">
+            <Plans />
+          </Route>
 
-      {/* Public end-user guide */}
-      <Route path="/guide">
-        <Guide />
-      </Route>
+          {/* Checkout return target */}
+          <Route path="/billing/return/:reference">
+            {({ reference }) => (
+              <RequireAuth>
+                {() => <BillingReturn reference={decodeURIComponent(reference)} />}
+              </RequireAuth>
+            )}
+          </Route>
+          <Route path="/billing/return">
+            <Redirect to="/dashboard?tab=billing" />
+          </Route>
 
-      {/* Public landing page */}
-      <Route path="/">
-        <Home />
-      </Route>
+          {/* Team workspace invite */}
+          <Route path="/invite/:token">
+            <InviteAccept />
+          </Route>
 
-      {/* Room entry route */}
-      <Route path="/lobby/:roomId">
-        {(params: { roomId: string }) => (
-          <RequireAuth>
-            {(user) => <Lobby initialRoomId={params.roomId} profile={user} onJoinRoom={handleJoinRoom} />}
-          </RequireAuth>
-        )}
-      </Route>
-      <Route path="/lobby">
-        <RequireAuth>
-          {(user) => <Lobby initialRoomId={getLobbyRoomCode()} profile={user} onJoinRoom={handleJoinRoom} />}
-        </RequireAuth>
-      </Route>
+          {/* Public support / donation page — beta only */}
+          <Route path="/support/thank-you">
+            <SupportThankYou />
+          </Route>
+          <Route path="/support">
+            <Support />
+          </Route>
 
-      {/* Catch-all fallback */}
-      <Route>
-        <Home />
-      </Route>
-      </Switch>
+          {/* Public landing page */}
+          <Route path="/">
+            <Home />
+          </Route>
+
+          {/* Room entry route */}
+          <Route path="/lobby/:roomId">
+            {(params: { roomId: string }) => (
+              <RequireAuth>
+                {(user) => <Lobby initialRoomId={params.roomId} profile={user} onJoinRoom={handleJoinRoom} />}
+              </RequireAuth>
+            )}
+          </Route>
+          <Route path="/lobby">
+            <RequireAuth>
+              {(user) => <Lobby initialRoomId={getLobbyRoomCode()} profile={user} onJoinRoom={handleJoinRoom} />}
+            </RequireAuth>
+          </Route>
+
+          {/* Catch-all fallback */}
+          <Route>
+            <Home />
+          </Route>
+        </Switch>
+      </Suspense>
       <LoggerOutlet />
-    </>
+    </ToastProvider>
   );
 }
 

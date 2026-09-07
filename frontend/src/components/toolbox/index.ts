@@ -72,6 +72,7 @@ export {
   handleSetZoom,
   handleResetPanZoom,
   handleCenterOn,
+  handleCenterOnContentOrOrigin,
 } from '@/components/toolbox/navigation';
 
 // ── Links ──────────────────────────────────────────────────────────────

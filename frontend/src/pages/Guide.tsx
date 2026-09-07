@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import {
-  ArrowLeft,
   ArrowUpRight,
   BookOpen,
   CheckCircle2,
@@ -19,6 +18,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Link } from 'wouter';
+import PublicHeader from '@/components/PublicHeader';
 import '@/styles/Guide.css';
 
 const accessModes = [
@@ -97,17 +97,7 @@ function Guide() {
 
   return (
     <div className="guide-page">
-      <header className="guide-header">
-        <Link className="guide-brand" href="/" aria-label="Chalkboard home">
-          <span className="guide-brand-mark">C</span>
-          <span>Chalkboard</span>
-        </Link>
-        <div className="guide-header-actions">
-          <span className="guide-header-label"><BookOpen size={14} /> User guide</span>
-          <Link className="guide-header-link" href="/docs"><ArrowUpRight size={14} /> Developer docs</Link>
-          <Link className="guide-header-link" href="/"><ArrowLeft size={14} /> Home</Link>
-        </div>
-      </header>
+      <PublicHeader activeRoute="guide" />
 
       <main className="guide-main">
         <section className="guide-hero" aria-labelledby="guide-title">
@@ -292,6 +282,7 @@ function Guide() {
               <div className="guide-docs-map">
                 <article><span className="guide-card-icon"><BookOpen size={18} /></span><strong>You are here: User guide</strong><p>How to sign in, create or join rooms, use the canvas, collaborate, and recover from common mistakes.</p></article>
                 <article><span className="guide-card-icon"><Puzzle size={18} /></span><strong><Link href="/docs">Plugin developer guide</Link></strong><p>How to package, test, submit, review, publish, and update Chalkboard plugins.</p></article>
+                <article><span className="guide-card-icon"><BookOpen size={18} /></span><strong><Link href="/plans">Plans and pricing</Link></strong><p>What each plan includes, how board retention works, and how plugin developers are paid.</p></article>
                 <article><span className="guide-card-icon"><LayoutDashboard size={18} /></span><strong>Project contributor docs</strong><p>Repository setup, frontend/backend architecture, database, Redis, realtime behavior, and deployment remain in the repository README files.</p></article>
               </div>
               <div className="guide-callout guide-callout-dark"><CircleAlert size={18} /><div><strong>Keep the product guide honest</strong><p>This walkthrough documents controls currently exposed in the interface. Capabilities that exist only in backend services or future plans should not be presented as available user actions.</p></div></div>

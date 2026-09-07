@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
-import type { Point, Stroke } from '@/types';
+import type {
+  Point,
+  Stroke
+} from '@/types';
 
 export type PluginPermission =
   | 'board:read'
@@ -81,7 +84,25 @@ export interface PluginManifest {
   logoUrl?: string | null;
   permissions: PluginPermission[];
   contributes: PluginContributions;
+  /**
+   * The access plan the catalogue published this plugin under. Undefined for
+   * built-in plugins, which are always available.
+   */
+  plan?: 'free' | 'pro';
+  /**
+   * True when the plugin is Pro and the viewer's plan does not reach it.
+   * Presentational only: the backend refuses to serve the bundle regardless of
+   * what the client does with this flag.
+   */
+  locked?: boolean;
+  /**
+   * True when the plugin opts into a live preview of the inserted object
+   * rendered inside its modal. Undefined means the plugin does not want a
+   * preview; the modal only draws previews for plugins that declare it.
+   */
+  preview?: boolean;
 }
+
 
 export interface InsertStrokeOptions {
   select?: boolean;
@@ -89,6 +110,8 @@ export interface InsertStrokeOptions {
   group?: boolean;
   pluginId?: string;
   objectType?: string;
+  /** Translate inserted strokes so their bounding box is centered in the current viewport. */
+  centerInViewport?: boolean;
 }
 
 export interface PluginViewport {

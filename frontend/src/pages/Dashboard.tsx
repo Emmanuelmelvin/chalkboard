@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpRight,
   BookOpen,
@@ -22,23 +22,54 @@ import {
   ShieldCheck,
   Shapes,
   Sparkles,
+  Star,
   Trash2,
   UserRound,
   UsersRound,
+  WalletCards,
   X,
 } from 'lucide-react';
-import { useLocation, useSearch } from 'wouter';
-import { getRoomThemeLabel, roomThemes, type RoomTheme } from '@/constants/roomThemes';
+import {
+  useLocation,
+  useSearch
+} from 'wouter';
+import { getPlan } from '@/constants/plans';
+import {
+  getRoomThemeLabel,
+  roomThemes,
+  type RoomTheme
+} from '@/constants/roomThemes';
 import UserAvatar from '@/components/UserAvatar';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import RoomMembersModal from '@/components/RoomMembersModal';
-import DeveloperPlugins from '@/components/DeveloperPlugins';
+import SessionFeedbackModal from '@/components/SessionFeedbackModal';
+import {
+  consumePendingSessionFeedback,
+  hasRatedRoom,
+  isSessionFeedbackOptedOut
+} from '@/lib/sessionFeedback';
+const DeveloperPlugins = lazy(() => import('@/components/DeveloperPlugins'));
+const BillingPanel = lazy(() => import('@/components/BillingPanel'));
+const WorkspacePanel = lazy(() => import('@/components/WorkspacePanel'));
+import { useEntitlements } from '@/hooks/useEntitlements';
+import { toast } from '@/components/ui/Toast';
 import type { UserProfile } from '@/stores/authStore';
-import { useCreateRoomMutation, useDeleteRoomMutation, useResetRoomPasswordMutation, useRoomsQuery, useSignOutMutation } from '@/api/hooks';
-import type { RoomAccessMode, RoomSummary } from '@/api/types';
+import {
+  useCreateRoomMutation,
+  useDeleteRoomMutation,
+  useDashboardRoomRatingsQuery,
+  useResetRoomPasswordMutation,
+  useRoomsQuery,
+  useSignOutMutation
+} from '@/api/hooks';
+import type {
+  RoomAccessMode,
+  RoomRatingRecord,
+  RoomSummary
+} from '@/api/types';
 import '@/styles/PublicPages.css';
 
-type DashboardTab = 'overview' | 'rooms' | 'toolkit' | 'developer' | 'profile';
+type DashboardTab = 'overview' | 'rooms' | 'toolkit' | 'developer' | 'billing' | 'team' | 'profile';
 interface DashboardProps {
   profile: UserProfile;
   onJoinRoom: (room: string, password?: string) => void;
@@ -49,6 +80,13 @@ const tabItems: Array<{ id: DashboardTab; label: string; icon: typeof LayoutDash
   { id: 'rooms', label: 'Rooms', icon: PanelTopOpen },
   { id: 'toolkit', label: 'Toolkit', icon: LibraryBig },
   { id: 'developer', label: 'Developer', icon: Code2 },
+  // The Plans page links straight here with ?plan=, so this is the pre-checkout
+  // screen as well as the place a plan is managed afterwards.
+  { id: 'billing', label: 'Plan & billing', icon: WalletCards },
+  // The Team tab is the workspace owner's surface: it is filtered out of the
+  // rail for everyone who is not the owner of a Team-plan workspace, and a
+  // deep link is redirected to the overview (see the guard effect below).
+  { id: 'team', label: 'Team', icon: UsersRound },
   { id: 'profile', label: 'Profile', icon: UserRound },
 ];
 
@@ -87,6 +125,57 @@ function formatActivity(value: string) {
   return `Last active ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 }
 
+function formatRatingDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function StarRow({ rating }: { rating: number }) {
+  return (
+    <span className="room-ratings-stars" aria-label={`${rating} out of 5 stars`}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <Star key={star} size={13} strokeWidth={1.6} className={star <= rating ? 'is-filled' : ''} aria-hidden="true" />
+      ))}
+    </span>
+  );
+}
+
+function RoomRatingsPanel() {
+  const ratingsQuery = useDashboardRoomRatingsQuery();
+  const ratings = ratingsQuery.data?.feedback ?? [];
+
+  return (
+    <section className="dashboard-panel dashboard-room-ratings">
+      <div className="dashboard-panel-heading">
+        <div>
+          <p className="dashboard-panel-kicker">Room experience</p>
+          <h3>How did your sessions go?</h3>
+        </div>
+      </div>
+      {ratings.length === 0 ? (
+        <p className="dashboard-room-ratings-empty">
+          No ratings yet. When someone leaves one of your rooms they can rate the session, and it will appear here.
+        </p>
+      ) : (
+        <div className="dashboard-room-ratings-list">
+          {ratings.slice(0, 6).map((item: RoomRatingRecord) => (
+            <div className="dashboard-room-rating" key={item.id}>
+              <div className="dashboard-room-rating-head">
+                <strong>{item.room.title}</strong>
+                <StarRow rating={item.rating} />
+                <time dateTime={item.createdAt}>{formatRatingDate(item.createdAt)}</time>
+              </div>
+              {item.note && <p className="dashboard-room-rating-note">{item.note}</p>}
+              <small className="dashboard-room-rating-reporter">{item.reporter.displayName}</small>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function roomRole(room: RoomSummary) {
   return room.role || 'owner';
 }
@@ -95,17 +184,19 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const signOutMutation = useSignOutMutation();
+  const planLabel = profile.plan !== 'free' ? getPlan(profile.plan).name : null;
   const roomsQuery = useRoomsQuery();
   const createRoomMutation = useCreateRoomMutation();
   const deleteRoomMutation = useDeleteRoomMutation();
   const resetRoomPasswordMutation = useResetRoomPasswordMutation();
+  const entitlements = useEntitlements();
   const rooms = useMemo(() => roomsQuery.data?.rooms ?? [], [roomsQuery.data?.rooms]);
   const [roomTitle, setRoomTitle] = useState('');
   const [roomDescription, setRoomDescription] = useState('');
   const [roomAccessMode, setRoomAccessMode] = useState<RoomAccessMode>('password_protected');
   const [defaultMemberRole, setDefaultMemberRole] = useState<'instructor' | 'viewer'>('instructor');
   const [roomTheme, setRoomTheme] = useState<RoomTheme>('classroom');
-  const [roomVoiceEnabled, setRoomVoiceEnabled] = useState(false);
+  const [roomMediaMode, setRoomMediaMode] = useState<'none' | 'audio' | 'video'>('none');
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -125,9 +216,14 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   const activeTab = getTab(search, developerMode);
   const firstName = profile.displayName.trim().split(/\s+/)[0] || 'friend';
   const openRooms = useMemo(() => rooms.filter((room) => room.status === 'open'), [rooms]);
+  const [pendingFeedback, setPendingFeedback] = useState<{ slug: string } | null>(null);
+  // The Team tab exists only for the owner of a Team-plan workspace. Members
+  // are seated on the same plan, but the workspace admin surface is the
+  // owner's alone, and a plan that is not Team has no workspace at all.
+  const isTeamOwner = entitlements.summary?.plan === 'team' && entitlements.summary?.workspaceRole === 'owner';
   const visibleTabItems = useMemo(
-    () => tabItems.filter(({ id }) => id !== 'developer' || developerMode),
-    [developerMode],
+    () => tabItems.filter(({ id }) => (id !== 'developer' || developerMode) && (id !== 'team' || isTeamOwner)),
+    [developerMode, isTeamOwner],
   );
 
   useEffect(() => {
@@ -137,6 +233,15 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   }, [developerMode, search, setLocation]);
 
   useEffect(() => {
+    // Entitlements arrive after first paint; only redirect once the plan is
+    // known, so a Team owner deep-linking straight to the tab is not bounced.
+    if (entitlements.isLoading) return;
+    if (!isTeamOwner && getTab(search, developerMode) === 'team') {
+      setLocation('/dashboard?tab=overview');
+    }
+  }, [entitlements.isLoading, isTeamOwner, developerMode, search, setLocation]);
+
+  useEffect(() => {
     document.documentElement.classList.add('dashboard-active');
     document.body.classList.add('dashboard-active');
 
@@ -144,6 +249,18 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
       document.documentElement.classList.remove('dashboard-active');
       document.body.classList.remove('dashboard-active');
     };
+  }, []);
+
+  // Session feedback: ask about the room the user just left, once per room,
+  // unless they opted out entirely or already rated it.
+  useEffect(() => {
+    const slug = consumePendingSessionFeedback();
+    if (!slug) return;
+    if (isSessionFeedbackOptedOut() || hasRatedRoom(slug)) return;
+    // Mount-time one-shot read of the pending flag; intentional, not a
+    // synchronisation race.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingFeedback({ slug });
   }, []);
 
   useEffect(() => {
@@ -195,7 +312,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     setError('');
     try {
       await signOutMutation.mutateAsync();
-      setLocation('/login');
+      window.location.href = '/login';
     } catch {
       setSigningOut(false);
       setError('We could not log you out. Please try again.');
@@ -206,9 +323,11 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
     try {
       await navigator.clipboard.writeText(value);
       setCopiedRoomValue(key);
+      toast.success('Copied to clipboard');
       window.setTimeout(() => setCopiedRoomValue((current) => current === key ? null : current), 1800);
     } catch {
       setError('We could not copy that value. Please copy it manually.');
+      toast.error('Could not copy to clipboard');
     }
   };
 
@@ -246,7 +365,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
         accessMode: roomAccessMode,
         defaultRole: defaultMemberRole,
         theme: roomTheme,
-        voiceEnabled: roomVoiceEnabled,
+        voiceEnabled: roomMediaMode !== 'none',
       });
       setCreatedRoomInvite({
         slug: payload.room.slug,
@@ -369,21 +488,21 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                   </button>
                 )}
               </div>
-                {room.accessMode === 'password_protected' && !room.password && roomRole(room) === 'owner' && (
-                  <div className="dashboard-room-password-recovery">
-                    <span>Password unavailable for this older room.</span>
-                    <button
-                      className="dashboard-room-copy-button"
-                      type="button"
-                      onClick={() => { void regenerateRoomPassword(room.slug); }}
-                      disabled={resettingPasswordSlug === room.slug}
-                      title="Generate a new room password"
-                    >
-                      <RefreshCw size={12} className={resettingPasswordSlug === room.slug ? 'is-spinning' : undefined} />
-                      <span>{resettingPasswordSlug === room.slug ? 'Generating' : 'Generate password'}</span>
-                    </button>
-                  </div>
-                )}
+              {room.accessMode === 'password_protected' && !room.password && roomRole(room) === 'owner' && (
+                <div className="dashboard-room-password-recovery">
+                  <span>Password unavailable for this older room.</span>
+                  <button
+                    className="dashboard-room-copy-button"
+                    type="button"
+                    onClick={() => { void regenerateRoomPassword(room.slug); }}
+                    disabled={resettingPasswordSlug === room.slug}
+                    title="Generate a new room password"
+                  >
+                    <RefreshCw size={12} className={resettingPasswordSlug === room.slug ? 'is-spinning' : undefined} />
+                    <span>{resettingPasswordSlug === room.slug ? 'Generating' : 'Generate password'}</span>
+                  </button>
+                </div>
+              )}
               {room.accessMode === 'password_protected' && !room.password && roomRole(room) !== 'owner' && <span className="dashboard-room-password-status">Password protected</span>}
               <div className="dashboard-room-attendance" aria-label="Room attendance summary">
                 <div><span>Members</span><strong>{room.members.length}</strong></div>
@@ -560,18 +679,42 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                 ))}
               </div>
             </fieldset>
-            <fieldset className="dashboard-voice-fieldset">
-              <label className="dashboard-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={roomVoiceEnabled}
-                  onChange={(e) => setRoomVoiceEnabled(e.target.checked)}
-                />
-                <span>
-                  <strong>Enable voice chat</strong>
-                  <small>Add live audio to this room.</small>
-                </span>
-              </label>
+            <fieldset className="dashboard-access-fieldset">
+              <legend>Media & Calling</legend>
+              <div className="dashboard-access-grid">
+                <label className={`dashboard-access-option${roomMediaMode === 'none' ? ' is-selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="room-media"
+                    value="none"
+                    checked={roomMediaMode === 'none'}
+                    onChange={() => setRoomMediaMode('none')}
+                  />
+                  <span><strong>Canvas only</strong><small>No live audio or video calling.</small></span>
+                </label>
+
+                <label className={`dashboard-access-option${roomMediaMode === 'audio' ? ' is-selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="room-media"
+                    value="audio"
+                    checked={roomMediaMode === 'audio'}
+                    onChange={() => setRoomMediaMode('audio')}
+                  />
+                  <span><strong>Audio only</strong><small>Live voice chat for discussions.</small></span>
+                </label>
+
+                <label className={`dashboard-access-option${roomMediaMode === 'video' ? ' is-selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="room-media"
+                    value="video"
+                    checked={roomMediaMode === 'video'}
+                    onChange={() => setRoomMediaMode('video')}
+                  />
+                  <span><strong>Video & Audio</strong><small>Webcams & screen sharing.</small></span>
+                </label>
+              </div>
             </fieldset>
             <button className="dashboard-button dashboard-button-dark" type="submit" disabled={loading}>
               <Plus size={15} strokeWidth={2} /> {loading ? 'Creating room…' : 'Create a new room'}
@@ -589,6 +732,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
           {renderRoomList()}
         </div>
       </section>
+      {rooms.some((room) => room.role === 'owner' || room.role === 'instructor') && <RoomRatingsPanel />}
     </>
   );
 
@@ -670,100 +814,106 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
   return (
     <>
       <div className="dashboard-page">
-      <aside className="dashboard-rail">
-        <div className="dashboard-rail-top">
-          <button className="dashboard-brand" type="button" onClick={() => setLocation('/')} aria-label="Chalkboard home"><span className="home-brand-mark">C</span><span>Chalkboard</span></button>
-        </div>
-        <div className="dashboard-rail-rule" />
-        <p className="dashboard-rail-label">Workspace</p>
-        <nav className="dashboard-tabs" aria-label="Dashboard sections">
-          {visibleTabItems.map(({ id, label, icon: Icon }) => (
-            <button className={`dashboard-tab${activeTab === id ? ' is-active' : ''}`} type="button" key={id} onClick={() => selectTab(id)} aria-current={activeTab === id ? 'page' : undefined}>
-              <Icon size={17} strokeWidth={activeTab === id ? 1.9 : 1.5} /><span>{label}</span>{id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
-            </button>
-          ))}
-          {developerMode && <button className="dashboard-tab dashboard-tab-external" type="button" onClick={() => setLocation('/docs')}><BookOpen size={17} strokeWidth={1.5} /><span>Go to docs</span><ArrowUpRight size={13} strokeWidth={1.7} /></button>}
-        </nav>
-        <div className="dashboard-rail-bottom">
-          <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
-          {profile.platformRole !== 'user' && <button className="dashboard-help" type="button" onClick={() => { window.location.href = '/admin'; }}><ShieldCheck size={15} /> Open admin console</button>}
-          <button className="dashboard-help" type="button" onClick={() => setLocation('/guide')}><CircleHelp size={15} /> Read the user guide</button>
-          <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
-        </div>
-      </aside>
-      <main className="dashboard-main">
-        <header className="dashboard-header">
-          <div><p className="dashboard-header-meta">Chalkboard / {tabTitle}</p><h1>{activeTab === 'overview' ? `Good to see you, ${firstName}.` : tabTitle}</h1></div>
-          <div className="dashboard-header-actions">
-            <button className="dashboard-header-room-button" type="button" onClick={() => selectTab('rooms')}><Plus size={15} /> New room</button>
-            <button
-              className="dashboard-mobile-menu-button"
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Open workspace menu"
-              aria-expanded={mobileMenuOpen}
-              aria-controls="dashboard-mobile-drawer"
-            >
-              <Menu size={19} strokeWidth={1.8} />
-              <span>Menu</span>
-            </button>
-            <UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="md" />
+        <aside className="dashboard-rail">
+          <div className="dashboard-rail-top">
+            <button className="dashboard-brand" type="button" onClick={() => setLocation('/')} aria-label="Chalkboard home"><span className="home-brand-mark">C</span><span>Chalkboard</span>{planLabel && <span className="dashboard-brand-plan">{planLabel}</span>}</button>
           </div>
-        </header>
-        <div className="dashboard-content">
-          {activeTab === 'overview' && renderOverview()}
-          {activeTab === 'rooms' && renderRooms()}
-          {activeTab === 'toolkit' && renderToolkit()}
-          {activeTab === 'developer' && <DeveloperPlugins />}
-          {activeTab === 'profile' && renderProfile()}
-          {activeTab !== 'rooms' && error && <p className="dashboard-error dashboard-floating-error" role="alert">{error}</p>}
-        </div>
-      </main>
-      <button
-        className={`dashboard-mobile-menu-backdrop${mobileMenuOpen ? ' is-visible' : ''}`}
-        type="button"
-        onClick={() => setMobileMenuOpen(false)}
-        aria-label="Close workspace menu"
-        tabIndex={mobileMenuOpen ? 0 : -1}
-      />
-      <aside
-        id="dashboard-mobile-drawer"
-        className={`dashboard-mobile-drawer${mobileMenuOpen ? ' is-open' : ''}`}
-        aria-label="Mobile workspace menu"
-        aria-hidden={!mobileMenuOpen}
-      >
-        <div className="dashboard-mobile-drawer-header">
-          <div><p className="dashboard-panel-kicker">Workspace</p><strong>Chalkboard</strong></div>
-          <button className="dashboard-mobile-drawer-close" type="button" onClick={() => setMobileMenuOpen(false)} aria-label="Close workspace menu">
-            <X size={18} strokeWidth={1.8} />
-          </button>
-        </div>
-        <nav className="dashboard-mobile-drawer-nav" aria-label="Workspace sections">
-          {visibleTabItems.map(({ id, label, icon: Icon }) => (
-            <button
-              className={`dashboard-mobile-drawer-tab${activeTab === id ? ' is-active' : ''}`}
-              type="button"
-              key={id}
-              onClick={() => selectTab(id)}
-              aria-current={activeTab === id ? 'page' : undefined}
-            >
-              <Icon size={18} strokeWidth={activeTab === id ? 1.9 : 1.5} />
-              <span>{label}</span>
-              {id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
+          <div className="dashboard-rail-rule" />
+          <p className="dashboard-rail-label">Workspace</p>
+          <nav className="dashboard-tabs" aria-label="Dashboard sections">
+            {visibleTabItems.map(({ id, label, icon: Icon }) => (
+              <button className={`dashboard-tab${activeTab === id ? ' is-active' : ''}`} type="button" key={id} onClick={() => selectTab(id)} aria-current={activeTab === id ? 'page' : undefined}>
+                <Icon size={17} strokeWidth={activeTab === id ? 1.9 : 1.5} /><span>{label}</span>{id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
+              </button>
+            ))}
+            {developerMode && <button className="dashboard-tab dashboard-tab-external" type="button" onClick={() => setLocation('/docs')}><BookOpen size={17} strokeWidth={1.5} /><span>Go to docs</span><ArrowUpRight size={13} strokeWidth={1.7} /></button>}
+          </nav>
+          <div className="dashboard-rail-bottom">
+            <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
+            {profile.platformRole !== 'user' && <button className="dashboard-help" type="button" onClick={() => { window.location.href = '/admin'; }}><ShieldCheck size={15} /> Open admin console</button>}
+            <button className="dashboard-help" type="button" onClick={() => setLocation('/guide')}><CircleHelp size={15} /> Read the user guide</button>
+            <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
+          </div>
+        </aside>
+        <main className="dashboard-main">
+          <header className="dashboard-header">
+            <div><p className="dashboard-header-meta">Chalkboard / {tabTitle}</p><h1>{activeTab === 'overview' ? `Good to see you, ${firstName}.` : tabTitle}</h1></div>
+            <div className="dashboard-header-actions">
+              <button className="dashboard-header-room-button" type="button" onClick={() => selectTab('rooms')}><Plus size={15} /> New room</button>
+              <button
+                className="dashboard-mobile-menu-button"
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="Open workspace menu"
+                aria-expanded={mobileMenuOpen}
+                aria-controls="dashboard-mobile-drawer"
+              >
+                <Menu size={19} strokeWidth={1.8} />
+                <span>Menu</span>
+              </button>
+              <UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="md" />
+            </div>
+          </header>
+          <div className="dashboard-content">
+            <Suspense fallback={<div className="auth-loading" role="status" aria-live="polite"><span className="auth-loading-mark">C</span><span>Loading section…</span></div>}>
+              {activeTab === 'overview' && renderOverview()}
+              {activeTab === 'rooms' && renderRooms()}
+              {activeTab === 'toolkit' && renderToolkit()}
+              {activeTab === 'developer' && <DeveloperPlugins />}
+              {activeTab === 'billing' && <BillingPanel />}
+              {/* Only the owner of a Team workspace reaches this: the rail filters
+                the tab, and the guard effect redirects deep links otherwise. */}
+              {activeTab === 'team' && (isTeamOwner || entitlements.isLoading) && <WorkspacePanel />}
+              {activeTab === 'profile' && renderProfile()}
+            </Suspense>
+            {activeTab !== 'rooms' && error && <p className="dashboard-error dashboard-floating-error" role="alert">{error}</p>}
+          </div>
+        </main>
+        <button
+          className={`dashboard-mobile-menu-backdrop${mobileMenuOpen ? ' is-visible' : ''}`}
+          type="button"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="Close workspace menu"
+          tabIndex={mobileMenuOpen ? 0 : -1}
+        />
+        <aside
+          id="dashboard-mobile-drawer"
+          className={`dashboard-mobile-drawer${mobileMenuOpen ? ' is-open' : ''}`}
+          aria-label="Mobile workspace menu"
+          aria-hidden={!mobileMenuOpen}
+        >
+          <div className="dashboard-mobile-drawer-header">
+            <div><p className="dashboard-panel-kicker">Workspace</p><strong>Chalkboard</strong></div>
+            <button className="dashboard-mobile-drawer-close" type="button" onClick={() => setMobileMenuOpen(false)} aria-label="Close workspace menu">
+              <X size={18} strokeWidth={1.8} />
             </button>
-          ))}
-          {developerMode && <button className="dashboard-mobile-drawer-tab dashboard-mobile-drawer-tab-external" type="button" onClick={() => { setMobileMenuOpen(false); setLocation('/docs'); }}><BookOpen size={18} strokeWidth={1.5} /><span>Go to docs</span><ArrowUpRight size={14} strokeWidth={1.7} /></button>}
-        </nav>
-        <button className="dashboard-mobile-drawer-new-room" type="button" onClick={() => selectTab('rooms')}>
-          <Plus size={16} strokeWidth={1.9} /> New room
-        </button>
-        <div className="dashboard-mobile-drawer-bottom">
-          <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
-          {profile.platformRole !== 'user' && <button className="dashboard-help" type="button" onClick={() => { window.location.href = '/admin'; }}><ShieldCheck size={15} /> Open admin console</button>}
-          <button className="dashboard-help" type="button" onClick={() => setLocation('/guide')}><CircleHelp size={15} /> Read the user guide</button>
-          <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
-        </div>
-      </aside>
+          </div>
+          <nav className="dashboard-mobile-drawer-nav" aria-label="Workspace sections">
+            {visibleTabItems.map(({ id, label, icon: Icon }) => (
+              <button
+                className={`dashboard-mobile-drawer-tab${activeTab === id ? ' is-active' : ''}`}
+                type="button"
+                key={id}
+                onClick={() => selectTab(id)}
+                aria-current={activeTab === id ? 'page' : undefined}
+              >
+                <Icon size={18} strokeWidth={activeTab === id ? 1.9 : 1.5} />
+                <span>{label}</span>
+                {id === 'rooms' && openRooms.length > 0 && <small>{openRooms.length}</small>}
+              </button>
+            ))}
+            {developerMode && <button className="dashboard-mobile-drawer-tab dashboard-mobile-drawer-tab-external" type="button" onClick={() => { setMobileMenuOpen(false); setLocation('/docs'); }}><BookOpen size={18} strokeWidth={1.5} /><span>Go to docs</span><ArrowUpRight size={14} strokeWidth={1.7} /></button>}
+          </nav>
+          <button className="dashboard-mobile-drawer-new-room" type="button" onClick={() => selectTab('rooms')}>
+            <Plus size={16} strokeWidth={1.9} /> New room
+          </button>
+          <div className="dashboard-mobile-drawer-bottom">
+            <div className="dashboard-rail-status"><span /> Redis-backed live canvas</div>
+            {profile.platformRole !== 'user' && <button className="dashboard-help" type="button" onClick={() => { window.location.href = '/admin'; }}><ShieldCheck size={15} /> Open admin console</button>}
+            <button className="dashboard-help" type="button" onClick={() => setLocation('/guide')}><CircleHelp size={15} /> Read the user guide</button>
+            <div className="dashboard-mini-profile"><UserAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} size="sm" /><span><strong>{profile.displayName}</strong><small>Workspace member</small></span></div>
+          </div>
+        </aside>
       </div>
       {roomToDelete && (
         <ConfirmModal
@@ -813,6 +963,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                 onClick={() => {
                   void navigator.clipboard.writeText(createdRoomInvite.slug).then(() => {
                     setCopiedInviteValue('code');
+                    toast.success('Room code copied to clipboard');
                     window.setTimeout(() => setCopiedInviteValue((current) => current === 'code' ? null : current), 1800);
                   });
                 }}
@@ -832,6 +983,7 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
                   onClick={() => {
                     void navigator.clipboard.writeText(createdRoomInvite.password || '').then(() => {
                       setCopiedInviteValue('password');
+                      toast.success('Room password copied to clipboard');
                       window.setTimeout(() => setCopiedInviteValue((current) => current === 'password' ? null : current), 1800);
                     });
                   }}
@@ -843,6 +995,13 @@ function Dashboard({ profile, onJoinRoom }: DashboardProps) {
             </div>
           )}
         </ConfirmModal>
+      )}
+      {pendingFeedback && (
+        <SessionFeedbackModal
+          roomSlug={pendingFeedback.slug}
+          roomTitle={rooms.find((room) => room.slug === pendingFeedback.slug)?.title}
+          onDone={() => setPendingFeedback(null)}
+        />
       )}
     </>
   );

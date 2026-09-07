@@ -1,0 +1,2 @@
+# Lesson memory (FIRESTORE_ENABLED=true)
+firebase-admin==7.5.0

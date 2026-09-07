@@ -1,4 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
+import {
+  useState,
+  useRef,
+  useCallback
+} from 'react';
 import { useBoardStore } from '@/stores/boardStore';
 import {
   boxCenter,
@@ -15,8 +19,15 @@ import {
   hitTestTransformBox,
   handleApplyTrim,
 } from '@/components/toolbox';
-import { clampZoom, viewportToCanvas } from '@/lib/zoom';
-import type { Point, Rect, Stroke } from '@/types';
+import {
+  clampZoom,
+  viewportToCanvas
+} from '@/lib/zoom';
+import type {
+  Point,
+  Rect,
+  Stroke
+} from '@/types';
 
 /**
  * Hook to manage all canvas pointer interactions, drag gestures, local visual effects,
@@ -76,7 +87,29 @@ export function useCanvasInteraction(
   const activeStrokeRef = useRef<Stroke | null>(null);
   const activeTouchPoints = useRef(new Map<number, Point>());
   const pinchStart = useRef<{ distance: number; zoom: number; canvasPoint: Point } | null>(null);
+  const lastCursorEmitRef = useRef<number>(0);
+  const pendingCursorEmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const MARQUEE_THRESHOLD = 5; // screen pixels before marquee appears
+
+  const emitCursorMove = useCallback((pos: Point) => {
+    if (!socket || !canEdit) return;
+    const now = performance.now();
+    const elapsed = now - lastCursorEmitRef.current;
+    if (elapsed > 35) {
+      lastCursorEmitRef.current = now;
+      if (pendingCursorEmitRef.current) {
+        clearTimeout(pendingCursorEmitRef.current);
+        pendingCursorEmitRef.current = null;
+      }
+      socket.emit('cursor-move', { roomId, cursor: pos });
+    } else if (!pendingCursorEmitRef.current) {
+      pendingCursorEmitRef.current = setTimeout(() => {
+        pendingCursorEmitRef.current = null;
+        lastCursorEmitRef.current = performance.now();
+        socket.emit('cursor-move', { roomId, cursor: pos });
+      }, 35 - elapsed);
+    }
+  }, [socket, canEdit, roomId]);
 
   // Screen to Canvas coordinate conversion
   const screenToCanvas = useCallback(
@@ -151,7 +184,7 @@ export function useCanvasInteraction(
     cursorPosRef.current = pos;
     setCursorPos(pos);
 
-    socket?.emit('cursor-move', { roomId, cursor: pos });
+    emitCursorMove(pos);
 
     if (!isDrawing || !currentStrokeId.current) return;
 
@@ -175,7 +208,7 @@ export function useCanvasInteraction(
       strokeId: currentStrokeId.current,
       point: pos,
     });
-  }, [isDrawing, activeTool, roomId, socket, screenToCanvas, setCursorPos, setStrokes, triggerDustPuff, canvasRef]);
+  }, [isDrawing, activeTool, roomId, socket, screenToCanvas, setCursorPos, setStrokes, triggerDustPuff, canvasRef, emitCursorMove]);
 
   const stopDrawing = useCallback(() => {
     if (!isDrawing) return;
@@ -188,44 +221,64 @@ export function useCanvasInteraction(
     socket?.emit('stroke-end', { roomId });
 
     // Live stroke-start/stroke-draw packets are transient. Persist the
-    // completed stroke through the existing full-stroke event so Redis keeps
+    // completed stroke through the full-stroke event so Redis keeps
     // the complete room history for refreshes and later joins.
     if (completedStroke?.tool === 'chalk' && strokeId) {
       socket?.emit('draw-stroke', { roomId, stroke: completedStroke });
     }
 
     if (completedStroke?.tool === 'eraser' && strokeId) {
+      const eraserPoints = completedStroke.points;
+      const ew = completedStroke.eraserWidth ?? eraserWidth;
+      const eh = completedStroke.eraserHeight ?? eraserHeight;
+      const radius = ew && eh
+        ? Math.max(ew, eh) / 2
+        : (completedStroke.size || brushSize) * 2;
+
       setStrokes((prevStrokes) => {
-        const eraserStroke = prevStrokes.find((s) => s.id === strokeId);
-        if (!eraserStroke || eraserStroke.points.length === 0) {
-          return prevStrokes.filter((s) => s.id !== strokeId);
-        }
-
-        const eraserPoints = eraserStroke.points;
-        const radius = eraserStroke.eraserWidth && eraserStroke.eraserHeight
-          ? Math.max(eraserStroke.eraserWidth, eraserStroke.eraserHeight) / 2
-          : eraserStroke.size * 2;
-
         const updated: Stroke[] = [];
-        prevStrokes.forEach((stroke) => {
-          if (stroke.id === strokeId) return;
-          if (stroke.tool === 'eraser') {
+        for (const stroke of prevStrokes) {
+          // Remove the completed eraser stroke and any previous eraser strokes
+          if (stroke.id === strokeId || stroke.tool === 'eraser') continue;
+
+          if (eraserPoints.length === 0) {
             updated.push(stroke);
-            return;
+          } else {
+            const sliced = eraseStrokePoints(stroke, eraserPoints, radius, ew, eh);
+            updated.push(...sliced);
           }
-          const sliced = eraseStrokePoints(stroke, eraserPoints, radius, eraserStroke.eraserWidth, eraserStroke.eraserHeight);
-          updated.push(...sliced);
-        });
+        }
 
         socket?.emit('undo-stroke', { roomId, strokes: updated });
         return updated;
       });
+
+      // Clear or update selection if any currently selected strokes were erased
+      const store = useBoardStore.getState();
+      if (store.selectedStrokeIds.length > 0) {
+        const currentStrokes = store.strokes;
+        const remaining = currentStrokes.filter((s) => store.selectedStrokeIds.includes(s.id));
+        if (remaining.length !== store.selectedStrokeIds.length) {
+          const nextIds = remaining.map((s) => s.id);
+          store.setSelectedStrokeIds(nextIds);
+          if (nextIds.length > 0) {
+            store.setTransformBox(getSelectionBoundingBox(remaining));
+          } else {
+            store.setTransformBox(null);
+            store.setSelectionRotation(0);
+          }
+        }
+      }
     }
-  }, [isDrawing, roomId, socket, setStrokes]);
+  }, [isDrawing, roomId, socket, setStrokes, eraserWidth, eraserHeight, brushSize]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    if (!useBoardStore.getState().userHasInteracted) {
+      useBoardStore.getState().setUserHasInteracted(true);
+    }
 
     if (!canEdit && e.pointerType === 'touch') {
       activeTouchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -295,7 +348,7 @@ export function useCanvasInteraction(
         }
       }
 
-      const clickedStroke = strokes.find((s) => isStrokeInRect(s, {
+      const clickedStroke = strokes.find((s) => s.tool !== 'eraser' && isStrokeInRect(s, {
         minX: pos.x - 5 / zoom,
         minY: pos.y - 5 / zoom,
         maxX: pos.x + 5 / zoom,
@@ -521,7 +574,12 @@ export function useCanvasInteraction(
 
       // Use ref to avoid stale closure issues with selectionMarquee
       if (isMarqueeDragging.current) {
-        setSelectionMarquee({ minX: marqueeStartPos.current!.x, minY: marqueeStartPos.current!.y, maxX: pos.x, maxY: pos.y });
+        setSelectionMarquee({
+          minX: Math.min(marqueeStartPos.current!.x, pos.x),
+          minY: Math.min(marqueeStartPos.current!.y, pos.y),
+          maxX: Math.max(marqueeStartPos.current!.x, pos.x),
+          maxY: Math.max(marqueeStartPos.current!.y, pos.y),
+        });
         return;
       }
 
@@ -639,7 +697,7 @@ export function useCanvasInteraction(
             maxY: Math.max(marquee.minY, marquee.maxY),
           };
 
-          const selected = strokes.filter((s) => isStrokeInRect(s, normMarquee));
+          const selected = strokes.filter((s) => s.tool !== 'eraser' && isStrokeInRect(s, normMarquee));
           const sIds = selected.map((s) => s.id);
 
           if (sIds.length > 0) {
@@ -662,7 +720,7 @@ export function useCanvasInteraction(
           maxY: Math.max(selectionMarquee.minY, selectionMarquee.maxY),
         };
 
-        const selected = strokes.filter((s) => isStrokeInRect(s, normMarquee));
+        const selected = strokes.filter((s) => s.tool !== 'eraser' && isStrokeInRect(s, normMarquee));
         const sIds = selected.map((s) => s.id);
 
         if (sIds.length > 0) {
@@ -690,6 +748,10 @@ export function useCanvasInteraction(
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    if (!useBoardStore.getState().userHasInteracted) {
+      useBoardStore.getState().setUserHasInteracted(true);
+    }
 
     const zoomIntensity = 0.1;
     const rect = canvas.getBoundingClientRect();

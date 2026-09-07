@@ -6,34 +6,41 @@ React,
   useMemo,
   useState,
   useCallback,
-  createContext,
-  useContext,
 } from 'react';
 import {
-  Copy,
   Check,
-  ChevronDown,
-  UsersRound,
   Maximize2,
   Minimize2,
   Minus,
   Plus,
-  Shapes,
+  SquarePlus,
   Eye,
   EyeOff,
-  Mic,
-  MicOff,
-  Phone,
-  PhoneOff,
-  UserPlus,
-  UserX,
+  Hand,
+  Smile,
+  Radio,
+  RadioOff,
+  Share2,
+  Link,
+  LogOut,
+  Menu,
+  X,
 } from 'lucide-react';
+import * as Avatar from '@radix-ui/react-avatar';
+import { getApiError, isPlanLimitError } from '@/api/client';
 import Toolbar from '@/pages/Toolbar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import { HoverCard } from '@/components/ui/HoverCard';
 import UserAvatar from '@/components/UserAvatar';
+import CollaboratorCursor from '@/components/CollaboratorCursor';
+import ChalkboardMasterIcon from '@/components/ChalkboardMasterIcon';
+import { RoleDropdown } from '@/components/ui/DropdownMenu';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import LinkIcon from '@/components/svg/LinkIcon';
+import ChalkboardLogo from '@/components/svg/ChalkboardLogo';
+import { getPlan } from '@/constants/plans';
+import { useAuthStore } from '@/stores/authStore';
 import { getCanvasCursor } from '@/components/svg/cursors';
 import {
   getCombinedBoundingBox,
@@ -49,36 +56,28 @@ import type {
   ChalkboardProps,
   RoomMember,
 } from '@/types';
-import type {
-  PluginManifest,
-  PluginSelectionToolContribution,
-  PluginToolContribution
-} from '@/plugins/types';
-import { filterPluginSelectionTools } from '@/plugins/selection';
+import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
 import ActionSticks from '@/components/tools/ActionSticks';
 import SelectionToolbox from '@/components/tools/SelectionToolbox';
 import InsertShapes from '@/components/tools/InsertShapes';
+import LinksPanel from '@/components/tools/LinksPanel';
 import ChatPanel from '@/components/ChatPanel';
 import PluginModal from '@/components/tools/PluginModal';
 import {
   LiveKitRoom,
   RoomAudioRenderer,
-  useLocalParticipant,
-  useParticipants,
-  useSpeakingParticipants,
-  useMaybeRoomContext,
-  StartAudio,
 } from '@livekit/components-react';
 import { getVoiceToken } from '@/api/rooms';
-
-
+import VideoStage from '@/components/video/VideoStage';
 import NotesLayer from '@/plugins/builtin/notes/NotesLayer';
 import NotesEditor from '@/plugins/builtin/notes/NotesEditor';
-import { NOTES_PLUGIN_ID } from '@/plugins/builtin/notes';
 import { useLinksStore } from '@/stores/linksStore';
 import { useBoardStore } from '@/stores/boardStore';
+import { toast } from '@/components/ui/Toast';
+import { webMcp } from '@/webmcp';
 import { useLoggerStore } from '@/stores/loggerStore';
-import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
+import { MAX_ZOOM, MIN_ZOOM } from '@/lib/zoom';
+import { REACTION_EMOJIS, REACTION_PICKER_EVENT } from '@/constants/reactions';
 import { useCanvasRenderer } from '@/hooks/useCanvasRenderer';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -125,136 +124,13 @@ import {
   handleRenameLink,
   handleNavigateToLink,
   handleInsertShape as toolboxInsertShape,
+  handleResetPanZoom,
+  handleCenterOnContentOrOrigin,
 } from '@/components/toolbox';
 
+import { VoiceAudioStarter, SpeakingParticipantsProvider, RoomMemberAvatar, RoomHeaderMediaControls, VoiceRoleSync, RoomMemberVoiceControls, avatarInitials, type RaisedHand, type ActiveReaction, type PendingJoinRequest } from '@/pages/chalkboard/VoiceControls';
+
 const DEFAULT_DOCUMENT_TITLE = 'Chalkboard - A live canvas for shared thinking';
-
-const SpeakingParticipantsContext = createContext<ReadonlySet<string>>(new Set());
-
-function SpeakingParticipantsProvider({ children }: { children: React.ReactNode }) {
-  const speakingParticipants = useSpeakingParticipants();
-  const speakingIdentities = useMemo(
-    () => new Set(speakingParticipants.map((participant) => participant.identity)),
-    [speakingParticipants],
-  );
-
-  return (
-    <SpeakingParticipantsContext.Provider value={speakingIdentities}>
-      {children}
-    </SpeakingParticipantsContext.Provider>
-  );
-}
-
-function CollaboratorAvatar({ userId, name, avatarUrl }: { userId: string; name: string; avatarUrl?: string | null }) {
-  const speakingIdentities = useContext(SpeakingParticipantsContext);
-  const isSpeaking = speakingIdentities.has(userId);
-  return (
-    <UserAvatar
-      name={name}
-      avatarUrl={avatarUrl}
-      size="sm"
-      className={`collaborator-avatar${isSpeaking ? ' collaborator-avatar-speaking' : ''}`}
-    />
-  );
-}
-
-type PendingJoinRequest = {
-  id: string;
-  userId: string;
-  displayName: string;
-  email: string;
-  avatarUrl?: string | null;
-};
-
-interface RoomMemberVoiceControlsProps {
-  memberUserId: string;
-  effectiveRole: string;
-  currentUserId: string;
-  socket: unknown;
-  roomId: string;
-}
-
-function RoomMemberVoiceControlsConnected({ memberUserId, effectiveRole, currentUserId, socket, roomId }: RoomMemberVoiceControlsProps) {
-  const participants = useParticipants();
-  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
-
-  const participant = participants.find((candidate) => candidate.identity === memberUserId);
-  const canSpeak = participant?.permissions?.canPublish === true;
-
-  const isMe = memberUserId === currentUserId;
-  const isOwner = effectiveRole === 'owner';
-
-  const toggleMute = () => {
-    if (localParticipant) {
-      void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled).catch(() => {
-        useLoggerStore.getState().notify('Microphone access was blocked. Check your browser permissions and try again.', 'error', 6000);
-      });
-    }
-  };
-
-  const inviteUser = () => {
-    (socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId, targetUserId: memberUserId }, (res: { ok?: boolean; error?: string }) => {
-      if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
-    });
-  };
-
-  const removeUser = () => {
-    (socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:remove', { roomId, targetUserId: memberUserId }, (res: { ok?: boolean; error?: string }) => {
-      if (res && !res.ok) console.error('Failed to remove from voice:', res.error);
-    });
-  };
-
-  if (isMe) {
-    if (localParticipant) {
-      return (
-        <div className="voice-actions-group">
-          <button type="button" className="voice-action-btn" onClick={toggleMute} title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>{isMicrophoneEnabled ? <Mic size={14} /> : <MicOff size={14} />}</button>
-        </div>
-      );
-    }
-    return null;
-  }
-
-  if (isOwner) {
-    if (canSpeak) {
-      return (
-        <div className="voice-actions-group">
-          <button type="button" className="voice-action-btn" onClick={removeUser} title="Remove from voice"><UserX size={14} /></button>
-        </div>
-      );
-    }
-    return (
-      <div className="voice-actions-group">
-        <button type="button" className="voice-action-btn" onClick={inviteUser} title="Invite to voice"><UserPlus size={14} /></button>
-      </div>
-    );
-  }
-
-  return null;
-}
-
-function RoomMemberVoiceControls(props: RoomMemberVoiceControlsProps) {
-  const room = useMaybeRoomContext();
-  if (!room) {
-    const isMe = props.memberUserId === props.currentUserId;
-    const isOwner = props.effectiveRole === 'owner';
-
-    if (isOwner && !isMe) {
-      return (
-        <div className="voice-actions-group">
-          <button type="button" className="voice-action-btn" title="Invite to voice" onClick={() => {
-            (props.socket as { emit: (event: string, payload: unknown, ack?: unknown) => void })?.emit('voice:invite', { roomId: props.roomId, targetUserId: props.memberUserId }, (res: { ok?: boolean; error?: string }) => {
-              if (res && !res.ok) console.error('Failed to invite to voice:', res.error);
-            });
-          }}><UserPlus size={14} /></button>
-        </div>
-      );
-    }
-    return null;
-  }
-
-  return <RoomMemberVoiceControlsConnected {...props} />;
-}
 
 export const Chalkboard: React.FC<ChalkboardProps> = ({
   roomId,
@@ -266,6 +142,8 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const { profile } = useAuthStore();
+  const planLabel = profile && profile.plan !== 'free' ? getPlan(profile.plan).name : null;
 
   const {
     activeTool, setActiveTool,
@@ -277,13 +155,14 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     brushIntensity, setBrushIntensity,
     eraserWidth, setEraserWidth,
     eraserHeight, setEraserHeight,
-    panOffset, setPanOffset,
+    panOffset,
     zoom, setZoom,
     strokes, setStrokes,
     redoStack,
     trimState,
     showInsertShapes, setShowInsertShapes,
-    insertShapesTab, setInsertShapesTab,
+    insertShapesTab,
+    linksPanelOpen, setLinksPanelOpen,
     highlightedLinkId, setHighlightedLinkId,
     isCopied, setIsCopied,
     initSession,
@@ -355,12 +234,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   }, [publishedManifests]);
   const publishedTools = useMemo<PluginToolContribution[]>(() => publishedManifests.flatMap((manifest) => manifest.contributes.tools?.map((tool) => ({ ...tool, pluginId: manifest.id, description: tool.description ?? manifest.description })) ?? []), [publishedManifests]);
   const pluginTools = useMemo(() => [...pluginRegistry.getTools(), ...publishedTools], [publishedTools]);
-  const publishedSelectionTools = useMemo<PluginSelectionToolContribution[]>(() => publishedManifests.flatMap((manifest) => manifest.contributes.selectionTools?.map((tool) => ({ ...tool, pluginId: manifest.id, description: tool.description ?? manifest.description })) ?? []), [publishedManifests]);
-  const pluginSelectionTools = useMemo(() => [...pluginRegistry.getSelectionTools(), ...publishedSelectionTools], [publishedSelectionTools]);
-  const selectionToolsForCurrentSelection = useMemo(() => filterPluginSelectionTools(
-    pluginSelectionTools,
-    strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id)),
-  ), [pluginSelectionTools, selectedStrokeIds, strokes]);
   const [activePluginModals, setActivePluginModals] = useState<Array<{ pluginId: string }>>([]);
   const [sharedPluginOutput, setSharedPluginOutput] = useState<string | undefined>();
   const [liveRoomMembers, setLiveRoomMembers] = useState<RoomMember[] | null>(null);
@@ -377,57 +250,132 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const [voiceToken, setVoiceToken] = useState('');
   const [voiceUrl, setVoiceUrl] = useState('');
   const [voiceListening, setVoiceListening] = useState(true);
-  const [voiceToast, setVoiceToast] = useState<{ message: string, type: 'info' | 'error' } | null>(null);
+  const hasVoiceCredentials = Boolean(voiceToken && voiceUrl);
+  const [raisedHands, setRaisedHands] = useState<RaisedHand[]>([]);
+  const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const [activeReactions, setActiveReactions] = useState<ActiveReaction[]>([]);
+  const voiceSwappingRef = useRef(false);
 
   useEffect(() => {
     if (!socket) return;
     const handleVoiceInvited = (data: { roomId: string }) => {
       if (data.roomId !== roomId) return;
-      setVoiceToast({ message: 'You can now speak in this room. Unmute your microphone when you are ready.', type: 'info' });
+      useLoggerStore.getState().notify('You have been added to video and voice. You can now turn on your camera and microphone.', 'success');
+      // Clear existing token to force LiveKit to disconnect before
+      // reconnecting with the new (speaker-enabled) token.
+      voiceSwappingRef.current = true;
+      setVoiceToken('');
+      setVoiceUrl('');
       const connectVoice = async () => {
         try {
           const res = await getVoiceToken(roomId);
           if (res.token && res.url) {
             setVoiceToken(res.token);
             setVoiceUrl(res.url);
+          } else {
+            voiceSwappingRef.current = false;
           }
-        } catch {
-          setVoiceToast({ message: 'Failed to join voice', type: 'error' });
+        } catch (error) {
+          voiceSwappingRef.current = false;
+          const apiError = getApiError(error);
+          useLoggerStore.getState().notify(
+            isPlanLimitError(apiError) ? apiError.message : 'Failed to join media session',
+            'error',
+            isPlanLimitError(apiError) ? 6000 : undefined,
+          );
         }
       };
       void connectVoice();
-      setTimeout(() => setVoiceToast(null), 5000);
     };
 
     const handleVoiceRemoved = (data: { roomId: string }) => {
       if (data.roomId !== roomId) return;
-      setVoiceToast({ message: 'Speaking access was removed. You can still hear the room.', type: 'info' });
+      useLoggerStore.getState().notify('Video and speaking access was removed. You can still view and hear the room.', 'info');
+      // Clear existing token to force LiveKit to disconnect before
+      // reconnecting with the new (listener-only) token.
+      voiceSwappingRef.current = true;
+      setVoiceToken('');
+      setVoiceUrl('');
       const refreshVoice = async () => {
         try {
           const res = await getVoiceToken(roomId);
           if (res.token && res.url) {
             setVoiceToken(res.token);
             setVoiceUrl(res.url);
+          } else {
+            voiceSwappingRef.current = false;
           }
-        } catch {
-          setVoiceToast({ message: 'Voice access could not be refreshed', type: 'error' });
+        } catch (error) {
+          voiceSwappingRef.current = false;
+          const apiError = getApiError(error);
+          useLoggerStore.getState().notify(
+            isPlanLimitError(apiError) ? apiError.message : 'Media access could not be refreshed',
+            'error',
+            isPlanLimitError(apiError) ? 6000 : undefined,
+          );
         }
       };
       void refreshVoice();
-      setTimeout(() => setVoiceToast(null), 5000);
+    };
+
+    const handleVoiceSpeakerAdded = (data: { roomId: string; targetUserId: string; displayName?: string }) => {
+      if (data.roomId !== roomId || data.targetUserId === userId) return;
+      const displayName = data.displayName?.trim() || 'A room member';
+      useLoggerStore.getState().notify(`${displayName} can now share video and voice`, 'success');
     };
 
     socket.on('voice:invited', handleVoiceInvited);
     socket.on('voice:removed', handleVoiceRemoved);
+    socket.on('voice:speaker-added', handleVoiceSpeakerAdded);
 
     return () => {
       socket.off('voice:invited', handleVoiceInvited);
       socket.off('voice:removed', handleVoiceRemoved);
+      socket.off('voice:speaker-added', handleVoiceSpeakerAdded);
     };
-  }, [socket, roomId]);
+  }, [socket, roomId, userId]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRaisedHandsUpdate = (hands: RaisedHand[]) => {
+      if (!Array.isArray(hands)) return;
+      setRaisedHands([...hands].sort((a, b) => a.raisedAt - b.raisedAt));
+    };
+
+    const handleReactionReceived = (reaction: { userId?: string; emoji?: string; at?: number }) => {
+      if (!reaction.userId || !reaction.emoji) return;
+      const id = `${reaction.userId}-${reaction.at ?? Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setActiveReactions((current) => [
+        ...current.slice(-11),
+        {
+          id,
+          userId: reaction.userId!,
+          emoji: reaction.emoji!,
+          at: reaction.at ?? Date.now(),
+          lane: Math.floor(Math.random() * 5),
+        },
+      ]);
+      window.setTimeout(() => {
+        setActiveReactions((current) => current.filter((item) => item.id !== id));
+      }, 2600);
+    };
+
+    socket.on('raised-hands:update', handleRaisedHandsUpdate);
+    socket.on('reaction:received', handleReactionReceived);
+    return () => {
+      socket.off('raised-hands:update', handleRaisedHandsUpdate);
+      socket.off('reaction:received', handleReactionReceived);
+    };
+  }, [socket]);
+
   const [closingRoom, setClosingRoom] = useState(false);
   const roomClosureHandledRef = useRef(false);
-  const roomDetailsRef = useRef<HTMLDivElement | null>(null);
+  const linksPanelRef = useRef<HTMLDivElement | null>(null);
+  const roomInfoRef = useRef<HTMLDivElement | null>(null);
+  const roomMembersRef = useRef<HTMLDivElement | null>(null);
+  const insertShapesWrapRef = useRef<HTMLDivElement | null>(null);
+  const [roomInfoOpen, setRoomInfoOpen] = useState(false);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -482,37 +430,23 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const openPluginModal = useCallback((pluginId: string) => {
     setShowInsertShapes(false);
-    if (publishedCataloguePlugins.some((plugin) => plugin.pluginId === pluginId)) {
-      setActivePublishedPluginId(pluginId);
+    const cataloguePlugin = publishedCataloguePlugins.find((plugin) => plugin.pluginId === pluginId);
+    if (cataloguePlugin) {
+      // The server will not hand over a locked Pro bundle, so asking for it
+      // only produces a request that fails and a modal that spins forever.
+      // Open the modal anyway; it renders its own locked state.
+      if (!cataloguePlugin.locked) setActivePublishedPluginId(pluginId);
       setActivePluginModals((current) => current.some((modal) => modal.pluginId === pluginId)
         ? current
         : [...current, { pluginId }]);
       return;
     }
-    if (pluginId === NOTES_PLUGIN_ID) {
-      setActivePublishedPluginId(null);
-      void activateInstalledPlugin(NOTES_PLUGIN_ID).then(() => pluginRegistry.executeCommand('notes.create'));
-      return;
-    }
+
     setActivePublishedPluginId(null);
     setActivePluginModals((current) => current.some((modal) => modal.pluginId === pluginId)
       ? current
       : [...current, { pluginId }]);
-  }, [activateInstalledPlugin, publishedCataloguePlugins, setShowInsertShapes]);
-
-  const runPluginSelectionTool = useCallback((commandId: string) => {
-    const tool = selectionToolsForCurrentSelection.find((candidate) => candidate.command === commandId);
-    if (tool?.pluginId === 'chalkboard.tag' && selectedStrokeIds.length > 0 && commandId !== 'tag.removeSelection') openPluginModal(tool.pluginId);
-    else if (tool?.pluginId === 'chalkboard.math-set' && selectedStrokeIds.length > 0) openPluginModal(tool.pluginId);
-    else if (tool?.pluginId && publishedCataloguePlugins.some((plugin) => plugin.pluginId === tool.pluginId)) {
-      setActivePublishedPluginId(tool.pluginId);
-      pendingPublishedCommandRef.current = { pluginId: tool.pluginId, commandId };
-    } else if (tool?.pluginId) {
-      void activateInstalledPlugin(tool.pluginId).then(() => pluginRegistry.executeCommand(commandId));
-    } else {
-      void pluginRegistry.executeCommand(commandId);
-    }
-  }, [activateInstalledPlugin, openPluginModal, publishedCataloguePlugins, selectedStrokeIds.length, selectionToolsForCurrentSelection]);
+  }, [publishedCataloguePlugins, setShowInsertShapes]);
 
   useCanvasRenderer(canvasRef);
 
@@ -536,6 +470,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     userCursorColor,
     currentRole,
     onlineCount,
+    ownerVoiceConnected,
     chatMessages,
     chatUnreadMentions,
     clearChatNotifications,
@@ -544,7 +479,7 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const room = roomQuery.data?.room;
 
   useEffect(() => {
-    if (!room?.voiceEnabled || !voiceListening || voiceToken) return;
+    if (!room?.voiceEnabled || !voiceListening || voiceToken || voiceSwappingRef.current) return;
     let cancelled = false;
     const connectVoiceForListening = async () => {
       try {
@@ -553,8 +488,15 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           setVoiceToken(res.token);
           setVoiceUrl(res.url);
         }
-      } catch {
-        if (!cancelled) setVoiceToast({ message: 'Failed to connect room audio', type: 'error' });
+      } catch (error) {
+        if (!cancelled) {
+          const apiError = getApiError(error);
+          useLoggerStore.getState().notify(
+            isPlanLimitError(apiError) ? apiError.message : 'Failed to connect room audio',
+            'error',
+            isPlanLimitError(apiError) ? 6000 : undefined,
+          );
+        }
       }
     };
     void connectVoiceForListening();
@@ -568,8 +510,16 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   const roomQueryMembers = roomQuery.data?.members;
   const roomMembers = useMemo(() => liveRoomMembers ?? roomQueryMembers ?? [], [liveRoomMembers, roomQueryMembers]);
   const effectiveRole = roomMembers.find((member) => member.userId === userId)?.role ?? currentRole;
+  const voiceConnected = effectiveRole === 'owner'
+    ? Boolean(voiceToken && voiceUrl)
+    : ownerVoiceConnected;
   const canEdit = effectiveRole !== 'viewer';
   const canManageMembers = effectiveRole === 'owner';
+  const roleReady = Boolean(
+    roomQueryMembers?.length
+    || liveRoomMembers?.length
+    || currentRole !== 'viewer',
+  );
   const joinRequestsQuery = useJoinRequestsQuery(roomId, canManageMembers && roomDetailsOpen && roomAccessMode === 'approval_required');
   const resolveJoinRequestMutation = useResolveJoinRequestMutation();
   const joinRequests = joinRequestsQuery.data?.requests ?? [];
@@ -618,6 +568,49 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     return [...members.values()];
   }, [roomMembers, collaborators, userId, userName, effectiveRole]);
 
+  const raisedHandUserIds = useMemo(() => new Set(raisedHands.map((hand) => hand.userId)), [raisedHands]);
+  const raisedHandCount = raisedHands.length;
+  const isHandRaised = raisedHandUserIds.has(userId);
+
+  const memberDisplayNames = useMemo(() => {
+    const names = new Map<string, string>();
+    displayedRoomMembers.forEach((member) => names.set(member.userId, member.displayName));
+    return names;
+  }, [displayedRoomMembers]);
+
+  const sortedDisplayedRoomMembers = useMemo(() => {
+    const order = new Map(raisedHands.map((hand, index) => [hand.userId, index]));
+    return [...displayedRoomMembers].sort((a, b) => {
+      const aOrder = order.get(a.userId);
+      const bOrder = order.get(b.userId);
+      if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder;
+      if (aOrder !== undefined) return -1;
+      if (bOrder !== undefined) return 1;
+      return a.displayName.localeCompare(b.displayName);
+    });
+  }, [displayedRoomMembers, raisedHands]);
+
+  const onlineHeaderMembers = useMemo(() => {
+    const onlineIds = new Set(Object.values(collaborators).map((collaborator) => collaborator.userId));
+    return displayedRoomMembers.filter((member) => member.userId === userId || onlineIds.has(member.userId));
+  }, [displayedRoomMembers, collaborators, userId]);
+
+  const toggleRaisedHand = useCallback(() => {
+    socket.emit('hand:raise', { roomId, raised: !isHandRaised }, (response: { ok?: boolean; error?: string }) => {
+      if (response && !response.ok) useLoggerStore.getState().notify('Could not update your raised hand. Try again.', 'error');
+    });
+  }, [isHandRaised, roomId, socket]);
+
+  const sendReaction = useCallback((emoji: string) => {
+    setReactionPickerOpen(false);
+    socket.emit('reaction:send', { roomId, emoji }, (response: { ok?: boolean; error?: string }) => {
+      if (response && !response.ok) {
+        const message = response.error === 'rate_limited' ? 'Slow down before sending another reaction.' : 'Could not send reaction.';
+        useLoggerStore.getState().notify(message, 'warning');
+      }
+    });
+  }, [roomId, socket]);
+
   useKeyboardShortcuts(canEdit);
 
   useEffect(() => {
@@ -632,6 +625,25 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   useEffect(() => {
     initSession({ roomId, socket, userId, canEdit });
   }, [roomId, socket, userId, canEdit, initSession]);
+
+  // Initialize WebMCP bridge — registers 23 tools on W3C document.modelContext (pure registry, no socket relay)
+  useEffect(() => {
+    webMcp.init().then(() => {
+      console.log(
+        `[WebMCP] W3C document.modelContext active — ${webMcp.getStatus().registeredToolsCount} tools registered.`
+      );
+    });
+  }, []);
+
+  // Interactive WebMCP reaction picker — allows chalkboard_send_reaction tool to animate UI
+  useEffect(() => {
+    const handleReactionPicker = () => {
+      setReactionPickerOpen(true);
+      window.setTimeout(() => setReactionPickerOpen(false), 1200);
+    };
+    window.addEventListener(REACTION_PICKER_EVENT as any, handleReactionPicker);
+    return () => window.removeEventListener(REACTION_PICKER_EVENT as any, handleReactionPicker);
+  }, []);
 
   useEffect(() => {
     const handleMembersUpdated = (payload: { members?: RoomMember[] }) => {
@@ -692,7 +704,13 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
   useEffect(() => {
     if (!roomDetailsOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (!roomDetailsRef.current?.contains(event.target as Node)) setRoomDetailsOpen(false);
+      const target = event.target as Element | null;
+      const isInsidePortal = Boolean(
+        target?.closest?.('.astryx-dropdown-content, [data-radix-popper-content-wrapper], .astryx-hover-card-content, [data-radix-menu-content]')
+      );
+      if (!roomMembersRef.current?.contains(event.target as Node) && !isInsidePortal) {
+        setRoomDetailsOpen(false);
+      }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setRoomDetailsOpen(false);
@@ -704,6 +722,55 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [roomDetailsOpen]);
+
+
+  useEffect(() => {
+    if (!linksPanelOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!linksPanelRef.current?.contains(event.target as Node)) setLinksPanelOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLinksPanelOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [linksPanelOpen, setLinksPanelOpen]);
+
+  useEffect(() => {
+    if (!showInsertShapes) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!insertShapesWrapRef.current?.contains(event.target as Node)) setShowInsertShapes(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowInsertShapes(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showInsertShapes, setShowInsertShapes]);
+
+  useEffect(() => {
+    if (!roomInfoOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!roomInfoRef.current?.contains(event.target as Node)) setRoomInfoOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setRoomInfoOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [roomInfoOpen]);
 
   const updateMemberRole = (targetUserId: string, role: 'instructor' | 'viewer') => {
     if (!canManageMembers || targetUserId === userId) return;
@@ -737,11 +804,23 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     });
   };
 
-  const roleLabel = (role: RoomMember['role']) => role === 'instructor' ? 'Editor' : role === 'viewer' ? 'Viewer' : 'Owner';
 
-  useEffect(() => {
-    setCanvas(canvasRef.current);
-    return () => setCanvas(null);
+
+  // Register the canvas element in the board store. A callback ref is used
+  // instead of a mount effect because LiveKitRoom renders its children one
+  // commit after this component mounts, so `canvasRef.current` is still null
+  // when mount effects run and the store would never receive the element.
+  const attachCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    canvasRef.current = node;
+    setCanvas(node);
+    if (node) {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has('link') && !useBoardStore.getState().userHasInteracted) {
+        requestAnimationFrame(() => {
+          handleCenterOnContentOrOrigin();
+        });
+      }
+    }
   }, [setCanvas]);
 
   // Auto-apply crop/trim on tool change, and deselect when leaving select tool
@@ -770,17 +849,32 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
     }
   }, [strokes.length, links]);
 
+  // Center viewport on room content (if strokes exist) or origin (0, 0)
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('link')) return;
+
+    if (useBoardStore.getState().userHasInteracted) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    handleCenterOnContentOrOrigin();
+  }, [strokes]);
+
   const handleCopyLink = () => {
     const inviteLink = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
     navigator.clipboard.writeText(inviteLink).then(() => {
       setIsCopied(true);
+      toast.success('Room invite link copied to clipboard');
       setTimeout(() => setIsCopied(false), 2000);
     });
   };
 
   const resetPanZoom = () => {
-    setZoom(DEFAULT_ZOOM);
-    setPanOffset({ x: 0, y: 0 });
+    handleResetPanZoom();
   };
 
   const requestKickMember = (member: RoomMember, targetSocketId: string) => {
@@ -829,12 +923,6 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
   const mainContent = (
     <>
-      {voiceToast && (
-        <div className={`voice-toast voice-toast-${voiceToast.type}`}>
-          {voiceToast.message}
-          <button onClick={() => setVoiceToast(null)} className="voice-toast-close">&times;</button>
-        </div>
-      )}
       <div className={`board-container room-theme-${roomTheme}`} ref={containerRef}>
         {isMobilePortrait && (
           <div className="mobile-landscape-hint" role="status" aria-live="polite">
@@ -843,54 +931,94 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           </div>
         )}
         <div className="blackboard-slate" />
-        {dustPuffs.map((p) => (
-          <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" />
-        ))}
-        {Object.entries(collaborators).map(([id, coll]) => {
-          if (coll.role === 'viewer' || !coll.cursor) return null;
-          const x = coll.cursor.x * zoom + panOffset.x + 24;
-          const y = coll.cursor.y * zoom + panOffset.y + 24;
-          if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null;
-          return (
+        <div className="reaction-overlay" aria-hidden="true">
+          {activeReactions.map((reaction) => (
             <div
-              key={id}
-              className="collaborator-cursor"
-              data-left={x - 24}
-              data-top={y - 24}
-              title={`${coll.name}'s cursor`}
-              aria-label={`${coll.name}'s cursor`}
+              key={reaction.id}
+              className="reaction-bubble"
+              style={{ right: `${18 + reaction.lane * 58}px` }}
+              title={`${memberDisplayNames.get(reaction.userId) ?? 'Someone'} reacted ${reaction.emoji}`}
             >
-              <CollaboratorAvatar userId={coll.userId} name={coll.name} avatarUrl={coll.avatarUrl} />
-              <span
-                className="collaborator-cursor-dot"
-                data-color={coll.color}
-                aria-hidden="true"
+              <span className="reaction-emoji">{reaction.emoji}</span>
+              <span className="reaction-name">{memberDisplayNames.get(reaction.userId) ?? 'Someone'}</span>
+            </div>
+          ))}
+        </div>
+        {dustPuffs.map((p) => (
+          <div key={p.id} className="dust-puff" data-left={p.x - 12} data-top={p.y - 12} data-size="24" style={{ left: p.x - 12, top: p.y - 12, width: 24, height: 24 }} />
+        ))}
+        {/* Render active collaborator cursors with select pointer icon + avatar badge */}
+        {Object.entries(collaborators).map(([id, coll]) => {
+          const effectiveCollRole = roomMembers.find((m) => m.userId === coll.userId)?.role ?? coll.role;
+          if (effectiveCollRole === 'viewer' || coll.role === 'viewer') return null;
+          if (coll.cursor) {
+            const x = coll.cursor.x * zoom + panOffset.x;
+            const y = coll.cursor.y * zoom + panOffset.y;
+            if (x < -100 || y < -100 || x > window.innerWidth + 100 || y > window.innerHeight + 100) return null;
+            return (
+              <CollaboratorCursor
+                key={id}
+                id={id}
+                collaborator={{ ...coll, role: effectiveCollRole }}
+                x={x}
+                y={y}
               />
+            );
+          }
+          return null;
+        })}
+        {/* Render docked collaborator presence for users without cursor coordinates */}
+        {(() => {
+          const defaultCollaborators = Object.entries(collaborators).filter(
+            ([, coll]) => {
+              const effectiveCollRole = roomMembers.find((m) => m.userId === coll.userId)?.role ?? coll.role;
+              return effectiveCollRole !== 'viewer' && coll.role !== 'viewer' && !coll.cursor;
+            }
+          );
+          if (defaultCollaborators.length === 0) return null;
+          return (
+            <div className="collaborator-dock-container">
+              {defaultCollaborators.map(([id, coll]) => {
+                const effectiveCollRole = roomMembers.find((m) => m.userId === coll.userId)?.role ?? coll.role;
+                return (
+                  <CollaboratorCursor
+                    key={id}
+                    id={id}
+                    collaborator={{ ...coll, role: effectiveCollRole }}
+                    isDefaultPosition
+                  />
+                );
+              })}
             </div>
           );
-        })}
-        <canvas ref={canvasRef} className={`chalk-canvas chalk-canvas-${activeTool}`}
+        })()}
+        <canvas ref={attachCanvas} className={`chalk-canvas chalk-canvas-${activeTool}`}
           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp} onWheel={handleWheel} />
         <NotesLayer />
 
-        {canEdit && showInsertShapes && (
-          <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
-            pluginManifests={pluginManifests}
-            onOpenPlugin={openPluginModal}
-            onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
-            links={links} hasSelection={selectedStrokeIds.length > 0} onNavigateToLink={handleNavigateToLink}
-            onCreateLink={handleCreateLink} onDeleteLink={handleDeleteLink} onRenameLink={handleRenameLink}
-            initialTab={insertShapesTab} highlightedLinkId={highlightedLinkId} />
-        )}
-        <div className="board-utility-actions">
-          {canEdit && <button
-            onClick={() => setShowInsertShapes(prev => !prev)}
-            title="Insert Shape (Ctrl+1)"
-            className="insert-shapes-fab"
-          >
-            <Shapes size={18} />
-          </button>}
+        <div className="board-actions-card board-utility-actions">
+          {roleReady && canEdit && (
+            <div className="insert-shapes-trigger-wrap" ref={insertShapesWrapRef}>
+              <HoverCard content="Insert Shape (Ctrl+1)" placement="above" sideOffset={10}>
+                <button
+                  onClick={() => setShowInsertShapes(prev => !prev)}
+                  className={`insert-shapes-fab${showInsertShapes ? ' active' : ''}`}
+                  aria-label="Insert Shape"
+                >
+                  <SquarePlus size={18} />
+                </button>
+              </HoverCard>
+              {showInsertShapes && (
+                <InsertShapes onInsertShape={(shape: ShapeType) => toolboxInsertShape(shape)}
+                  pluginManifests={pluginManifests}
+                  onOpenPlugin={openPluginModal}
+                  hasSelection={selectedStrokeIds.length > 0}
+                  onClose={() => { setShowInsertShapes(false); setHighlightedLinkId(null); }}
+                  initialTab={insertShapesTab} />
+              )}
+            </div>
+          )}
           <ChatPanel
             socket={socket}
             roomId={roomId}
@@ -917,28 +1045,30 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             const fullBottom = initBox.maxY * zoom + panOffset.y;
             return (
               <>
-                <div className="trim-overlay trim-overlay-top" data-left={fullLeft} data-top={fullTop} data-width={fullRight - fullLeft} data-height={Math.max(0, screenTop - fullTop)} />
-                <div className="trim-overlay trim-overlay-bottom" data-left={fullLeft} data-top={screenBottom} data-width={fullRight - fullLeft} data-height={Math.max(0, fullBottom - screenBottom)} />
-                <div className="trim-overlay trim-overlay-left" data-left={fullLeft} data-top={screenTop} data-width={Math.max(0, screenLeft - fullLeft)} data-height={screenBottom - screenTop} />
-                <div className="trim-overlay trim-overlay-right" data-left={screenRight} data-top={screenTop} data-width={Math.max(0, fullRight - screenRight)} data-height={screenBottom - screenTop} />
-                <div className="trim-selection-box" data-left={screenLeft} data-top={screenTop} data-width={screenRight - screenLeft} data-height={screenBottom - screenTop} />
+                <div className="trim-overlay trim-overlay-top" data-left={fullLeft} data-top={fullTop} data-width={fullRight - fullLeft} data-height={Math.max(0, screenTop - fullTop)} style={{ left: fullLeft, top: fullTop, width: fullRight - fullLeft, height: Math.max(0, screenTop - fullTop) }} />
+                <div className="trim-overlay trim-overlay-bottom" data-left={fullLeft} data-top={screenBottom} data-width={fullRight - fullLeft} data-height={Math.max(0, fullBottom - screenBottom)} style={{ left: fullLeft, top: screenBottom, width: fullRight - fullLeft, height: Math.max(0, fullBottom - screenBottom) }} />
+                <div className="trim-overlay trim-overlay-left" data-left={fullLeft} data-top={screenTop} data-width={Math.max(0, screenLeft - fullLeft)} data-height={screenBottom - screenTop} style={{ left: fullLeft, top: screenTop, width: Math.max(0, screenLeft - fullLeft), height: screenBottom - screenTop }} />
+                <div className="trim-overlay trim-overlay-right" data-left={screenRight} data-top={screenTop} data-width={Math.max(0, fullRight - screenRight)} data-height={screenBottom - screenTop} style={{ left: screenRight, top: screenTop, width: Math.max(0, fullRight - screenRight), height: screenBottom - screenTop }} />
+                <div className="trim-selection-box" data-left={screenLeft} data-top={screenTop} data-width={screenRight - screenLeft} data-height={screenBottom - screenTop} style={{ left: screenLeft, top: screenTop, width: screenRight - screenLeft, height: screenBottom - screenTop }} />
                 {[{ left: screenLeft - 5, top: screenTop - 5 }, { left: screenRight - 5, top: screenTop - 5 }, { left: screenLeft - 5, top: screenBottom - 5 }, { left: screenRight - 5, top: screenBottom - 5 }].map((pos, i) => (
-                  <div key={i} className="trim-handle" data-left={pos.left} data-top={pos.top} />
+                  <div key={i} className="trim-handle" data-left={pos.left} data-top={pos.top} style={{ left: pos.left, top: pos.top }} />
                 ))}
-                <div className="trim-toolbar" data-left={(screenLeft + screenRight) / 2} data-top={screenTop - 60}>
-                  <div className="trim-toolbar-copy">
-                    <div className="trim-toolbar-title">CROP MODE</div>
-                    <div className="trim-toolbar-hint">Enter to apply · Esc to cancel</div>
-                  </div>
-                  <div className="trim-toolbar-actions">
-                    <button className="trim-apply-button" onClick={handleApplyTrim}>Apply</button>
-                    <button className="trim-cancel-button" onClick={handleCancelTrim}>Cancel</button>
-                  </div>
+                <div className="trim-actions">
+                  <HoverCard content="Apply crop (Enter)" placement="top">
+                    <button className="trim-apply-button" onClick={handleApplyTrim} aria-label="Apply crop">
+                      <Check size={20} />
+                    </button>
+                  </HoverCard>
+                  <HoverCard content="Cancel crop (Esc)" placement="top">
+                    <button className="trim-cancel-button" onClick={handleCancelTrim} aria-label="Cancel crop">
+                      <X size={20} />
+                    </button>
+                  </HoverCard>
                 </div>
               </>
             );
           })()}
-          {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
+          {roleReady && canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && !trimState.active && (() => {
             const linkedLink = links.find(l => l.strokeIds.some(id => selectedStrokeIds.includes(id)));
             if (!linkedLink) return null;
             const LINK_PADDING = 12;
@@ -946,17 +1076,20 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             const linkY = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y - 12;
 
             return (
-              <button onClick={() => { setHighlightedLinkId(linkedLink.id); setInsertShapesTab('links'); setShowInsertShapes(true); }}
-                className="selection-link-button"
-                data-left={linkX}
-                data-top={linkY}
-                title="Click to view linked location">
-                <LinkIcon />
-              </button>
+              <HoverCard content="Click to view linked location" placement="top">
+                <button onClick={() => { setHighlightedLinkId(linkedLink.id); setLinksPanelOpen(true); }}
+                  className="selection-link-button"
+                  data-left={linkX}
+                  data-top={linkY}
+                  style={{ left: linkX, top: linkY }}
+                  aria-label="Click to view linked location">
+                  <LinkIcon />
+                </button>
+              </HoverCard>
             );
           })()}
 
-          {canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && (() => {
+          {roleReady && canEdit && selectedStrokeIds.length > 0 && transformBox && !transformMode && !trimState.active && (() => {
             const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
             const hasGroupId = selectedStrokes.length > 0 && selectedStrokes.every(s => s.groupId !== undefined);
             const actualColor = selectedStrokes.length > 0 ? selectedStrokes[0].color : activeColor;
@@ -965,15 +1098,18 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             // Compute panel position (mirrors SelectionToolbox logic)
             const BOX_SCREEN_LEFT = transformBox.minX * zoom + panOffset.x;
             const BOX_SCREEN_RIGHT = transformBox.maxX * zoom + panOffset.x;
-            const BOX_SCREEN_CENTER_Y = (transformBox.minY + transformBox.maxY) / 2 * zoom + panOffset.y;
+            const BOX_SCREEN_TOP = transformBox.minY * zoom + panOffset.y;
+            const BOX_SCREEN_BOTTOM = transformBox.maxY * zoom + panOffset.y;
+            const BOX_SCREEN_CENTER_X = (BOX_SCREEN_LEFT + BOX_SCREEN_RIGHT) / 2;
+            const BOX_SCREEN_CENTER_Y = (BOX_SCREEN_TOP + BOX_SCREEN_BOTTOM) / 2;
 
             return (
               <>
                 {showSelectionToolbox && (
                   <SelectionToolbox
-                    boxScreenLeft={BOX_SCREEN_LEFT}
-                    boxScreenRight={BOX_SCREEN_RIGHT}
-                    boxScreenCenterY={BOX_SCREEN_CENTER_Y}
+                    boxScreenCenterX={BOX_SCREEN_CENTER_X}
+                    boxScreenTop={BOX_SCREEN_TOP}
+                    boxScreenBottom={BOX_SCREEN_BOTTOM}
                     activeColor={actualColor}
                     activeFillColor={actualFillColor}
                     onColorChange={(color) => { const updated = strokes.map(s => selectedStrokeIds.includes(s.id) && s.tool === 'chalk' ? { ...s, color } : s); setStrokes(updated); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
@@ -1003,25 +1139,30 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
                     onSetDimensions={(width, height) => { const selected = strokes.filter(s => selectedStrokeIds.includes(s.id)); const box = getCombinedBoundingBox(selected); if (!box) return; const newBox = { minX: box.minX, minY: box.minY, maxX: box.minX + width, maxY: box.minY + height }; const transformed = transformStrokes(selected, box, newBox); const updated = strokes.map(s => { const t = transformed.find(ts => ts.id === s.id); return t ? t : s; }); setStrokes(updated); setTransformBox(newBox); socket.emit('undo-stroke', { roomId, strokes: updated }); }}
                     currentRotation={selectionRotation} currentWidth={transformBox ? Math.round(transformBox.maxX - transformBox.minX) : 0}
                     currentHeight={transformBox ? Math.round(transformBox.maxY - transformBox.minY) : 0}
-                    pluginSelectionTools={selectionToolsForCurrentSelection}
-                    onRunPluginSelectionTool={runPluginSelectionTool}
+                    currentSize={selectedStrokes.length > 0 ? selectedStrokes[0].size : brushSize}
                     selectedCount={selectedStrokeIds.length} isGrouped={hasGroupId} />
                 )}
                 {/* ── Selection toolbox toggle button ── */}
-                <button
-                  onClick={() => setShowSelectionToolbox(prev => !prev)}
-                  title={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
-                  className={`selection-toolbox-toggle ${showSelectionToolbox ? 'active' : ''}`}
-                  data-left={BOX_SCREEN_RIGHT + 12}
-                  data-top={BOX_SCREEN_CENTER_Y - 11}
+                <HoverCard
+                  content={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
+                  placement="bottom"
                 >
-                  {showSelectionToolbox ? <EyeOff size={12} /> : <Eye size={12} />}
-                </button>
+                  <button
+                    onClick={() => setShowSelectionToolbox(prev => !prev)}
+                    className={`selection-toolbox-toggle ${showSelectionToolbox ? 'active' : ''}`}
+                    aria-label={`${showSelectionToolbox ? 'Hide' : 'Show'} Selection Toolbox (Ctrl+O)`}
+                    data-left={BOX_SCREEN_RIGHT + 12}
+                    data-top={BOX_SCREEN_CENTER_Y - 11}
+                    style={{ left: BOX_SCREEN_RIGHT + 12, top: BOX_SCREEN_CENTER_Y - 11 }}
+                  >
+                    {showSelectionToolbox ? <EyeOff size={12} /> : <Eye size={12} />}
+                  </button>
+                </HoverCard>
               </>
             );
           })()}
 
-          {canEdit && (
+          {roleReady && canEdit && (
             <div className="board-actions-center">
               <Card className="board-actions-card">
                 <ActionSticks onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
@@ -1032,191 +1173,362 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
 
           <div className="board-header">
             <div className="board-header-tools">
-              {!canEdit && (
-                <div className="board-readonly-badge">Viewer · read only</div>
-              )}
+              <div className="board-actions-card board-brand-menu">
+                <HoverCard content="Chalkboard" placement="below">
+                  <button type="button" className="board-brand" aria-label="Chalkboard">
+                    <ChalkboardLogo className="board-brand-logo" />
+                    <span className="board-brand-name">Chalkboard</span>
+                    {planLabel && <span className="board-brand-plan">{planLabel}</span>}
+                  </button>
+                </HoverCard>
+                <div className="room-info-trigger-wrap" ref={roomInfoRef}>
+                  <HoverCard content="Room info" placement="below">
+                    <button
+                      type="button"
+                      className={`header-icon-btn${roomInfoOpen ? ' active' : ''}`}
+                      onClick={() => setRoomInfoOpen((open) => !open)}
+                      aria-label="Room info"
+                    >
+                      <Menu size={14} />
+                    </button>
+                  </HoverCard>
+                  {roomInfoOpen && (
+                    <div className="room-info-popover">
+                      <strong className="room-info-popover-title">{roomTitle}</strong>
+                      {roomDescription ? (
+                        <p className="room-info-popover-description">{roomDescription}</p>
+                      ) : (
+                        <p className="room-info-popover-empty">No description yet.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="room-links-trigger-wrap" ref={linksPanelRef}>
+                  <HoverCard content="Links" placement="below">
+                    <button
+                      type="button"
+                      className={`header-icon-btn${linksPanelOpen ? ' active' : ''}`}
+                      onClick={() => { setLinksPanelOpen(!linksPanelOpen); setHighlightedLinkId(null); }}
+                      aria-label="Links"
+                    >
+                      <Link size={14} />
+                    </button>
+                  </HoverCard>
+                  {linksPanelOpen && (
+                    <div className="room-links-popover">
+                      <LinksPanel
+                        links={links}
+                        hasSelection={selectedStrokeIds.length > 0}
+                        onNavigateToLink={(link) => { handleNavigateToLink(link); setLinksPanelOpen(false); }}
+                        onCreateLink={handleCreateLink}
+                        onDeleteLink={handleDeleteLink}
+                        onRenameLink={handleRenameLink}
+                        highlightedLinkId={highlightedLinkId}
+                        onClose={() => { setLinksPanelOpen(false); setHighlightedLinkId(null); }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="board-header-actions">
-              {roomQuery.data?.room.voiceEnabled && (
-                <button
-                  type="button"
-                  className="voice-action-btn"
-                  onClick={() => {
-                    if (voiceToken && voiceUrl) {
-                      setVoiceListening(false);
-                      setVoiceToken('');
-                      setVoiceUrl('');
-                    } else {
-                      setVoiceListening(true);
-                    }
-                  }}
-                  title={voiceToken && voiceUrl ? 'Disconnect Voice' : 'Connect Voice'}
-                  aria-label={voiceToken && voiceUrl ? 'Disconnect voice' : 'Connect voice'}
-                >
-                  {voiceToken && voiceUrl ? <Phone size={14} /> : <PhoneOff size={14} />}
-                </button>
-              )}
-              <div className="room-details-menu" ref={roomDetailsRef}>
-                <button
-                  type="button"
-                  className="room-details-trigger"
-                  onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
-                  aria-expanded={roomDetailsOpen}
-                  aria-label="Open room details"
-                >
-                  <UsersRound size={13} />
-                  <span>{onlineCount}</span>
-                  <ChevronDown size={11} className={roomDetailsOpen ? 'room-details-chevron open' : 'room-details-chevron'} />
-                </button>
-                {roomDetailsOpen && (
-                  <div className="room-details-popover">
-                    <div className="room-details-heading">
-                      <div>
-                        <strong>{roomTitle}</strong>
-                        <span>Room code: {roomId.toUpperCase()}</span>
-                      </div>
-                      <span className={canEdit ? 'room-role-pill room-role-editor' : 'room-role-pill'}>{roleLabel(effectiveRole)}</span>
-                    </div>
-                    {roomDescription && <p className="room-details-description">{roomDescription}</p>}
-                    {canManageMembers && roomAccessMode === 'approval_required' && (
-                      <section className="room-join-requests" aria-labelledby="room-join-requests-heading">
-                        <div className="room-details-section-title" id="room-join-requests-heading">
-                          Join requests <span>{joinRequests.length}</span>
-                        </div>
-                        {(joinRequestError || joinRequestsQuery.error) && <p className="room-details-error" role="alert">{joinRequestError || (joinRequestsQuery.error instanceof Error ? joinRequestsQuery.error.message : 'We could not load join requests.')}</p>}
-                        {joinRequestsLoading ? (
-                          <p className="room-join-requests-empty">Loading requests...</p>
-                        ) : joinRequests.length === 0 ? (
-                          <p className="room-join-requests-empty">No pending requests.</p>
-                        ) : (
-                          <div className="room-details-members">
-                            {joinRequests.map((request) => {
-                              const actionPending = Boolean(joinRequestAction);
-                              return (
-                                <div key={request.id} className="room-detail-member room-join-request-row">
-                                  <UserAvatar name={request.displayName} avatarUrl={request.avatarUrl} size="sm" className="room-member-avatar" />
-                                  <div className="room-member-name">
-                                    <strong>{request.displayName}</strong>
-                                    <span>{request.email || 'Waiting for approval'}</span>
-                                  </div>
-                                  <div className="room-join-request-controls">
-                                    <span className="room-member-role">Pending</span>
-                                    <button
-                                      type="button"
-                                      className="room-join-request-button room-join-request-approve"
-                                      onClick={() => { void resolveJoinRequest(request, 'approve'); }}
-                                      disabled={actionPending}
-                                      aria-label={`Approve ${request.displayName}`}
-                                    >
-                                      {joinRequestAction === `approve:${request.userId}` ? '...' : 'Approve'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="room-join-request-button room-join-request-deny"
-                                      onClick={() => { void resolveJoinRequest(request, 'deny'); }}
-                                      disabled={actionPending}
-                                      aria-label={`Decline ${request.displayName}`}
-                                    >
-                                      {joinRequestAction === `deny:${request.userId}` ? '...' : 'Decline'}
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </section>
-                    )}
-                    <div className="room-details-section-title">Members <span>{displayedRoomMembers.length} · {onlineCount} online</span></div>
-                    <div className="room-details-members">
-                      {displayedRoomMembers.map((member) => {
-                        const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);
-                        const isOnline = member.userId === userId || Boolean(collaborator);
-                        return (
-                          <div key={member.userId} className="room-detail-member">
-                            <UserAvatar
-                              name={member.displayName}
-                              avatarUrl={member.avatarUrl || collaborator?.avatarUrl}
-                              size="sm"
-                              className="room-member-avatar"
-                            />
-                            <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} />
-                            <div className="room-member-name">
-                              <strong>{member.displayName}{member.userId === userId ? ' (You)' : ''}</strong>
-                              <span>{isOnline ? 'Online' : 'Offline'}</span>
-                            </div>
-                            <div className="room-member-actions">
-                              <RoomMemberVoiceControls
-                                memberUserId={member.userId}
-                                effectiveRole={effectiveRole}
-                                currentUserId={userId}
-                                socket={socket}
-                                roomId={roomId}
-                              />
-                              {canManageMembers && member.role !== 'owner' ? (
-                                <select className="room-member-role-select"
-                                  value={member.role}
-                                  onChange={(event) => updateMemberRole(member.userId, event.target.value as 'instructor' | 'viewer')}
-                                  aria-label={`Role for ${member.displayName}`}
-                                >
-                                  <option value="instructor">Editor</option>
-                                  <option value="viewer">Viewer</option>
-                                </select>
-                              ) : (
-                                <span className="room-member-role">{roleLabel(member.role)}</span>
-                              )}
-                              {canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
-                                <button
-                                  type="button"
-                                  className="room-member-kick-button"
-                                  onClick={() => requestKickMember(member, collaborator.id)}
-                                  disabled={Boolean(kickingMemberId)}
-                                  aria-label={`Kick ${member.displayName}`}
-                                >
-                                  {kickingMemberId === member.userId ? '...' : 'Kick'}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {(roleUpdateError || kickMemberError) && <p className="room-details-error">{roleUpdateError || kickMemberError}</p>}
-                    {canManageMembers && (
-                      <button className="room-close-button" type="button" onClick={requestCloseRoom}>
-                        Close room
+              <div className="board-actions-card board-header-actions-card">
+                <div className="participation-actions">
+                  {raisedHandCount > 0 && <span className="raised-hand-count" title="Raised hands">✋ {raisedHandCount}</span>}
+                  <HoverCard content={isHandRaised ? 'Lower hand' : 'Raise hand'} placement="below">
+                    <button
+                      type="button"
+                      className={`voice-action-btn participation-action-btn${isHandRaised ? ' active' : ''}`}
+                      onClick={toggleRaisedHand}
+                      aria-label={isHandRaised ? 'Lower hand' : 'Raise hand'}
+                    >
+                      <Hand size={14} />
+                    </button>
+                  </HoverCard>
+                  <div className="reaction-picker-wrap">
+                    <HoverCard content="Send reaction" placement="below">
+                      <button
+                        type="button"
+                        className="voice-action-btn participation-action-btn"
+                        onClick={() => setReactionPickerOpen((open) => !open)}
+                        aria-label="Send reaction"
+                      >
+                        <Smile size={14} />
                       </button>
+                    </HoverCard>
+                    {reactionPickerOpen && (
+                      <div className="reaction-picker" role="menu" aria-label="Send a reaction">
+                        {REACTION_EMOJIS.map((emoji) => (
+                          <button key={emoji} type="button" onClick={() => sendReaction(emoji)} aria-label={`React ${emoji}`}>{emoji}</button>
+                        ))}
+                      </div>
                     )}
                   </div>
+                </div>
+                <RoomHeaderMediaControls voiceConnected={voiceConnected} />
+                {effectiveRole === 'owner' && roomQuery.data?.room.voiceEnabled && (
+                  <HoverCard content={voiceConnected ? 'Disconnect Voice' : 'Connect Voice'} placement="below">
+                    <button
+                      type="button"
+                      className="header-icon-btn"
+                      onClick={() => {
+                        if (voiceToken && voiceUrl) {
+                          setVoiceListening(false);
+                          setVoiceToken('');
+                          setVoiceUrl('');
+                        } else {
+                          setVoiceListening(true);
+                        }
+                      }}
+                      aria-label={voiceConnected ? 'Disconnect voice' : 'Connect voice'}
+                    >
+                      {voiceConnected ? <Radio size={14} /> : <RadioOff size={14} />}
+                    </button>
+                  </HoverCard>
                 )}
+                <HoverCard content={isFullscreen ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)'} placement="below">
+                  <button
+                    type="button"
+                    className="header-icon-btn"
+                    onClick={() => { void toggleFullscreen(); }}
+                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                  >
+                    {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                  </button>
+                </HoverCard>
+                <div className="room-members-trigger-wrap" ref={roomMembersRef}>
+                  <HoverCard content={`${onlineHeaderMembers.length} online — Click to view members`} placement="below">
+                    <button
+                      type="button"
+                      className={`room-details-trigger${roomDetailsOpen ? ' active' : ''}`}
+                      onClick={() => { setRoomDetailsOpen((open) => !open); setRoleUpdateError(''); }}
+                      aria-expanded={roomDetailsOpen}
+                      aria-label={`${onlineHeaderMembers.length} online — open room details`}
+                    >
+                      <span className="member-avatar-stack">
+                        {onlineHeaderMembers.slice(0, 4).map((member) => {
+                          const isAgent = Boolean(
+                            member.userId?.startsWith('agent:') ||
+                            member.displayName?.toLowerCase().includes('chalkboard master') ||
+                            member.avatarUrl === 'ai:chalkboard-master'
+                          );
+
+                          if (isAgent) {
+                            return (
+                              <span key={member.userId} className="member-stack-avatar member-stack-avatar-ai" title="Chalkboard Master (AI)">
+                                <ChalkboardMasterIcon size="100%" withBackground={true} />
+                              </span>
+                            );
+                          }
+
+
+
+                          return (
+                            <Avatar.Root key={member.userId} className="member-stack-avatar">
+                              <Avatar.Image src={member.avatarUrl || undefined} alt={member.displayName} />
+                              <Avatar.Fallback delayMs={300}>{avatarInitials(member.displayName)}</Avatar.Fallback>
+                            </Avatar.Root>
+                          );
+                        })}
+                        {onlineHeaderMembers.length > 4 && (
+                          <span className="member-stack-more">+{onlineHeaderMembers.length - 4}</span>
+                        )}
+                      </span>
+
+                    </button>
+                  </HoverCard>
+                  {roomDetailsOpen && (
+                    <div className="room-members-popover" role="dialog" aria-modal="false" aria-label="Members">
+                      <div className="room-info-panel-header">
+                        <h3>Members</h3>
+                        <button
+                          type="button"
+                          className="room-info-panel-close"
+                          onClick={() => { setRoomDetailsOpen(false); setRoleUpdateError(''); }}
+                          aria-label="Close members"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                      <div className="room-info-panel-body">
+                        {canManageMembers && roomAccessMode === 'approval_required' && (
+                          <section className="room-join-requests" aria-labelledby="room-join-requests-heading">
+                            <div className="room-details-section-title" id="room-join-requests-heading">
+                              Join requests <span>{joinRequests.length}</span>
+                            </div>
+                            {(joinRequestError || joinRequestsQuery.error) && <p className="room-details-error" role="alert">{joinRequestError || (joinRequestsQuery.error instanceof Error ? joinRequestsQuery.error.message : 'We could not load join requests.')}</p>}
+                            {joinRequestsLoading ? (
+                              <p className="room-join-requests-empty">Loading requests...</p>
+                            ) : joinRequests.length === 0 ? (
+                              <p className="room-join-requests-empty">No pending requests.</p>
+                            ) : (
+                              <div className="room-details-members">
+                                {joinRequests.map((request) => {
+                                  const actionPending = Boolean(joinRequestAction);
+                                  return (
+                                    <div key={request.id} className="room-detail-member room-join-request-row">
+                                      <UserAvatar name={request.displayName} avatarUrl={request.avatarUrl} size="sm" className="room-member-avatar" />
+                                      <div className="room-member-name">
+                                        <strong>{request.displayName}</strong>
+                                        <span>{request.email || 'Waiting for approval'}</span>
+                                      </div>
+                                      <div className="room-join-request-controls">
+                                        <span className="room-member-role">Pending</span>
+                                        <button
+                                          type="button"
+                                          className="room-join-request-button room-join-request-approve"
+                                          onClick={() => { void resolveJoinRequest(request, 'approve'); }}
+                                          disabled={actionPending}
+                                          aria-label={`Approve ${request.displayName}`}
+                                        >
+                                          {joinRequestAction === `approve:${request.userId}` ? '...' : 'Approve'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="room-join-request-button room-join-request-deny"
+                                          onClick={() => { void resolveJoinRequest(request, 'deny'); }}
+                                          disabled={actionPending}
+                                          aria-label={`Decline ${request.displayName}`}
+                                        >
+                                          {joinRequestAction === `deny:${request.userId}` ? '...' : 'Decline'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </section>
+                        )}
+                        <div className="room-details-section-title">Members <span>{displayedRoomMembers.length} · {onlineCount} online{raisedHandCount > 0 ? ` · ${raisedHandCount} raised` : ''}</span></div>
+                        <div className="room-details-members">
+                          {sortedDisplayedRoomMembers.map((member) => {
+                            const collaborator = Object.values(collaborators).find((item) => item.userId === member.userId);
+                            const isOnline = member.userId === userId || Boolean(collaborator);
+                            const isAgent = Boolean(
+                              member.userId?.startsWith('agent:') ||
+                              member.displayName?.toLowerCase().includes('chalkboard master') ||
+                              member.avatarUrl === 'ai:chalkboard-master'
+                            );
+                            const displayName = isAgent ? 'Chalkboard Master (AI)' : member.displayName;
+                            return (
+                              <div key={member.userId} className="room-detail-member">
+                                <RoomMemberAvatar
+                                  userId={member.userId}
+                                  name={displayName}
+                                  avatarUrl={member.avatarUrl || collaborator?.avatarUrl}
+                                />
+                                {raisedHandUserIds.has(member.userId) && <span className="room-member-hand-badge" title="Hand raised">✋</span>}
+                                <span className="room-member-presence" data-color={collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b')} style={{ backgroundColor: collaborator?.color || (member.userId === userId ? userCursorColor : '#64748b') }} />
+                                <div className="room-member-name">
+                                  <strong>{displayName}{member.userId === userId ? ' (You)' : ''}</strong>
+                                  <span>{isOnline ? 'Online' : 'Offline'}</span>
+                                </div>
+
+                                <div className="room-member-actions">
+                                  <RoomMemberVoiceControls
+                                    memberUserId={member.userId}
+                                    effectiveRole={effectiveRole}
+                                    currentUserId={userId}
+                                    socket={socket}
+                                    roomId={roomId}
+                                    voiceEnabled={roomQuery.data?.room.voiceEnabled ?? false}
+                                    isOnline={isOnline}
+                                    memberName={displayName}
+                                    voiceConnected={voiceConnected}
+                                  />
+                                  {isAgent ? (
+                                    <RoleDropdown
+                                      role="instructor"
+                                      disabled={true}
+                                      ariaLabel="Chalkboard Master role (Editor)"
+                                    />
+                                  ) : member.userId === userId ? (
+                                    <RoleDropdown
+                                      role="instructor"
+                                      disabled={true}
+                                      ariaLabel="Your role (Editor)"
+                                    />
+                                  ) : canManageMembers && member.role !== 'owner' ? (
+                                    <RoleDropdown
+                                      role={member.role as 'instructor' | 'viewer'}
+                                      onChange={(newRole) => updateMemberRole(member.userId, newRole)}
+                                      ariaLabel={`Change role for ${member.displayName}`}
+                                    />
+                                  ) : (
+                                    <RoleDropdown
+                                      role={member.role === 'viewer' ? 'viewer' : 'instructor'}
+                                      disabled={true}
+                                      ariaLabel={`Role for ${member.displayName}`}
+                                    />
+                                  )}
+
+
+                                  {!isAgent && canEdit && member.userId !== userId && member.role !== 'owner' && collaborator && (
+                                    <button
+                                      type="button"
+                                      className="room-member-kick-button"
+                                      onClick={() => requestKickMember(member, collaborator.id)}
+                                      disabled={Boolean(kickingMemberId)}
+                                      aria-label={`Kick ${member.displayName}`}
+                                    >
+                                      {kickingMemberId === member.userId ? '...' : 'Kick'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                        </div>
+                        {(roleUpdateError || kickMemberError) && <p className="room-details-error">{roleUpdateError || kickMemberError}</p>}
+                        {canManageMembers && (
+                          <button className="room-close-button" type="button" onClick={requestCloseRoom}>
+                            Close room
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <HoverCard content={isCopied ? 'Link Copied!' : 'Copy Invite Link'} placement="below">
+                  <button
+                    type="button"
+                    className="header-icon-btn"
+                    onClick={handleCopyLink}
+                    aria-label="Copy invite link"
+                  >
+                    {isCopied ? <Check size={14} className="copy-success-icon" /> : <Share2 size={14} />}
+                  </button>
+                </HoverCard>
+                <HoverCard content="Exit room" placement="below">
+                  <button
+                    type="button"
+                    className="header-icon-btn header-exit-btn"
+                    onClick={() => onLeaveRoom({ promptSessionFeedback: true })}
+                    aria-label="Exit room"
+                  >
+                    <LogOut size={14} />
+                  </button>
+                </HoverCard>
               </div>
-              <Card className="share-panel">
-                <span className="room-code-badge">{roomId.toUpperCase()}</span>
-                <Button variant="icon" onClick={handleCopyLink} title="Copy Invite Link">
-                  {isCopied ? <Check size={14} className="copy-success-icon" /> : <Copy size={14} />}
-                </Button>
-              </Card>
-              <Button
-                variant="icon"
-                className="hud-panel fullscreen-toggle"
-                onClick={() => { void toggleFullscreen(); }}
-                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              >
-                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              </Button>
-              <Button variant="primary" className="hud-panel board-exit-button" onClick={onLeaveRoom}>Exit</Button>
             </div>
           </div>
 
           <div className="zoom-indicator">
-            <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.1))}><Minus size={12} /></Button>
+            <HoverCard content="Zoom Out (-)" placement="top">
+              <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.1))} aria-label="Zoom out"><Minus size={12} /></Button>
+            </HoverCard>
             <span className="zoom-value">{Math.round(zoom * 100)}%</span>
-            <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.1))}><Plus size={12} /></Button>
-            <Button variant="icon" className="zoom-control-button zoom-reset-button" onClick={resetPanZoom} title="Reset Pan/Zoom"><Maximize2 size={12} /></Button>
+            <HoverCard content="Zoom In (+)" placement="top">
+              <Button variant="icon" className="zoom-control-button" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.1))} aria-label="Zoom in"><Plus size={12} /></Button>
+            </HoverCard>
+            <HoverCard content="Reset Pan/Zoom (Ctrl+0)" placement="top">
+              <Button variant="icon" className="zoom-control-button zoom-reset-button" onClick={resetPanZoom} aria-label="Reset Pan/Zoom"><Maximize2 size={12} /></Button>
+            </HoverCard>
           </div>
 
-          {canEdit && <Toolbar
+          {roleReady && canEdit && <Toolbar
             activeTool={activeTool}
             activeColor={activeColor}
             brushSize={brushSize}
@@ -1234,13 +1546,20 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
           const plugin = pluginManifests.find((item) => item.id === modal.pluginId);
           if (!plugin) return null;
           const tools = pluginTools.filter((tool) => (tool.pluginId ?? plugin.id) === plugin.id);
+          // A locked Pro plugin has no bundle to wait for, so it is never
+          // "loading" — the modal shows its upgrade state instead.
+          const pluginLocked = Boolean(plugin.locked);
           return <PluginModal key={modal.pluginId} plugin={plugin} tools={tools}
             selectedStrokes={strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id))}
             selectionStrokeIds={selectedStrokeIds}
             sharedOutput={sharedPluginOutput}
             onPublishOutput={setSharedPluginOutput}
-            pluginReady={!publishedCataloguePlugins.some((candidate) => candidate.pluginId === plugin.id)
+            locked={pluginLocked}
+            onUpgrade={() => window.open('/dashboard?tab=billing', '_blank', 'noopener,noreferrer')}
+            pluginReady={pluginLocked
+              || !publishedCataloguePlugins.some((candidate) => candidate.pluginId === plugin.id)
               || publishedPluginDefinitions.some((definition) => definition.pluginId === plugin.id)}
+
             onClose={() => {
               setActivePluginModals((current) => current.filter((item) => item.pluginId !== modal.pluginId));
               if (activePublishedPluginId === modal.pluginId) setActivePublishedPluginId(null);
@@ -1276,37 +1595,49 @@ export const Chalkboard: React.FC<ChalkboardProps> = ({
             onConfirm={kickMember}
           />
         )}
+        {hasVoiceCredentials && <VideoStage members={roomMembers} />}
       </div>
     </>
   );
 
-  if (voiceToken && voiceUrl) {
-    return (
-      <LiveKitRoom
-        key={voiceToken}
-        video={false}
-        // Join with playback enabled, but request the microphone only when the
-        // user explicitly presses Unmute. This also keeps viewer tokens
-        // (which intentionally cannot publish) from failing on join.
-        audio={false}
-        token={voiceToken}
-        serverUrl={voiceUrl}
-        connect={true}
-        onDisconnected={() => { setVoiceToken(''); setVoiceUrl(''); }}
-        onError={() => {
-          setVoiceToast({ message: 'Voice connection error', type: 'error' });
-        }}
-      >
-        <SpeakingParticipantsProvider>
-          {mainContent}
-          <StartAudio className="voice-start-audio" label="Enable voice audio" />
-        </SpeakingParticipantsProvider>
-        <RoomAudioRenderer />
-      </LiveKitRoom>
-    );
-  }
-
-  return mainContent;
+  return (
+    <LiveKitRoom
+      video={false}
+      // Join with playback enabled, but request media only when the
+      // user explicitly presses Unmute or starts camera. This also keeps viewer tokens
+      // (which intentionally cannot publish) from failing on join or reconnect.
+      audio={false}
+      token={voiceToken || undefined}
+      serverUrl={voiceUrl || undefined}
+      connect={hasVoiceCredentials}
+      onConnected={() => {
+        voiceSwappingRef.current = false;
+        if (effectiveRole === 'owner') socket.emit('voice:owner-connection', { roomId, connected: true });
+      }}
+      onDisconnected={() => {
+        if (voiceSwappingRef.current) return;
+        if (effectiveRole === 'owner') socket.emit('voice:owner-connection', { roomId, connected: false });
+        setVoiceToken('');
+        setVoiceUrl('');
+      }}
+      onError={() => {
+        useLoggerStore.getState().notify('Voice/video connection error', 'error');
+      }}
+    >
+      <VoiceAudioStarter />
+      <VoiceRoleSync
+        effectiveRole={effectiveRole}
+        roomId={roomId}
+        setVoiceToken={setVoiceToken}
+        setVoiceUrl={setVoiceUrl}
+        voiceSwappingRef={voiceSwappingRef}
+      />
+      <SpeakingParticipantsProvider>
+        {mainContent}
+      </SpeakingParticipantsProvider>
+      {hasVoiceCredentials && <RoomAudioRenderer />}
+    </LiveKitRoom>
+  );
 };
 
 export default Chalkboard;

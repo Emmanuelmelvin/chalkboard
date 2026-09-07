@@ -1,5 +1,9 @@
 import { existsSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import {
+  dirname,
+  relative,
+  resolve
+} from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -7,12 +11,24 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { api } from '@/routers/api';
 import { sql } from '@/db/client';
-import { initRedis, closeRedis, redis } from '@/services/roomState';
+import {
+  initRedis,
+  closeRedis,
+  redis,
+  isRedisReady,
+  getRedisStatus
+} from '@/config/redis';
 import { attachSocket } from '@/realtime/socket';
-import { errorHandler } from '@/middlewares/errorHandler';
-import { requestLogger } from '@/middlewares/requestLogger';
+import { errorHandler } from '@/middlewares/errorHandler.middleware';
+import { requestLogger } from '@/middlewares/requestLogger.middleware';
+import { stopRateLimiterSweeper } from '@/services/infra/rateLimiter.service';
 import { logger } from '@/utils/logger';
-import { env, isAllowedCorsOrigin, logBootMode } from '@/config/env';
+import { initMonitoring } from '@/utils/monitoring';
+import {
+  env,
+  isAllowedCorsOrigin,
+  logBootMode
+} from '@/config/env';
 
 type DependencyStatus = 'up' | 'down';
 const READINESS_TIMEOUT_MS = 2000;
@@ -41,7 +57,7 @@ export async function getReadiness() {
   const [database, cache] = await Promise.all([
     checkDependency('database', () => sql`select 1`),
     checkDependency('redis', async () => {
-      if (!redis?.isReady) throw new Error('Redis client is not ready');
+      if (!isRedisReady()) throw new Error(`Redis client is not ready (status=${getRedisStatus()})`);
       await redis.ping();
     }),
   ]);
@@ -59,6 +75,7 @@ function getFrontendRoot() {
 }
 
 export async function startServer() {
+  initMonitoring();
   logBootMode();
   const app = new Hono();
   app.use('*', requestLogger);
@@ -119,6 +136,7 @@ export async function startServer() {
       try {
         await io.close();
         logger.info('Socket.IO and HTTP servers closed');
+        stopRateLimiterSweeper();
         const cleanup = await Promise.allSettled([closeRedis(), sql.end({ timeout: 5 })]);
         for (const result of cleanup) {
           if (result.status === 'rejected') logger.error('Server shutdown cleanup failed', { error: result.reason });
@@ -131,6 +149,7 @@ export async function startServer() {
 
     return shutdownPromise;
   }
+  //changes made.
 
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
   process.once('SIGINT', () => void shutdown('SIGINT'));

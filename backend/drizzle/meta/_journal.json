@@ -85,6 +85,62 @@
       "when": 1784634000000,
       "tag": "0011_plugin_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785768900081,
+      "tag": "0012_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785857895463,
+      "tag": "0013_admin_billing_and_developer_pool",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1786025401720,
+      "tag": "0014_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1786031268219,
+      "tag": "0015_flaky_darwin",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1786032203853,
+      "tag": "0016_bumpy_eddie_brock",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786955130525,
+      "tag": "0017_tired_quentin_quire",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787217274596,
+      "tag": "0018_wakeful_paibok",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787219573734,
+      "tag": "0019_flaky_silhouette",
+      "breakpoints": true
     }
   ]
 }

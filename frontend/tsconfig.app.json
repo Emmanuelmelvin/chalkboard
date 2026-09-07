@@ -13,10 +13,17 @@
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
     "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@shared/*": [
+        "../shared/*",
+        "./src/shared/*"
+      ],
+      "@shared": [
+        "../shared",
+        "./src/shared"
       ]
     },
     /* Bundler mode */
@@ -27,6 +34,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
     /* Linting */
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,

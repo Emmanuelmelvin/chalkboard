@@ -1,14 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, Crown, X } from 'lucide-react';
 import type { Stroke } from '@/types';
 import type { PluginManifest, PluginToolContribution } from '@/plugins/types';
 import PluginIcon from '@/components/svg/PluginIcons';
 import { MathToolPreview, TagPreview } from '@/components/svg/MathPreviews';
 import { parseMatrixValues, validateMatrixRequest } from '@/plugins/builtin/mathSet/generators';
 import { calculateSummary, parseStatisticRows } from '@/plugins/builtin/statistics/generators';
+import {
+  DEFAULT_NOTE_HTML,
+  noteDraftHasText,
+  type NotesRichTextDraft,
+} from '@/plugins/builtin/notes/draft';
+import NotesRichEditor from '@/plugins/builtin/notes/NotesRichEditor';
 
 const TAG_PLUGIN_ID = 'chalkboard.tag';
 const STATISTICS_PLUGIN_ID = 'chalkboard.statistics';
+const NOTES_PLUGIN_ID = 'chalkboard.notes';
 
 interface DataGridRow {
   label: string;
@@ -46,7 +53,7 @@ const MatrixGridField: React.FC<{ value: string; onChange: (value: string) => vo
           <button type="button" disabled={(matrix[0]?.length ?? 1) <= 1} onClick={() => update(matrix.map((row) => row.slice(0, -1)))}>− Column</button>
         </div>
       </div>
-      <div className="matrix-grid" data-columns={matrix[0]?.length ?? 1}>
+      <div className="matrix-grid" data-columns={matrix[0]?.length ?? 1} style={{ gridTemplateColumns: `repeat(${matrix[0]?.length ?? 1}, minmax(0, 1fr))` }}>
         {matrix.flatMap((row, rowIndex) => row.map((cell, columnIndex) => (
           <input
             key={`${rowIndex}-${columnIndex}`}
@@ -79,7 +86,7 @@ const StatisticsPreview: React.FC<{ values: Record<string, string>; summaryOnly:
           {rows.slice(0, 10).map((row, index) => {
             const value = Number(row.value);
             const height = Number.isFinite(value) ? Math.max(8, Math.abs(value) / max * 86) : 4;
-            return <div className="statistics-bar-item" key={`${row.label}-${index}`}><div className="statistics-bar" data-height={height} /><small>{row.label || index + 1}</small></div>;
+            return <div className="statistics-bar-item" key={`${row.label}-${index}`}><div className="statistics-bar" data-height={height} style={{ height }} /><small>{row.label || index + 1}</small></div>;
           })}
         </div>
       )}
@@ -165,7 +172,14 @@ interface PluginModalProps {
   sharedOutput?: string;
   onPublishOutput?: (value: string) => void;
   pluginReady?: boolean;
+  /**
+   * True when this is a Pro plugin the viewer's plan does not reach. The tools
+   * are still rendered, blurred, so the user can see what upgrading buys them.
+   */
+  locked?: boolean;
+  onUpgrade?: () => void;
 }
+
 
 /*
 
@@ -182,7 +196,10 @@ const PluginModal: React.FC<PluginModalProps> = ({
   sharedOutput,
   onPublishOutput,
   pluginReady = true,
+  locked = false,
+  onUpgrade,
 }) => {
+
   const clampPosition = useCallback((x: number, y: number) => ({
     x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 432)),
     y: Math.min(Math.max(12, y), Math.max(12, window.innerHeight - 120)),
@@ -204,7 +221,17 @@ const PluginModal: React.FC<PluginModalProps> = ({
   const isTagPlugin = plugin.id === TAG_PLUGIN_ID;
   const isMathSetPlugin = plugin.id === 'chalkboard.math-set';
   const isStatisticsPlugin = plugin.id === STATISTICS_PLUGIN_ID;
+  const isNotesPlugin = plugin.id === NOTES_PLUGIN_ID;
   const [activeToolId, setActiveToolId] = useState<string | null>(isTagPlugin ? tools[0]?.id ?? null : null);
+  const [noteDraft, setNoteDraft] = useState<NotesRichTextDraft>({
+    html: DEFAULT_NOTE_HTML,
+    fontFamily: 'Arial',
+    fontSize: '24',
+    textColor: '#ffffff',
+    backgroundColor: '#fff7d6',
+    backgroundTransparent: true,
+    textAlign: 'left',
+  });
 
   const handleDragMove = useCallback((event: PointerEvent) => {
     if (!dragStart) return;
@@ -266,7 +293,17 @@ const PluginModal: React.FC<PluginModalProps> = ({
   };
 
   const handleSubmit = async (tool: PluginToolContribution) => {
-    await onRunPluginTool(tool.command, getToolFormValues(tool), selectionStrokeIds);
+    const formValues = getToolFormValues(tool);
+    if (isNotesPlugin) {
+      formValues.noteHtml = noteDraft.html;
+      formValues.fontFamily = noteDraft.fontFamily;
+      formValues.fontSize = String(noteDraft.fontSize);
+      formValues.textColor = noteDraft.textColor;
+      formValues.textAlign = noteDraft.textAlign;
+      formValues.backgroundTransparent = String(noteDraft.backgroundTransparent);
+      formValues.backgroundColor = noteDraft.backgroundTransparent ? 'transparent' : noteDraft.backgroundColor;
+    }
+    await onRunPluginTool(tool.command, formValues, selectionStrokeIds);
   };
 
   const applySharedOutputAsTag = (toolId: string) => {
@@ -275,9 +312,11 @@ const PluginModal: React.FC<PluginModalProps> = ({
 
   return (
     <div
-      className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${isMathSetPlugin ? 'math-set-plugin-modal' : ''} ${isStatisticsPlugin ? 'statistics-plugin-modal' : ''}`}
+      className={`plugin-floating-modal ${isTagPlugin ? 'tag-plugin-modal' : ''} ${isMathSetPlugin ? 'math-set-plugin-modal' : ''} ${isStatisticsPlugin ? 'statistics-plugin-modal' : ''} ${isNotesPlugin ? 'notes-plugin-modal' : ''} ${locked ? 'plugin-modal-locked' : ''}`}
+
       data-left={position.x}
       data-top={position.y}
+      style={{ left: position.x, top: position.y }}
       role="dialog"
       aria-modal="true"
       aria-label={`${plugin.name} plugin`}
@@ -285,14 +324,19 @@ const PluginModal: React.FC<PluginModalProps> = ({
       <div className="plugin-floating-header" onPointerDown={handleHeaderPointerDown}>
         <span className="insert-plugin-logo">{plugin.logoUrl ? <img src={plugin.logoUrl} alt="" /> : <PluginIcon pluginId={plugin.id} fallback={plugin.name.slice(0, 1)} />}</span>
         <div>
-          <strong>{plugin.name}</strong>
+          <strong>
+            {plugin.name}
+            {locked && <span className="plugin-pro-badge"><Crown size={10} /> PRO</span>}
+          </strong>
           <small>{plugin.description}</small>
         </div>
         <button className="insert-shapes-close" type="button" onClick={onClose} aria-label="Close plugin modal">
           <X size={14} />
         </button>
       </div>
-      <div className="plugin-floating-body">
+      <div className={`plugin-floating-body${locked ? ' plugin-locked-body' : ''}`}>
+        <div className="plugin-floating-content">
+
         {tools.length === 0 ? (
           <div className="tag-plugin-preview-empty">This plugin has no available tools.</div>
         ) : !activeToolId ? tools.map((tool) => (
@@ -310,9 +354,11 @@ const PluginModal: React.FC<PluginModalProps> = ({
           const matrixError = isMatrixTool ? validateMatrixRequest(values) : null;
           const canSubmit = isTagPlugin
             ? selectedStrokes.length > 0 && tagText.trim().length > 0
-            : isMatrixTool
-              ? !matrixError
-              : !isStatisticsPlugin || hasStatisticValues;
+            : isNotesPlugin
+              ? noteDraftHasText(noteDraft)
+              : isMatrixTool
+                ? !matrixError
+                : !isStatisticsPlugin || hasStatisticValues;
 
           return (
             <div key={tool.id} className="plugin-tool-card">
@@ -323,7 +369,7 @@ const PluginModal: React.FC<PluginModalProps> = ({
               </div>
               {tool.description && <p>{tool.description}</p>}
 
-              {isTagPlugin && (
+              {plugin.preview && isTagPlugin && (
                 <TagPreview strokes={selectedStrokes} label={tagText} placement={placement} />
               )}
               {isTagPlugin && sharedOutput && (
@@ -331,12 +377,14 @@ const PluginModal: React.FC<PluginModalProps> = ({
                   Use selected symbol <strong>{sharedOutput}</strong>
                 </button>
               )}
-              {!isTagPlugin && !isStatisticsPlugin && tool.id === 'math-set.set-builder' && <SetBuilderPreview values={values} />}
-              {!isTagPlugin && !isStatisticsPlugin && tool.id === 'math-set.operation' && <SetOperationPreview values={values} />}
-              {!isTagPlugin && !isStatisticsPlugin && tool.id !== 'math-set.set-builder' && tool.id !== 'math-set.operation' && <MathToolPreview toolId={tool.id} values={values} />}
-              {isStatisticsPlugin && <StatisticsPreview values={values} summaryOnly={tool.command === 'statistics.insertSummary'} />}
+              {plugin.preview && !isTagPlugin && !isStatisticsPlugin && tool.id === 'math-set.set-builder' && <SetBuilderPreview values={values} />}
+              {plugin.preview && !isTagPlugin && !isStatisticsPlugin && tool.id === 'math-set.operation' && <SetOperationPreview values={values} />}
+              {plugin.preview && !isTagPlugin && !isStatisticsPlugin && tool.id !== 'math-set.set-builder' && tool.id !== 'math-set.operation' && <MathToolPreview toolId={tool.id} values={values} />}
+              {plugin.preview && isStatisticsPlugin && <StatisticsPreview values={values} summaryOnly={tool.command === 'statistics.insertSummary'} />}
 
-              {(tool.formFields ?? []).map((field) => {
+              {isNotesPlugin ? (
+                <NotesRichEditor value={noteDraft} onChange={setNoteDraft} autoFocus />
+              ) : (tool.formFields ?? []).map((field) => {
                 const isMatrixOperationField = ['rowOperation', 'rowTarget', 'rowSource', 'factor'].includes(field.id);
                 if (isMatrixTool && isMatrixOperationField && values.operation !== 'row-operation') return null;
                 return (
@@ -428,21 +476,33 @@ const PluginModal: React.FC<PluginModalProps> = ({
                 );
               })}
               {matrixError && <div className="plugin-validation-error" role="alert">{matrixError}</div>}
-              <button
-                type="button"
-                className="insert-links-add-btn"
-                disabled={!canSubmit || !pluginReady}
-                onClick={() => void handleSubmit(tool)}
-              >
-                <Check size={14} />
-                {!pluginReady ? 'Loading plugin…' : isTagPlugin ? 'Add tag' : 'Add to canvas'}
-              </button>
+              {locked ? (
+                <button
+                  type="button"
+                  className="insert-links-add-btn plugin-upgrade-action-btn"
+                  onClick={onUpgrade}
+                >
+                  <Crown size={14} /> Upgrade plan
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="insert-links-add-btn"
+                  disabled={!canSubmit || !pluginReady}
+                  onClick={() => void handleSubmit(tool)}
+                >
+                  <Check size={14} />
+                  {!pluginReady ? 'Loading plugin…' : isTagPlugin ? 'Add tag' : 'Add to canvas'}
+                </button>
+              )}
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );
 };
+
 
 export default PluginModal;

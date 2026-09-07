@@ -1,11 +1,18 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useState
+} from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { useLocation } from 'wouter';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import type { LobbyProps } from '@/types';
 import { apiKeys } from '@/api/keys';
 import { getRoom } from '@/api/rooms';
-import { useJoinApprovalQuery, useJoinRoomMutation } from '@/api/hooks';
+import {
+  useJoinApprovalQuery,
+  useJoinRoomMutation
+} from '@/api/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import '@/styles/PublicPages.css';
 

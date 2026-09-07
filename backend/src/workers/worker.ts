@@ -1,15 +1,59 @@
-import { Queue, Worker } from 'bullmq';
-import { env, logBootMode } from '@/config/env';
-import { closeInactiveRooms } from '@/services/cleanup';
+import { createServer, type Server } from 'node:http';
+import {
+  Queue,
+  Worker
+} from 'bullmq';
+import {
+  env,
+  logBootMode
+} from '@/config/env';
+import { closeInactiveRooms } from '@/services/infra/cleanup.service';
+import {
+  distributeMonth,
+  previousMonthBounds
+} from '@/services/billing/developerPool.service';
+import { reconcileExpiredSeatAddOns } from '@/services/billing/billing.service';
+import { reconcileOpenVoiceSessions } from '@/services/rooms/voiceMetering.service';
+import {
+  emailQueueName,
+  sendEmail
+} from '@/services/emails/emails.service';
 import { sql } from '@/db/client';
-import { closeRedis, initRedis } from '@/services/roomState';
+import {
+  closeRedis,
+  initRedis,
+  isRedisReady
+} from '@/config/redis';
 import { logger } from '@/utils/logger';
+import {
+  captureException,
+  initMonitoring
+} from '@/utils/monitoring';
+import {
+  add,
+  hit,
+  metricNames,
+  timed
+} from '@/utils/metrics';
 
 const connection = { url: env.REDIS_URL };
 const queueName = 'chalkboard-background';
 const cleanupJobName = 'room-inactivity-cleanup';
+const voiceReconcileJobName = 'voice-session-reconciliation';
+const poolDistributionJobName = 'developer-pool-distribution';
+const seatExpiryJobName = 'seat-addon-expiry';
+const emailSendJobName = 'send';
+
+/**
+ * How often the pool job wakes up. It runs daily rather than monthly because a
+ * monthly repeat would silently skip a period if the worker happened to be down
+ * on the one day it fired. Running every day and letting the idempotency
+ * constraint reject the repeats is strictly safer than trying to hit a date.
+ */
+const POOL_DISTRIBUTION_REPEAT_MS = 24 * 60 * 60 * 1000;
 
 export async function startWorker() {
+  initMonitoring();
   logBootMode();
   await initRedis();
   const queue = new Queue(queueName, { connection });
@@ -21,22 +65,139 @@ export async function startWorker() {
       removeOnFail: 100,
     });
 
+    // Voice sessions are closed by the socket layer in the normal case. This
+    // pass exists for the abnormal one: a killed browser or a crashed backend
+    // leaves a row open, and unbilled minutes are as wrong as overbilled ones.
+    await queue.add(voiceReconcileJobName, {}, {
+      jobId: voiceReconcileJobName,
+      repeat: { every: env.VOICE_RECONCILE_REPEAT_MS },
+      removeOnComplete: 100,
+      removeOnFail: 100,
+    });
+
+    // Closes the previous month for the developer revenue pool. Safe to fire
+    // repeatedly: `developer_pool_runs.period_start` is unique, so every run
+    // after the first returns `already_distributed` instead of paying again.
+    await queue.add(poolDistributionJobName, {}, {
+      jobId: poolDistributionJobName,
+      repeat: { every: POOL_DISTRIBUTION_REPEAT_MS },
+      removeOnComplete: 100,
+      removeOnFail: 100,
+    });
+
+    // A seat add-on cancelled at period end keeps its seats until the paid
+    // period elapses, then normally drops via the `subscription.deleted`
+    // webhook. This daily pass is the fallback for a webhook that is delayed
+    // or lost, so a cancelled add-on can never keep seats past what was paid
+    // for. Runs daily like the pool job: missing one day is survivable.
+    await queue.add(seatExpiryJobName, {}, {
+      jobId: seatExpiryJobName,
+      repeat: { every: POOL_DISTRIBUTION_REPEAT_MS },
+      removeOnComplete: 100,
+      removeOnFail: 100,
+    });
+
     const worker = new Worker(queueName, async (job) => {
       logger.info('Background job started', { jobId: job.id, name: job.name });
-      if (job.name === cleanupJobName) return closeInactiveRooms();
-      logger.warn('Unknown background job ignored', { jobId: job.id, name: job.name });
-      return { ignored: true };
+      return timed(metricNames.workerJobDuration, async () => {
+        if (job.name === cleanupJobName) {
+          const result = await closeInactiveRooms();
+          add(metricNames.cleanupRoomsClosed, result.closed);
+          return result;
+        }
+        if (job.name === voiceReconcileJobName) {
+          const result = await reconcileOpenVoiceSessions();
+          add(metricNames.voiceReconcileSessions, result.closed);
+          return result;
+        }
+        if (job.name === seatExpiryJobName) {
+          const expired = await reconcileExpiredSeatAddOns();
+          add(metricNames.billingSeatAddOnExpired, expired);
+          return expired;
+        }
+        if (job.name === poolDistributionJobName) {
+          // Always the *previous* month: the current one is still accruing, and
+          // closing it early would pay out a partial period.
+          const { periodStart, periodEnd } = previousMonthBounds();
+          return distributeMonth(periodStart, periodEnd);
+        }
+        logger.warn('Unknown background job ignored', { jobId: job.id, name: job.name });
+        return { ignored: true };
+      }, { job: job.name });
     }, { connection });
 
-    worker.on('completed', (job, result) => logger.info('Background job completed', { jobId: job.id, name: job.name, result }));
-    worker.on('failed', (job, error) => logger.error('Background job failed', { jobId: job?.id, name: job?.name, error }));
-    logger.info('BullMQ worker started', { queueName, cleanupJobName });
+    worker.on('completed', (job, result) => {
+      hit(metricNames.workerJobSucceeded, { job: job?.name });
+      logger.info('Background job completed', { jobId: job.id, name: job.name, result });
+    });
+    worker.on('failed', (job, error) => {
+      hit(metricNames.workerJobFailed, { job: job?.name });
+      logger.error('Background job failed', { jobId: job?.id, name: job?.name, error });
+      captureException(error, { jobId: job?.id, jobName: job?.name });
+    });
+    logger.info('BullMQ worker started', {
+      queueName,
+      cleanupJobName,
+      voiceReconcileJobName,
+      poolDistributionJobName,
+      seatExpiryJobName,
+    });
+
+    // Transactional email: enqueued by the API process at the trigger sites
+    // (signup, first room, plan events, invites, plugin flow) and sent here so
+    // a slow or failing mail provider can never stall an HTTP request. The
+    // jobs carry their own `attempts`/backoff from enqueue time.
+    const emailWorker = new Worker(emailQueueName, async (job) => {
+      logger.info('Email job started', { jobId: job.id, name: job.name });
+      if (job.name === emailSendJobName) {
+        await sendEmail(job.data);
+        return { sent: true };
+      }
+      logger.warn('Unknown email job ignored', { jobId: job.id, name: job.name });
+      return { ignored: true };
+    }, { connection, concurrency: 5 });
+
+    emailWorker.on('completed', (job) => {
+      hit(metricNames.workerJobSucceeded, { job: job?.name });
+      logger.info('Email job completed', { jobId: job.id, name: job.name });
+    });
+    emailWorker.on('failed', (job, error) => {
+      hit(metricNames.workerJobFailed, { job: job?.name });
+      logger.error('Email job failed', { jobId: job?.id, name: job?.name, error });
+      captureException(error, { jobId: job?.id, jobName: job?.name });
+    });
+    logger.info('Email worker started', { queueName: emailQueueName });
+
+    const healthServer: Server = createServer((req, res) => {
+      if (req.url === '/health' || req.url === '/' || req.url === '/ready') {
+        const ready = isRedisReady();
+        res.writeHead(ready ? 200 : 503, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            status: ready ? 'healthy' : 'unhealthy',
+            service: 'chalkboard-worker',
+            redis: ready ? 'connected' : 'disconnected',
+            uptime: Math.floor(process.uptime()),
+            timestamp: new Date().toISOString(),
+          }),
+        );
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+
+    healthServer.listen(env.PORT, env.HOST, () => {
+      logger.info('Worker health server listening for Cloud Run probes', { host: env.HOST, port: env.PORT });
+    });
 
     let shutdownPromise: Promise<void> | undefined;
     async function shutdown(signal: string) {
       if (shutdownPromise) return shutdownPromise;
       shutdownPromise = (async () => {
         logger.info('Worker graceful shutdown requested', { signal });
+        await new Promise<void>((resolveClose) => healthServer.close(() => resolveClose()));
+        await emailWorker.close();
         await worker.close();
         await queue.close();
         await closeRedis();

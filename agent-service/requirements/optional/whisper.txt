@@ -1,0 +1,3 @@
+# STT: local faster-whisper (STT_BACKEND=local, LLM_PROVIDER=bedrock)
+# ~600MB with CUDA via ctranslate2
+faster-whisper==1.2.1

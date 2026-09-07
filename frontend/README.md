@@ -1,6 +1,6 @@
 # Chalkboard — Frontend
 
-A real-time collaborative whiteboard with a chalk-on-blackboard aesthetic, built in React + TypeScript. Multiple users draw, select, transform, and organize objects on a shared canvas via Socket.IO, with an optional AI agent able to manipulate the board through the same command surface the UI uses.
+A real-time collaborative whiteboard with a chalk-on-blackboard aesthetic, built in React + TypeScript. Multiple users draw, select, transform, and organize objects on a shared canvas via Socket.IO, with an optional AI agent able to manipulate the board through the same command surface the UI uses
 
 ## Tech stack
 

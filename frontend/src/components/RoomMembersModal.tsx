@@ -3,7 +3,10 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import UserAvatar from '@/components/UserAvatar';
 import type { RoomMember } from '@/types';
-import { useJoinRequestsQuery, useResolveJoinRequestMutation } from '@/api/hooks';
+import {
+  useJoinRequestsQuery,
+  useResolveJoinRequestMutation
+} from '@/api/hooks';
 
 interface RoomMembersModalProps {
   roomSlug: string;

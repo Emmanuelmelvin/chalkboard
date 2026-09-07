@@ -1,5 +1,10 @@
 import type { Stroke, Rect, Point } from '@/types';
-import { getCombinedBoundingBox, rotatePoint } from '@/lib/geometry';
+import {
+  getCombinedBoundingBox,
+  getStrokeBoundingBox,
+  rectsIntersect,
+  rotatePoint,
+} from '@/lib/geometry';
 
 /**
  * Rotate an array of strokes by an angle (degrees) around their combined center.
@@ -235,9 +240,42 @@ export const pointInSweptRect = (pt: Point, a: Point, b: Point, w: number, h: nu
 };
 
 // Destructively erase points of a stroke that intersect the eraser path
-export const eraseStrokePoints = (stroke: Stroke, eraserPoints: Point[], radius: number, eraserWidth?: number, eraserHeight?: number): Stroke[] => {
-  if (stroke.points.length === 0) return [];
-  
+export const eraseStrokePoints = (
+  stroke: Stroke,
+  eraserPoints: Point[],
+  radius: number,
+  eraserWidth?: number,
+  eraserHeight?: number
+): Stroke[] => {
+  if (stroke.points.length === 0 || stroke.tool === 'eraser') return [];
+  if (eraserPoints.length === 0) return [stroke];
+
+  const ew = eraserWidth ?? radius * 2;
+  const eh = eraserHeight ?? radius * 2;
+
+  // 1. Fast bounding box check to avoid unnecessary point inspection
+  let eraserMinX = Infinity;
+  let eraserMaxX = -Infinity;
+  let eraserMinY = Infinity;
+  let eraserMaxY = -Infinity;
+  for (const ep of eraserPoints) {
+    if (ep.x < eraserMinX) eraserMinX = ep.x;
+    if (ep.x > eraserMaxX) eraserMaxX = ep.x;
+    if (ep.y < eraserMinY) eraserMinY = ep.y;
+    if (ep.y > eraserMaxY) eraserMaxY = ep.y;
+  }
+  const eraserBox: Rect = {
+    minX: eraserMinX - ew / 2,
+    maxX: eraserMaxX + ew / 2,
+    minY: eraserMinY - eh / 2,
+    maxY: eraserMaxY + eh / 2,
+  };
+
+  const sBox = getStrokeBoundingBox(stroke);
+  if (!sBox || !rectsIntersect(sBox, eraserBox)) {
+    return [stroke];
+  }
+
   const checkErased = (pt: Point) => {
     return eraserPoints.some((ep, idx) => {
       if (idx === eraserPoints.length - 1) {
@@ -254,65 +292,108 @@ export const eraseStrokePoints = (stroke: Stroke, eraserPoints: Point[], radius:
     });
   };
 
+  // 2. Note or text strokes: erase entirely if eraser overlaps their bounding box
+  if (stroke.noteHtml || stroke.text) {
+    const overlaps = eraserPoints.some((ep, idx) => {
+      const pBox: Rect = {
+        minX: ep.x - ew / 2,
+        maxX: ep.x + ew / 2,
+        minY: ep.y - eh / 2,
+        maxY: ep.y + eh / 2,
+      };
+      if (rectsIntersect(sBox, pBox)) return true;
+      if (idx < eraserPoints.length - 1) {
+        const nextEp = eraserPoints[idx + 1];
+        const segBox: Rect = {
+          minX: Math.min(ep.x, nextEp.x) - ew / 2,
+          maxX: Math.max(ep.x, nextEp.x) + ew / 2,
+          minY: Math.min(ep.y, nextEp.y) - eh / 2,
+          maxY: Math.max(ep.y, nextEp.y) + eh / 2,
+        };
+        if (rectsIntersect(sBox, segBox)) return true;
+      }
+      return false;
+    });
+    return overlaps ? [] : [stroke];
+  }
+
+  // 3. Single-point chalk stroke (dot)
   if (stroke.points.length === 1) {
     return checkErased(stroke.points[0]) ? [] : [stroke];
   }
 
+  // 4. Multi-point stroke / polygon (include closing segment for closed shapes)
+  const pointsToCheck = stroke.closed && stroke.points.length >= 3
+    ? [...stroke.points, stroke.points[0]]
+    : stroke.points;
+
+  let anyErased = false;
   const newStrokes: Stroke[] = [];
   let currentPoints: Point[] = [];
   let lastUnErasedPoint: Point | null = null;
 
   const pushStroke = () => {
     if (currentPoints.length > 0) {
-      if (lastUnErasedPoint && 
-          (currentPoints[currentPoints.length - 1].x !== lastUnErasedPoint.x || 
-           currentPoints[currentPoints.length - 1].y !== lastUnErasedPoint.y)) {
-         currentPoints.push(lastUnErasedPoint);
+      if (
+        lastUnErasedPoint &&
+        (currentPoints[currentPoints.length - 1].x !== lastUnErasedPoint.x ||
+          currentPoints[currentPoints.length - 1].y !== lastUnErasedPoint.y)
+      ) {
+        currentPoints.push(lastUnErasedPoint);
       }
-      newStrokes.push({
-        ...stroke,
-        id: `${stroke.id}-split-${newStrokes.length}-${Date.now()}`,
-        points: currentPoints,
-        closed: false,
-      });
+      if (currentPoints.length >= 2) {
+        newStrokes.push({
+          ...stroke,
+          id: `${stroke.id}-split-${newStrokes.length}-${Date.now()}`,
+          points: currentPoints,
+          closed: false,
+        });
+      }
       currentPoints = [];
     }
   };
 
-  for (let i = 0; i < stroke.points.length; i++) {
-    const p1 = stroke.points[i];
+  for (let i = 0; i < pointsToCheck.length; i++) {
+    const p1 = pointsToCheck[i];
 
     if (i > 0) {
-      const p0 = stroke.points[i - 1];
+      const p0 = pointsToCheck[i - 1];
       const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
       const steps = Math.ceil(dist / 2); // 2px resolution for clipping
-      
+
       for (let j = 1; j < steps; j++) {
-         const midPoint = {
-            x: p0.x + (p1.x - p0.x) * (j / steps),
-            y: p0.y + (p1.y - p0.y) * (j / steps)
-         };
-         if (!checkErased(midPoint)) {
-            if (currentPoints.length === 0) {
-               currentPoints.push(midPoint);
-            }
-            lastUnErasedPoint = midPoint;
-         } else {
-            pushStroke();
-            lastUnErasedPoint = null;
-         }
+        const midPoint = {
+          x: p0.x + (p1.x - p0.x) * (j / steps),
+          y: p0.y + (p1.y - p0.y) * (j / steps),
+        };
+        if (!checkErased(midPoint)) {
+          if (currentPoints.length === 0) {
+            currentPoints.push(midPoint);
+          }
+          lastUnErasedPoint = midPoint;
+        } else {
+          anyErased = true;
+          pushStroke();
+          lastUnErasedPoint = null;
+        }
       }
     }
 
     if (!checkErased(p1)) {
-       currentPoints.push(p1);
-       lastUnErasedPoint = p1;
+      currentPoints.push(p1);
+      lastUnErasedPoint = p1;
     } else {
-       pushStroke();
-       lastUnErasedPoint = null;
+      anyErased = true;
+      pushStroke();
+      lastUnErasedPoint = null;
     }
   }
   pushStroke();
-  
+
+  // If no points or segments were erased at all, preserve the original stroke untouched
+  if (!anyErased) {
+    return [stroke];
+  }
+
   return newStrokes;
 };

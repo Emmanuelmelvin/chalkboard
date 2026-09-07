@@ -6,6 +6,8 @@ The product deliberately combines the feel of a physical classroom blackboard wi
 
 ![Chalkboard demo](demo-video/chalkboard-demo.gif)
 
+A beta release of Chalkboard is live at [chalkboard.click](https://chalkboard.click).
+
 ## What problem does it solve?
 
 Ideas are often developed across disconnected tools: a video call for conversation, a whiteboard for diagrams, a document for notes, and chat for links. That makes it difficult to keep the discussion, visual thinking, and next steps together.
@@ -39,6 +41,9 @@ Chalkboard solves this by providing a shared, persistent room where participants
 - Room owners can update member roles, remove members, and close rooms.
 - Rooms can be open, approval-required, or password-protected.
 - Rooms have themes such as classroom, workshop, brainstorm, meeting, planning, and studio.
+
+- Users can submit bug reports, feature requests, and general feedback from the in-app widget, which is powered by [UserJot](https://userjot.com) and shows the roadmap and changelog the moment the project is configured. Product feedback is triaged in the UserJot dashboard.
+- End-of-session room ratings (1–5 stars) are collected after a participant leaves a room and are shown to the room's owners and instructors in a Room experience panel on the dashboard. These stay in Chalkboard's own database; UserJot covers product feedback, not per-room session ratings.
 
 ### Authentication and access control
 
@@ -113,6 +118,7 @@ chalkboard/
 ├── plugin-artifacts/           # Example uploadable plugin ZIPs and source packages
 ├── demo-video/                 # Demo GIF, source frames, and demo generation script
 ├── plugin_implementation.md    # Detailed plugin design and implementation notes
+├── LICENSE                     # Business Source License 1.1 for the core codebase
 ├── package.json                # Root TypeScript development dependency
 └── README.md
 ```
@@ -395,6 +401,7 @@ The frontend reads the client ID from `/api/auth/google/config` unless `VITE_CLI
 | Variable | Required | Description |
 | --- | --- | --- |
 | `VITE_CLIENT_ID` | No | Optional Vite build-time override for the Google web client ID. Leave it unset when the frontend should read the value from the backend configuration endpoint. |
+| `VITE_USERJOT_PROJECT_ID` | No | UserJot project ID. When set, the build loads the UserJot widget SDK and the Feedback button opens the UserJot widget (`trigger: custom`). Leave it unset to ship without the widget. |
 
 For the first administrator, set `SUPER_ADMIN_EMAIL` to the email address of the Google account that should administer plugins. That account must sign in once, then complete the TOTP setup at `/admin` before admin actions are enabled. Store the generated recovery codes safely.
 
@@ -614,7 +621,17 @@ Change `PORT` for the backend and update the Vite proxy in `frontend/vite.config
 - [`frontend/README.md`](frontend/README.md) — frontend architecture and board-state design.
 - [`plugin_implementation.md`](plugin_implementation.md) — plugin architecture and implementation history.
 - [`frontend/src/pages/Docs.tsx`](frontend/src/pages/Docs.tsx) — source for the in-app plugin documentation at `/docs`.
+- [`WALKTHROUGH.md`](WALKTHROUGH.md) — narrated feature walkthrough, tunnelling setup for collaborative testing, and a step-by-step product review.
 
 ## License
 
-No license file is currently included in this repository. Treat the project as all rights reserved unless the project owner adds a license or gives separate permission to use, modify, or redistribute it.
+The Chalkboard core (the `backend/` and `frontend/` applications and the repository root) is licensed under the [Business Source License 1.1](LICENSE). It is not an open-source license: you may copy, modify, and use the code in non-production settings, and you may make production use of it only as permitted by the Additional Use Grant. In particular, you may not offer the Licensed Work to third parties as a hosted or managed service in competition with Chalkboard's paid offering. Each version converts to the Apache License 2.0 four years after publication.
+
+The example plugin packages under [`plugin-artifacts/`](plugin-artifacts/) are licensed separately under the [MIT License](plugin-artifacts/LICENSE) to encourage community plugin development.
+
+---
+
+## A note on the demo video
+
+I apologise that the demo video does not include a voiceover. I was not able to record narration in time for submission. To make up for it, I have written [`WALKTHROUGH.md`](WALKTHROUGH.md), which walks through the same features the video shows, explains how to run the project for real multi-user collaboration, and reviews how to use the product end to end. Thank you for your understanding.
+

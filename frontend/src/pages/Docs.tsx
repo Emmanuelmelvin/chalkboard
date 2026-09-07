@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowLeft,
   ArrowUpRight,
   AudioLines,
-  BookOpen,
   Bot,
   CheckCircle2,
   ChevronRight,
@@ -18,6 +16,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import { Link } from 'wouter';
+import PublicHeader from '@/components/PublicHeader';
 import '@/styles/Docs.css';
 
 const manifestExample = `{
@@ -26,6 +25,7 @@ const manifestExample = `{
   "version": "1.0.0",
   "description": "Insert reusable geometry constructions.",
   "author": "Your name",
+  "preview": true,
   "permissions": ["board:read", "board:write", "selection:read"],
   "contributes": {
     "tools": [
@@ -161,17 +161,7 @@ function Docs() {
 
   return (
     <div className="docs-page">
-      <header className="docs-header">
-        <Link className="docs-brand" href="/">
-          <span className="home-brand-mark">C</span>
-          <span>Chalkboard</span>
-        </Link>
-        <div className="docs-header-actions">
-          <span className="docs-header-label"><BookOpen size={14} /> Plugin documentation</span>
-          <Link className="docs-back-link" href="/guide"><BookOpen size={14} /> User guide</Link>
-          <Link className="docs-back-link" href="/dashboard"><ArrowLeft size={15} /> Open dashboard</Link>
-        </div>
-      </header>
+      <PublicHeader activeRoute="docs" />
 
       <main className="docs-main">
         <section className="docs-hero" aria-labelledby="docs-title">
@@ -284,6 +274,7 @@ function Docs() {
                 <div><strong><code>version</code></strong><span>Semantic version such as <code>1.0.0</code>. It must match the version entered in the dashboard. A new release uses a new version.</span></div>
                 <div><strong><code>description</code></strong><span>Explain the job the plugin performs, not just the implementation technique. This is used for discovery and review context.</span></div>
                 <div><strong><code>author</code></strong><span>The person, team, or organization responsible for the package.</span></div>
+                <div><strong><code>preview</code></strong><span>Optional. Set <code>true</code> to opt into a live preview of the inserted object inside the tool modal. Plugins without a preview component (such as a text editor) should omit this field.</span></div>
                 <div><strong><code>permissions</code></strong><span>Declare only the access the plugin needs: <code>board:read</code>, <code>board:write</code>, <code>selection:read</code>, <code>selection:write</code>, <code>ui:panel</code>, <code>ui:modal</code>, or <code>room:sync</code>.</span></div>
                 <div><strong><code>contributes</code></strong><span>Lists the tools, commands, and selection tools that the host may expose.</span></div>
               </div>

@@ -191,6 +191,7 @@
 }
 
 .insert-plugin-card {
+  position: relative;
   display: flex;
   gap: 12px;
   align-items: center;
@@ -203,6 +204,52 @@
   cursor: pointer;
   text-align: left;
 }
+
+/* Pro plugin the current plan cannot reach: blur the content and badge it,
+   so the plugin is still discoverable but visibly gated. */
+.insert-plugin-card.is-pro-locked {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.03);
+}
+
+.insert-plugin-card.is-pro-locked .insert-plugin-logo,
+.insert-plugin-card.is-pro-locked .insert-plugin-copy {
+  filter: none;
+  opacity: 0.95;
+}
+
+.insert-plugin-card.is-pro-locked:hover {
+  border-color: rgba(251, 191, 36, 0.7);
+  background: rgba(251, 191, 36, 0.07);
+}
+
+.insert-plugin-pro-badge,
+.plugin-pro-badge {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 0;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #1f2937;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.insert-plugin-pro-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+}
+
+.plugin-pro-badge {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 
 .insert-plugin-card:hover {
   border-color: rgba(96, 165, 250, 0.45);
@@ -252,7 +299,6 @@
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 0;
   background: rgba(15, 23, 42, 0.94);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(18px);
   color: #e2e8f0;
   pointer-events: auto;
@@ -289,6 +335,19 @@
   padding: 14px;
 }
 
+.insert-links-add-btn.plugin-upgrade-action-btn {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #1f2937;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.insert-links-add-btn.plugin-upgrade-action-btn:hover {
+  background: linear-gradient(135deg, #fcd34d, #fbbf24);
+  border-color: rgba(251, 191, 36, 0.6);
+}
+
 .plugin-tool-card {
   display: flex;
   flex-direction: column;
@@ -298,6 +357,7 @@
   border-radius: 0;
   background: rgba(30, 41, 59, 0.56);
 }
+
 
 .plugin-tool-card p {
   margin: 0;

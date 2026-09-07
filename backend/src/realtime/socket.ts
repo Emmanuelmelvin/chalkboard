@@ -1,8 +1,25 @@
 import { Server } from 'socket.io';
 import { randomUUID } from 'node:crypto';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { redis, setRaisedHand, getRaisedHands, setVoicePublisher } from '@/services/roomState';
-import { assertRoomJoinAllowed, authorizeRoomAction, banRoomUser, closeRoomForOwner, getRoomWithMembers, touchRoomActivity, updateRoomMemberRole, updateRoomPeakAttendeeCount } from '@/services/rooms';
+import { redis } from '@/config/redis';
+import {
+  setRaisedHand,
+  getRaisedHands,
+  isVoiceOwnerConnected,
+  setVoiceOwnerConnected,
+  setVoicePublisher,
+  setVoiceBlocked
+} from '@/services/rooms/roomState.service';
+import {
+  assertRoomJoinAllowed,
+  authorizeRoomAction,
+  banRoomUser,
+  closeRoomForOwner,
+  getRoomWithMembers,
+  touchRoomActivity,
+  updateRoomMemberRole,
+  updateRoomPeakAttendeeCount
+} from '@/services/rooms/rooms.service';
 import {
   appendStroke,
   appendChatMessage,
@@ -20,13 +37,21 @@ import {
   removePresenceNow,
   setPresenceServer,
   notifyRoomManagers,
-} from '@/services/realtimeRooms';
+} from '@/services/rooms/realtimeRooms.service';
+import { closeVoiceSessions } from '@/services/rooms/voiceMetering.service';
 import { logger } from '@/utils/logger';
+import { captureSocketError } from '@/utils/monitoring';
+import { failed, hit, metricNames, record, timed } from '@/utils/metrics';
 import { env, isAllowedCorsOrigin } from '@/config/env';
-import { checkRateLimit } from '@/services/rateLimiter';
-import { authenticateSocketSession } from '@/services/auth';
+import { AGENT_DISPLAY_NAME, AGENT_USER_ID } from '@/config/agent';
+import { timingSafeStringEqual } from '@/utils/crypto';
+import { notifyAgentToJoinRoom } from '@/services/rooms/roomAgent.service';
+
+import { checkRateLimit } from '@/services/infra/rateLimiter.service';
+import { authenticateSocketSession } from '@/services/auth/auth.service';
 import {
   SOCKET_LIMITS,
+  agentActivitySchema,
   clearBoardSchema,
   chatMessageSchema,
   cursorMoveSchema,
@@ -44,13 +69,17 @@ import {
   strokeStartSchema,
   undoStrokeSchema,
   voiceInviteSchema,
+  voiceOwnerConnectionSchema,
   voiceRemoveSchema,
-} from '@/validators/socketValidators';
+  type AgentActivityPayload,
+} from '@/validators/socket.validator';
 
 type SocketAckResponse = {
   ok: boolean;
   error?: string;
   role?: string;
+  room?: Record<string, any>;
+  ownerVoiceConnected?: boolean;
 };
 
 type SocketAck = ((response: SocketAckResponse) => void) | undefined;
@@ -79,6 +108,7 @@ async function emitPresence(io: Server, roomId: string) {
       roomId,
       error: error instanceof Error ? error.message : String(error),
     });
+    captureSocketError(error, { roomId });
     users = [...getRoomUsers(roomId).entries()];
   }
 
@@ -116,6 +146,7 @@ async function hasActiveRoomSession(
       userId,
       error: error instanceof Error ? error.message : String(error),
     });
+    captureSocketError(error, { userId, roomId });
     return [...getRoomUsers(roomId).entries()].some(([socketId, user]) => {
       if (socketId === currentSocketId || user.userId !== userId) return false;
       const existingMeta = getSocketMeta(socketId);
@@ -132,6 +163,7 @@ async function recordRoomActivity(roomId: string) {
       roomId,
       error: error instanceof Error ? error.message : String(error),
     });
+    captureSocketError(error, { roomId });
     return false;
   }
 }
@@ -147,6 +179,7 @@ function sendAck(ack: SocketAck, response: SocketAckResponse) {
 
 function rejectEvent(socket: any, event: string, error: string, ack?: SocketAck, roomId?: string) {
   logger.warn('Socket event rejected', { event, error, socketId: socket.id, roomId });
+  hit(metricNames.socketEventRejected, { event, reason: error });
   sendAck(ack, { ok: false, error });
 }
 
@@ -182,18 +215,23 @@ async function canEditRoom(socket: any, roomId: string, event: string, ack?: Soc
 }
 
 function runSafely(socket: any, event: string, ack: SocketAck, handler: () => unknown) {
-  try {
-    const result = handler();
-    if (result && typeof (result as Promise<unknown>).catch === 'function') {
-      void (result as Promise<unknown>).catch((error) => {
-        logger.error('Socket event failed', { event, socketId: socket.id, error: error instanceof Error ? error.message : String(error) });
-        sendAck(ack, { ok: false, error: 'internal_error' });
-      });
-    }
-  } catch (error) {
+  hit(metricNames.socketEvent, { event });
+  const reportFailure = (error: unknown) => {
+    const meta = getSocketMeta(socket.id);
+    failed(metricNames.socketEventFailed, { event });
+    console.error(`❌ [Socket ${event} Failed]:`, error);
     logger.error('Socket event failed', { event, socketId: socket.id, error: error instanceof Error ? error.message : String(error) });
     sendAck(ack, { ok: false, error: 'internal_error' });
-  }
+    captureSocketError(error, {
+      event,
+      socketId: socket.id,
+      userId: socket.data?.user?.id ?? meta?.userId,
+      roomId: meta?.roomId,
+    });
+  };
+  // Event latency is recorded for successful and failed handlers alike: a slow
+  // failure is still a slow event.
+  void timed(metricNames.socketEventDuration, async () => handler(), { event }).catch(reportFailure);
 }
 
 async function handleJoin(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
@@ -211,36 +249,49 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     return;
   }
 
-  const joinLimit = checkRateLimit(
-    `socket:${socket.id}:join:${data.roomId}`,
-    env.INVITE_JOIN_RATE_LIMIT_MAX,
-    env.INVITE_JOIN_RATE_LIMIT_WINDOW_MS,
-  );
-  if (!joinLimit.allowed) {
-    logger.warn('Socket room join rate limited', { socketId: socket.id, roomId: data.roomId });
-    sendAck(ack, { ok: false, error: 'rate_limited' });
-    return;
-  }
+  // Agent-ness comes only from the handshake middleware, which sets it after
+  // verifying the shared secret. Checking handshake.auth here instead would let
+  // any signed-in user skip join approval, passwords, and duplicate-session
+  // checks by sending isAgent: true.
+  const isAgent = socket.data.isAgent === true;
+  let role: 'owner' | 'instructor' | 'viewer' = 'instructor';
 
-  const join = await assertRoomJoinAllowed({ roomSlug: data.roomId, userId: user.id, password: data.password });
-  if (!join.ok) {
-    if (join.error === 'approval_required' && join.requestCreated && join.requestId) {
-      void notifyRoomManagers(data.roomId, 'room:join-requested', {
-        roomId: data.roomId,
-        requestId: join.requestId,
-        requester: {
-          userId: user.id,
-          displayName: user.displayName,
-          avatarUrl: user.avatarUrl ?? null,
-        },
-      });
+  if (!isAgent) {
+    // Keyed on the authenticated user, not socket.id: socket ids are reissued on
+    // every reconnect, so an id-based key lets a client reset its quota at will.
+    const joinLimit = await checkRateLimit(
+      `socket:join:${user.id}:${data.roomId}`,
+      env.INVITE_JOIN_RATE_LIMIT_MAX,
+      env.INVITE_JOIN_RATE_LIMIT_WINDOW_MS,
+    );
+    if (!joinLimit.allowed) {
+      logger.warn('Socket room join rate limited', { socketId: socket.id, userId: user.id, roomId: data.roomId });
+      sendAck(ack, { ok: false, error: 'rate_limited' });
+      return;
     }
-    sendAck(ack, { ok: false, error: join.error });
-    return;
+
+    const join = await assertRoomJoinAllowed({ roomSlug: data.roomId, userId: user.id, password: data.password });
+    if (!join.ok) {
+      if (join.error === 'approval_required' && join.requestCreated && join.requestId) {
+        void notifyRoomManagers(data.roomId, 'room:join-requested', {
+          roomId: data.roomId,
+          requestId: join.requestId,
+          requester: {
+            userId: user.id,
+            displayName: user.displayName,
+            avatarUrl: user.avatarUrl ?? null,
+          },
+        });
+      }
+      sendAck(ack, { ok: false, error: join.error });
+      return;
+    }
+    role = join.role;
   }
 
-  if (await hasActiveRoomSession(io, data.roomId, user.id, socket.id, data.clientSessionId)) {
+  if (!isAgent && await hasActiveRoomSession(io, data.roomId, user.id, socket.id, data.clientSessionId)) {
     logger.info('Duplicate room session rejected', { roomId: data.roomId, userId: user.id, socketId: socket.id });
+    hit(metricNames.roomJoin, { outcome: 'already_joined' });
     sendAck(ack, { ok: false, error: 'already_joined' });
     return;
   }
@@ -255,7 +306,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     }
   }
 
-  if (!await recordRoomActivity(data.roomId)) {
+  if (!isAgent && !await recordRoomActivity(data.roomId)) {
     sendAck(ack, { ok: false, error: 'room_closed' });
     return;
   }
@@ -263,11 +314,11 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
   setSocketMeta(socket.id, {
     roomId: data.roomId,
     userId: user.id,
-    role: join.role,
+    role,
     clientSessionId: data.clientSessionId,
   });
   socket.data.roomId = data.roomId;
-  socket.data.roomRole = join.role;
+  socket.data.roomRole = role;
   socket.data.roomColor = data.color || '#fff';
   socket.data.roomAvatarUrl = user.avatarUrl ?? null;
   socket.data.clientSessionId = data.clientSessionId;
@@ -281,7 +332,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
       name: user.displayName,
       avatarUrl: user.avatarUrl ?? null,
       color: data.color || '#fff',
-      role: join.role,
+      role,
     },
   });
 
@@ -303,7 +354,7 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     userId: user.id,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl ?? null,
-    role: join.role,
+    role,
   });
   await emitPresence(io, data.roomId);
   const roomDetails = await getRoomWithMembers(data.roomId);
@@ -312,10 +363,36 @@ async function handleJoin(io: Server, socket: any, payload: unknown, ack?: Socke
     socketId: socket.id,
     roomId: data.roomId,
     userId: user.id,
-    role: join.role,
+    role,
     reconnected: presence.reconnected,
   });
-  sendAck(ack, { ok: true, role: join.role });
+  hit(metricNames.roomJoin, { outcome: 'joined', role, reconnected: presence.reconnected });
+
+  if (!isAgent) {
+    void notifyAgentToJoinRoom(data.roomId);
+  }
+
+  sendAck(ack, {
+    ok: true,
+    role,
+    room: roomDetails?.room
+      ? {
+          id: roomDetails.room.id,
+          slug: roomDetails.room.slug,
+          title: roomDetails.room.title,
+          description: roomDetails.room.description,
+          theme: roomDetails.room.theme,
+          accessMode: roomDetails.room.accessMode,
+          defaultRole: roomDetails.room.defaultRole,
+          voiceEnabled: roomDetails.room.voiceEnabled,
+          ownerId: roomDetails.room.ownerId,
+          createdAt: roomDetails.room.createdAt,
+        }
+      : undefined,
+    ownerVoiceConnected: roomDetails?.room.voiceEnabled
+      ? await isVoiceOwnerConnected(data.roomId)
+      : false,
+  });
 }
 
 async function handleRoomSync(socket: any, payload: unknown, ack?: SocketAck) {
@@ -338,8 +415,10 @@ async function handleChatMessage(io: Server, socket: any, payload: unknown, ack?
   }>(socket, 'chat:send', chatMessageSchema, payload, ack);
   if (!data || !isJoinedRoom(socket, data.roomId, 'chat:send', ack)) return;
 
-  const limit = checkRateLimit(
-    `socket:${socket.id}:chat:${data.roomId}`,
+  const chatActorId = getSocketMeta(socket.id)?.userId ?? socket.data.user?.id ?? socket.id;
+  // Keyed on the user id so reconnecting cannot clear the counter.
+  const limit = await checkRateLimit(
+    `socket:chat:${chatActorId}:${data.roomId}`,
     env.CHAT_RATE_LIMIT_MAX,
     env.CHAT_RATE_LIMIT_WINDOW_MS,
   );
@@ -356,21 +435,32 @@ async function handleChatMessage(io: Server, socket: any, payload: unknown, ack?
   const actor = getSocketMeta(socket.id);
   const roomDetails = await getRoomWithMembers(data.roomId);
   const memberIds = new Set((roomDetails?.members ?? []).map((member: { userId: string }) => member.userId));
+  memberIds.add(AGENT_USER_ID);
+  memberIds.add('chalkboard-master');
+
   const mentionedUserIds = [...new Set(data.mentionedUserIds)]
-    .filter((mentionedUserId) => mentionedUserId !== actor?.userId && memberIds.has(mentionedUserId));
+    .filter((mentionedUserId) => mentionedUserId !== actor?.userId && (memberIds.has(mentionedUserId) || mentionedUserId === '__all__' || mentionedUserId.startsWith('agent:')));
+
   const user = socket.data.user;
+  // Same rule as join-room: only the middleware-verified agent socket may send
+  // chat under the agent identity, never a client that merely claims isAgent.
+  const isAgentSender = socket.data.isAgent === true;
+
   const message = {
     id: randomUUID(),
     roomId: data.roomId,
-    userId: actor?.userId,
-    displayName: user?.displayName ?? 'Classmate',
-    avatarUrl: user?.avatarUrl ?? null,
+    userId: isAgentSender ? AGENT_USER_ID : (actor?.userId || user?.id),
+    displayName: isAgentSender ? AGENT_DISPLAY_NAME : (user?.displayName ?? 'Classmate'),
+    avatarUrl: isAgentSender ? null : (user?.avatarUrl ?? null),
+
     message: data.message,
     mentionedUserIds,
     createdAt: new Date().toISOString(),
   };
 
+
   await appendChatMessage(data.roomId, message);
+  hit(metricNames.chatMessageSent);
   io.to(data.roomId).emit('chat:message', message);
 
   if (mentionedUserIds.length > 0) {
@@ -430,8 +520,9 @@ async function handleMemberRoleUpdate(io: Server, socket: any, payload: unknown,
     return;
   }
 
-  const targetSocket = [...io.sockets.sockets.values()].find((candidate: any) => candidate.data.user?.id === data.targetUserId);
-  if (targetSocket) {
+  const targetSockets = [...io.sockets.sockets.values()].filter((candidate: any) => candidate.data?.user?.id === data.targetUserId);
+  for (const targetSocket of targetSockets) {
+    targetSocket.data.roomRole = data.role;
     const targetMeta = getSocketMeta(targetSocket.id);
     if (targetMeta?.roomId === data.roomId) setSocketMeta(targetSocket.id, { ...targetMeta, role: data.role });
     const targetPresence = getRoomUsers(data.roomId).get(targetSocket.id);
@@ -468,6 +559,7 @@ async function handleRoomClose(io: Server, socket: any, payload: unknown, ack?: 
       roomId: data.roomId,
       error: error instanceof Error ? error.message : String(error),
     });
+    captureSocketError(error, { socketId: socket.id, roomId: data.roomId });
   }
 
   io.to(data.roomId).emit('room:closed', { roomId: data.roomId });
@@ -570,17 +662,18 @@ async function handleVoiceMembershipAction(
   if (!data || !isJoinedRoom(socket, data.roomId, event, ack)) return;
 
   const actor = getSocketMeta(socket.id);
+  const isSelfLeave = event === 'voice:remove' && data.targetUserId === actor?.userId;
   const authorization = await authorizeRoomAction({
     roomSlug: data.roomId,
     userId: actor?.userId,
-    minimumRole: 'owner',
+    minimumRole: isSelfLeave ? 'viewer' : 'owner',
   });
   if (!authorization.ok) {
     rejectEvent(socket, event, 'forbidden', ack, data.roomId);
     return;
   }
 
-  if (data.targetUserId === actor?.userId) {
+  if (data.targetUserId === actor?.userId && event === 'voice:invite') {
     rejectEvent(socket, event, 'invalid_target', ack, data.roomId);
     return;
   }
@@ -591,8 +684,11 @@ async function handleVoiceMembershipAction(
     return;
   }
 
-  const targetIsMember = roomDetails.members.some((member: { userId: string }) => member.userId === data.targetUserId);
-  if (!targetIsMember) {
+  const isAgentTarget = data.targetUserId === AGENT_USER_ID || data.targetUserId?.includes('chalkboard-master');
+  const targetMember = isAgentTarget
+    ? { userId: data.targetUserId, displayName: AGENT_DISPLAY_NAME }
+    : roomDetails.members.find((member: { userId: string; displayName?: string }) => member.userId === data.targetUserId);
+  if (!targetMember) {
     rejectEvent(socket, event, 'target_not_found', ack, data.roomId);
     return;
   }
@@ -604,11 +700,34 @@ async function handleVoiceMembershipAction(
     return;
   }
 
-  await setVoicePublisher(data.roomId, data.targetUserId, event === 'voice:invite');
+  if (event === 'voice:invite') {
+    await setVoiceBlocked(data.roomId, data.targetUserId, false);
+    await setVoicePublisher(data.roomId, data.targetUserId, true);
+  } else {
+    await setVoicePublisher(data.roomId, data.targetUserId, false);
+    await setVoiceBlocked(data.roomId, data.targetUserId, true);
+  }
+  hit(metricNames.voiceMembership, { action: event === 'voice:invite' ? 'invite' : 'remove' });
+
+  // Leaving voice stops the meter now rather than waiting for the socket to
+  // drop: a member who is removed, or who leaves voice while staying on the
+  // board, must not keep accruing minutes against the owner.
+  if (event === 'voice:remove') {
+    await accrueVoiceUsageSafely(authorization.roomId, data.targetUserId);
+  }
+
   targetSockets.forEach((targetSocket: any) => targetSocket.emit(targetEvent, {
     roomId: data.roomId,
     actorUserId: actor!.userId,
   }));
+  if (event === 'voice:invite') {
+    io.to(data.roomId).emit('voice:speaker-added', {
+      roomId: data.roomId,
+      targetUserId: data.targetUserId,
+      displayName: targetMember.displayName,
+      actorUserId: actor!.userId,
+    });
+  }
   logger.info('Voice membership action delivered', {
     event,
     roomId: data.roomId,
@@ -625,6 +744,77 @@ async function handleVoiceInvite(io: Server, socket: any, payload: unknown, ack?
 
 async function handleVoiceRemove(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
   return handleVoiceMembershipAction(io, socket, 'voice:remove', 'voice:removed', voiceRemoveSchema, payload, ack);
+}
+
+/**
+ * Sockets carry the room slug; voice_sessions rows are keyed on the room's
+ * database id. Resolve one to the other, tolerating a deleted room.
+ */
+async function resolveRoomIdForMetering(roomSlug: string) {
+  try {
+    const details = await getRoomWithMembers(roomSlug);
+    return details?.room.id ?? null;
+  } catch (error) {
+    logger.error('Voice metering room lookup failed', {
+      roomSlug,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    captureSocketError(error, { roomId: roomSlug });
+    return null;
+  }
+}
+
+/**
+ * Close a participant's open voice sessions without letting a metering failure
+ * break the surrounding room event.
+ *
+ * Usage that cannot be written here is not lost: every open row is still picked
+ * up by the reconciliation pass in the worker.
+ */
+async function accrueVoiceUsageSafely(roomId: string, userId: string) {
+  try {
+    await closeVoiceSessions(roomId, userId);
+  } catch (error) {
+    logger.error('Voice usage accrual failed; leaving the session for reconciliation', {
+      roomId,
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    captureSocketError(error, { userId, roomId });
+  }
+}
+
+async function handleVoiceOwnerConnection(io: Server, socket: any, payload: unknown, ack?: SocketAck) {
+  const data = parsePayload<{ roomId: string; connected: boolean }>(socket, 'voice:owner-connection', voiceOwnerConnectionSchema, payload, ack);
+  if (!data || !isJoinedRoom(socket, data.roomId, 'voice:owner-connection', ack)) return;
+
+  const actor = getSocketMeta(socket.id);
+  const authorization = await authorizeRoomAction({
+    roomSlug: data.roomId,
+    userId: actor?.userId,
+    minimumRole: 'owner',
+  });
+  if (!authorization.ok) {
+    rejectEvent(socket, 'voice:owner-connection', 'forbidden', ack, data.roomId);
+    return;
+  }
+
+  const roomDetails = await getRoomWithMembers(data.roomId);
+  if (!roomDetails?.room.voiceEnabled) {
+    rejectEvent(socket, 'voice:owner-connection', 'voice_disabled', ack, data.roomId);
+    return;
+  }
+
+  // The owner's own participation is metered like anyone else's: disconnecting
+  // from voice closes their session and stops the clock.
+  if (!data.connected) {
+    await accrueVoiceUsageSafely(authorization.roomId, actor!.userId);
+  }
+
+  await setVoiceOwnerConnected(data.roomId, data.connected);
+  hit(metricNames.voiceOwnerConnection, { connected: data.connected });
+  io.to(data.roomId).emit('voice:owner-connection-changed', data);
+  sendAck(ack, { ok: true });
 }
 
 type SocketCorsOrigin = (
@@ -645,28 +835,64 @@ export async function attachSocket(server: any) {
     cors: { origin: corsOrigin, credentials: true },
     maxHttpBufferSize: SOCKET_LIMITS.maxPacketBytes,
   });
-  if (redis) {
-    const pubClient = redis.duplicate();
-    const subClient = redis.duplicate();
-    await Promise.all([pubClient.connect(), subClient.connect()]);
-    io.adapter(createAdapter(pubClient, subClient));
-    logger.info('Socket.IO Redis adapter attached');
+  if (redis?.isReady) {
+    try {
+      const pubClient = redis.duplicate();
+      const subClient = redis.duplicate();
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      io.adapter(createAdapter(pubClient, subClient));
+      logger.info('Socket.IO Redis adapter attached');
+    } catch (error) {
+      logger.error('Failed to attach Socket.IO Redis adapter, running without adapter', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } else if (redis) {
+    logger.warn('Redis not ready for Socket.IO adapter, running without adapter', {
+      redisStatus: (redis as unknown as { isReady?: boolean }).isReady ? 'unknown' : 'not-ready',
+    });
   }
   setPresenceServer(io);
 
   io.use(async (socket, next) => {
     try {
+      // Support internal Chalkboard Agent Service connections. An agent claim
+      // is honored only with the exact shared secret, compared in constant
+      // time; the identity is then pinned server-side. Handlers must derive
+      // agent-ness from socket.data.isAgent — never from handshake fields,
+      // which any connected client can set to arbitrary values.
+      const auth = socket.handshake.auth;
+      if (auth?.isAgent) {
+        if (!timingSafeStringEqual(auth.token, env.AGENT_SERVICE_SECRET)) {
+          logger.warn('Socket agent authentication rejected', { socketId: socket.id });
+          failed(metricNames.socketConnected, { reason: 'agent_auth_failed' });
+          return next(new Error('unauthorized'));
+        }
+        socket.data.isAgent = true;
+        socket.data.user = {
+          id: AGENT_USER_ID,
+          displayName: AGENT_DISPLAY_NAME,
+          email: 'agent@chalkboard.local',
+          role: 'instructor',
+          avatarUrl: null,
+        };
+        return next();
+      }
+
       const user = await authenticateSocketSession(socket.request.headers.cookie);
       if (!user) return next(new Error('unauthorized'));
       socket.data.user = user;
       next();
     } catch (error) {
-      logger.warn('Socket authentication failed', { error: error instanceof Error ? error.message : String(error) });
+      logger.error('Socket authentication failed', { error: error instanceof Error ? error.message : String(error) });
+      captureSocketError(error, { socketId: socket.id });
+      failed(metricNames.socketConnected, { reason: 'auth_failed' });
       next(new Error('unauthorized'));
     }
   });
 
   io.on('connection', (socket) => {
+    hit(metricNames.socketConnected);
     socket.on('join-room', (payload, ack) => {
       runSafely(socket, 'join-room', ack, () => handleJoin(io, socket, payload, ack));
     });
@@ -711,6 +937,8 @@ export async function attachSocket(server: any) {
         }
         const stroke = { ...(data.stroke as Record<string, any>), userId: socket.id } as Record<string, any>;
         await appendStroke(data.roomId, stroke);
+        hit(metricNames.strokeDrawn);
+        record(metricNames.strokePoints, (stroke.points as Array<{ x: number; y: number }> | undefined)?.length ?? 0);
         socket.to(data.roomId).emit('stroke-start', {
           ...stroke,
           strokeId: stroke.id,
@@ -729,6 +957,7 @@ export async function attachSocket(server: any) {
           return;
         }
         await replaceHistory(data.roomId, data.strokes);
+        hit(metricNames.strokeUndone);
         socket.to(data.roomId).emit('undo-stroke', { strokes: data.strokes });
         sendAck(ack, { ok: true });
       });
@@ -743,6 +972,7 @@ export async function attachSocket(server: any) {
           return;
         }
         await clearHistory(data.roomId);
+        hit(metricNames.boardCleared);
         io.to(data.roomId).emit('clear-board');
         sendAck(ack, { ok: true });
       });
@@ -757,22 +987,25 @@ export async function attachSocket(server: any) {
           return;
         }
         await replaceLinks(data.roomId, data.links);
+        hit(metricNames.boardLinksUpdated);
         socket.to(data.roomId).emit('links-update', { links: data.links });
         sendAck(ack, { ok: true });
       });
     });
 
     socket.on('reaction:send', (payload, ack) => {
-      runSafely(socket, 'reaction:send', ack, () => {
+      runSafely(socket, 'reaction:send', ack, async () => {
         const data = parsePayload<{ roomId: string; emoji: string }>(socket, 'reaction:send', reactionSendSchema, payload, ack);
         if (!data || !isJoinedRoom(socket, data.roomId, 'reaction:send', ack)) return;
-        const limit = checkRateLimit(`socket:${socket.id}:reaction`, env.REACTION_RATE_LIMIT_MAX, env.REACTION_RATE_LIMIT_WINDOW_MS);
+        const reactionActorId = getSocketMeta(socket.id)?.userId ?? socket.data.user?.id ?? socket.id;
+        const limit = await checkRateLimit(`socket:reaction:${reactionActorId}`, env.REACTION_RATE_LIMIT_MAX, env.REACTION_RATE_LIMIT_WINDOW_MS);
         if (!limit.allowed) {
-          logger.warn('Socket reaction rate limited', { socketId: socket.id, roomId: data.roomId });
+          logger.warn('Socket reaction rate limited', { socketId: socket.id, userId: reactionActorId, roomId: data.roomId });
           sendAck(ack, { ok: false, error: 'rate_limited' });
           return;
         }
-        io.to(data.roomId).emit('reaction:received', { userId: socket.id, emoji: data.emoji, at: Date.now() });
+        io.to(data.roomId).emit('reaction:received', { userId: reactionActorId, emoji: data.emoji, at: Date.now() });
+        hit(metricNames.reactionSent, { emoji: data.emoji });
         sendAck(ack, { ok: true });
       });
     });
@@ -781,13 +1014,15 @@ export async function attachSocket(server: any) {
       runSafely(socket, 'hand:raise', ack, async () => {
         const data = parsePayload<{ roomId: string; raised: boolean }>(socket, 'hand:raise', handRaiseSchema, payload, ack);
         if (!data || !isJoinedRoom(socket, data.roomId, 'hand:raise', ack)) return;
-        const limit = checkRateLimit(`socket:${socket.id}:hand`, env.HAND_RATE_LIMIT_MAX, env.HAND_RATE_LIMIT_WINDOW_MS);
+        const handActorId = getSocketMeta(socket.id)?.userId ?? socket.data.user?.id ?? socket.id;
+        const limit = await checkRateLimit(`socket:hand:${handActorId}`, env.HAND_RATE_LIMIT_MAX, env.HAND_RATE_LIMIT_WINDOW_MS);
         if (!limit.allowed) {
-          logger.warn('Socket hand-toggle rate limited', { socketId: socket.id, roomId: data.roomId });
+          logger.warn('Socket hand-toggle rate limited', { socketId: socket.id, userId: handActorId, roomId: data.roomId });
           sendAck(ack, { ok: false, error: 'rate_limited' });
           return;
         }
-        io.to(data.roomId).emit('raised-hands:update', await setRaisedHand(data.roomId, socket.id, data.raised));
+        io.to(data.roomId).emit('raised-hands:update', await setRaisedHand(data.roomId, handActorId, data.raised));
+        hit(metricNames.handRaiseChanged, { raised: data.raised });
         sendAck(ack, { ok: true });
       });
     });
@@ -801,13 +1036,33 @@ export async function attachSocket(server: any) {
     socket.on('voice:remove', (payload, ack) => {
       runSafely(socket, 'voice:remove', ack, () => handleVoiceRemove(io, socket, payload, ack));
     });
+    socket.on('voice:owner-connection', (payload, ack) => {
+      runSafely(socket, 'voice:owner-connection', ack, () => handleVoiceOwnerConnection(io, socket, payload, ack));
+    });
 
 
     socket.on('member:update-role', (payload, ack) => {
       runSafely(socket, 'member:update-role', ack, () => handleMemberRoleUpdate(io, socket, payload, ack));
     });
 
+    // Relay agent thinking, stage, and tool activity telemetry to all room
+    // members. Locked to the authenticated agent socket and to rooms it has
+    // actually joined; the payload is schema-bounded before broadcast.
+    socket.on('agent:activity', (payload, ack) => {
+      runSafely(socket, 'agent:activity', ack, () => {
+        if (socket.data.isAgent !== true) {
+          rejectEvent(socket, 'agent:activity', 'forbidden', ack);
+          return;
+        }
+        const data = parsePayload<AgentActivityPayload>(socket, 'agent:activity', agentActivitySchema, payload, ack);
+        if (!data || !isJoinedRoom(socket, data.roomId, 'agent:activity', ack)) return;
+        io.to(data.roomId).emit('agent:activity', data);
+        sendAck(ack, { ok: true });
+      });
+    });
+
     socket.on('disconnect', () => {
+      hit(metricNames.socketDisconnected);
       const meta = getSocketMeta(socket.id);
       if (!meta) return;
       logger.info('Socket disconnected; scheduling presence grace removal', {
@@ -818,6 +1073,13 @@ export async function attachSocket(server: any) {
       schedulePresenceRemoval(socket.id, env.PRESENCE_GRACE_MS, (removedMeta) => {
         io.to(removedMeta.roomId).emit('user-disconnected', socket.id);
         void emitPresence(io, removedMeta.roomId);
+        // Deliberately after the grace period, and keyed on the room's database
+        // id rather than its slug: a browser refresh reconnects within the
+        // window and reopens voice, so closing the meter on the raw disconnect
+        // would bill two sessions for one continuous call.
+        void resolveRoomIdForMetering(removedMeta.roomId).then((roomId) => {
+          if (roomId) return accrueVoiceUsageSafely(roomId, removedMeta.userId);
+        });
         logger.info('Socket presence removed after grace period', { socketId: socket.id, roomId: removedMeta.roomId });
       });
     });

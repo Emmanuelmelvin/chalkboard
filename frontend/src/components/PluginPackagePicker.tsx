@@ -1,5 +1,15 @@
-import { useRef, useState, type DragEvent } from 'react';
-import { FileArchive, FileCode2, FileJson, FolderOpen, UploadCloud } from 'lucide-react';
+import {
+  useRef,
+  useState,
+  type DragEvent
+} from 'react';
+import {
+  FileArchive,
+  FileCode2,
+  FileJson,
+  FolderOpen,
+  UploadCloud
+} from 'lucide-react';
 
 export interface PluginPackageFile {
   name: string;

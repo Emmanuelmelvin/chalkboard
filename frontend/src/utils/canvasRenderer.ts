@@ -2,6 +2,7 @@ import {
   drawChalkStroke,
   drawEraserSegment,
 } from '@/utils/drawing';
+import { drawCachedBoard } from '@/utils/strokeCache';
 import type { Stroke, Point, Rect, TrimState } from '@/types';
 
 interface RenderState {
@@ -57,18 +58,28 @@ export function drawBoardOnCanvas(
   // Rebuilding it from rotated strokes produces an axis-aligned bounding box
   // and rotating that box a second time makes the marquee drift out of alignment.
   const frameBox = transformBox;
+  // Snap a world-space coordinate to whole device pixels (accounting for pan,
+  // zoom, and DPR) so guide lines land exactly on physical pixels instead of
+  // aliasing into uneven, "cracked" dashes on high-DPR phones.
+  const snapDevice = (v: number) =>
+    (Math.round((v * zoom + panOffset.x) * dpr) / dpr - panOffset.x) / zoom;
+  const snapYS = (v: number) =>
+    (Math.round((v * zoom + panOffset.y) * dpr) / dpr - panOffset.y) / zoom;
   // Draw selection marquee
   if (selectionMarquee) {
     ctx.save();
     ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 2 / zoom;
     ctx.setLineDash([5 / zoom, 5 / zoom]);
-    ctx.strokeRect(
-      selectionMarquee.minX,
-      selectionMarquee.minY,
-      selectionMarquee.maxX - selectionMarquee.minX,
-      selectionMarquee.maxY - selectionMarquee.minY
-    );
+    const normMinX = Math.min(selectionMarquee.minX, selectionMarquee.maxX);
+    const normMinY = Math.min(selectionMarquee.minY, selectionMarquee.maxY);
+    const normMaxX = Math.max(selectionMarquee.minX, selectionMarquee.maxX);
+    const normMaxY = Math.max(selectionMarquee.minY, selectionMarquee.maxY);
+    const minX = snapDevice(normMinX);
+    const minY = snapYS(normMinY);
+    const maxX = snapDevice(normMaxX);
+    const maxY = snapYS(normMaxY);
+    ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
     ctx.restore();
   }
 
@@ -89,38 +100,37 @@ export function drawBoardOnCanvas(
     ctx.save();
     ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 2 / zoom;
-    ctx.strokeRect(
-      frameBox.minX,
-      frameBox.minY,
-      frameBox.maxX - frameBox.minX,
-      frameBox.maxY - frameBox.minY
-    );
+    const boxMinX = snapDevice(frameBox.minX);
+    const boxMinY = snapYS(frameBox.minY);
+    const boxMaxX = snapDevice(frameBox.maxX);
+    const boxMaxY = snapYS(frameBox.maxY);
+    ctx.strokeRect(boxMinX, boxMinY, boxMaxX - boxMinX, boxMaxY - boxMinY);
     // Resize Handles (TL, TR, BL, BR)
     ctx.fillStyle = '#fff';
     const hs = 6 / zoom;
 
     // TL
-    ctx.fillRect(frameBox.minX - hs, frameBox.minY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(frameBox.minX - hs, frameBox.minY - hs, hs * 2, hs * 2);
+    ctx.fillRect(boxMinX - hs, boxMinY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(boxMinX - hs, boxMinY - hs, hs * 2, hs * 2);
 
     // TR
-    ctx.fillRect(frameBox.maxX - hs, frameBox.minY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(frameBox.maxX - hs, frameBox.minY - hs, hs * 2, hs * 2);
+    ctx.fillRect(boxMaxX - hs, boxMinY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(boxMaxX - hs, boxMinY - hs, hs * 2, hs * 2);
 
     // BL
-    ctx.fillRect(frameBox.minX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(frameBox.minX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
+    ctx.fillRect(boxMinX - hs, boxMaxY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(boxMinX - hs, boxMaxY - hs, hs * 2, hs * 2);
 
     // BR
-    ctx.fillRect(frameBox.maxX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
-    ctx.strokeRect(frameBox.maxX - hs, frameBox.maxY - hs, hs * 2, hs * 2);
+    ctx.fillRect(boxMaxX - hs, boxMaxY - hs, hs * 2, hs * 2);
+    ctx.strokeRect(boxMaxX - hs, boxMaxY - hs, hs * 2, hs * 2);
 
     ctx.restore();
 
     // Draw rotate handle (circle with arrow below transform box)
     {
-      const centerX = boxCenterX;
-      const rotY = frameBox.maxY + 30 / zoom;
+      const centerX = snapDevice(boxCenterX);
+      const rotY = snapYS(frameBox.maxY + 30 / zoom);
       const rotRadius = 10 / zoom;
 
       ctx.save();
@@ -167,83 +177,55 @@ export function drawBoardOnCanvas(
   }
   };
 
-  // Draw all strokes with smooth curves
-  strokes.forEach((stroke) => {
-    if (stroke.points.length < 1) return;
-    const pts = stroke.points;
-
-    if (stroke.noteHtml) {
-      return;
-    }
-
-    if (stroke.text) {
-      const minX = Math.min(...pts.map((p) => p.x));
-      const minY = Math.min(...pts.map((p) => p.y));
-      const maxX = Math.max(...pts.map((p) => p.x));
-      const fontSize = stroke.fontSize ?? 28;
-      const maxWidth = Math.max(fontSize * 2, maxX - minX);
-      const lineHeight = fontSize * 1.25;
-      const words = stroke.text.split(/\s+/).filter(Boolean);
-      const lines: string[] = [];
-
-      ctx.save();
-      ctx.fillStyle = stroke.color;
-      ctx.font = `${fontSize}px "Comic Sans MS", "Chalkboard SE", cursive`;
-      ctx.textBaseline = 'top';
-      ctx.textAlign = stroke.textAlign ?? 'left';
-
-      words.forEach((word) => {
-        const currentLine = lines[lines.length - 1] ?? '';
-        const nextLine = currentLine ? `${currentLine} ${word}` : word;
-        if (currentLine && ctx.measureText(nextLine).width > maxWidth) {
-          lines.push(word);
-        } else if (lines.length === 0) {
-          lines.push(word);
-        } else {
-          lines[lines.length - 1] = nextLine;
-        }
-      });
-
-      (lines.length > 0 ? lines : [stroke.text]).forEach((line, index) => {
-        const textX = stroke.textAlign === 'center' ? (minX + maxX) / 2 : stroke.textAlign === 'right' ? maxX : minX;
-        ctx.fillText(line, textX, minY + index * lineHeight, maxWidth);
-      });
-      ctx.restore();
-      return;
-    }
-
-    if (stroke.tool === 'chalk') {
-      drawChalkStroke(ctx, stroke);
-    } else {
-      if (pts.length === 1) {
-        drawEraserSegment(
-          ctx,
-          pts[0].x,
-          pts[0].y,
-          pts[0].x,
-          pts[0].y,
-          stroke.size,
-          stroke.eraserWidth,
-          stroke.eraserHeight
-        );
-      } else {
-        for (let i = 1; i < pts.length; i++) {
-          drawEraserSegment(
-            ctx,
-            pts[i - 1].x,
-            pts[i - 1].y,
-            pts[i].x,
-            pts[i].y,
-            stroke.size,
-            stroke.eraserWidth,
-            stroke.eraserHeight
-          );
-        }
+  // Cached stroke layer: only re-renders when strokes/zoom/pan/dpr change.
+  // Selection marquee / transform box are overlaid per-frame (cheap) so
+  // dragging a selection no longer replays 10k strokes. Viewport culling
+  // inside the cache drops off-screen strokes entirely.
+  // Falls back gracefully when `document` is unavailable (e.g. vitest).
+  try {
+    drawCachedBoard(ctx, width, height, dpr, zoom, panOffset, strokes, drawSelectionOverlay);
+  } catch {
+    // Fallback direct draw (no cache) — keeps old behavior for SSR/tests.
+    strokes.forEach((stroke) => {
+      if (stroke.points.length < 1) return;
+      const pts = stroke.points;
+      if (stroke.noteHtml) return;
+      if (stroke.text) {
+        const minX = Math.min(...pts.map((p) => p.x));
+        const minY = Math.min(...pts.map((p) => p.y));
+        const maxX = Math.max(...pts.map((p) => p.x));
+        const fontSize = stroke.fontSize ?? 28;
+        const maxWidth = Math.max(fontSize * 2, maxX - minX);
+        const lineHeight = fontSize * 1.25;
+        const words = stroke.text.split(/\s+/).filter(Boolean);
+        const lines: string[] = [];
+        ctx.save();
+        ctx.fillStyle = stroke.color;
+        ctx.font = `${fontSize}px "Architects Daughter", "Caveat", "Outfit", cursive, sans-serif`;
+        ctx.textBaseline = 'top';
+        ctx.textAlign = stroke.textAlign ?? 'left';
+        words.forEach((word) => {
+          const currentLine = lines[lines.length - 1] ?? '';
+          const nextLine = currentLine ? `${currentLine} ${word}` : word;
+          if (currentLine && ctx.measureText(nextLine).width > maxWidth) lines.push(word);
+          else if (lines.length === 0) lines.push(word);
+          else lines[lines.length - 1] = nextLine;
+        });
+        (lines.length > 0 ? lines : [stroke.text]).forEach((line, index) => {
+          const textX = stroke.textAlign === 'center' ? (minX + maxX) / 2 : stroke.textAlign === 'right' ? maxX : minX;
+          ctx.fillText(line, textX, minY + index * lineHeight, maxWidth);
+        });
+        ctx.restore();
+        return;
       }
-    }
-  });
-
-  drawSelectionOverlay();
+      if (stroke.tool === 'chalk') drawChalkStroke(ctx, stroke);
+      else {
+        if (pts.length === 1) drawEraserSegment(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
+        else for (let i = 1; i < pts.length; i++) drawEraserSegment(ctx, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, stroke.size, stroke.eraserWidth, stroke.eraserHeight);
+      }
+    });
+    drawSelectionOverlay();
+  }
 
   ctx.restore();
 }

@@ -1,11 +1,45 @@
-import { getSelectionBoundingBox } from '@/lib/geometry';
+import {
+  boxCenter,
+  getSelectionBoundingBox
+} from '@/lib/geometry';
 import { nestStrokeGroup } from '@/lib/grouping';
 import { viewportToCanvas } from '@/lib/zoom';
 import { getBoard } from '@/stores/boardStore';
 import { useLoggerStore } from '@/stores/loggerStore';
 import { pluginRegistry } from '@/plugins/registry';
-import type { ChalkboardPluginAPI, InsertStrokeOptions } from '@/plugins/types';
+import type {
+  ChalkboardPluginAPI,
+  InsertStrokeOptions
+} from '@/plugins/types';
 import type { Stroke } from '@/types';
+
+function getViewportCenter() {
+  const { canvas, panOffset, zoom } = getBoard();
+  const width = canvas?.getBoundingClientRect().width || window.innerWidth;
+  const height = canvas?.getBoundingClientRect().height || window.innerHeight;
+  return viewportToCanvas({ x: width / 2, y: height / 2 }, panOffset, zoom);
+}
+
+function centerStrokesInViewport(strokes: Stroke[]): Stroke[] {
+  const viewportCenter = getViewportCenter();
+  const strokesBox = getSelectionBoundingBox(strokes);
+  if (!viewportCenter || !strokesBox) return strokes;
+
+  const strokesCenter = boxCenter(strokesBox);
+  const delta = {
+    x: viewportCenter.x - strokesCenter.x,
+    y: viewportCenter.y - strokesCenter.y,
+  };
+
+  if (delta.x === 0 && delta.y === 0) return strokes;
+  return strokes.map((stroke) => ({
+    ...stroke,
+    points: stroke.points.map((point) => ({
+      x: point.x + delta.x,
+      y: point.y + delta.y,
+    })),
+  }));
+}
 
 function insertStrokes(strokes: Stroke[], options: InsertStrokeOptions = {}): boolean {
   const {
@@ -19,10 +53,13 @@ function insertStrokes(strokes: Stroke[], options: InsertStrokeOptions = {}): bo
     setShowInsertShapes,
   } = getBoard();
 
-  if (!socket || strokes.length === 0) return false;
+  if (strokes.length === 0) return false;
 
-  const groupId = options.group ? `${socket.id ?? 'local'}-plugin-${Date.now()}` : undefined;
-  const preparedStrokes = strokes.map((stroke) => ({
+  const shouldCenter = options.centerInViewport ?? true;
+  const positionedStrokes = shouldCenter ? centerStrokesInViewport(strokes) : strokes;
+  const userId = socket?.id ?? 'local';
+  const groupId = options.group ? `${userId}-plugin-${Date.now()}` : undefined;
+  const preparedStrokes = positionedStrokes.map((stroke) => ({
     ...(groupId ? nestStrokeGroup(stroke, groupId) : stroke),
     pluginId: options.pluginId ?? stroke.pluginId,
     objectType: options.objectType ?? stroke.objectType,
@@ -41,7 +78,9 @@ function insertStrokes(strokes: Stroke[], options: InsertStrokeOptions = {}): bo
     setShowInsertShapes(false);
   }
 
-  socket.emit('undo-stroke', { roomId, strokes: updated });
+  if (socket) {
+    socket.emit('undo-stroke', { roomId, strokes: updated });
+  }
   return true;
 }
 
@@ -55,12 +94,7 @@ export function createPluginAPI(): ChalkboardPluginAPI {
         const { panOffset, zoom } = getBoard();
         return { panOffset, zoom };
       },
-      getViewportCenter: () => {
-        const { canvas, panOffset, zoom } = getBoard();
-        if (!canvas) return null;
-        const rect = canvas.getBoundingClientRect();
-        return viewportToCanvas({ x: rect.width / 2, y: rect.height / 2 }, panOffset, zoom);
-      },
+      getViewportCenter,
       insertStrokes,
       updateStrokes: (updatedStrokes) => {
         const { socket, roomId, setStrokes } = getBoard();

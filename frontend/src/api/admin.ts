@@ -13,6 +13,7 @@ import type {
   VerifyAdminTwoFactorResponse
 } from '@/api/types';
 
+//admin endpoints
 export function getAdminSession() {
   return apiRequest<AdminSession>({ url: '/admin/session', method: 'GET' });
 }

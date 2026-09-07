@@ -1,8 +1,38 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
 import type { ApiErrorResponse } from '@/api/types';
 
+/**
+ * Resolves the HTTP API base URL for Axios.
+ * - If VITE_API_URL is unset, empty, or '/api', returns '/api' for local dev proxy.
+ * - If VITE_API_URL is 'api.chalkboard.click' or 'https://api.chalkboard.click', returns 'https://api.chalkboard.click/api'.
+ */
+export function resolveApiUrl(raw?: string): string {
+  const trimmed = raw?.trim() || '';
+  if (!trimmed || trimmed === '/api') return '/api';
+  const withProto = trimmed.startsWith('http://') || trimmed.startsWith('https://')
+    ? trimmed
+    : `https://${trimmed}`;
+  const clean = withProto.replace(/\/+$/, '');
+  return clean.endsWith('/api') ? clean : `${clean}/api`;
+}
+
+/**
+ * Resolves the Socket.IO server URL.
+ * - If VITE_API_URL is unset, empty, or '/api', returns undefined (same-origin / dev proxy).
+ * - If VITE_API_URL is 'api.chalkboard.click' or 'https://api.chalkboard.click', returns 'https://api.chalkboard.click'.
+ */
+export function resolveSocketUrl(raw?: string): string | undefined {
+  const trimmed = raw?.trim() || '';
+  if (!trimmed || trimmed === '/api') return undefined;
+  const withProto = trimmed.startsWith('http://') || trimmed.startsWith('https://')
+    ? trimmed
+    : `https://${trimmed}`;
+  const clean = withProto.replace(/\/+$/, '');
+  return clean.endsWith('/api') ? clean.slice(0, -4) : clean;
+}
+
 export const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: resolveApiUrl(import.meta.env.VITE_API_URL),
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -19,14 +49,39 @@ export class ApiRequestError extends Error {
   }
 }
 
+/**
+ * Messages for the plan errors the backend can return.
+ *
+ * The wire format is a stable code rather than prose, so the wording lives here
+ * and can change without a backend deploy. Anything unmapped keeps the server's
+ * own text.
+ */
+const PLAN_ERROR_MESSAGES: Record<string, string> = {
+  room_limit_reached: 'You have reached the number of open rooms your plan allows. Close a room, or upgrade to open another.',
+  plan_required: 'This feature is not part of your current plan.',
+  seat_limit_reached: 'Your plan has no seats left. Remove a member or revoke a pending invite, or buy more seats.',
+  voice_minutes_exhausted: 'This room is out of voice minutes for the month. Upgrade to keep using room audio.',
+};
+
+/** True when a request failed because of a plan limit rather than a fault. */
+export function isPlanLimitError(error: unknown): error is ApiRequestError {
+  return error instanceof ApiRequestError && error.status === 402;
+}
+
 export function getApiError(error: unknown, fallback = 'The service is unavailable.') {
   if (error instanceof ApiRequestError) return error;
   if (error instanceof AxiosError) {
     const payload = error.response?.data as ApiErrorResponse | undefined;
-    return new ApiRequestError(
-      payload?.error || payload?.message || error.message || fallback,
-      error.response?.status,
-    );
+    const code = payload?.error;
+    // 402 is the agreed signal for "your plan does not reach this". Translate
+    // the code into something the user can act on; every other status keeps the
+    // server message unchanged.
+    const message = (error.response?.status === 402 && code && PLAN_ERROR_MESSAGES[code])
+      || code
+      || payload?.message
+      || error.message
+      || fallback;
+    return new ApiRequestError(message, error.response?.status, code);
   }
   if (error instanceof Error) return error;
   return new Error(fallback);

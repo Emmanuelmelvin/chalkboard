@@ -221,7 +221,8 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                 logger.info("model succeeded model=%s turns=%s policy=%s/%s prompt_chars=%s",
                             model, turns, policy["version"], str(policy["sha256"])[:12], len(message))
                 return {"finalText": final_text, "turns": turns, "model": model,
-                        "trace": caller.trace, "policy": policy, "promptChars": len(message)}
+                        "trace": caller.trace, "policy": policy, "prompt": ctx.get("promptMetadata", {}),
+                        "promptChars": len(message)}
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
                 if ctx.get("cancelEvent") is not None and ctx["cancelEvent"].is_set():

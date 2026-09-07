@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
 from typing import Any
 
 from agent.layout import format_spatial_layout_prompt
@@ -26,6 +25,13 @@ MAX_LESSON_PROMPT_CHARS = 120
 
 def clean_text(value: Any, max_len: int) -> str:
     return _CONTROL_CHARS.sub("", str(value or "")).strip()[:max_len]
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError, OverflowError):
+        return 0
 
 
 def _role_counts(members: Any) -> dict[str, int]:
@@ -63,7 +69,7 @@ def _lesson_history(history: Any) -> list[dict[str, str | int]]:
             continue
         result.append({
             "prompt": clean_text(entry.get("prompt"), MAX_LESSON_PROMPT_CHARS),
-            "turns": int(entry.get("turns") or 0),
+            "turns": _nonnegative_int(entry.get("turns")),
             "model": clean_text(entry.get("model"), 80),
         })
     return result
@@ -72,17 +78,18 @@ def _lesson_history(history: Any) -> list[dict[str, str | int]]:
 def build_reasoning_message(*, room_id: str, prompt: str, requested_by: str,
                             invoker_role: str, modality: str, context: dict,
                             lesson_history: list[dict], voice_state: str,
-                            voice_can_speak: bool, tool_count: int) -> tuple[str, str]:
+                            voice_can_speak: bool, tool_count: int,
+                            include_metadata: bool = False):
     """Return the user-model message and a display-safe requester name."""
     safe_prompt = clean_text(prompt, MAX_REQUEST_CHARS)
     safe_requester = clean_text(requested_by, 64) or "Classmate"
     meta = context.get("roomMetadata") if isinstance(context.get("roomMetadata"), dict) else {}
-    strokes = context.get("strokes") if isinstance(context.get("strokes"), list) else []
+    strokes = [stroke for stroke in (context.get("strokes") or []) if isinstance(stroke, dict)]
     trusted_envelope = {
         "invokerRole": invoker_role if invoker_role in _ROLES else "viewer",
         "modality": "voice" if modality == "voice" else "chat",
         "voiceAvailable": bool(voice_can_speak),
-        "toolCount": max(0, int(tool_count)),
+        "toolCount": _nonnegative_int(tool_count),
         "delivery": "voice" if modality == "voice" and voice_can_speak else "chat",
     }
     context_data = {
@@ -97,7 +104,7 @@ def build_reasoning_message(*, room_id: str, prompt: str, requested_by: str,
         },
         "participants": _role_counts(context.get("members")),
         "board": {
-            "strokeCount": max(0, int(context.get("strokeCount") or 0)),
+            "strokeCount": _nonnegative_int(context.get("strokeCount")),
             "layout": format_spatial_layout_prompt(strokes),
         },
         "recentChat": _recent_chat(context.get("chat")),
@@ -114,4 +121,14 @@ def build_reasoning_message(*, room_id: str, prompt: str, requested_by: str,
         "RUNTIME_CONTEXT_JSON_END\n\n"
         "Complete the request using the policy and registered tools. Return only the natural final answer."
     )
+    metadata = {
+        "promptChars": len(message),
+        "requestTruncated": len(clean_text(prompt, 100_000)) > len(safe_prompt),
+        "recentChatIncluded": len(context_data["recentChat"]),
+        "recentChatDropped": max(0, len(context.get("chat") or []) - len(context_data["recentChat"])),
+        "lessonHistoryIncluded": len(context_data["earlierTasks"]),
+        "lessonHistoryDropped": max(0, len(lesson_history or []) - len(context_data["earlierTasks"])),
+    }
+    if include_metadata:
+        return message, safe_requester, metadata
     return message, safe_requester

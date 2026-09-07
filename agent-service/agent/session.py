@@ -53,6 +53,7 @@ class RoomSession:
         self.tool_calls = 0
         self.total_turns = 0
         self.last_task_at: str | None = None
+        self.last_prompt_metadata: dict = {}
         self.lesson_history: list[dict] = []
 
     # ---- lifecycle ----
@@ -329,7 +330,13 @@ class RoomSession:
                              request_id: str, modality: str = "chat",
                              task_cancel_event: threading.Event | None = None) -> dict:
         from agent import providers
-        message, safe_requester = self._build_prompt(prompt, requested_by, invoker_role, modality)
+        message, safe_requester, prompt_metadata = self._build_prompt(
+            prompt, requested_by, invoker_role, modality)
+        self.last_prompt_metadata = prompt_metadata
+        logger.info("prompt compiled room=%s chars=%s chat=%s/%s history=%s/%s request_truncated=%s",
+                    self.room_id, prompt_metadata["promptChars"], prompt_metadata["recentChatIncluded"],
+                    prompt_metadata["recentChatDropped"], prompt_metadata["lessonHistoryIncluded"],
+                    prompt_metadata["lessonHistoryDropped"], prompt_metadata["requestTruncated"])
         logger.debug("reasoning with provider=%s room=%s", config.LLM_PROVIDER, self.room_id)
         try:
             self.socket.broadcast_activity({"stage": "thinking", "thought": "Analyzing classroom request...",
@@ -340,7 +347,7 @@ class RoomSession:
             stats = create_board_tool_stats()
             ctx = {"socket": self.socket, "cursorStreamer": self.cursor, "invokerRole": invoker_role,
                    "requestId": request_id, "maxTurns": config.MAX_TURNS_PER_INSTRUCTION,
-                   "cancelEvent": task_cancel_event}
+                   "cancelEvent": task_cancel_event, "promptMetadata": prompt_metadata}
             outcome = await providers.run_reasoning(message, safe_requester, ctx, stats, request_id,
                                                     config.MAX_TURNS_PER_INSTRUCTION)
             if task_cancel_event is not None and task_cancel_event.is_set():
@@ -355,7 +362,7 @@ class RoomSession:
             except Exception:
                 pass
             return {"success": True, "turns": outcome.get("turns", 0), "delivery": delivery,
-                    "policy": outcome.get("policy", {})}
+                    "policy": outcome.get("policy", {}), "prompt": outcome.get("prompt", {})}
         finally:
             try:
                 self.cursor.cancel_active_stream()
@@ -390,7 +397,7 @@ class RoomSession:
         return "failed"
 
     def _build_prompt(self, prompt: str, requested_by: str, invoker_role: str,
-                      modality: str = "chat") -> tuple[str, str]:
+                      modality: str = "chat") -> tuple[str, str, dict]:
         lock = getattr(self.socket, "context_lock", None)
         if lock is None:
             source = self.socket.context
@@ -411,7 +418,7 @@ class RoomSession:
             invoker_role=invoker_role, modality=modality, context=context,
             lesson_history=list(self.lesson_history), voice_state=self.voice.state,
             voice_can_speak=bool(getattr(self.voice, "can_speak", False)),
-            tool_count=len(TOOL_SPECS),
+            tool_count=len(TOOL_SPECS), include_metadata=True,
         )
 
     def get_status(self) -> dict:
@@ -430,4 +437,5 @@ class RoomSession:
                 "lastTaskAt": self.last_task_at, "currentModel": self.current_model,
                 "lessonHistoryCount": len(self.lesson_history), "memoryBackend": self._lessons.backend,
                 "voiceState": self.voice.state, "voiceCanSpeak": self.voice.can_speak,
-                "policy": {"version": policy["version"], "sha256": policy["sha256"]}}
+                "policy": {"version": policy["version"], "sha256": policy["sha256"]},
+                "lastPrompt": self.last_prompt_metadata}

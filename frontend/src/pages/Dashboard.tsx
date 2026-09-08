@@ -48,9 +48,10 @@ import {
   hasRatedRoom,
   isSessionFeedbackOptedOut
 } from '@/lib/sessionFeedback';
-const DeveloperPlugins = lazy(() => import('@/components/DeveloperPlugins'));
-const BillingPanel = lazy(() => import('@/components/BillingPanel'));
-const WorkspacePanel = lazy(() => import('@/components/WorkspacePanel'));
+import retryDynamicImport from '@/lib/retryDynamicImport';
+const DeveloperPlugins = lazy(() => retryDynamicImport(() => import('@/components/DeveloperPlugins')));
+const BillingPanel = lazy(() => retryDynamicImport(() => import('@/components/BillingPanel')));
+const WorkspacePanel = lazy(() => retryDynamicImport(() => import('@/components/WorkspacePanel')));
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { toast } from '@/components/ui/Toast';
 import type { UserProfile } from '@/stores/authStore';

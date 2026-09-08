@@ -1,19 +1,20 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Redirect, Route, Switch, useLocation } from 'wouter';
+import retryDynamicImport from '@/lib/retryDynamicImport';
 
-const Chalkboard = lazy(() => import('@/pages/Chalkboard'));
-const Home = lazy(() => import('@/pages/Home'));
-const Login = lazy(() => import('@/pages/Login'));
-const Dashboard = lazy(() => import('@/pages/Dashboard'));
-const Docs = lazy(() => import('@/pages/Docs'));
-const Guide = lazy(() => import('@/pages/Guide'));
-const Lobby = lazy(() => import('@/pages/Lobby'));
-const Plans = lazy(() => import('@/pages/Plans'));
-const BillingReturn = lazy(() => import('@/pages/BillingReturn'));
-const Support = lazy(() => import('@/pages/Support'));
-const SupportThankYou = lazy(() => import('@/pages/SupportThankYou'));
-const InviteAccept = lazy(() => import('@/pages/InviteAccept'));
+const Chalkboard = lazy(() => retryDynamicImport(() => import('@/pages/Chalkboard')));
+const Home = lazy(() => retryDynamicImport(() => import('@/pages/Home')));
+const Login = lazy(() => retryDynamicImport(() => import('@/pages/Login')));
+const Dashboard = lazy(() => retryDynamicImport(() => import('@/pages/Dashboard')));
+const Docs = lazy(() => retryDynamicImport(() => import('@/pages/Docs')));
+const Guide = lazy(() => retryDynamicImport(() => import('@/pages/Guide')));
+const Lobby = lazy(() => retryDynamicImport(() => import('@/pages/Lobby')));
+const Plans = lazy(() => retryDynamicImport(() => import('@/pages/Plans')));
+const BillingReturn = lazy(() => retryDynamicImport(() => import('@/pages/BillingReturn')));
+const Support = lazy(() => retryDynamicImport(() => import('@/pages/Support')));
+const SupportThankYou = lazy(() => retryDynamicImport(() => import('@/pages/SupportThankYou')));
+const InviteAccept = lazy(() => retryDynamicImport(() => import('@/pages/InviteAccept')));
 
 import LoggerOutlet from '@/components/LoggerOutlet';
 import ThemeToggle, { type ThemeMode } from '@/components/ThemeToggle';

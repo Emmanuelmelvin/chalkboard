@@ -22,7 +22,8 @@ import {
 import PluginPackagePicker, {
   type PluginPackageFile,
 } from "@/components/PluginPackagePicker";
-const DeveloperPluginAnalytics = lazy(() => import("@/components/DeveloperPluginAnalytics"));
+import retryDynamicImport from "@/lib/retryDynamicImport";
+const DeveloperPluginAnalytics = lazy(() => retryDynamicImport(() => import("@/components/DeveloperPluginAnalytics")));
 import {
   createBrowserModuleBundle,
   findZipEntry,

@@ -65,6 +65,51 @@ describe('getGoogleTokenHeader', () => {
     assert.deepEqual(result, { authorization: 'Bearer token-lower' });
   });
 
+  it('reads the token from a native fetch Headers instance (get method, no index)', async () => {
+    // google-auth-library returns `new Headers({ authorization: 'Bearer ...' })`,
+    // whose values are NOT reachable via bracket indexing (verified at runtime).
+    // This test pins the `.get()` read path that made the old code send requests
+    // with NO Authorization header at all.
+    const headerBag = {
+      get(name: string) {
+        if (name.toLowerCase() === 'authorization') return 'Bearer token-native';
+        return undefined;
+      },
+    };
+    const result = await getGoogleTokenHeader(CLOUD_RUN_URL, fakeAuth({
+      getRequestHeaders: async () => headerBag,
+    }));
+    assert.deepEqual(result, { authorization: 'Bearer token-native' });
+  });
+
+  it('treats a bare run.app host without a scheme as https', async () => {
+    const bareUrl = CLOUD_RUN_URL.replace('https://', '');
+    const audiences: string[] = [];
+    const auth: GoogleAuthLike = {
+      getIdTokenClient: async (targetUrl) => {
+        audiences.push(targetUrl);
+        return { getRequestHeaders: async () => ({ Authorization: 'Bearer token-bare' }) };
+      },
+    };
+    const result = await getGoogleTokenHeader(bareUrl, auth);
+    assert.deepEqual(audiences, [CLOUD_RUN_URL]);
+    assert.deepEqual(result, { authorization: 'Bearer token-bare' });
+  });
+
+  it('skips private-IP development targets without touching the provider', async () => {
+    let called = false;
+    const auth: GoogleAuthLike = {
+      getIdTokenClient: async () => {
+        called = true;
+        return {} as IdTokenHeaderProvider;
+      },
+    };
+    for (const url of ['http://10.0.0.5:8080', 'http://192.168.1.20:8080', 'http://127.0.0.1:8080']) {
+      assert.deepEqual(await getGoogleTokenHeader(url, auth), {});
+    }
+    assert.equal(called, false);
+  });
+
   it('returns {} when the provider sends no authorization header', async () => {
     const provider: IdTokenHeaderProvider = { getRequestHeaders: async () => ({}) };
     const result = await getGoogleTokenHeader(CLOUD_RUN_URL, fakeAuth(provider));

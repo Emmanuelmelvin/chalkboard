@@ -89,34 +89,44 @@ function parseBody(data: unknown): Record<string, unknown> {
 // plain object, so the cast is limited to this integration seam.
 const googleAuth = new GoogleAuth() as unknown as GoogleAuthLike;
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
+interface AgentAuthState {
+  headers: Record<string, string>;
+  /** Whether an OIDC bearer token for Cloud Run IAM is attached to the request. */
+  iamAuthorized: boolean;
+  /** Present when the token could not be acquired. */
+  iamError?: string;
+}
+
+async function getAuthHeaders(): Promise<AgentAuthState> {
   const headers: Record<string, string> = {
     'x-agent-secret': env.AGENT_SERVICE_SECRET,
   };
 
   // Cloud Run rejects requests without a Google-signed OIDC token before they
   // reach the agent container ("Empty Authorization header value"), so the
-  // shared x-agent-secret alone is not enough for a deployed HTTPS service.
+  // shared x-agent-secret alone is not enough for a deployed service.
   const { authorization, error } = await getGoogleTokenHeader(env.AGENT_SERVICE_URL, googleAuth);
   if (authorization) {
     headers.Authorization = authorization;
-  } else if (error) {
+    return { headers, iamAuthorized: true };
+  }
+  if (error) {
     logger.warn(
       'Could not obtain a Google IAM ID token for the agent service; requests carry only x-agent-secret and will be rejected with 403 by Cloud Run IAM. Check that AGENT_SERVICE_URL is the HTTPS service URL and the backend runtime account has the Cloud Run Invoker role on the agent service.',
       { agentServiceUrl: env.AGENT_SERVICE_URL, oidcError: error },
     );
   }
 
-  return headers;
+  return { headers, iamAuthorized: false, iamError: error };
 }
 
 async function attempt(path: string, body: unknown): Promise<{ status: number; data: Record<string, unknown> }> {
-  const authHeaders = await getAuthHeaders();
+  const auth = await getAuthHeaders();
   const config: AxiosRequestConfig = {
     url: path,
     method: 'POST',
-    // Carries both the shared app secret and the Google IAM OIDC token (if on GCP)
-    headers: authHeaders,
+    // Carries both the shared app secret and the Google IAM OIDC token (on GCP).
+    headers: auth.headers,
     data: JSON.stringify(body),
   };
 
@@ -125,7 +135,19 @@ async function attempt(path: string, body: unknown): Promise<{ status: number; d
     return { status: response.status, data: parseBody(response.data) };
   } catch (error) {
     if (!axios.isAxiosError(error) || !error.response) throw error;
-    return { status: error.response.status, data: parseBody(error.response.data) };
+    const status = error.response.status;
+    if (status === 401 || status === 403) {
+      // Cloud Run IAM rejects before the container; its body says exactly why
+      // ("Empty Authorization header value" vs "caller is not authorized").
+      logger.warn('Agent service request was rejected at the front door', {
+        path,
+        status,
+        iamTokenAttached: auth.iamAuthorized,
+        iamError: auth.iamError,
+        responseBody: String(error.response.data ?? '').slice(0, 300),
+      });
+    }
+    return { status, data: parseBody(error.response.data) };
   }
 }
 

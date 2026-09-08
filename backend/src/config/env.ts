@@ -96,6 +96,11 @@ const envSchema = z.object({
   VOICE_RECONCILE_REPEAT_MS: z.coerce.number().int().positive().default(900000),
 
   // Chalkboard Master Agent Service (Cloud Run / Local)
+  // For the deployed backend this MUST be the https://<service>...run.app URL:
+  // the Google IAM OIDC ID token is minted with that URL as its audience, and
+  // Cloud Run IAM rejects requests without a matching token (403 "Empty
+  // Authorization header value"). Local dev uses http://localhost:8080 and the
+  // ID-token path is skipped.
   AGENT_SERVICE_URL: z.string().default('http://localhost:8080'),
   // Shared bearer secret between this backend and the agent-service. It is the
   // only thing authenticating the agent on the socket and internal routes, so

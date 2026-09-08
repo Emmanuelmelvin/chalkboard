@@ -12,7 +12,8 @@ import { GoogleAuth } from 'google-auth-library';
 
 import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
-import { getRoomWithMembers } from './rooms.service';
+import { getRoomWithMembers } from '@/services/rooms/rooms.service';
+import { getGoogleTokenHeader, type GoogleAuthLike } from '@/services/rooms/gcpIdToken';
 
 // Debounce map to prevent spamming join requests when multiple users join concurrently
 const recentJoinNotified = new Map<string, number>();
@@ -82,30 +83,28 @@ function parseBody(data: unknown): Record<string, unknown> {
   return {};
 }
 
-const googleAuth = new GoogleAuth();
-let idTokenClientPromise: ReturnType<typeof googleAuth.getIdTokenClient> | undefined;
+// Used to mint the Google IAM OIDC token that satisfies the Cloud Run IAM gate
+// on the deployed agent service. google-auth-library declares getRequestHeaders
+// as returning the fetch-style `Headers` type even though it resolves to a
+// plain object, so the cast is limited to this integration seam.
+const googleAuth = new GoogleAuth() as unknown as GoogleAuthLike;
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'x-agent-secret': env.AGENT_SERVICE_SECRET,
   };
 
-  const serviceUrl = env.AGENT_SERVICE_URL.replace(/\/$/, '');
-  // Only attempt GCP ID token generation when targeting an HTTPS Cloud Run endpoint
-  if (serviceUrl.startsWith('https://')) {
-    try {
-      if (!idTokenClientPromise) {
-        idTokenClientPromise = googleAuth.getIdTokenClient(serviceUrl);
-      }
-      const client = await idTokenClientPromise;
-      const tokenHeaders = (await client.getRequestHeaders()) as unknown as Record<string, string>;
-      Object.assign(headers, tokenHeaders);
-    } catch (error) {
-      // In local development or non-GCP environments, gracefully fall back to x-agent-secret only
-      logger.debug('Could not acquire GCP ID token for agent service; falling back to app secret only', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  // Cloud Run rejects requests without a Google-signed OIDC token before they
+  // reach the agent container ("Empty Authorization header value"), so the
+  // shared x-agent-secret alone is not enough for a deployed HTTPS service.
+  const { authorization, error } = await getGoogleTokenHeader(env.AGENT_SERVICE_URL, googleAuth);
+  if (authorization) {
+    headers.Authorization = authorization;
+  } else if (error) {
+    logger.warn(
+      'Could not obtain a Google IAM ID token for the agent service; requests carry only x-agent-secret and will be rejected with 403 by Cloud Run IAM. Check that AGENT_SERVICE_URL is the HTTPS service URL and the backend runtime account has the Cloud Run Invoker role on the agent service.',
+      { agentServiceUrl: env.AGENT_SERVICE_URL, oidcError: error },
+    );
   }
 
   return headers;

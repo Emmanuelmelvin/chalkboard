@@ -103,9 +103,10 @@ _warmup_started = False
 
 def start_reasoning_warmup() -> None:
     """Kick off a one-shot background import of the ADK/LiteLLM reasoning
-    stack. Without it the first classroom request pays multi-second lazy
-    import cost (google-adk + litellm + google-genai) on its critical path.
-    Idempotent; safe to call from every entrypoint."""
+    stack, plus the local TTS model. Without it the first classroom request
+    pays multi-second lazy import cost (google-adk + litellm + google-genai)
+    and the first spoken answer pays ~9s of ONNX session init on its critical
+    path. Idempotent; safe to call from every entrypoint."""
     global _warmup_started
     if _warmup_started:
         return
@@ -118,7 +119,15 @@ def start_reasoning_warmup() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("reasoning stack warmup failed: %s", exc)
 
+    def _run_tts():
+        try:
+            from voice.tts import warm_up as warm_tts
+            warm_tts()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("TTS warmup failed: %s", exc)
+
     threading.Thread(target=_run, name="reasoning-warmup", daemon=True).start()
+    threading.Thread(target=_run_tts, name="tts-warmup", daemon=True).start()
 
 
 

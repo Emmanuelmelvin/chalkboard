@@ -1,7 +1,7 @@
 """LiveKit voice presence - full duplex (mirrors src/voice/voiceClient.ts).
 
 Joins the room's LiveKit call as a listener, transcribes remote speech via
-VAD segmentation + STT backends, and publishes Edge-TTS audio when the owner
+VAD segmentation + STT backends, and publishes TTS audio when the owner
 has invited the agent to speak.  Degrades to a disconnected stub when the
 ``livekit`` package is not installed so the board keeps working without voice.
 
@@ -13,11 +13,13 @@ Key fixes vs. scaffold:
 - Remote audio is consumed via ``AudioStream`` -> ``UtteranceSegmenter`` ->
   ``transcribe_utterance_blocking`` -> ``on_transcript`` (was no feeding).
 - ``livekit`` is a real dependency in ``requirements.txt`` (was commented out).
+- TTS is streamed from ``voice.tts`` (local piper by default, edge-tts as
+  fallback), so the room hears the opening words while the rest synthesizes.
 - mp3 decode runs in-process via PyAV, so no system ffmpeg is required.
 - ``speak`` reports the *real* publish outcome so callers can fall back to chat.
 - ``can_speak`` is seeded from the token response, so a restarted agent keeps a
   standing voice invite instead of silently going mute forever.
-- a supervisor rejoins with backoff on disconnect and refreshes the 1h token.
+- a supervisor rejoins with backoff and refreshes the 1h token.
 """
 
 from __future__ import annotations
@@ -38,16 +40,18 @@ CHANNELS = 1
 SAMPLES_PER_FRAME = 480  # 10ms @ 48kHz mono
 BYTES_PER_FRAME = SAMPLES_PER_FRAME * 2  # s16le
 MAX_SPEAK_CHARS = 1000
-# Edge-TTS is a network call to Microsoft's endpoint and does time out in the
-# wild; retry before giving up so the caller only falls back to chat when the
-# service is really unavailable.
-TTS_ATTEMPTS = 3
-TTS_TIMEOUT_S = 12.0
-TTS_RETRY_BASE_DELAY_S = 0.5
+# Jitter cushion in LiveKit's AudioSource queue. capture_frame blocks once this
+# much audio is buffered, so LiveKit paces publishing in real time while we stay
+# up to a second ahead of the listener — enough to cover the gap while piper
+# synthesizes the next sentence.
+AUDIO_QUEUE_MS = 1000
+# Grace period for the echo guard while synthesis is still running and no
+# audio length is known yet. Extended per published frame afterwards.
+SYNTH_GRACE_S = 40.0
 # How long speak() waits to learn whether audio reached the room. It resolves
 # on the FIRST published frame, not on full playout: publishing is paced in
 # real time, so waiting for the tail would burn the caller's reasoning timeout
-# for no extra information. Budget = worst-case TTS retries + decode.
+# for no extra information.
 SPEAK_RESULT_TIMEOUT_S = 50.0
 # Ceiling for one utterance on the voice loop, including real-time playout.
 PUBLISH_TIMEOUT_S = 180.0
@@ -110,6 +114,10 @@ def _decode_to_pcm48k(mp3: bytes) -> bytes:
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{name}: {exc}")
     raise RuntimeError("mp3 decode failed (" + "; ".join(errors)[:400] + ")")
+
+
+# Public alias for voice.tts (the edge-tts backend needs mp3 -> 48k PCM).
+decode_mp3_to_pcm48k = _decode_to_pcm48k
 
 
 def is_livekit_available() -> bool:
@@ -526,9 +534,13 @@ class AgentVoiceClient:
         if self._room is None:
             raise RuntimeError("no LiveKit room")
         from livekit import rtc  # type: ignore
-        # AudioSource for synthetic capture; loop is current running loop
+        # AudioSource for synthetic capture; loop is current running loop.
+        # queue_size_ms is the jitter cushion: capture_frame blocks once this
+        # much audio is queued, which both paces publishing in real time and
+        # covers the gap while the next sentence is still synthesizing.
         loop = asyncio.get_running_loop()
-        source = rtc.AudioSource(SAMPLE_RATE, CHANNELS, loop=loop)
+        source = rtc.AudioSource(SAMPLE_RATE, CHANNELS,
+                                 queue_size_ms=AUDIO_QUEUE_MS, loop=loop)
         track = rtc.LocalAudioTrack.create_audio_track("agent-voice", source)
         pub = await self._room.local_participant.publish_track(
             track,
@@ -538,86 +550,81 @@ class AgentVoiceClient:
         self._audio_track = track
         logger.info("voice audio track published sid=%s", getattr(pub, "sid", "unknown"))
 
-    async def _synthesize_mp3(self, text: str) -> bytes:
-        """Edge-TTS with bounded retries. Raises when every attempt fails."""
-        try:
-            import edge_tts  # type: ignore
-        except ImportError as exc:
-            raise RuntimeError("edge-tts is not installed") from exc
-
-        async def _once() -> bytes:
-            communicate = edge_tts.Communicate(text, config.TTS_VOICE)
-            chunks: list[bytes] = []
-            async for part in communicate.stream():
-                if part.get("type") == "audio" and part.get("data"):
-                    chunks.append(part["data"])
-            return b"".join(chunks)
-
-        last_error: Exception | None = None
-        for attempt in range(1, TTS_ATTEMPTS + 1):
-            try:
-                mp3 = await asyncio.wait_for(_once(), timeout=TTS_TIMEOUT_S)
-                if mp3:
-                    return mp3
-                last_error = RuntimeError("TTS returned no audio")
-            except Exception as exc:  # noqa: BLE001
-                last_error = exc
-            if attempt < TTS_ATTEMPTS:
-                delay = TTS_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
-                logger.warning("TTS attempt %s/%s failed (%s) — retrying in %.1fs",
-                               attempt, TTS_ATTEMPTS, str(last_error)[:160], delay)
-                await asyncio.sleep(delay)
-        raise RuntimeError(f"TTS failed after {TTS_ATTEMPTS} attempts: {str(last_error)[:200]}")
-
     async def _publish_async(self, text: str, room_id: str, item=None) -> None:  # noqa: ANN001
         await self._ensure_published()
         # Echo suppression must never outlive this call: a flat 60s window that
         # only got reset on the success path left the agent deaf for a full
-        # minute after any TTS/publish failure. Bound it by the real audio
-        # duration and always release it in `finally`.
-        self._suppress_until = time.time() + TTS_TIMEOUT_S * TTS_ATTEMPTS
+        # minute after any TTS/publish failure. Extended as audio is queued and
+        # always released in `finally`.
+        self._suppress_until = time.time() + SYNTH_GRACE_S
+        from livekit import rtc  # type: ignore
+        from voice.tts import synthesize_48k
+
+        # ~200ms of lead-in silence so the first syllable never clips.
+        pad = b"\x00\x00" * SAMPLES_PER_FRAME * 20
+        buffer = bytearray(pad)
+        published = 0
+        started_at = 0.0
         try:
-            mp3 = await self._synthesize_mp3(text)
-            # Decoding is blocking (PyAV/ffmpeg) — keep it off the voice loop so
-            # RX streams and concurrent publishes never stall behind a synthesis.
-            pcm = await asyncio.get_running_loop().run_in_executor(None, _decode_to_pcm48k, mp3)
-            # pad ~200ms silence on both ends so nothing clips
-            silence = b"\x00\x00" * SAMPLES_PER_FRAME * 20
-            padded = silence + pcm + silence
-            # ensure byte alignment
-            remainder = len(padded) % BYTES_PER_FRAME
-            if remainder:
-                padded += b"\x00\x00" * ((BYTES_PER_FRAME - remainder) // 2)
-            frames = len(padded) // BYTES_PER_FRAME
-            if frames == 0:
-                raise RuntimeError("no audio frames to publish")
-            duration_s = frames * (SAMPLES_PER_FRAME / SAMPLE_RATE)
-            # Now that the real length is known, size the suppression window to
-            # the utterance instead of a worst-case guess.
-            self._suppress_until = time.time() + duration_s + 1.0
-            from livekit import rtc  # type: ignore
             assert self._audio_source is not None
-            for i in range(frames):
-                if not self.can_speak:
-                    raise RuntimeError("uninvited mid-utterance, cutting speak")
-                if not self.connected or self._room is None:
-                    raise RuntimeError("voice disconnected mid-utterance")
-                slice_bytes = padded[i * BYTES_PER_FRAME:(i + 1) * BYTES_PER_FRAME]
-                frame = rtc.AudioFrame(
-                    data=slice_bytes,
-                    sample_rate=SAMPLE_RATE,
-                    num_channels=CHANNELS,
-                    samples_per_channel=SAMPLES_PER_FRAME,
-                )
-                await self._audio_source.capture_frame(frame)
-                if i == 0:
-                    # Audio is reaching the room. Resolve speak() here rather
-                    # than after playout: the caller only needs to know whether
-                    # to fall back to chat, and blocking for the full utterance
-                    # would eat into the reasoning timeout.
-                    self._settle(item, {"delivered": True, "durationMs": round(duration_s * 1000)})
-                await asyncio.sleep(0.01)  # pace in real time (10ms)
-            logger.debug("utterance published room=%s frames=%s", room_id, frames)
+
+            async def _flush(final: bool = False) -> None:
+                """Queue every whole 10ms frame the buffer holds.
+
+                No manual pacing here: ``AudioSource.capture_frame`` blocks once
+                its internal queue (AUDIO_QUEUE_MS) is full, so LiveKit does the
+                real-time pacing and we stay up to a second ahead. The previous
+                ``sleep(0.01)`` per frame double-paced to exactly 1x realtime,
+                leaving no cushion — any gap while the next sentence synthesized
+                could underrun and stutter.
+                """
+                nonlocal published, started_at
+                while len(buffer) >= BYTES_PER_FRAME:
+                    if not self.can_speak:
+                        raise RuntimeError("uninvited mid-utterance, cutting speak")
+                    if not self.connected or self._room is None:
+                        raise RuntimeError("voice disconnected mid-utterance")
+                    chunk = bytes(buffer[:BYTES_PER_FRAME])
+                    del buffer[:BYTES_PER_FRAME]
+                    await self._audio_source.capture_frame(rtc.AudioFrame(
+                        data=chunk, sample_rate=SAMPLE_RATE, num_channels=CHANNELS,
+                        samples_per_channel=SAMPLES_PER_FRAME,
+                    ))
+                    published += 1
+                    if published == 1:
+                        started_at = time.time()
+                        # Audio is reaching the room. Resolve speak() here
+                        # rather than after playout: the caller only needs to
+                        # know whether to fall back to chat, and blocking for
+                        # the whole utterance would eat the reasoning budget.
+                        self._settle(item, {"delivered": True})
+                    # Audio queued so far finishes playing at started_at +
+                    # duration; keep the echo guard just past that.
+                    self._suppress_until = max(
+                        self._suppress_until,
+                        started_at + published * (SAMPLES_PER_FRAME / SAMPLE_RATE) + 1.0)
+                if final and buffer:
+                    # Zero-pad the ragged tail to a whole frame.
+                    buffer.extend(b"\x00" * (BYTES_PER_FRAME - len(buffer)))
+                    await _flush()
+
+            # Backends stream: piper yields one block per sentence, so the room
+            # hears the opening words while the rest is still synthesizing.
+            async for pcm in synthesize_48k(text):
+                buffer.extend(pcm)
+                await _flush()
+            buffer.extend(pad)  # ~200ms lead-out
+            await _flush(final=True)
+            if published == 0:
+                raise RuntimeError("no audio frames to publish")
+            # Don't report the utterance finished until it has actually played,
+            # so queued utterances don't overlap and the echo guard is honest.
+            try:
+                await self._audio_source.wait_for_playout()
+            except Exception:  # noqa: BLE001
+                pass
+            logger.debug("utterance published room=%s frames=%s (%.1fs)",
+                         room_id, published, published * SAMPLES_PER_FRAME / SAMPLE_RATE)
         finally:
             # Release the echo guard ~1s after whatever actually happened.
             self._suppress_until = min(self._suppress_until, time.time() + 1.0)

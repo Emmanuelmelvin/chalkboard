@@ -39,6 +39,11 @@ lerna-debug.log*
 .vite/
 *.local
 
+# Downloaded model weights — fetched by the agent-service at first run and
+# baked into the Docker image at build time. Never commit (60MB+ each).
+agent-service/voices/
+*.onnx
+
 # Editor and operating-system files
 .vscode/*
 !.vscode/extensions.json

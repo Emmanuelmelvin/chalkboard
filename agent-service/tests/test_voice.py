@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 
 from voice import client as voice_client
+from voice import tts as tts_mod
 from voice.client import AgentVoiceClient
 
 
@@ -48,9 +49,10 @@ class FakeAudioFrame:
 class FakeAudioSource:
     instances: list = []
 
-    def __init__(self, sample_rate, num_channels, loop=None):
+    def __init__(self, sample_rate, num_channels, queue_size_ms=1000, loop=None):
         self.sample_rate = sample_rate
         self.num_channels = num_channels
+        self.queue_size_ms = queue_size_ms
         self.frames: list[bytes] = []
         FakeAudioSource.instances.append(self)
 
@@ -168,7 +170,20 @@ def fake_backend_ok(room_url="wss://livekit.test", token="tok-123", invited=None
 
 
 def install_fake_tts(monkeypatch, mp3=b"mp3-bytes", fail_times=0, pcm=None):
-    """Patch edge_tts + the decoder. Returns the attempt counter list."""
+    """Patch edge_tts + the decoder and force the edge backend.
+
+    Returns the attempt counter list.
+    """
+    force_backends(monkeypatch, ["edge"])
+    return install_fake_edge(monkeypatch, mp3=mp3, fail_times=fail_times, pcm=pcm)
+
+
+def force_backends(monkeypatch, order):
+    """Pin the TTS backend chain so a test never depends on the real piper model."""
+    monkeypatch.setattr(tts_mod, "backend_order", lambda: list(order))
+
+
+def install_fake_edge(monkeypatch, mp3=b"mp3-bytes", fail_times=0, pcm=None):
     attempts: list[int] = []
 
     class FakeCommunicate:
@@ -187,9 +202,52 @@ def install_fake_tts(monkeypatch, mp3=b"mp3-bytes", fail_times=0, pcm=None):
     if pcm is None:
         pcm = (np.zeros(4800, dtype=np.int16) + 100).tobytes()
     monkeypatch.setattr(voice_client, "_decode_to_pcm48k", lambda _mp3: pcm)
+    monkeypatch.setattr(voice_client, "decode_mp3_to_pcm48k", lambda _mp3: pcm)
     # Keep retry backoff out of the test runtime.
-    monkeypatch.setattr(voice_client, "TTS_RETRY_BASE_DELAY_S", 0.0)
+    monkeypatch.setattr(tts_mod, "EDGE_RETRY_BASE_DELAY_S", 0.0)
     return attempts
+
+
+def install_fake_piper(monkeypatch, chunk_samples=(2205, 2205), rate=22050, fail=None):
+    """Fake PiperVoice yielding sentence-sized chunks at its native rate."""
+    calls: list[str] = []
+
+    class FakeChunk:
+        def __init__(self, n):
+            self.sample_rate = rate
+            self.sample_width = 2
+            self.sample_channels = 1
+            self.audio_int16_bytes = (np.zeros(n, dtype=np.int16) + 1200).tobytes()
+
+    class FakeVoice:
+        def synthesize(self, text, *a, **k):
+            calls.append(text)
+            for n in chunk_samples:
+                yield FakeChunk(n)
+
+    def _get():
+        if fail:
+            raise RuntimeError(fail)
+        return FakeVoice()
+
+    monkeypatch.setattr(tts_mod, "get_piper_voice", _get)
+    return calls
+
+
+def wait_for_publish(client, timeout=15.0):
+    """Block until the speak pump has drained.
+
+    speak() deliberately resolves on the FIRST published frame, so a test that
+    inspects the published frame list right after it returns races the tail of
+    the utterance.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not client._pumping and client._queue.empty():
+            return True
+        time.sleep(0.02)
+    raise AssertionError("publish did not finish in time")
+
 
 
 # ---- tests ----
@@ -378,9 +436,9 @@ def test_suppress_window_released_when_tts_fails(monkeypatch):
     c = AgentVoiceClient()
     assert c.join("r") is True
     c.set_invited(True, "r")
-    # Every TTS attempt fails.
-    install_fake_tts(monkeypatch, fail_times=voice_client.TTS_ATTEMPTS)
-    monkeypatch.setattr(voice_client, "TTS_TIMEOUT_S", 0.5)
+    # Every TTS attempt fails, on both backends.
+    monkeypatch.setattr(tts_mod, "EDGE_TIMEOUT_S", 0.5)
+    install_fake_tts(monkeypatch, fail_times=tts_mod.EDGE_ATTEMPTS)
 
     try:
         asyncio.run(c._publish_async("hello", "r"))
@@ -418,8 +476,8 @@ def test_speak_reports_publish_failure(monkeypatch):
     c = AgentVoiceClient()
     assert c.join("r") is True
     c.set_invited(True, "r")
-    install_fake_tts(monkeypatch, fail_times=voice_client.TTS_ATTEMPTS)
-    monkeypatch.setattr(voice_client, "TTS_TIMEOUT_S", 0.5)
+    monkeypatch.setattr(tts_mod, "EDGE_TIMEOUT_S", 0.5)
+    install_fake_tts(monkeypatch, fail_times=tts_mod.EDGE_ATTEMPTS)
 
     result = c.speak("hello", "r")
     assert result["delivered"] is False
@@ -440,7 +498,6 @@ def test_speak_reports_success_after_frames_published(monkeypatch):
 
     result = c.speak("hello there", "r")
     assert result["delivered"] is True
-    assert result["durationMs"] > 0
     assert len(FakeAudioSource.instances[0].frames) > 0
     c.leave()
 
@@ -654,3 +711,169 @@ def test_leave_disconnects_and_clears(monkeypatch):
     assert c._room_id is None
     assert c.can_speak is False
     assert room.disconnect_called == 1
+
+
+# ---- TTS backends: local piper primary, edge-tts fallback ----
+
+def test_piper_is_the_default_backend():
+    """Voice must not depend on a third-party endpoint by default."""
+    assert tts_mod.backend_order()[0] == "piper"
+    assert tts_mod.backend_order() == ["piper", "edge"]
+
+
+def test_backend_order_puts_the_other_backend_second(monkeypatch):
+    import config as cfg
+    monkeypatch.setattr(cfg, "TTS_BACKEND", "edge")
+    assert tts_mod.backend_order() == ["edge", "piper"]
+    monkeypatch.setattr(cfg, "TTS_BACKEND", "nonsense")
+    assert tts_mod.backend_order() == ["piper", "edge"]
+
+
+def test_resampler_is_sample_exact_across_chunks():
+    """22050 -> 48000 must not drift; one resampler per utterance, not per chunk."""
+    r = tts_mod.Resampler48k(22050)
+    chunk = (np.zeros(22050, dtype=np.int16) + 500).tobytes()  # 1s
+    total = sum(len(r.feed(chunk)) for _ in range(3))
+    total += len(r.flush())
+    assert total // 2 == 3 * 48000
+
+
+def test_resampler_passthrough_at_target_rate():
+    r = tts_mod.Resampler48k(48000)
+    pcm = b"\x01\x02" * 100
+    assert r.feed(pcm) == pcm
+    assert r.flush() == b""
+
+
+def test_piper_path_publishes_resampled_frames(monkeypatch):
+    """Local piper output must reach the room as aligned 48kHz frames."""
+    FakeAudioSource.instances.clear()
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok())
+    force_backends(monkeypatch, ["piper"])
+    # two sentence-sized chunks of 0.1s each at piper's native 22.05kHz
+    install_fake_piper(monkeypatch, chunk_samples=(2205, 2205))
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    c.set_invited(True, "r")
+    assert c.speak("Two sentences here. And the second one.", "r")["delivered"] is True
+    wait_for_publish(c)
+
+    src = FakeAudioSource.instances[0]
+    assert src.queue_size_ms == voice_client.AUDIO_QUEUE_MS
+    assert all(len(f) == 960 for f in src.frames)
+    # 0.2s of speech + 2x0.2s padding = ~0.6s = ~60 frames.
+    assert 58 <= len(src.frames) <= 62, len(src.frames)
+    assert any(set(f) != {0} for f in src.frames)
+    c.leave()
+
+
+def test_piper_streams_chunk_by_chunk(monkeypatch):
+    """Frames must be published per chunk, not only after full synthesis."""
+    force_backends(monkeypatch, ["piper"])
+    install_fake_piper(monkeypatch, chunk_samples=(2205, 2205, 2205))
+
+    seen: list[int] = []
+
+    async def _collect():
+        async for pcm in tts_mod.synthesize_48k("a. b. c."):
+            seen.append(len(pcm))
+        return len(seen)
+
+    # 3 chunks, plus whatever the resampler holds back until flush.
+    assert asyncio.run(_collect()) >= 3
+    # each 0.1s chunk at 22.05k becomes ~0.1s at 48k (~9600 bytes)
+    assert all(9000 <= n <= 10000 for n in seen[:3]), seen
+    assert sum(seen) // 2 == 3 * 4800, sum(seen)  # sample-exact overall
+
+
+
+def test_falls_back_to_edge_when_piper_unavailable(monkeypatch):
+    """A missing/broken local model must not silence the agent."""
+    force_backends(monkeypatch, ["piper", "edge"])
+    install_fake_piper(monkeypatch, fail="piper voice missing")
+    install_fake_edge(monkeypatch)
+
+    async def _collect():
+        return [pcm async for pcm in tts_mod.synthesize_48k("hello")]
+
+    blocks = asyncio.run(_collect())
+    assert len(blocks) == 1 and len(blocks[0]) == 9600
+
+
+def test_falls_back_to_piper_when_edge_unavailable(monkeypatch):
+    """The point of the local backend: network TTS dying is survivable."""
+    force_backends(monkeypatch, ["edge", "piper"])
+    monkeypatch.setattr(tts_mod, "EDGE_TIMEOUT_S", 0.2)
+    attempts = install_fake_edge(monkeypatch, fail_times=99)
+    install_fake_piper(monkeypatch, chunk_samples=(2205,))
+
+    async def _collect():
+        return [pcm async for pcm in tts_mod.synthesize_48k("hello")]
+
+    blocks = asyncio.run(_collect())
+    assert len(attempts) == tts_mod.EDGE_ATTEMPTS  # exhausted retries first
+    assert blocks and sum(len(b) for b in blocks) > 0
+
+
+
+def test_raises_when_every_backend_fails(monkeypatch):
+    force_backends(monkeypatch, ["piper", "edge"])
+    monkeypatch.setattr(tts_mod, "EDGE_TIMEOUT_S", 0.2)
+    install_fake_piper(monkeypatch, fail="no model")
+    install_fake_edge(monkeypatch, fail_times=99)
+
+    async def _collect():
+        return [pcm async for pcm in tts_mod.synthesize_48k("hello")]
+
+    try:
+        asyncio.run(_collect())
+        raise AssertionError("expected total TTS failure")
+    except RuntimeError as exc:
+        assert "no model" in str(exc) and "edge" in str(exc)
+
+
+def test_no_fallback_once_audio_is_already_audible(monkeypatch):
+    """Switching voice mid-sentence is worse than failing; must re-raise."""
+    force_backends(monkeypatch, ["piper", "edge"])
+    install_fake_edge(monkeypatch)
+
+    class HalfBrokenVoice:
+        def synthesize(self, text, *a, **k):
+            yield types.SimpleNamespace(
+                sample_rate=22050,
+                audio_int16_bytes=(np.zeros(2205, dtype=np.int16) + 900).tobytes())
+            raise RuntimeError("died mid-utterance")
+
+    monkeypatch.setattr(tts_mod, "get_piper_voice", lambda: HalfBrokenVoice())
+
+    async def _collect():
+        return [pcm async for pcm in tts_mod.synthesize_48k("hello")]
+
+    try:
+        asyncio.run(_collect())
+        raise AssertionError("expected the mid-stream error to propagate")
+    except RuntimeError as exc:
+        assert "died mid-utterance" in str(exc)
+
+
+def test_piper_model_path_uses_config(monkeypatch):
+    import config as cfg
+    monkeypatch.setattr(cfg, "PIPER_VOICE_DIR", "/tmp/voices")
+    monkeypatch.setattr(cfg, "PIPER_VOICE", "en_US-test-medium")
+    assert tts_mod.piper_model_path().name == "en_US-test-medium.onnx"
+
+
+def test_missing_model_without_autodownload_is_a_clear_error(monkeypatch, tmp_path):
+    import config as cfg
+    monkeypatch.setattr(cfg, "PIPER_VOICE_DIR", str(tmp_path))
+    monkeypatch.setattr(cfg, "PIPER_AUTO_DOWNLOAD", False)
+    monkeypatch.setattr(tts_mod, "_piper_voice", None)
+    try:
+        tts_mod.get_piper_voice()
+        raise AssertionError("expected a missing-model error")
+    except RuntimeError as exc:
+        assert "piper voice missing" in str(exc)
+        assert "download_voices" in str(exc)  # actionable

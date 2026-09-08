@@ -36,6 +36,13 @@ def _list(name: str, default: str) -> list[str]:
     return [m.strip() for m in raw.split(",") if m.strip()]
 
 
+def _bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 PORT: int = _int("PORT", 8080)
 NODE_ENV: str = _str("NODE_ENV", "development")
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
@@ -70,6 +77,18 @@ if STT_BACKEND not in ("auto", "gemini", "local", "aws"):
 STT_MODEL: str = _str("STT_MODEL", "base")
 STT_LANGUAGE: str = os.environ.get("STT_LANGUAGE", "en").strip() or "en"
 TTS_VOICE: str = _str("TTS_VOICE", "en-US-AriaNeural")
+# Text-to-speech backend for the LiveKit publish path:
+#   piper (default) local ONNX neural TTS — offline, no vendor endpoint
+#   edge            Microsoft Edge read-aloud via edge-tts (network, no SLA)
+# The other backend is used automatically if the primary produces no audio.
+TTS_BACKEND: str = os.environ.get("TTS_BACKEND", "piper").strip().lower()
+if TTS_BACKEND not in ("piper", "edge"):
+    TTS_BACKEND = "piper"
+PIPER_VOICE: str = _str("PIPER_VOICE", "en_US-amy-medium")
+PIPER_VOICE_DIR: str = _str("PIPER_VOICE_DIR", str(Path(__file__).resolve().parent / "voices"))
+# Convenience for local dev only. Production images bake the model in at build
+# time, so the local backend never needs the network at request time.
+PIPER_AUTO_DOWNLOAD: bool = _bool("PIPER_AUTO_DOWNLOAD", True)
 LOG_LEVEL: str = _str("LOG_LEVEL", "info")
 
 

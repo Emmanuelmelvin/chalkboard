@@ -21,11 +21,15 @@ python-socketio==5.16.4
 websocket-client==1.9.2
 google-adk==2.8.0
 google-genai==2.22.0
+# TTS. piper-tts is the default backend: local ONNX neural synthesis, ~5.8x
+# realtime on CPU, no vendor endpoint. edge-tts is kept as the fallback (higher
+# fidelity, but an undocumented Microsoft endpoint with no SLA).
+piper-tts==1.8.0
 edge-tts==7.2.8
-# In-process mp3 -> PCM decode for the TTS publish path. PyAV bundles its own
-# ffmpeg libraries, so voice works without a system ffmpeg binary on PATH
-# (dev machines usually have none; voice/client.py falls back to the ffmpeg
-# subprocess when PyAV cannot handle a stream).
+# In-process mp3 -> PCM decode and 22.05k -> 48k resample for the TTS publish
+# path. PyAV bundles its own ffmpeg libraries, so voice works without a system
+# ffmpeg binary on PATH (dev machines usually have none; voice/client.py falls
+# back to the ffmpeg subprocess when PyAV cannot handle a stream).
 av==18.1.0
 livekit==1.1.17
 numpy==2.5.2

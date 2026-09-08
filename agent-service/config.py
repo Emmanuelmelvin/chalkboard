@@ -59,11 +59,28 @@ BEDROCK_MODELS: list[str] = _list(
     "BEDROCK_MODELS", "bedrock/us.amazon.nova-lite-v1:0"
 )
 AWS_REGION: str = _str("AWS_REGION", "us-east-1")
-STT_BACKEND: str = os.environ.get("STT_BACKEND", "local").strip().lower()  # local|aws
+# Speech-to-text backend, independent of LLM_PROVIDER:
+#   auto   -> gemini audio when LLM_PROVIDER=gemini, else local whisper
+#   gemini -> Gemini audio understanding (needs GEMINI_API_KEY)
+#   local  -> faster-whisper on CPU (needs requirements/optional/whisper.txt)
+#   aws    -> Amazon Transcribe streaming (needs optional/transcribe.txt + IAM)
+STT_BACKEND: str = os.environ.get("STT_BACKEND", "auto").strip().lower()
+if STT_BACKEND not in ("auto", "gemini", "local", "aws"):
+    STT_BACKEND = "auto"
 STT_MODEL: str = _str("STT_MODEL", "base")
 STT_LANGUAGE: str = os.environ.get("STT_LANGUAGE", "en").strip() or "en"
 TTS_VOICE: str = _str("TTS_VOICE", "en-US-AriaNeural")
 LOG_LEVEL: str = _str("LOG_LEVEL", "info")
+
+
+def get_gemini_models() -> list[str]:
+    """Gemini candidates regardless of the active provider.
+
+    Voice STT needs these explicitly: get_model_waterfall() returns Bedrock IDs
+    in bedrock mode, and passing those to the Gemini audio client fails.
+    """
+    models = [GEMINI_MODEL, *FALLBACK_GEMINI_MODELS]
+    return list(dict.fromkeys(m for m in models if m))
 
 
 def get_model_waterfall() -> list[str]:
@@ -71,8 +88,16 @@ def get_model_waterfall() -> list[str]:
     if LLM_PROVIDER == "bedrock":
         seen = list(dict.fromkeys(BEDROCK_MODELS))
         return seen or ["bedrock/us.amazon.nova-lite-v1:0"]
-    models = [GEMINI_MODEL, *FALLBACK_GEMINI_MODELS]
-    return list(dict.fromkeys(m for m in models if m))
+    return get_gemini_models()
+
+
+def resolve_stt_backend() -> str:
+    """Concrete STT backend: gemini|local|aws. Resolves the `auto` default."""
+    if STT_BACKEND != "auto":
+        return STT_BACKEND
+    # `auto` preserves the historical coupling: Gemini reasoning transcribed via
+    # Gemini audio, Bedrock reasoning via local whisper.
+    return "gemini" if LLM_PROVIDER == "gemini" else "local"
 
 
 def validate_or_warn() -> None:

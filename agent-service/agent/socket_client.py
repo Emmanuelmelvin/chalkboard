@@ -16,6 +16,18 @@ import config
 from logger import logger
 
 MAX_COORD = 10_000_000
+# Cap on the in-memory stroke mirror.
+#
+# The mirror is what undo/delete/change_color/nudge send back as the FULL board
+# history, so a mirror smaller than the board would silently delete whatever it
+# cannot see — `historyComplete` exists to block exactly that.
+#
+# 500 is not raised to the backend's 10_000-stroke ceiling on purpose: the
+# binding limit on a history replacement is maxHistoryBytes (768 KiB), and a
+# 500-stroke board of 20-point strokes already serializes to ~226 KiB. A
+# 2_000-stroke mirror overruns the byte ceiling (~958 KiB) so those undos could
+# not be delivered anyway, while costing ~10 MiB per room (~52 MiB at 10_000).
+MIRROR_STROKE_LIMIT = 500
 # How long an idle dispatcher thread waits before retiring itself after the
 # socket has been closed (see _dispatch_loop).
 DISPATCH_IDLE_TIMEOUT_S = 30.0
@@ -60,7 +72,7 @@ def normalize_full_stroke(payload: Any, fallback_id: str | None = None) -> dict 
     color = str(payload.get("color") or "#ffffff")[:64]
     size = payload.get("size")
     size = min(1000, max(0.1, size)) if isinstance(size, (int, float)) else 4
-    return {
+    stroke = {
         "id": sid[:256],
         "userId": str(payload.get("userId") or "unknown")[:256],
         "tool": tool, "color": color, "size": size,
@@ -77,8 +89,15 @@ def normalize_full_stroke(payload: Any, fallback_id: str | None = None) -> dict 
         "noteBackgroundColor": str(payload.get("noteBackgroundColor") or "")[:64] or None,
         "noteTextColor": str(payload.get("noteTextColor") or "")[:64] or None,
         "objectType": str(payload.get("objectType") or "")[:128] or None,
+        "pluginId": str(payload.get("pluginId") or "")[:128] or None,
         "agentId": str(payload.get("agentId") or "")[:128] or None,
     }
+    # Absent optionals must be OMITTED, never null. The backend stroke schema
+    # uses zod .optional() (not .nullish()), so an explicit null fails
+    # validation. These normalized strokes are re-emitted verbatim inside the
+    # full-history payloads of undo-stroke/links-update, so a single null here
+    # makes undo, delete, change_color and nudge fail with invalid_payload.
+    return {k: v for k, v in stroke.items() if v is not None}
 
 
 class AgentRoomSocket:
@@ -89,7 +108,8 @@ class AgentRoomSocket:
         self.room_metadata: dict | None = None
         self.context: dict = {"roomId": room_id, "roomMetadata": None, "strokes": [],
                               "links": [], "chat": [], "members": {}, "persistedMembers": [],
-                              "strokeCount": 0, "lastActivityAt": int(time.time() * 1000)}
+                              "strokeCount": 0, "historyComplete": True,
+                              "lastActivityAt": int(time.time() * 1000)}
         self.voice = None
         self._handlers: dict[str, set[Callable]] = defaultdict(set)
         self.context_lock = threading.RLock()
@@ -305,28 +325,37 @@ class AgentRoomSocket:
         if any(st.get("id") == stroke.get("id") for st in self.context["strokes"]):
             return
         self.context["strokes"].append(stroke)
-        if len(self.context["strokes"]) > 500:
+        if len(self.context["strokes"]) > MIRROR_STROKE_LIMIT:
             self.context["strokes"].pop(0)
+            self.context["historyComplete"] = False
         self.context["strokeCount"] += 1
         self.context["lastActivityAt"] = int(time.time() * 1000)
+
+    def _replace_history(self, raw_strokes: list) -> None:
+        """Adopt a server-authoritative stroke list.
+
+        Records whether the mirror ended up holding the WHOLE board. Anything
+        beyond MIRROR_STROKE_LIMIT is invisible to the agent, and the board
+        tools reconstruct full history from this mirror — so the flag is what
+        stops an undo from deleting the strokes it never received.
+        """
+        valid = [st for st in (normalize_full_stroke(s) for s in raw_strokes) if st]
+        self.context["strokes"] = valid[-MIRROR_STROKE_LIMIT:]
+        self.context["strokeCount"] = len(valid)
+        self.context["historyComplete"] = len(valid) <= MIRROR_STROKE_LIMIT
+        self._live_counts.clear()
 
     @_with_context_lock
     def _on_room_history(self, payload) -> None:
         strokes = payload if isinstance(payload, list) else (payload or {}).get("strokes")
         if isinstance(strokes, list):
-            valid = [st for st in (normalize_full_stroke(s) for s in strokes) if st]
-            self.context["strokes"] = valid[-500:]
-            self.context["strokeCount"] = len(valid)
+            self._replace_history(strokes)
             self.context["lastActivityAt"] = int(time.time() * 1000)
-            self._live_counts.clear()
 
     @_with_context_lock
     def _on_room_state(self, payload) -> None:
         if isinstance((payload or {}).get("strokes"), list):
-            valid = [st for st in (normalize_full_stroke(s) for s in payload["strokes"]) if st]
-            self.context["strokes"] = valid[-500:]
-            self.context["strokeCount"] = len(valid)
-            self._live_counts.clear()
+            self._replace_history(payload["strokes"])
         if isinstance((payload or {}).get("links"), list):
             self.context["links"] = [lnk for lnk in payload["links"]
                                      if isinstance(lnk, dict) and isinstance(lnk.get("id"), str)][-1000:]
@@ -388,16 +417,14 @@ class AgentRoomSocket:
     @_with_context_lock
     def _on_undo(self, payload) -> None:
         if isinstance((payload or {}).get("strokes"), list):
-            valid = [st for st in (normalize_full_stroke(s) for s in payload["strokes"]) if st]
-            self.context["strokes"] = valid[-500:]
-            self.context["strokeCount"] = len(valid)
-            self._live_counts.clear()
+            self._replace_history(payload["strokes"])
         self._emit_local("undo-stroke", payload)
 
     @_with_context_lock
     def _on_clear(self, _payload=None) -> None:
         self.context["strokes"] = []
         self.context["strokeCount"] = 0
+        self.context["historyComplete"] = True
         self._live_counts.clear()
         self._emit_local("clear-board", {})
 

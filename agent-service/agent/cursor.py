@@ -252,7 +252,7 @@ class ParallelCursorStreamer:
         # Exact arrival — the hotspot lands precisely on the target.
         self._emit_position(tx, ty, final=True)
 
-    def trace_path_blocking(self, points: list, on_ink=None) -> list:
+    def trace_path_blocking(self, points: list, on_ink=None, progress: dict | None = None) -> list:
         """Pace along the ACTUAL ink polyline, blocking.
 
         The cursor follows the very coordinates the stroke uses — there is
@@ -262,7 +262,16 @@ class ParallelCursorStreamer:
 
         Returns the traced points as [{'x', 'y'}] — the full path normally,
         truncated to what was actually drawn if cancelled.
+
+        This is a TIME sampling of the path, not a faithful copy of it: it
+        lands on the source vertices only by coincidence and can return far
+        fewer points than it was given. Callers that persist geometry must use
+        `progress` to tell a completed trace from a cancelled one, and keep
+        the original points in the completed case. `progress["completed"]` is
+        set False on entry and True only if the trace ran to the end.
         """
+        if progress is not None:
+            progress["completed"] = False
         pts = [(float(p["x"]), float(p.get("y", 0) or 0)) for p in (points or [])
                if isinstance(p, dict) and isinstance(p.get("x"), (int, float))]
         if not pts:
@@ -281,6 +290,8 @@ class ParallelCursorStreamer:
         if on_ink is not None:
             on_ink(pts[0][0], pts[0][1])
         if len(pts) == 1 or total < 0.5:
+            if progress is not None:
+                progress["completed"] = True
             return traced
         steps = max(2, round(draw_duration_ms(total) / TICK_MS))
         for i in range(1, steps + 1):
@@ -295,6 +306,8 @@ class ParallelCursorStreamer:
                 on_ink(x, y)
             if i < steps:
                 time.sleep(TICK_MS / 1000.0)
+        if progress is not None:
+            progress["completed"] = True
         return traced
 
     def hold(self, duration_ms: int = 120) -> None:

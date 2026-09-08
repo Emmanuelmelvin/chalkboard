@@ -8,6 +8,7 @@ Covers:
 - viewer role cannot trigger pen-synced drawing
 """
 
+import math
 import sys
 import threading
 import time
@@ -27,6 +28,8 @@ from agent.cursor import (
     draw_duration_ms,
     glide_duration_ms,
 )
+from tools.executors import _clean_stroke
+from tools.shapes import generate_shape_strokes
 
 
 class FakeSio:
@@ -272,6 +275,67 @@ def test_viewer_draw_forbidden_no_pen_events():
     assert sock.context["strokes"] == []
 
 
+def test_persisted_shape_geometry_is_exact_not_resampled():
+    """The trace is a TIME sampling of the path — it hits source vertices only
+    by coincidence. Persisting it chamfered every corner: a star kept 2 of its
+    10 vertices, a cross 2 of 12. The pen-up must persist authored geometry."""
+    for shape in ("triangle", "square", "star", "cross", "pentagon", "heart", "circle"):
+        expected = generate_shape_strokes({"shape": shape, "cx": 0, "cy": 0, "radius": 80})
+        sock = PenSocket()
+        res = run_board_tool(_ctx(sock), create_board_tool_stats(),
+                             "chalkboard_insert_shape", {"shape": shape, "x": 0, "y": 0})
+        assert res.get("isError") is None, shape
+        persisted = [p["stroke"]["points"] for e, p in sock.sio.emits if e == "draw-stroke"]
+        assert len(persisted) == len(expected), shape
+        for got, source in zip(persisted, expected):
+            assert got == _clean_stroke(source)["points"], (
+                f"{shape}: persisted geometry was resampled — "
+                f"{len(source['points'])} authored points became {len(got)}")
+
+
+def test_persisted_shape_keeps_every_vertex():
+    """Explicit vertex-count guard: the corner-count IS the shape."""
+    for shape, vertices in (("triangle", 3), ("square", 4), ("star", 10), ("cross", 12),
+                            ("decagon", 10), ("circle", 48), ("heart", 48)):
+        sock = PenSocket()
+        run_board_tool(_ctx(sock), create_board_tool_stats(),
+                       "chalkboard_insert_shape", {"shape": shape, "x": 0, "y": 0})
+        points = [p["stroke"]["points"] for e, p in sock.sio.emits if e == "draw-stroke"][0]
+        assert len(points) == vertices, f"{shape} persisted {len(points)} of {vertices} points"
+
+
+def test_dense_chalk_stroke_is_persisted_at_full_resolution():
+    """Trace step count comes from duration, not input density, so detailed
+    strokes were being reduced to ~22% of their points regardless of length."""
+    for count, span in ((500, 100), (300, 400), (1000, 2000), (60, 50)):
+        points = [{"x": round(i * span / count, 2), "y": round(math.sin(i / 3) * 20, 2)}
+                  for i in range(count)]
+        sock = PenSocket()
+        res = run_board_tool(_ctx(sock), create_board_tool_stats(),
+                             "chalkboard_draw_chalk", {"points": points})
+        assert res.get("isError") is None
+        persisted = [p["stroke"]["points"] for e, p in sock.sio.emits if e == "draw-stroke"][0]
+        assert persisted == points, (
+            f"{count} authored points over {span}u were persisted as {len(persisted)}")
+
+
+def test_live_ink_still_streams_while_geometry_stays_exact():
+    """Persisting exact geometry must not silence the live preview: ink packets
+    still stream during the movement, on the path, before the pen-up."""
+    pts = [{"x": 0, "y": 0}, {"x": 300, "y": 0}, {"x": 300, "y": 300}]
+    sock = PenSocket()
+    run_board_tool(_ctx(sock), create_board_tool_stats(),
+                   "chalkboard_draw_chalk", {"points": pts})
+    events = sock.sio.emits
+    assert events[0][0] == "stroke-start"
+    draws = [e for e in events if e[0] == "stroke-draw"]
+    assert len(draws) >= 2
+    for _, payload in draws:
+        assert _on_path((payload["point"]["x"], payload["point"]["y"]), pts)
+    assert events[-1][0] == "draw-stroke"
+    assert events[-1][1]["stroke"]["points"] == pts
+
+
 def test_partial_trace_persists_partial_ink_without_stuck_state():
     """Simulates a cancelled action: trace returns only the ink drawn so far,
     and the pen-up persist still completes with a valid stroke."""
@@ -281,7 +345,9 @@ def test_partial_trace_persists_partial_ink_without_stuck_state():
         def glide_to_blocking(self, x, y, steps=None, interval_ms=None):
             pass
 
-        def trace_path_blocking(self, pts, on_ink=None):
+        def trace_path_blocking(self, pts, on_ink=None, progress=None):
+            if progress is not None:
+                progress["completed"] = False  # cancelled mid-trace
             return [{"x": 5, "y": 0}]  # cancellation hit after one tick
 
         def hold(self, duration_ms=120):

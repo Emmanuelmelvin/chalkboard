@@ -4,6 +4,7 @@ import { env } from '@/config/env';
 import { AGENT_DISPLAY_NAME, AGENT_USER_ID } from '@/config/agent';
 import { timingSafeStringEqual } from '@/utils/crypto';
 import { createRoomVoiceToken } from '@/services/rooms/rooms.service';
+import { isVoicePublisher } from '@/services/rooms/roomState.service';
 import { APIError } from '@/utils/error';
 import { logger } from '@/utils/logger';
 
@@ -36,6 +37,12 @@ agentInternalRouter.post('/voice-token', async (c) => {
     const status = result.error === 'voice_minutes_exhausted' ? 402 : result.error === 'room_closed' ? 410 : 403;
     throw new APIError(result.error, status);
   }
-  logger.info('Issued agent voice token', { roomId: body.roomId });
-  return c.json(result);
+  // Durable invite state. `voice:invited` is delivered only to sockets that are
+  // live at invite time, so without this the agent loses the ability to speak
+  // across a restart or a LiveKit reconnect until someone re-invites it. The
+  // LiveKit grant cannot be used to infer this: agent identities authorize as
+  // instructor, so canPublish is always true for the agent.
+  const invited = await isVoicePublisher(body.roomId, AGENT_USER_ID);
+  logger.info('Issued agent voice token', { roomId: body.roomId, invited });
+  return c.json({ ...result, invited });
 });

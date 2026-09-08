@@ -13,12 +13,19 @@ Key fixes vs. scaffold:
 - Remote audio is consumed via ``AudioStream`` -> ``UtteranceSegmenter`` ->
   ``transcribe_utterance_blocking`` -> ``on_transcript`` (was no feeding).
 - ``livekit`` is a real dependency in ``requirements.txt`` (was commented out).
+- mp3 decode runs in-process via PyAV, so no system ffmpeg is required.
+- ``speak`` reports the *real* publish outcome so callers can fall back to chat.
+- ``can_speak`` is seeded from the token response, so a restarted agent keeps a
+  standing voice invite instead of silently going mute forever.
+- a supervisor rejoins with backoff on disconnect and refreshes the 1h token.
 """
 
 from __future__ import annotations
 
 import asyncio
+import io
 import queue
+import random
 import subprocess
 import threading
 import time
@@ -31,23 +38,78 @@ CHANNELS = 1
 SAMPLES_PER_FRAME = 480  # 10ms @ 48kHz mono
 BYTES_PER_FRAME = SAMPLES_PER_FRAME * 2  # s16le
 MAX_SPEAK_CHARS = 1000
+# Edge-TTS is a network call to Microsoft's endpoint and does time out in the
+# wild; retry before giving up so the caller only falls back to chat when the
+# service is really unavailable.
+TTS_ATTEMPTS = 3
+TTS_TIMEOUT_S = 12.0
+TTS_RETRY_BASE_DELAY_S = 0.5
+# How long speak() waits to learn whether audio reached the room. It resolves
+# on the FIRST published frame, not on full playout: publishing is paced in
+# real time, so waiting for the tail would burn the caller's reasoning timeout
+# for no extra information. Budget = worst-case TTS retries + decode.
+SPEAK_RESULT_TIMEOUT_S = 50.0
+# Ceiling for one utterance on the voice loop, including real-time playout.
+PUBLISH_TIMEOUT_S = 180.0
+# Backend mints 1h LiveKit tokens; refresh well before that so a long lesson
+# never drops out of voice mid-sentence.
+TOKEN_REFRESH_S = 45 * 60
+RECONNECT_BASE_DELAY_S = 2.0
+RECONNECT_MAX_DELAY_S = 60.0
+
+
+def _decode_pyav(mp3: bytes) -> bytes:
+    """Decode mp3 -> 48kHz mono s16le in-process via PyAV.
+
+    Preferred over the ffmpeg subprocess: PyAV ships its own ffmpeg libraries,
+    so local dev works without a system ffmpeg on PATH (the Windows dev boxes
+    have none, which made every speak() fail with FileNotFoundError).
+    """
+    import av  # type: ignore
+
+    container = av.open(io.BytesIO(mp3), mode="r")
+    try:
+        resampler = av.AudioResampler(format="s16", layout="mono", rate=SAMPLE_RATE)
+        out: list[bytes] = []
+        for frame in container.decode(audio=0):
+            for resampled in resampler.resample(frame):
+                out.append(resampled.to_ndarray().tobytes())
+        # Flush whatever the resampler still buffers.
+        try:
+            for resampled in resampler.resample(None) or []:
+                out.append(resampled.to_ndarray().tobytes())
+        except Exception:
+            pass
+        return b"".join(out)
+    finally:
+        try:
+            container.close()
+        except Exception:
+            pass
+
+
+def _decode_ffmpeg(mp3: bytes) -> bytes:
+    proc = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
+         "-f", "s16le", "-ac", "1", "-ar", str(SAMPLE_RATE), "pipe:1"],
+        input=mp3, capture_output=True, timeout=60)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.decode()[:300])
+    return proc.stdout
 
 
 def _decode_to_pcm48k(mp3: bytes) -> bytes:
-    candidates = ["ffmpeg"]
-    last_error: Exception | None = None
-    for binary in candidates:
+    """PyAV first, ffmpeg subprocess as fallback. Raises when both fail."""
+    errors: list[str] = []
+    for name, decode in (("pyav", _decode_pyav), ("ffmpeg", _decode_ffmpeg)):
         try:
-            proc = subprocess.run(
-                [binary, "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
-                 "-f", "s16le", "-ac", "1", "-ar", "48000", "pipe:1"],
-                input=mp3, capture_output=True, timeout=60)
-            if proc.returncode == 0:
-                return proc.stdout
-            last_error = RuntimeError(proc.stderr.decode()[:300])
+            pcm = decode(mp3)
+            if pcm:
+                return pcm
+            errors.append(f"{name}: produced no audio")
         except Exception as exc:  # noqa: BLE001
-            last_error = exc
-    raise last_error or RuntimeError("ffmpeg unavailable")
+            errors.append(f"{name}: {exc}")
+    raise RuntimeError("mp3 decode failed (" + "; ".join(errors)[:400] + ")")
 
 
 def is_livekit_available() -> bool:
@@ -75,6 +137,13 @@ class AgentVoiceClient:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._loop_thread: threading.Thread | None = None
         self._lock = threading.Lock()
+        # Set once the owner explicitly invites/uninvites over the socket. Until
+        # then the token's `invited` flag (durable Redis publisher state) is the
+        # source of truth, so a restarted agent keeps a standing invite.
+        self._invite_pinned = False
+        self._token_fetched_at = 0.0
+        self._supervisor: threading.Thread | None = None
+        self._supervisor_stop = threading.Event()
 
     @property
     def state(self) -> str:
@@ -130,7 +199,7 @@ class AgentVoiceClient:
 
     # -- lifecycle --
 
-    def join(self, room_id: str) -> bool:
+    def join(self, room_id: str, supervise: bool = True) -> bool:
         if self.connected and self._room is not None and self._room_id == room_id:
             return True
         if self.connected and self._room is not None and self._room_id != room_id:
@@ -146,6 +215,11 @@ class AgentVoiceClient:
             if not url or not token:
                 logger.warning("voice token response incomplete room=%s", room_id)
                 return False
+            # Durable invite state from the backend's Redis publisher set. The
+            # `voice:invited` socket event only reaches sockets that were live
+            # at invite time, so without this seed a restarted (or late-joining)
+            # agent can never speak again until someone re-invites it.
+            invited = (data or {}).get("invited")
             try:
                 from livekit import rtc as livekit_rtc  # type: ignore
             except ImportError:
@@ -160,7 +234,14 @@ class AgentVoiceClient:
                 logger.warning("voice join failed room=%s: %s", room_id, exc)
                 return False
             if ok:
-                logger.info("voice joined LiveKit as listener room=%s", room_id)
+                self._token_fetched_at = time.time()
+                # An explicit socket invite/uninvite always wins over the seed:
+                # the owner may have acted while we were reconnecting.
+                if isinstance(invited, bool) and not self._invite_pinned:
+                    self.can_speak = invited
+                logger.info("voice joined LiveKit room=%s canSpeak=%s", room_id, self.can_speak)
+                if supervise:
+                    self._ensure_supervisor()
             return ok
         except Exception as exc:  # noqa: BLE001
             logger.warning("voice join failed room=%s: %s", room_id, exc)
@@ -211,6 +292,11 @@ class AgentVoiceClient:
 
         self._room = room
         self._room_id = room_id
+        # A fresh room means the previous local track is gone with it; drop the
+        # stale AudioSource so _ensure_published republishes on this room.
+        self._audio_source = None
+        self._audio_track = None
+        self._suppress_until = 0.0
         self.connected = True
 
         # handle tracks that were already published before we connected
@@ -233,13 +319,13 @@ class AgentVoiceClient:
 
     def leave(self) -> None:
         self._generation += 1
+        self._supervisor_stop.set()
+        self._supervisor = None
         self.can_speak = False
+        self._invite_pinned = False
         self._transcribing = False
-        while not self._queue.empty():
-            try:
-                self._queue.get_nowait()
-            except queue.Empty:
-                break
+        self._token_fetched_at = 0.0
+        self._drain_queue("voice_left")
         # capture fields for async disconnect
         room = self._room
         loop = self._loop
@@ -262,13 +348,104 @@ class AgentVoiceClient:
         # same loop and force a thread churn on every room switch.
         logger.info("voice left LiveKit")
 
+    def _drain_queue(self, reason: str) -> None:
+        """Fail every queued utterance so no speak() caller waits forever."""
+        while True:
+            try:
+                item = self._queue.get_nowait()
+            except queue.Empty:
+                return
+            self._settle(item, {"delivered": False, "reason": reason})
+
     def set_invited(self, invited: bool, room_id: str) -> None:
         self.can_speak = invited
+        # An explicit owner decision outranks the token seed from here on.
+        self._invite_pinned = True
         logger.info("voice invite state changed room=%s canSpeak=%s", room_id, invited)
+
+    # -- reconnect supervision --
+
+    def _ensure_supervisor(self) -> None:
+        t = self._supervisor
+        if t is not None and t.is_alive():
+            return
+        with self._lock:
+            t = self._supervisor
+            if t is not None and t.is_alive():
+                return
+            self._supervisor_stop = threading.Event()
+            self._supervisor = threading.Thread(
+                target=self._supervise, daemon=True, name="voice-supervisor")
+            self._supervisor.start()
+
+    def _supervise(self) -> None:
+        """Rejoin on disconnect and refresh the token before it expires.
+
+        The backend mints 1h LiveKit tokens and ``_on_disconnected`` only flips
+        a flag — without this, any transient LiveKit blip or a lesson longer
+        than the TTL loses voice permanently while the board keeps working.
+        """
+        stop = self._supervisor_stop
+        attempt = 0
+        while not stop.wait(RECONNECT_BASE_DELAY_S):
+            room_id = self._room_id
+            if room_id is None:
+                return
+            try:
+                if not self.connected:
+                    attempt += 1
+                    delay = min(RECONNECT_MAX_DELAY_S,
+                                RECONNECT_BASE_DELAY_S * (2 ** min(attempt - 1, 5)))
+                    delay += random.uniform(0, delay * 0.25)  # jitter
+                    logger.info("voice reconnecting room=%s attempt=%s in %.1fs",
+                                room_id, attempt, delay)
+                    if stop.wait(delay):
+                        return
+                    if self._room_id != room_id or stop.is_set():
+                        return
+                    self._reset_room()
+                    if self.join(room_id, supervise=False):
+                        attempt = 0
+                    continue
+                attempt = 0
+                age = time.time() - (self._token_fetched_at or 0.0)
+                if self._token_fetched_at and age >= TOKEN_REFRESH_S:
+                    logger.info("voice token nearing expiry room=%s age=%.0fs — reconnecting",
+                                room_id, age)
+                    self._reset_room()
+                    self.join(room_id, supervise=False)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("voice supervisor iteration failed room=%s: %s", room_id, exc)
+
+    def _reset_room(self) -> None:
+        """Drop the current room without clearing invite state or the supervisor."""
+        room = self._room
+        loop = self._loop
+        self._generation += 1
+        self._room = None
+        self._audio_source = None
+        self._audio_track = None
+        self.connected = False
+        self._suppress_until = 0.0
+        if room is not None and loop is not None and not loop.is_closed():
+            try:
+                fut = asyncio.run_coroutine_threadsafe(room.disconnect(), loop)
+                fut.result(timeout=5)
+            except Exception:
+                pass
 
     # -- speaking (TTS -> publish) --
 
     def speak(self, text: str, room_id: str) -> dict:
+        """Synthesize and publish ``text``, returning the *real* outcome.
+
+        Blocks until the first frame of audio has reached the room (or the
+        attempt failed) — not until playout finishes, which would only burn the
+        caller's reasoning budget. Callers depend on the accuracy here:
+        ``session._deliver_final_response`` skips the chat fallback only when
+        ``delivered`` is true, so the old report-on-enqueue behaviour silently
+        dropped answers whenever TTS or publishing failed.
+        """
         clean = (text or "").strip()[:MAX_SPEAK_CHARS]
         if not clean:
             return {"delivered": False, "reason": "empty_text"}
@@ -277,8 +454,9 @@ class AgentVoiceClient:
                 return {"delivered": False, "reason": "voice_not_connected"}
         if not self.can_speak:
             return {"delivered": False, "reason": "not_invited_to_voice"}
+        item = {"text": clean, "done": threading.Event(), "result": None}
         try:
-            self._queue.put_nowait(clean)
+            self._queue.put_nowait(item)
         except queue.Full:
             return {"delivered": False, "reason": "speak_queue_full"}
         with self._lock:
@@ -287,23 +465,45 @@ class AgentVoiceClient:
                 self._pumping = True
         if should_start:
             threading.Thread(target=self._pump, args=(room_id,), daemon=True).start()
-        return {"delivered": True}
+        if not item["done"].wait(timeout=SPEAK_RESULT_TIMEOUT_S):
+            return {"delivered": False, "reason": "speak_timeout"}
+        return item["result"] or {"delivered": False, "reason": "speak_unknown"}
+
+    @staticmethod
+    def _settle(item, result: dict) -> None:
+        """First writer wins, so the real outcome survives the defensive
+        fallbacks in _pump's finally block."""
+        if not isinstance(item, dict):
+            return
+        done = item.get("done")
+        if not isinstance(done, threading.Event) or done.is_set():
+            return
+        item["result"] = result
+        done.set()
 
     def _pump(self, room_id: str) -> None:
         try:
             while True:
                 try:
-                    text = self._queue.get_nowait()
+                    item = self._queue.get_nowait()
                 except queue.Empty:
                     return
+                text = item["text"] if isinstance(item, dict) else item
                 try:
                     loop = self._loop
                     if loop is None or loop.is_closed():
                         loop = self._ensure_loop()
-                    fut = asyncio.run_coroutine_threadsafe(self._publish_async(text, room_id), loop)
-                    fut.result(timeout=60)
+                    fut = asyncio.run_coroutine_threadsafe(
+                        self._publish_async(text, room_id, item), loop)
+                    fut.result(timeout=PUBLISH_TIMEOUT_S)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("speak failed room=%s: %s", room_id, exc)
+                    self._settle(item, {"delivered": False, "reason": "publish_failed",
+                                        "error": str(exc)[:200]})
+                finally:
+                    # Defensive: a publish path that neither raised nor settled
+                    # must not leave speak() blocked until its timeout.
+                    self._settle(item, {"delivered": False, "reason": "publish_incomplete"})
         finally:
             with self._lock:
                 self._pumping = False
@@ -338,16 +538,14 @@ class AgentVoiceClient:
         self._audio_track = track
         logger.info("voice audio track published sid=%s", getattr(pub, "sid", "unknown"))
 
-    async def _publish_async(self, text: str, room_id: str) -> None:
-        await self._ensure_published()
-        # suppress echo while we speak + 1s after
-        self._suppress_until = time.time() + 60
+    async def _synthesize_mp3(self, text: str) -> bytes:
+        """Edge-TTS with bounded retries. Raises when every attempt fails."""
         try:
             import edge_tts  # type: ignore
         except ImportError as exc:
             raise RuntimeError("edge-tts is not installed") from exc
 
-        async def _synthesize() -> bytes:
+        async def _once() -> bytes:
             communicate = edge_tts.Communicate(text, config.TTS_VOICE)
             chunks: list[bytes] = []
             async for part in communicate.stream():
@@ -355,40 +553,74 @@ class AgentVoiceClient:
                     chunks.append(part["data"])
             return b"".join(chunks)
 
-        mp3 = await _synthesize()
-        if not mp3:
-            raise RuntimeError("TTS returned no audio")
-        # ffmpeg is a blocking subprocess — keep it off the voice loop so RX
-        # streams and concurrent publishes never stall behind a synthesis.
-        pcm = await asyncio.get_running_loop().run_in_executor(None, _decode_to_pcm48k, mp3)
-        # pad ~200ms silence on both ends so nothing clips
-        silence = b"\x00\x00" * SAMPLES_PER_FRAME * 20
-        padded = silence + pcm + silence
-        # ensure byte alignment
-        remainder = len(padded) % BYTES_PER_FRAME
-        if remainder:
-            padded += b"\x00\x00" * ((BYTES_PER_FRAME - remainder) // 2)
-        frames = len(padded) // BYTES_PER_FRAME
-        if frames == 0:
-            raise RuntimeError("no audio frames to publish")
-        from livekit import rtc  # type: ignore
-        assert self._audio_source is not None
-        for i in range(frames):
-            if not self.can_speak:
-                raise RuntimeError("uninvited mid-utterance, cutting speak")
-            if not self.connected or self._room is None:
-                raise RuntimeError("voice disconnected mid-utterance")
-            slice_bytes = padded[i * BYTES_PER_FRAME:(i + 1) * BYTES_PER_FRAME]
-            frame = rtc.AudioFrame(
-                data=slice_bytes,
-                sample_rate=SAMPLE_RATE,
-                num_channels=CHANNELS,
-                samples_per_channel=SAMPLES_PER_FRAME,
-            )
-            await self._audio_source.capture_frame(frame)
-            await asyncio.sleep(0.01)  # pace in real time (10ms)
-        logger.debug("utterance published room=%s", room_id)
-        self._suppress_until = time.time() + 1.0
+        last_error: Exception | None = None
+        for attempt in range(1, TTS_ATTEMPTS + 1):
+            try:
+                mp3 = await asyncio.wait_for(_once(), timeout=TTS_TIMEOUT_S)
+                if mp3:
+                    return mp3
+                last_error = RuntimeError("TTS returned no audio")
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+            if attempt < TTS_ATTEMPTS:
+                delay = TTS_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
+                logger.warning("TTS attempt %s/%s failed (%s) — retrying in %.1fs",
+                               attempt, TTS_ATTEMPTS, str(last_error)[:160], delay)
+                await asyncio.sleep(delay)
+        raise RuntimeError(f"TTS failed after {TTS_ATTEMPTS} attempts: {str(last_error)[:200]}")
+
+    async def _publish_async(self, text: str, room_id: str, item=None) -> None:  # noqa: ANN001
+        await self._ensure_published()
+        # Echo suppression must never outlive this call: a flat 60s window that
+        # only got reset on the success path left the agent deaf for a full
+        # minute after any TTS/publish failure. Bound it by the real audio
+        # duration and always release it in `finally`.
+        self._suppress_until = time.time() + TTS_TIMEOUT_S * TTS_ATTEMPTS
+        try:
+            mp3 = await self._synthesize_mp3(text)
+            # Decoding is blocking (PyAV/ffmpeg) — keep it off the voice loop so
+            # RX streams and concurrent publishes never stall behind a synthesis.
+            pcm = await asyncio.get_running_loop().run_in_executor(None, _decode_to_pcm48k, mp3)
+            # pad ~200ms silence on both ends so nothing clips
+            silence = b"\x00\x00" * SAMPLES_PER_FRAME * 20
+            padded = silence + pcm + silence
+            # ensure byte alignment
+            remainder = len(padded) % BYTES_PER_FRAME
+            if remainder:
+                padded += b"\x00\x00" * ((BYTES_PER_FRAME - remainder) // 2)
+            frames = len(padded) // BYTES_PER_FRAME
+            if frames == 0:
+                raise RuntimeError("no audio frames to publish")
+            duration_s = frames * (SAMPLES_PER_FRAME / SAMPLE_RATE)
+            # Now that the real length is known, size the suppression window to
+            # the utterance instead of a worst-case guess.
+            self._suppress_until = time.time() + duration_s + 1.0
+            from livekit import rtc  # type: ignore
+            assert self._audio_source is not None
+            for i in range(frames):
+                if not self.can_speak:
+                    raise RuntimeError("uninvited mid-utterance, cutting speak")
+                if not self.connected or self._room is None:
+                    raise RuntimeError("voice disconnected mid-utterance")
+                slice_bytes = padded[i * BYTES_PER_FRAME:(i + 1) * BYTES_PER_FRAME]
+                frame = rtc.AudioFrame(
+                    data=slice_bytes,
+                    sample_rate=SAMPLE_RATE,
+                    num_channels=CHANNELS,
+                    samples_per_channel=SAMPLES_PER_FRAME,
+                )
+                await self._audio_source.capture_frame(frame)
+                if i == 0:
+                    # Audio is reaching the room. Resolve speak() here rather
+                    # than after playout: the caller only needs to know whether
+                    # to fall back to chat, and blocking for the full utterance
+                    # would eat into the reasoning timeout.
+                    self._settle(item, {"delivered": True, "durationMs": round(duration_s * 1000)})
+                await asyncio.sleep(0.01)  # pace in real time (10ms)
+            logger.debug("utterance published room=%s frames=%s", room_id, frames)
+        finally:
+            # Release the echo guard ~1s after whatever actually happened.
+            self._suppress_until = min(self._suppress_until, time.time() + 1.0)
 
     # -- listening (remote audio -> VAD -> STT) --
 

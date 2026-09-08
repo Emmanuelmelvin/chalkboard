@@ -10,7 +10,7 @@ Types: str | float | bool | list | dict.
 
 TOOL_SPECS: list[tuple[str, str, list[tuple[str, str, bool]]]] = [
     ("chalkboard_get_state",
-     "Retrieves current board state: strokes, viewport, selection, links. Use to inspect before drawing.",
+     "Retrieves current board state: strokes, links, and members. Use to inspect before drawing. Viewport and selection are per-user browser state and are NOT available.",
      [("includeStrokeDetails", "bool", False)]),
     ("chalkboard_draw_chalk",
      "Draws ONE continuous chalk stroke. For multi-part diagrams, call once per component so cursor glides.",
@@ -44,9 +44,9 @@ TOOL_SPECS: list[tuple[str, str, list[tuple[str, str, bool]]]] = [
       ("dx", "float", False), ("dy", "float", False), ("color", "str", False),
       ("size", "float", False)]),
     ("chalkboard_manage_topic_links",
-     "Creates/lists/renames/deletes/focuses topic bookmark links.",
+     "Creates/lists/renames/deletes/focuses topic bookmark links. On create, pass strokeIds to bookmark specific strokes; omit it to bookmark the 8 most recent.",
      [("action", "str", True), ("tag", "str", False), ("linkId", "str", False),
-      ("newTag", "str", False)]),
+      ("newTag", "str", False), ("strokeIds", "list", False)]),
     ("chalkboard_send_chat",
      "Posts chat message to classroom.",
      [("message", "str", True)]),

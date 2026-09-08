@@ -12,10 +12,19 @@ import time
 import uuid
 from typing import Any
 
+from agent.socket_client import MIRROR_STROKE_LIMIT
 from logger import logger
 from tools.shapes import generate_shape_strokes
 
 Role = str
+
+# Must match frontend/src/plugins/builtin/notes/manifest.ts (`id`), which
+# NotesLayer.tsx filters on to render notes.
+NOTES_PLUGIN_ID = "chalkboard.notes"
+
+# Backend SOCKET_LIMITS.maxHistoryBytes — the whole undo-stroke payload is
+# measured against this, and an oversized one is rejected as invalid_payload.
+HISTORY_MAX_BYTES = 768 * 1024
 
 TOOL_MIN_ROLE: dict[str, str] = {
     "chalkboard_get_state": "viewer",
@@ -151,6 +160,70 @@ def _clean_stroke(stroke: dict) -> dict:
     return {k: v for k, v in cleaned.items() if v is not None}
 
 
+def history_is_complete(socket) -> bool:
+    """Is the in-memory mirror the WHOLE board?
+
+    ``undo-stroke`` replaces the entire server-side history with the array we
+    send. That array is rebuilt from the mirror, so if the mirror is missing
+    older strokes they are permanently deleted from the room. Default to True
+    only because a fresh mirror starts empty and complete; the socket sets it
+    False the moment it drops a stroke it received.
+    """
+    context = getattr(socket, "context", None) or {}
+    return context.get("historyComplete", True) is not False
+
+
+def _cannot_rewrite_history(action: str, reason: str) -> dict:
+    return _err_text(
+        f"Cannot {action}: {reason} Rewriting this board's history would permanently delete "
+        f"strokes, so I stopped. Ask a person to use the board's own undo or eraser instead."
+    )
+
+
+def sanitize_history(strokes: Any) -> list[dict]:
+    """Prepare a full-history array for undo-stroke.
+
+    ``undo-stroke`` replaces the entire board history, and every stroke in it
+    is validated against the same backend schema as a single draw. Strokes in
+    the in-memory mirror can come straight off the wire, so they must go
+    through the same null-stripping/clamping as freshly built ones — one
+    explicit null anywhere in the array rejects the whole payload with
+    ``invalid_payload`` and the undo/delete/recolor/nudge silently fails.
+    """
+    cleaned = []
+    for stroke in (strokes or []):
+        if not isinstance(stroke, dict):
+            continue
+        candidate = _clean_stroke(stroke)
+        if candidate.get("points"):
+            cleaned.append(candidate)
+    return cleaned
+
+
+def prepare_history_replacement(socket, strokes: Any, action: str) -> tuple[dict | None, dict | None]:
+    """Build a safe ``undo-stroke`` payload, or explain why it is not safe.
+
+    Returns ``(payload, error)`` with exactly one of the two set. Both refusals
+    are data-loss guards, not cosmetic validation:
+
+    * an incomplete mirror cannot describe the whole board, so sending it
+      deletes every stroke the agent never received;
+    * a payload over the backend's byte ceiling is rejected wholesale, and
+      emitting one just to watch it fail tells the model nothing useful.
+    """
+    if not history_is_complete(socket):
+        return None, _cannot_rewrite_history(
+            action, "this board has more strokes than I can track.")
+    payload = {"roomId": getattr(socket, "room_id", ""), "strokes": sanitize_history(strokes)}
+    size = len(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    if size > HISTORY_MAX_BYTES:
+        return None, _cannot_rewrite_history(
+            action,
+            f"the board's history is {size // 1024} KiB, over the "
+            f"{HISTORY_MAX_BYTES // 1024} KiB a single update may carry.")
+    return payload, None
+
+
 def _append_single_stroke(s, stroke: dict) -> dict:
     stroke = _clean_stroke(stroke)
     if not stroke.get("points"):
@@ -159,8 +232,12 @@ def _append_single_stroke(s, stroke: dict) -> dict:
     if not res.get("ok"):
         return {"ok": False, "error": str(res.get("error") or "draw-stroke rejected")}
     s.context["strokes"].append(stroke)
-    if len(s.context["strokes"]) > 500:
+    if len(s.context["strokes"]) > MIRROR_STROKE_LIMIT:
+        # Dropping a stroke makes the mirror an incomplete record of the board,
+        # so full-history rewrites must stop being offered (see
+        # history_is_complete) rather than delete what is no longer tracked.
         s.context["strokes"].pop(0)
+        s.context["historyComplete"] = False
     s.context["strokeCount"] = s.context.get("strokeCount", 0) + 1
     s.context["lastActivityAt"] = int(time.time() * 1000)
     return {"ok": True}
@@ -241,10 +318,22 @@ def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) 
             strokes = s.context.get("strokes", [])
             summary = [{"id": st.get("id"), "color": st.get("color"), "tool": st.get("tool"),
                         "text": st.get("text"), "pointCount": len(st.get("points") or [])} for st in strokes]
-            return _ok_text({"roomId": room_id, "totalStrokes": len(strokes),
-                             "strokes": strokes if include_details else summary,
-                             "links": s.context.get("links", []),
-                             "members": [{"socketId": sid, **u} for sid, u in s.context.get("members", {}).items()]})
+            board_total = s.context.get("strokeCount", len(strokes))
+            complete = history_is_complete(s)
+            payload = {"roomId": room_id, "totalStrokes": board_total,
+                       "inspectableStrokes": len(strokes),
+                       "strokes": strokes if include_details else summary,
+                       "links": s.context.get("links", []),
+                       "members": [{"socketId": sid, **u} for sid, u in s.context.get("members", {}).items()]}
+            if not complete:
+                # Tell the model up front, so a refused undo/delete is expected
+                # rather than looking like an unexplained tool failure.
+                payload["historyComplete"] = False
+                payload["note"] = (
+                    f"Only the {len(strokes)} most recent of {board_total} strokes are visible to me. "
+                    "Undo, delete, recolour and nudge are unavailable on this board because "
+                    "rewriting its history would delete the strokes I cannot see.")
+            return _ok_text(payload)
         if tool_name == "chalkboard_move_cursor":
             x, y = args.get("x"), args.get("y")
             if not _valid_coordinate(x) or not _valid_coordinate(y):
@@ -287,14 +376,23 @@ def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) 
             return _ok_text({"success": True, "shape": args.get("shape"),
                              "strokeCount": len(shape_strokes), "strokeIds": [st["id"] for st in shape_strokes]})
         if tool_name == "chalkboard_create_note":
+            content = args.get("content")
+            if not isinstance(content, str) or not content.strip():
+                return _err_text("content required (note HTML)")
             w, h = args.get("width") or 260, args.get("height") or 160
             x, y = args.get("x", 0), args.get("y", 0)
             stroke = {"id": _make_stroke_id(socket, "note"),
                       "userId": getattr(socket, "socket_id", "") or "agent:chalkboard-master",
                       "tool": "chalk", "color": args.get("textColor") or "#f8fafc", "size": 1,
-                      "noteHtml": args.get("content"), "noteWidth": w, "noteHeight": h,
+                      "noteHtml": content, "noteWidth": w, "noteHeight": h,
                       "noteBackgroundColor": args.get("backgroundColor") or "#1e293b",
                       "noteTextColor": args.get("textColor") or "#f8fafc", "objectType": "note",
+                      # NotesLayer renders ONLY strokes tagged with the notes
+                      # plugin id, and the canvas renderer skips anything with
+                      # noteHtml. Without this the note is persisted but drawn
+                      # nowhere — invisible while the tool reports success.
+                      "pluginId": NOTES_PLUGIN_ID,
+                      "pathType": "linear",
                       "points": [{"x": x, "y": y}, {"x": x + w, "y": y},
                                  {"x": x + w, "y": y + h}, {"x": x, "y": y + h}],
                       "agentId": "chalkboard-master"}
@@ -320,7 +418,10 @@ def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) 
                 if not s.context.get("strokes"):
                     return _ok_text({"success": False, "message": "Board has no strokes to undo."})
                 updated = s.context["strokes"][:-1]
-                res = s.emit_with_ack("undo-stroke", {"roomId": room_id, "strokes": updated})
+                payload, err = prepare_history_replacement(s, updated, "undo")
+                if err:
+                    return err
+                res = s.emit_with_ack("undo-stroke", payload)
                 if not res.get("ok"):
                     return _err_text(f"Undo failed: {res.get('error')}")
                 s.context["strokes"] = updated
@@ -383,7 +484,10 @@ def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) 
                 if not target_ids:
                     return _err_text("No strokeIds specified for deletion")
                 updated = [st for st in s.context.get("strokes", []) if st.get("id") not in target_ids]
-                res = s.emit_with_ack("undo-stroke", {"roomId": room_id, "strokes": updated})
+                payload, err = prepare_history_replacement(s, updated, "delete strokes")
+                if err:
+                    return err
+                res = s.emit_with_ack("undo-stroke", payload)
                 if not res.get("ok"):
                     return _err_text(f"Delete failed: {res.get('error')}")
                 s.context["strokes"] = updated
@@ -393,7 +497,10 @@ def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) 
                 color = args.get("color") or "#ffffff"
                 updated = [{**st, "color": color} if st.get("id") in target_ids else st
                            for st in s.context.get("strokes", [])]
-                res = s.emit_with_ack("undo-stroke", {"roomId": room_id, "strokes": updated})
+                payload, err = prepare_history_replacement(s, updated, "change stroke colour")
+                if err:
+                    return err
+                res = s.emit_with_ack("undo-stroke", payload)
                 if not res.get("ok"):
                     return _err_text(f"Change color failed: {res.get('error')}")
                 s.context["strokes"] = updated
@@ -403,7 +510,10 @@ def _execute_tool(socket, tool_name: str, args: dict | None, invoker_role: str) 
                 dx, dy = args.get("dx", 0) or 0, args.get("dy", 0) or 0
                 updated = [{**st, "points": [{"x": p["x"] + dx, "y": p["y"] + dy} for p in st.get("points", [])]}
                            if st.get("id") in target_ids else st for st in s.context.get("strokes", [])]
-                res = s.emit_with_ack("undo-stroke", {"roomId": room_id, "strokes": updated})
+                payload, err = prepare_history_replacement(s, updated, "nudge strokes")
+                if err:
+                    return err
+                res = s.emit_with_ack("undo-stroke", payload)
                 if not res.get("ok"):
                     return _err_text(f"Nudge failed: {res.get('error')}")
                 s.context["strokes"] = updated

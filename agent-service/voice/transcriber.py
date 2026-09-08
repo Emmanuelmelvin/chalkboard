@@ -1,9 +1,10 @@
 """Speech-to-text for voice utterances.
 
-Provider switch is internal (no agent-brain):
-  LLM_PROVIDER=gemini  -> in-process ADK transcriber agent (Gemini audio)
-  LLM_PROVIDER=bedrock -> local faster-whisper (STT_BACKEND=local, default)
-                          or Amazon Transcribe streaming (STT_BACKEND=aws)
+Backend is chosen by ``STT_BACKEND``, independent of ``LLM_PROVIDER``:
+  auto   -> gemini when LLM_PROVIDER=gemini, else local (historical default)
+  gemini -> Gemini audio understanding via google-genai (one generate_content)
+  local  -> faster-whisper on CPU (requirements/optional/whisper.txt)
+  aws    -> Amazon Transcribe streaming (requirements/optional/transcribe.txt)
 
 Mirrors src/voice/transcriber.ts + agent-brain/stt.py + stt_aws.py.
 """
@@ -132,9 +133,12 @@ def transcribe_utterance_blocking(pcm, sample_rate: int) -> str | None:
         pcm_bytes = arr.tobytes()
         if len(encode_wav(pcm_bytes, sample_rate)) > 2 * 1024 * 1024:
             return None
-        if config.LLM_PROVIDER == "bedrock":
-            if (config.STT_BACKEND or "local") == "aws":
-                return asyncio.run(_transcribe_aws(pcm_bytes))
+        # Backend choice is independent of LLM_PROVIDER: local whisper used to
+        # be unreachable in gemini mode, and STT_BACKEND was silently ignored.
+        backend = config.resolve_stt_backend()
+        if backend == "aws":
+            return asyncio.run(_transcribe_aws(pcm_bytes))
+        if backend == "local":
             return asyncio.run(_transcribe_local_async(pcm_bytes))
         return asyncio.run(_transcribe_gemini(arr, sample_rate))
     except Exception as exc:  # noqa: BLE001 — voice must never crash
@@ -142,50 +146,51 @@ def transcribe_utterance_blocking(pcm, sample_rate: int) -> str | None:
         return None
 
 
+_STT_PROMPT = ("Transcribe the attached classroom audio exactly. Reply with only the "
+               "transcription, no commentary. If there is no intelligible speech, "
+               "reply exactly NO_SPEECH.")
+_STT_TIMEOUT_S = 30.0
+
+
 async def _transcribe_gemini(arr, sample_rate: int) -> str | None:
-    from google.adk.agents import LlmAgent
-    from google.adk.runners import Runner
-    from google.adk.sessions import InMemorySessionService
+    """Transcribe via the Gemini audio API.
+
+    Deliberately does NOT go through google-adk: transcription is a single
+    stateless generate_content call, and the ADK Runner path was broken anyway
+    (raw-dict new_message where types.Content is required, plus a missing
+    session that raised SessionNotFoundError).
+    """
+    from google import genai
     from google.genai import types as genai_types
 
-    if not os.environ.get("GOOGLE_GENAI_API_KEY") and config.GEMINI_API_KEY:
-        os.environ["GOOGLE_GENAI_API_KEY"] = config.GEMINI_API_KEY
+    if not config.GEMINI_API_KEY and not os.environ.get("GEMINI_API_KEY") \
+            and not os.environ.get("GOOGLE_API_KEY"):
+        raise RuntimeError("GEMINI_API_KEY is required for STT_BACKEND=gemini")
+
     wav = encode_wav(arr.tobytes(), sample_rate)
     if len(wav) > 2 * 1024 * 1024:
         return None
-    candidates = config.get_model_waterfall()[:2]
+
+    client = genai.Client(api_key=config.GEMINI_API_KEY or None)
+    # Gemini models only — get_model_waterfall() yields Bedrock IDs when
+    # LLM_PROVIDER=bedrock, which this endpoint cannot serve.
+    candidates = config.get_gemini_models()[:2]
+    contents = genai_types.Content(parts=[
+        genai_types.Part(text=_STT_PROMPT),
+        genai_types.Part(inline_data=genai_types.Blob(mime_type="audio/wav", data=wav)),
+    ])
+    # No tools here; disabling AFC also drops a per-utterance SDK warning.
+    generate_config = genai_types.GenerateContentConfig(
+        automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
+    )
     last_error: Exception | None = None
-    sessions = InMemorySessionService()
     for model in candidates:
         try:
-            agent = LlmAgent(
-                name="voice_transcriber",
-                description="Transcribes classroom voice utterances exactly.",
-                model=model,
-                instruction="Transcribe the attached classroom audio exactly. Reply with only the "
-                            "transcription, no commentary. If there is no intelligible speech, reply exactly NO_SPEECH.",
-                tools=[],
-            )
-            runner = Runner(agent=agent, app_name="chalkboard", session_service=sessions)
-            stream = runner.run_async(
-                user_id="voice-transcriber", session_id="voice",
-                new_message={"parts": [{"inlineData": {
-                    "mimeType": "audio/wav", "data": base64.b64encode(wav).decode()}}]},
-            )
-            final_text = ""
-            last_text = ""
-            async for event in stream:
-                parts = getattr(getattr(event, "content", None), "parts", None) or []
-                text = "".join(getattr(p, "text", "") or "" for p in parts)
-                if text:
-                    last_text = text
-                try:
-                    is_final = event.is_final_response()
-                except Exception:
-                    is_final = False
-                if is_final and text:
-                    final_text = text
-            out = (final_text or last_text).strip()
+            response = await asyncio.wait_for(
+                client.aio.models.generate_content(
+                    model=model, contents=contents, config=generate_config),
+                timeout=_STT_TIMEOUT_S)
+            out = (getattr(response, "text", "") or "").strip()
             if not out or out == "NO_SPEECH":
                 return None
             return out

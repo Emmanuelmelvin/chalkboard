@@ -9,6 +9,7 @@ Covers the four scaffolding complaints:
 
 import asyncio
 import sys
+import time
 import types
 from pathlib import Path
 
@@ -156,11 +157,39 @@ def install_fake_rtc(monkeypatch, rtc):
     return mod
 
 
-def fake_backend_ok(room_url="wss://livekit.test", token="tok-123"):
+def fake_backend_ok(room_url="wss://livekit.test", token="tok-123", invited=None):
     def _post(path, payload, timeout_s=10):
         assert path == "/api/internal/agent/voice-token"
-        return 200, {"url": room_url, "token": token}
+        body = {"url": room_url, "token": token}
+        if invited is not None:
+            body["invited"] = invited
+        return 200, body
     return _post
+
+
+def install_fake_tts(monkeypatch, mp3=b"mp3-bytes", fail_times=0, pcm=None):
+    """Patch edge_tts + the decoder. Returns the attempt counter list."""
+    attempts: list[int] = []
+
+    class FakeCommunicate:
+        def __init__(self, *a, **k):
+            pass
+
+        async def stream(self):
+            attempts.append(1)
+            if len(attempts) <= fail_times:
+                raise RuntimeError("edge-tts unreachable")
+            yield {"type": "audio", "data": mp3}
+
+    edge_mod = types.ModuleType("edge_tts")
+    edge_mod.Communicate = FakeCommunicate
+    monkeypatch.setitem(sys.modules, "edge_tts", edge_mod)
+    if pcm is None:
+        pcm = (np.zeros(4800, dtype=np.int16) + 100).tobytes()
+    monkeypatch.setattr(voice_client, "_decode_to_pcm48k", lambda _mp3: pcm)
+    # Keep retry backoff out of the test runtime.
+    monkeypatch.setattr(voice_client, "TTS_RETRY_BASE_DELAY_S", 0.0)
+    return attempts
 
 
 # ---- tests ----
@@ -264,20 +293,7 @@ def test_publish_streams_pcm_frames(monkeypatch):
     c.set_invited(True, "r")
 
     # Fake Edge TTS -> tiny mp3; fake decode -> 0.1s of 48k PCM.
-    fake_mp3 = b"mp3-bytes"
-
-    class FakeCommunicate:
-        def __init__(self, *a, **k):
-            pass
-
-        async def stream(self):
-            yield {"type": "audio", "data": fake_mp3}
-
-    edge_mod = types.ModuleType("edge_tts")
-    edge_mod.Communicate = FakeCommunicate
-    monkeypatch.setitem(sys.modules, "edge_tts", edge_mod)
-    pcm = (np.zeros(4800, dtype=np.int16) + 100).tobytes()  # 4800 samples @48k = 100ms
-    monkeypatch.setattr(voice_client, "_decode_to_pcm48k", lambda mp3: pcm)
+    install_fake_tts(monkeypatch)
 
     asyncio.run(c._publish_async("hello there", "r"))
 
@@ -291,6 +307,274 @@ def test_publish_streams_pcm_frames(monkeypatch):
     # Room got a published microphone track.
     assert len(c._room.local_participant.published) == 1
     c.leave()
+
+
+# ---- decoder: PyAV first, ffmpeg fallback, no system ffmpeg needed ----
+
+def _make_mp3(seconds: float = 0.5, rate: int = 24000) -> bytes:
+    """Encode a real mp3 in-process so the decode test needs no network."""
+    import io as _io
+
+    import av  # type: ignore
+
+    t = np.arange(int(rate * seconds)) / rate
+    tone = (np.sin(2 * np.pi * 440 * t) * 8000).astype(np.int16)
+    buf = _io.BytesIO()
+    container = av.open(buf, mode="w", format="mp3")
+    stream = container.add_stream("libmp3lame", rate=rate)
+    frame = av.AudioFrame.from_ndarray(tone.reshape(1, -1), format="s16", layout="mono")
+    frame.sample_rate = rate
+    frame.pts = 0
+    for packet in stream.encode(frame):
+        container.mux(packet)
+    for packet in stream.encode(None):
+        container.mux(packet)
+    container.close()
+    return buf.getvalue()
+
+
+def test_decode_uses_pyav_without_system_ffmpeg(monkeypatch):
+    """The TTS decode path must not depend on an ffmpeg binary on PATH."""
+    mp3 = _make_mp3(seconds=0.5)
+
+    def _no_ffmpeg(_mp3):
+        raise FileNotFoundError("[WinError 2] The system cannot find the file specified")
+
+    monkeypatch.setattr(voice_client, "_decode_ffmpeg", _no_ffmpeg)
+    pcm = voice_client._decode_to_pcm48k(mp3)
+    # 0.5s of 48kHz mono s16 ~= 48000 bytes; mp3 padding makes it approximate.
+    assert len(pcm) > 40_000
+    assert len(pcm) % 2 == 0
+    assert set(pcm) != {0}
+
+
+def test_decode_falls_back_to_ffmpeg_when_pyav_fails(monkeypatch):
+    monkeypatch.setattr(voice_client, "_decode_pyav",
+                        lambda _mp3: (_ for _ in ()).throw(RuntimeError("pyav boom")))
+    monkeypatch.setattr(voice_client, "_decode_ffmpeg", lambda _mp3: b"\x01\x02")
+    assert voice_client._decode_to_pcm48k(b"x") == b"\x01\x02"
+
+
+def test_decode_raises_with_both_errors(monkeypatch):
+    monkeypatch.setattr(voice_client, "_decode_pyav",
+                        lambda _mp3: (_ for _ in ()).throw(RuntimeError("pyav boom")))
+    monkeypatch.setattr(voice_client, "_decode_ffmpeg",
+                        lambda _mp3: (_ for _ in ()).throw(RuntimeError("no ffmpeg")))
+    try:
+        voice_client._decode_to_pcm48k(b"x")
+        raise AssertionError("expected decode failure")
+    except RuntimeError as exc:
+        assert "pyav boom" in str(exc) and "no ffmpeg" in str(exc)
+
+
+# ---- suppression window must never outlive the utterance ----
+
+def test_suppress_window_released_when_tts_fails(monkeypatch):
+    """A failed speak must not leave the agent deaf (was a flat 60s window)."""
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok())
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    c.set_invited(True, "r")
+    # Every TTS attempt fails.
+    install_fake_tts(monkeypatch, fail_times=voice_client.TTS_ATTEMPTS)
+    monkeypatch.setattr(voice_client, "TTS_TIMEOUT_S", 0.5)
+
+    try:
+        asyncio.run(c._publish_async("hello", "r"))
+        raise AssertionError("expected TTS failure")
+    except RuntimeError:
+        pass
+    # THE regression: window must be ~1s, not the 60s worst-case guess.
+    assert c._suppress_until - time.time() <= 1.5
+    c.leave()
+
+
+def test_suppress_window_scales_with_audio_length(monkeypatch):
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok())
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    c.set_invited(True, "r")
+    install_fake_tts(monkeypatch)
+    asyncio.run(c._publish_async("hello", "r"))
+    # Success path also collapses to ~1s once publishing has finished.
+    assert c._suppress_until - time.time() <= 1.5
+    c.leave()
+
+
+# ---- speak() must report the real outcome ----
+
+def test_speak_reports_publish_failure(monkeypatch):
+    """delivered=False on failure, so session.py falls back to chat."""
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok())
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    c.set_invited(True, "r")
+    install_fake_tts(monkeypatch, fail_times=voice_client.TTS_ATTEMPTS)
+    monkeypatch.setattr(voice_client, "TTS_TIMEOUT_S", 0.5)
+
+    result = c.speak("hello", "r")
+    assert result["delivered"] is False
+    assert result["reason"] == "publish_failed"
+    c.leave()
+
+
+def test_speak_reports_success_after_frames_published(monkeypatch):
+    FakeAudioSource.instances.clear()
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok())
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    c.set_invited(True, "r")
+    install_fake_tts(monkeypatch)
+
+    result = c.speak("hello there", "r")
+    assert result["delivered"] is True
+    assert result["durationMs"] > 0
+    assert len(FakeAudioSource.instances[0].frames) > 0
+    c.leave()
+
+
+def test_tts_retries_then_succeeds(monkeypatch):
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok())
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    c.set_invited(True, "r")
+    attempts = install_fake_tts(monkeypatch, fail_times=1)
+
+    assert c.speak("hello", "r")["delivered"] is True
+    assert len(attempts) == 2  # first failed, second succeeded
+    c.leave()
+
+
+def test_leave_settles_queued_utterances(monkeypatch):
+    """leave() must not leave a speak() caller blocked on its timeout."""
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok())
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    c.set_invited(True, "r")
+    item = {"text": "queued", "done": __import__("threading").Event(), "result": None}
+    c._queue.put_nowait(item)
+    c.leave()
+    assert item["done"].is_set()
+    assert item["result"]["delivered"] is False
+
+
+# ---- durable invite state ----
+
+def test_join_seeds_can_speak_from_token(monkeypatch):
+    """A restarted agent keeps a standing invite (voice:invited is not replayed)."""
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok(invited=True))
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    assert c.can_speak is True
+    assert c.state == "speaking-enabled"
+    c.leave()
+
+
+def test_join_seed_does_not_override_explicit_invite(monkeypatch):
+    """An owner decision during reconnect outranks the stale token seed."""
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok(invited=True))
+
+    c = AgentVoiceClient()
+    c.set_invited(False, "r")  # owner removed voice while we were reconnecting
+    assert c.join("r") is True
+    assert c.can_speak is False
+    c.leave()
+
+
+def test_join_without_invited_field_keeps_listening(monkeypatch):
+    """Older backend without the `invited` field must not break the join."""
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok())
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    assert c.can_speak is False
+    assert c.state == "listening"
+    c.leave()
+
+
+# ---- reconnect supervision ----
+
+def test_supervisor_rejoins_after_disconnect(monkeypatch):
+    """A LiveKit drop must not lose voice permanently."""
+    FakeRoom.instances.clear()
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok(invited=True))
+    monkeypatch.setattr(voice_client, "RECONNECT_BASE_DELAY_S", 0.01)
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    assert len(FakeRoom.instances) == 1
+
+    # Simulate the server-side disconnect event.
+    for handler in FakeRoom.instances[0].handlers.get("disconnected", []):
+        handler("network")
+    assert c.connected is False
+
+    deadline = time.time() + 5
+    while time.time() < deadline and len(FakeRoom.instances) < 2:
+        time.sleep(0.05)
+    assert len(FakeRoom.instances) >= 2, "supervisor did not rejoin"
+    assert c.connected is True
+    assert c.can_speak is True  # invite survives the reconnect
+    c.leave()
+
+
+def test_supervisor_refreshes_expiring_token(monkeypatch):
+    FakeRoom.instances.clear()
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok())
+    monkeypatch.setattr(voice_client, "RECONNECT_BASE_DELAY_S", 0.01)
+    monkeypatch.setattr(voice_client, "TOKEN_REFRESH_S", 0.0)
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    deadline = time.time() + 5
+    while time.time() < deadline and len(FakeRoom.instances) < 2:
+        time.sleep(0.05)
+    assert len(FakeRoom.instances) >= 2, "supervisor did not refresh the token"
+    c.leave()
+
+
+def test_leave_stops_supervisor(monkeypatch):
+    rtc = make_fake_rtc()
+    install_fake_rtc(monkeypatch, rtc)
+    monkeypatch.setattr("http_client.backend_post", fake_backend_ok())
+    monkeypatch.setattr(voice_client, "RECONNECT_BASE_DELAY_S", 0.01)
+
+    c = AgentVoiceClient()
+    assert c.join("r") is True
+    supervisor = c._supervisor
+    assert supervisor is not None
+    c.leave()
+    supervisor.join(timeout=3)
+    assert supervisor.is_alive() is False
 
 
 def test_rx_path_feeds_vad_and_transcriber(monkeypatch):

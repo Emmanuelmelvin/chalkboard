@@ -416,9 +416,13 @@ class RoomSession:
             return "none"
         if modality == "voice" and getattr(self.voice, "can_speak", False):
             try:
+                # speak() now blocks until audio actually reaches the room, so a
+                # false `delivered` no longer suppresses the chat fallback.
                 spoken = self.voice.speak(clean, self.room_id)
                 if spoken.get("delivered"):
                     return "voice"
+                logger.info("voice delivery declined room=%s reason=%s — falling back to chat",
+                            self.room_id, spoken.get("reason"))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("final voice delivery failed room=%s: %s", self.room_id, exc)
         # Chat is the approved default and the safe fallback when voice is not

@@ -271,18 +271,40 @@ def _pen_synced_strokes(ctx: dict, strokes: list) -> list:
         # 2) Mouse down — stroke goes live under the pen
         started = _pen_down(socket, stroke, pts[0])
         # 3) Follow the ACTUAL drawing path; cursor and ink share the timeline
+        #
+        # The trace is a TIME sampling of the path (~60Hz, eased), not a
+        # faithful record of it: it lands on the source vertices only by
+        # coincidence and collapses dense input to roughly a fifth of its
+        # points. It drives the live preview only. `progress` reports whether
+        # it ran to completion so the pen-up below can persist exact geometry
+        # while still honouring a cancellation.
         traced = pts
+        progress = {"completed": True}
         if started:
             try:
                 traced = cursor.trace_path_blocking(
                     pts,
                     on_ink=lambda x, y, sid=stroke["id"]: _emit_stroke_draw(socket, sid, x, y),
+                    progress=progress,
                 ) or [pts[0]]
-            except Exception:
+            except Exception as exc:  # noqa: BLE001
+                # Never retry the trace here: a second call would replay the
+                # whole animation and double the live ink. Persist the authored
+                # geometry and make the failure visible — a silent fallback
+                # here looks exactly like a successful draw.
+                logger.warning("cursor trace failed id=%s, persisting untraced geometry: %s",
+                               stroke.get("id"), exc)
                 traced = pts
-        # 4) Mouse up — persist + relay the full stroke
+                progress["completed"] = True
+        # 4) Mouse up — persist + relay the full stroke. A completed trace
+        # persists the authored geometry, so a star keeps its 10 points and a
+        # 500-point chalk stroke keeps all 500; draw-stroke atomically replaces
+        # the resampled preview with the exact shape on every client. When the
+        # trace was cancelled the sampling IS the truth: only the ink drawn
+        # before cancellation exists, so persist that.
+        final_points = pts if progress.get("completed") else traced
         try:
-            res = append_stroke_locked(socket, {**stroke, "points": traced})
+            res = append_stroke_locked(socket, {**stroke, "points": final_points})
             if res.get("ok"):
                 delivered.append(stroke["id"])
             else:

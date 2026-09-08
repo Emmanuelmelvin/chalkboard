@@ -46,7 +46,7 @@ steps:
       - 'managed'
       - '--no-allow-unauthenticated'
       - '--ingress'
-      - 'internal'
+      - 'all'
       - '--min-instances'
       - '0'
 

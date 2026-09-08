@@ -37,6 +37,21 @@ type RoomUser = {
 };
 
 const CLIENT_SESSION_STORAGE_KEY = 'chalkboard-client-session-id';
+
+/**
+ * Stable id used for the "live room connection failed" notice/toast. Passing
+ * the same id to notify() replaces any still-visible toast instead of stacking
+ * a new one, and lets a successful reconnect dismiss it immediately.
+ */
+const CONNECT_ERROR_NOTIFY_ID = 'live-room-connect-error';
+
+/**
+ * Socket.IO retries failed connections with backoff and fires `connect_error`
+ * on every attempt. Throttle notifications to at most one per window so a
+ * flapping connection does not flood the screen with toasts.
+ */
+const CONNECT_ERROR_COOLDOWN_MS = 10_000;
+
 let fallbackClientSessionId: string | undefined;
 
 function createClientSessionId() {
@@ -109,6 +124,7 @@ export function useBoardSocket(
   const [userCursorColor] = useState<string>(() => getRandomColor());
   const previousUsersRef = useRef<Map<string, string> | null>(null);
   const lobbyRedirectHandledRef = useRef(false);
+  const lastConnectErrorNotifiedAtRef = useRef(0);
   const [clientSessionId] = useState(() => getClientSessionId());
 
   useEffect(() => {
@@ -200,7 +216,14 @@ export function useBoardSocket(
         : detail
           ? `Live room connection failed: ${detail}`
           : 'Live room connection failed. Realtime updates are unavailable.';
-      useLoggerStore.getState().notify(message, 'error', 7000);
+      // Connect errors fire on every Socket.IO retry; without a guard the
+      // screen fills with repeated toasts. Notify at most once per cooldown
+      // window and reuse a stable id so a visible toast is replaced, not
+      // duplicated.
+      const now = Date.now();
+      if (now - lastConnectErrorNotifiedAtRef.current < CONNECT_ERROR_COOLDOWN_MS) return;
+      lastConnectErrorNotifiedAtRef.current = now;
+      useLoggerStore.getState().notify(message, 'error', 7000, CONNECT_ERROR_NOTIFY_ID);
     };
 
     // The server uses stroke-start for both live strokes and redo broadcasts.
@@ -301,6 +324,10 @@ export function useBoardSocket(
     };
 
     const joinRoom = () => {
+      // A successful (re)connect ends the outage, so clear any pending
+      // connection-failed notice/toast instead of letting it linger for its
+      // full auto-hide duration.
+      useLoggerStore.getState().dismiss(CONNECT_ERROR_NOTIFY_ID);
       setChatMessages([]);
       setChatUnreadMentions(0);
       socket.emit('join-room', {

@@ -34,6 +34,7 @@ export interface ToastProps extends ToastOptions {
 const ToastContext = createContext<((options: ToastOptions | string) => string) | null>(null);
 
 let globalToastHandler: ((options: ToastOptions | string) => string) | null = null;
+let globalToastDismissHandler: ((id: string) => void) | null = null;
 
 function normalizeToastType(type?: ToastType): 'info' | 'success' | 'warning' | 'error' | 'neutral' {
   if (type === 'warn') return 'warning';
@@ -136,11 +137,12 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return item.id;
   }, []);
 
-  globalToastHandler = showToast;
-
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  globalToastHandler = showToast;
+  globalToastDismissHandler = dismissToast;
 
   return (
     <ToastContext.Provider value={showToast}>
@@ -197,6 +199,15 @@ export function useToast() {
   });
 
   return toastMethods;
+}
+
+/**
+ * Global imperative toast dismissal by id, callable from anywhere.
+ * Useful to clear a toast early (e.g. a connection-failed notice once the
+ * connection is restored).
+ */
+export function dismissToast(id: string) {
+  globalToastDismissHandler?.(id);
 }
 
 /**

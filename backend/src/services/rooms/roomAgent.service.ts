@@ -8,6 +8,8 @@ import axios, {
   type AxiosRequestConfig
 } from 'axios';
 
+import { GoogleAuth } from 'google-auth-library';
+
 import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
 import { getRoomWithMembers } from './rooms.service';
@@ -80,13 +82,42 @@ function parseBody(data: unknown): Record<string, unknown> {
   return {};
 }
 
+const googleAuth = new GoogleAuth();
+let idTokenClientPromise: ReturnType<typeof googleAuth.getIdTokenClient> | undefined;
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    'x-agent-secret': env.AGENT_SERVICE_SECRET,
+  };
+
+  const serviceUrl = env.AGENT_SERVICE_URL.replace(/\/$/, '');
+  // Only attempt GCP ID token generation when targeting an HTTPS Cloud Run endpoint
+  if (serviceUrl.startsWith('https://')) {
+    try {
+      if (!idTokenClientPromise) {
+        idTokenClientPromise = googleAuth.getIdTokenClient(serviceUrl);
+      }
+      const client = await idTokenClientPromise;
+      const tokenHeaders = (await client.getRequestHeaders()) as unknown as Record<string, string>;
+      Object.assign(headers, tokenHeaders);
+    } catch (error) {
+      // In local development or non-GCP environments, gracefully fall back to x-agent-secret only
+      logger.debug('Could not acquire GCP ID token for agent service; falling back to app secret only', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return headers;
+}
+
 async function attempt(path: string, body: unknown): Promise<{ status: number; data: Record<string, unknown> }> {
+  const authHeaders = await getAuthHeaders();
   const config: AxiosRequestConfig = {
     url: path,
     method: 'POST',
-    // Set per request rather than on the instance: the secret is read from env
-    // at call time. Never log these headers: they carry the shared secret.
-    headers: { 'x-agent-secret': env.AGENT_SERVICE_SECRET },
+    // Carries both the shared app secret and the Google IAM OIDC token (if on GCP)
+    headers: authHeaders,
     data: JSON.stringify(body),
   };
 

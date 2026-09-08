@@ -366,10 +366,30 @@ class AgentVoiceClient:
             self._settle(item, {"delivered": False, "reason": reason})
 
     def set_invited(self, invited: bool, room_id: str) -> None:
+        was = self.can_speak
         self.can_speak = invited
         # An explicit owner decision outranks the token seed from here on.
         self._invite_pinned = True
         logger.info("voice invite state changed room=%s canSpeak=%s", room_id, invited)
+        # If we were just invited but are still on a pre-invite LiveKit token
+        # (canPublish=false), the next publish will time out with
+        # "track publication timed out, no response received from the server".
+        # The frontend solves this by re-fetching the token on invite; we must
+        # do the same. Only reconnect when we transition false->true and we're
+        # already connected to the same room.
+        if invited and not was and self.connected and self._room_id == room_id:
+            threading.Thread(target=self._rejoin_after_invite, args=(room_id,), daemon=True).start()
+
+    def _rejoin_after_invite(self, room_id: str) -> None:
+        # Small delay to let the backend's Redis write (setVoicePublisher) settle
+        time.sleep(0.3)
+        if not self.can_speak or self._room_id != room_id:
+            return
+        logger.info("voice re-joining for publish permission room=%s", room_id)
+        self._reset_room()
+        ok = self.join(room_id)
+        if not ok:
+            logger.warning("voice re-join after invite failed room=%s", room_id)
 
     # -- reconnect supervision --
 
@@ -505,6 +525,22 @@ class AgentVoiceClient:
                         self._publish_async(text, room_id, item), loop)
                     fut.result(timeout=PUBLISH_TIMEOUT_S)
                 except Exception as exc:  # noqa: BLE001
+                    msg = str(exc)
+                    # LiveKit rejected publish because the token has canPublish=false
+                    # (joined before the invite). The invite handler already flips
+                    # can_speak, but the LiveKit grant is still stale. One
+                    # background re-join with the new token fixes it.
+                    if "track publication" in msg.lower() and self.can_speak:
+                        logger.warning("publish rejected (stale token) — re-joining room=%s", room_id)
+                        try:
+                            self._reset_room()
+                            if self.join(room_id):
+                                logger.info("voice re-joined after publish rejection room=%s", room_id)
+                                # Don't auto-retry the same utterance; the caller
+                                # (session) will fall back to chat for this turn,
+                                # and the next voice turn will publish correctly.
+                        except Exception as re_exc:  # noqa: BLE001
+                            logger.warning("re-join after publish failure failed room=%s: %s", room_id, re_exc)
                     logger.warning("speak failed room=%s: %s", room_id, exc)
                     self._settle(item, {"delivered": False, "reason": "publish_failed",
                                         "error": str(exc)[:200]})

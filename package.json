@@ -3,12 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "npx --yes concurrently -n \"backend,agent,frontend\" -c \"blue.bold,magenta.bold,cyan.bold\" --kill-others \"npm run dev --prefix backend\" \"python agent-service/app.py\" \"npm run dev --prefix frontend\"",
+    "dev": "npx --yes concurrently -n \"backend,agent,frontend\" -c \"blue.bold,magenta.bold,cyan.bold\" --kill-others \"npm run dev --prefix backend\" \"bash -c 'if [ -f agent-service/.venv/Scripts/python.exe ]; then agent-service/.venv/Scripts/python.exe agent-service/app.py; elif [ -f agent-service/.venv/bin/python ]; then agent-service/.venv/bin/python agent-service/app.py; else python agent-service/app.py; fi'\" \"npm run dev --prefix frontend\"",
     "dev:backend": "npm run dev --prefix backend",
-    "dev:agent": "python agent-service/app.py",
+    "dev:agent": "bash -c 'if [ -f agent-service/.venv/Scripts/python.exe ]; then agent-service/.venv/Scripts/python.exe agent-service/app.py; elif [ -f agent-service/.venv/bin/python ]; then agent-service/.venv/bin/python agent-service/app.py; else python agent-service/app.py; fi'",
     "dev:frontend": "npm run dev --prefix frontend",
-    "test": "python -m pytest agent-service/tests -q && npm test --prefix backend",
-    "build": "npm run build --prefix backend && python -m compileall -q agent-service && npm run build --prefix frontend"
+    "test": "bash -c 'if [ -f agent-service/.venv/Scripts/python.exe ]; then agent-service/.venv/Scripts/python.exe -m pytest agent-service/tests -q; elif [ -f agent-service/.venv/bin/python ]; then agent-service/.venv/bin/python -m pytest agent-service/tests -q; else python -m pytest agent-service/tests -q; fi' && npm test --prefix backend",
+    "build": "npm run build --prefix backend && bash -c 'if [ -f agent-service/.venv/Scripts/python.exe ]; then agent-service/.venv/Scripts/python.exe -m compileall -q agent-service; elif [ -f agent-service/.venv/bin/python ]; then agent-service/.venv/bin/python -m compileall -q agent-service; else python -m compileall -q agent-service; fi' && npm run build --prefix frontend"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

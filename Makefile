@@ -1,3 +1,5 @@
+PYTHON := $(shell if [ -f agent-service/.venv/Scripts/python.exe ]; then echo agent-service/.venv/Scripts/python.exe; elif [ -f agent-service/.venv/bin/python ]; then echo agent-service/.venv/bin/python; else echo python; fi)
+
 .PHONY: all dev dev-backend dev-frontend dev-agent install build test help
 
 # Default target: start all three services in dev mode
@@ -20,7 +22,7 @@ dev:
 		-c "blue.bold,magenta.bold,cyan.bold" \
 		--kill-others \
 		"npm run dev --prefix backend" \
-		"python agent-service/app.py" \
+		"$(PYTHON) agent-service/app.py" \
 		"npm run dev --prefix frontend"
 
 dev-backend:
@@ -30,18 +32,18 @@ dev-frontend:
 	npm run dev --prefix frontend
 
 dev-agent:
-	python agent-service/app.py
+	$(PYTHON) agent-service/app.py
 
 install:
 	npm install --prefix backend
-	pip install -r agent-service/requirements.txt
+	$(PYTHON) -m pip install -r agent-service/requirements.txt -r agent-service/requirements/optional/all.txt
 	npm install --prefix frontend
 
 build:
 	npm run build --prefix backend
-	python -m compileall -q agent-service
+	$(PYTHON) -m compileall -q agent-service
 	npm run build --prefix frontend
 
 test:
-	python -m pytest agent-service/tests -q
+	$(PYTHON) -m pytest agent-service/tests -q
 	npm test --prefix backend

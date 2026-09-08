@@ -123,6 +123,9 @@ async def _transcribe_aws(pcm_bytes: bytes, timeout_s: float = 45.0) -> str | No
     return " ".join(parts).strip() or None
 
 
+_warned_missing: set[str] = set()
+
+
 def transcribe_utterance_blocking(pcm, sample_rate: int) -> str | None:
     """Blocking entry used by the voice listener thread. Never raises."""
     import numpy as _np
@@ -133,14 +136,37 @@ def transcribe_utterance_blocking(pcm, sample_rate: int) -> str | None:
         pcm_bytes = arr.tobytes()
         if len(encode_wav(pcm_bytes, sample_rate)) > 2 * 1024 * 1024:
             return None
-        # Backend choice is independent of LLM_PROVIDER: local whisper used to
-        # be unreachable in gemini mode, and STT_BACKEND was silently ignored.
         backend = config.resolve_stt_backend()
-        if backend == "aws":
-            return asyncio.run(_transcribe_aws(pcm_bytes))
-        if backend == "local":
-            return asyncio.run(_transcribe_local_async(pcm_bytes))
-        return asyncio.run(_transcribe_gemini(arr, sample_rate))
+        # Graceful fallback when the requested backend isn't installed.
+        # This happens when running outside the venv (global python has no
+        # faster_whisper) or when optional deps weren't installed.
+        try:
+            if backend == "aws":
+                return asyncio.run(_transcribe_aws(pcm_bytes))
+            if backend == "local":
+                return asyncio.run(_transcribe_local_async(pcm_bytes))
+            return asyncio.run(_transcribe_gemini(arr, sample_rate))
+        except ModuleNotFoundError as exc:
+            missing = exc.name or str(exc)
+            if "faster_whisper" in missing and backend == "local":
+                if "faster_whisper" not in _warned_missing:
+                    _warned_missing.add("faster_whisper")
+                    logger.warning(
+                        "faster_whisper not installed (run with .venv or pip install -r "
+                        "requirements/optional/whisper.txt) — falling back to gemini STT for this session. "
+                        "Set STT_BACKEND=gemini to silence this warning.")
+                # Fall back to gemini if key is present, otherwise give up cleanly
+                if config.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+                    return asyncio.run(_transcribe_gemini(arr, sample_rate))
+                raise
+            if "amazon_transcribe" in missing and backend == "aws":
+                if "amazon_transcribe" not in _warned_missing:
+                    _warned_missing.add("amazon_transcribe")
+                    logger.warning("amazon-transcribe not installed — falling back to gemini STT")
+                if config.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY"):
+                    return asyncio.run(_transcribe_gemini(arr, sample_rate))
+                raise
+            raise
     except Exception as exc:  # noqa: BLE001 — voice must never crash
         logger.warning("transcription failed, skipping utterance: %s", exc)
         return None

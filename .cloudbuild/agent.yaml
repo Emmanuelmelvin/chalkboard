@@ -47,8 +47,9 @@ steps:
       - '--no-allow-unauthenticated'
       - '--ingress'
       - 'all'
+      - '--no-cpu-throttling'
       - '--min-instances'
-      - '0'
+      - '1'
 
 # Default substitutions (can be overridden in Cloud Build Trigger UI)
 substitutions:

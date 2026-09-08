@@ -14,6 +14,11 @@
 Flask==3.1.3
 python-dotenv==1.2.3
 python-socketio==5.16.4
+# WebSocket transport for the engineio client (optional dep of python-socketio).
+# Without it the agent silently degrades to polling and logs
+# "[engineio.client] websocket-client package not installed, only polling
+# transport is available" on every connection.
+websocket-client==1.9.2
 google-adk==2.8.0
 google-genai==2.22.0
 edge-tts==7.2.8

@@ -29,6 +29,15 @@ def _bare_socket() -> AgentRoomSocket:
     return s
 
 
+def test_requirements_declares_websocket_client():
+    """engineio client needs the `websocket` module (websocket-client) for the
+    websocket transport. Without it connections degrade to polling and Cloud
+    Run logs '[engineio.client] websocket-client package not installed, only
+    polling transport is available'."""
+    req = (Path(__file__).resolve().parents[1] / "requirements.txt").read_text()
+    assert "websocket-client==" in req
+
+
 def test_emit_local_does_not_run_handlers_under_context_lock():
     s = _bare_socket()
     caller_released = threading.Event()

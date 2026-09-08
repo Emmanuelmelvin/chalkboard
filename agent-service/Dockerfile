@@ -6,13 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt ./
 COPY requirements ./requirements
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir -r requirements/optional/firestore.txt
-# Bedrock LLM provider (LLM_PROVIDER=bedrock) — boto3 + LiteLLM.
-# LiteLlm wraps the BEDROCK_MODELS waterfall for google-adk.
-RUN pip install --no-cache-dir -r requirements/optional/bedrock.txt
-# Uncomment to bake ALL heavy optional deps into the image:
-# RUN pip install --no-cache-dir -r requirements/optional/all.txt
+RUN pip install --no-cache-dir -r requirements.txt -r requirements/optional/all.txt
 COPY app.py config.py errors.py logger.py system_info.py http_client.py requirements.txt ./
 COPY SYSTEM_INFO.md ./SYSTEM_INFO.md
 COPY agent ./agent

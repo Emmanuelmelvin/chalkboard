@@ -228,8 +228,13 @@ class RoomSession:
 
     def _handle_voice_transcript(self, t: dict) -> None:
         raw = str((t or {}).get("text") or "").strip()[:2000]
-        if not raw or not is_agent_addressed(raw):
+        if not raw:
+            logger.debug("voice transcript empty, ignoring room=%s", self.room_id)
             return
+        if not is_agent_addressed(raw):
+            logger.info("voice heard but not addressed (no wake word) room=%s text=%r", self.room_id, raw[:120])
+            return
+        logger.info("voice addressed, invoking room=%s text=%r", self.room_id, raw[:120])
         entry = {"id": f"voice-{uuid.uuid4().hex[:8]}", "userId": t.get("participantIdentity"),
                  "displayName": str(t.get("participantName") or "Classmate")[:128], "message": raw}
         if str(entry.get("userId") or "").startswith("agent:"):

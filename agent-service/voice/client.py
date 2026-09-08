@@ -722,7 +722,17 @@ class AgentVoiceClient:
                         None, lambda _pcm=pcm: transcribe_utterance_blocking(_pcm, 16000)
                     )
                     if text:
-                        logger.info("voice transcript room=%s", room_id)
+                        # Log what was heard (truncated) — user asked to see it for debugging.
+                        # Keep it short to avoid spamming logs with long utterances.
+                        preview = text.strip().replace("\n", " ")[:200]
+                        addressed = False
+                        try:
+                            from voice.transcriber import is_agent_addressed
+                            addressed = is_agent_addressed(text)
+                        except Exception:
+                            pass
+                        logger.info("voice transcript room=%s identity=%s addressed=%s text=%r",
+                                    room_id, identity, addressed, preview)
                         try:
                             if self.on_transcript:
                                 self.on_transcript({
@@ -732,6 +742,8 @@ class AgentVoiceClient:
                                 })
                         except Exception:
                             pass
+                    else:
+                        logger.info("voice transcript room=%s identity=%s text=<no_speech>", room_id, identity)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("transcription failed room=%s", room_id)
                 finally:

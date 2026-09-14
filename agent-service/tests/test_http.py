@@ -28,7 +28,7 @@ def test_health_shape():
     assert res.status_code == 200
     body = res.get_json()
     assert body["service"] == "chalkboard-agent-service"
-    assert body["provider"] in ("gemini", "bedrock")
+    assert body["provider"] in ("gemini", "bedrock", "groq")
     assert isinstance(body["activeRoomSessions"], int)
 
 

@@ -16,6 +16,7 @@ _QUIET_LIBS = (
     "google",
     "genai",
     "werkzeug",
+    "openai",  # Silence OpenAI SDK (used by Groq)
 )
 
 

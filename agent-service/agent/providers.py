@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import re
 import threading
 import time
 from typing import Any, Optional
@@ -32,6 +33,152 @@ try:
 except Exception:
     pass
 
+
+_GROQ_REASONING_KEYS = ("reasoning_content", "reasoning", "thinking_blocks")
+
+_groq_patch_state = {"done": False}
+
+
+def _is_groq_model(model: str | None) -> bool:
+    """True when a LiteLLM model string routes to the Groq provider."""
+    if not model or not isinstance(model, str):
+        return False
+    text = model.strip().lower()
+    # Canonical LiteLLM form is "groq/..." (e.g. "groq/openai/gpt-oss-120b").
+    first = text.split("/", 1)[0]
+    return first == "groq"
+
+
+def sanitize_messages_for_groq(messages: list) -> list:
+    """Drop Groq-rejected reasoning fields from assistant history.
+
+    gpt-oss/conversational Groq models return `reasoning` (surfaced by
+    LiteLLM as `reasoning_content`), but Groq's OpenAI-compatible
+    /chat/completions input schema rejects that property on
+    `role:assistant` messages. google-adk re-injects it verbatim on the
+    next tool-loop turn, so turn 2+ fails with:
+    `property 'reasoning_content' is unsupported`.
+
+    Stripping history echo (not disabling reasoning) is the standard fix —
+    the current turn still reasons, we just don't send the previous turn's
+    chain-of-thought back. Tool calls and visible content are preserved.
+    """
+    cleaned: list = []
+    for msg in messages or []:
+        if isinstance(msg, dict):
+            if msg.get("role") != "assistant":
+                cleaned.append(msg)
+                continue
+            if not any(k in msg for k in _GROQ_REASONING_KEYS):
+                content = msg.get("content")
+                if not (isinstance(content, list) and any(
+                    isinstance(b, dict) and b.get("type") in ("thinking", "reasoning")
+                    for b in content
+                )):
+                    cleaned.append(msg)
+                    continue
+            copy = dict(msg)
+            for key in _GROQ_REASONING_KEYS:
+                copy.pop(key, None)
+            content = copy.get("content")
+            if isinstance(content, list):
+                copy["content"] = [
+                    b for b in content
+                    if not (isinstance(b, dict) and b.get("type") in ("thinking", "reasoning"))
+                ] or None
+            cleaned.append(copy)
+        else:
+            # LiteLLM Message objects are dict subclasses in practice, but
+            # handle attribute-style messages defensively.
+            try:
+                role = msg.get("role")  # type: ignore[union-attr]
+            except Exception:
+                role = getattr(msg, "role", None)
+            if role != "assistant":
+                cleaned.append(msg)
+                continue
+            try:
+                for key in _GROQ_REASONING_KEYS:
+                    try:
+                        msg.pop(key, None)  # type: ignore[union-attr]
+                    except Exception:
+                        try:
+                            delattr(msg, key)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            cleaned.append(msg)
+    return cleaned
+
+
+def _install_groq_reasoning_strip() -> None:
+    """Monkey-patch ADK/LiteLLM once so Groq never receives reasoning echo.
+
+    Two layers (both idempotent, Groq-only):
+      1. Wrap `google.adk.models.lite_llm._get_completion_inputs` — sanitizes
+         the OpenAI message list ADK builds from session history.
+      2. Wrap `LiteLLMClient.{acompletion,completion}` — final safety net in
+         case a future ADK path bypasses (1).
+    Lazy (import inside) so `import agent.providers` stays cheap; called from
+    ensure_env_auth/build_agent/warm_up, i.e. before any LiteLlm use.
+    """
+    if _groq_patch_state["done"]:
+        return
+    try:
+        import google.adk.models.lite_llm as _adk_lite
+    except Exception as exc:
+        logger.debug("groq reasoning strip skipped (adk import failed): %s", exc)
+        return
+
+    orig_inputs = _adk_lite._get_completion_inputs
+
+    async def _patched_inputs(llm_request, model: str):
+        messages, tools, response_format, generation_params, tool_choice = await orig_inputs(
+            llm_request, model
+        )
+        try:
+            if _is_groq_model(model):
+                messages = sanitize_messages_for_groq(messages)
+        except Exception as exc:  # never break the request path
+            logger.debug("groq sanitize skipped: %s", exc)
+        return messages, tools, response_format, generation_params, tool_choice
+
+    _adk_lite._get_completion_inputs = _patched_inputs  # type: ignore[method-assign]
+
+    for method in ("acompletion", "completion"):
+        orig = getattr(_adk_lite.LiteLLMClient, method, None)
+        if orig is None or getattr(orig, "_groq_strip_wrapped", False):
+            continue
+
+        if method == "acompletion":
+            def _make_awrap(o):
+                async def _awrap(self, model=None, messages=None, tools=None, **kwargs):
+                    try:
+                        if _is_groq_model(model if isinstance(model, str) else "") and messages:
+                            messages = sanitize_messages_for_groq(messages)
+                    except Exception as exc:
+                        logger.debug("groq sanitize skipped: %s", exc)
+                    return await o(self, model=model, messages=messages, tools=tools, **kwargs)
+                _awrap._groq_strip_wrapped = True  # type: ignore[attr-defined]
+                return _awrap
+            setattr(_adk_lite.LiteLLMClient, method, _make_awrap(orig))
+        else:
+            def _make_wrap(o):
+                def _wrap(self, model=None, messages=None, tools=None, stream=False, **kwargs):
+                    try:
+                        if _is_groq_model(model if isinstance(model, str) else "") and messages:
+                            messages = sanitize_messages_for_groq(messages)
+                    except Exception as exc:
+                        logger.debug("groq sanitize skipped: %s", exc)
+                    return o(self, model=model, messages=messages, tools=tools, stream=stream, **kwargs)
+                _wrap._groq_strip_wrapped = True  # type: ignore[attr-defined]
+                return _wrap
+            setattr(_adk_lite.LiteLLMClient, method, _make_wrap(orig))
+
+    _groq_patch_state["done"] = True
+    logger.debug("groq reasoning_content strip installed")
+
 _TYPE_MAP = {"str": str, "float": float, "bool": bool, "list": list, "dict": dict}
 
 _instruction_cache: str | None = None
@@ -50,6 +197,12 @@ def ensure_env_auth() -> None:
     # LiteLlm reads GROQ_API_KEY from the environment for groq/* models.
     if not os.environ.get("GROQ_API_KEY") and getattr(config, "GROQ_API_KEY", ""):
         os.environ["GROQ_API_KEY"] = config.GROQ_API_KEY
+    # Groq rejects `reasoning_content` on assistant input; ADK re-injects it
+    # on tool-loop turns. Install the Groq-only strip before any LiteLlm use.
+    try:
+        _install_groq_reasoning_strip()
+    except Exception:
+        pass
 
 
 _warm_state = {"done": False}
@@ -212,6 +365,38 @@ def _event_text(event) -> str:
     return "".join(getattr(p, "text", "") or "" for p in parts)
 
 
+def _is_rate_limit_error(exc: BaseException, msg: str) -> bool:
+    """True for TPM/RPM/429-style throttling across LiteLLM/Groq/Bedrock.
+
+    The old check only looked for the literal "429", but Groq surfaces TPM
+    throttling as `RateLimitError: ... rate_limit_exceeded ... tokens per
+    minute (TPM)` with no "429" in the message, so it was misclassified as a
+    generic error and retried on the same hot model with a 4s cap.
+    """
+    try:
+        if "ratelimit" in type(exc).__name__.lower():
+            return True
+    except Exception:
+        pass
+    low = (msg or "").lower()
+    return any(s in low for s in (
+        "429", "ratelimit", "rate limit", "rate_limit",
+        "rate_limit_exceeded", "tokens per minute", "tpm",
+        "too many requests", "throttl", "quota",
+    ))
+
+
+def _parse_retry_after_s(msg: str, default: float) -> float:
+    """Honor Groq's `Please try again in Xs` hint when present."""
+    try:
+        m = re.search(r"try again in\s+([\d.]+)\s*s", msg or "", re.IGNORECASE)
+        if m:
+            return min(60.0, max(1.0, float(m.group(1)) + 1.0))
+    except Exception:
+        pass
+    return default
+
+
 async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                         request_id: str, max_turns: int) -> dict:
     """Run one reasoning task against the provider waterfall. Returns finalText/turns/model."""
@@ -301,15 +486,29 @@ async def run_reasoning(message: str, user_id: str, ctx: dict, stats: dict,
                 if ctx.get("cancelEvent") is not None and ctx["cancelEvent"].is_set():
                     raise AgentError("agent_stopped", "Agent session stopped") from exc
                 msg = str(exc)
-                retryable = any(s in msg for s in ("404", "NOT_FOUND", "not found", "503",
+                model_idx = candidates.index(model) if model in candidates else len(candidates) - 1
+                is_last_model = model_idx >= len(candidates) - 1
+                rate_limited = _is_rate_limit_error(exc, msg)
+                retryable = rate_limited or any(s in msg for s in ("404", "NOT_FOUND", "not found", "503",
                                                   "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "exhausted"))
-                logger.warning("model error model=%s: %s",
-                               model, msg[:150])
-                if retryable:
+                logger.warning("model error model=%s rate_limited=%s: %s",
+                               model, rate_limited, msg[:200])
+                if rate_limited and not is_last_model:
+                    # TPM is per-model on Groq: fail over to the next waterfall
+                    # candidate immediately instead of hammering the hot model.
+                    break
+                if retryable and not rate_limited:
                     break
                 if attempt >= config.MAX_RETRIES:
                     break
                 import asyncio as _asyncio
                 import random as _random
-                await _asyncio.sleep(min(4.0, (2 ** attempt) + _random.random() * 0.3))
+                if rate_limited:
+                    # Honor Groq's `try again in 16.9s` hint; old code capped at
+                    # 4s so it retried too early and burned more TPM.
+                    base = _parse_retry_after_s(msg, (2 ** attempt))
+                    delay = min(60.0, base + _random.random() * 1.0)
+                else:
+                    delay = min(4.0, (2 ** attempt) + _random.random() * 0.3)
+                await _asyncio.sleep(delay)
     raise last_error or RuntimeError("all models failed")

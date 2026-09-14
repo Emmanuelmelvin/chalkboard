@@ -3,9 +3,10 @@
 LLM_PROVIDER switch (config.LLM_PROVIDER):
   gemini  -> google-adk LlmAgent on Gemini API (GEMINI_MODEL waterfall)
   bedrock -> google-adk LlmAgent + LiteLlm on AWS Bedrock (BEDROCK_MODELS waterfall)
+  groq    -> google-adk LlmAgent + LiteLlm on Groq LPU (GROQ_MODELS waterfall)
 
-Both build the same registered FunctionTools whose closures call run_board_tool
-directly — no NODE_URL/BRAIN_URL HTTP hop, no /tools/execute callback.
+Both LiteLlm paths build the same registered FunctionTools whose closures call
+run_board_tool directly — no NODE_URL/BRAIN_URL HTTP hop, no /tools/execute callback.
 """
 
 from __future__ import annotations
@@ -46,6 +47,9 @@ def get_instruction() -> str:
 def ensure_env_auth() -> None:
     if not os.environ.get("GOOGLE_GENAI_API_KEY") and config.GEMINI_API_KEY:
         os.environ["GOOGLE_GENAI_API_KEY"] = config.GEMINI_API_KEY
+    # LiteLlm reads GROQ_API_KEY from the environment for groq/* models.
+    if not os.environ.get("GROQ_API_KEY") and getattr(config, "GROQ_API_KEY", ""):
+        os.environ["GROQ_API_KEY"] = config.GROQ_API_KEY
 
 
 _warm_state = {"done": False}
@@ -72,7 +76,7 @@ def warm_up() -> dict:
         from google.adk.sessions import InMemorySessionService  # noqa: F401
         from google.adk.tools import FunctionTool  # noqa: F401
         from google.genai import types as genai_types  # noqa: F401
-        if config.LLM_PROVIDER == "bedrock":
+        if config.LLM_PROVIDER in ("bedrock", "groq"):
             from google.adk.models.lite_llm import LiteLlm  # noqa: F401
         ensure_env_auth()
         get_instruction()
@@ -182,12 +186,12 @@ def build_agent(model: str, caller: DirectCaller):
     generate_config: dict[str, Any] = {"temperature": 0.4}
     if config.THINKING_BUDGET > 0:
         generate_config["thinkingConfig"] = {"thinkingBudget": config.THINKING_BUDGET}
-    if config.LLM_PROVIDER == "bedrock":
+    if config.LLM_PROVIDER in ("bedrock", "groq"):
         from google.adk.models.lite_llm import LiteLlm
         import litellm as _litellm
         # Bedrock Converse requires alternating roles; consecutive
         # user/tool blocks would error without a dummy assistant turn.
-        # This is a litellm global, not a Bedrock API param.
+        # This is a litellm global, not a Bedrock API param. Harmless for Groq.
         _litellm.modify_params = True
         return LlmAgent(name="chalkboard_master",
                         description="Autonomous AI teaching assistant for the Chalkboard classroom.",

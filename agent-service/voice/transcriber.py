@@ -1,8 +1,10 @@
 """Speech-to-text for voice utterances.
 
 Backend is chosen by ``STT_BACKEND``, independent of ``LLM_PROVIDER``:
-  auto   -> gemini when LLM_PROVIDER=gemini, else local (historical default)
+  auto   -> gemini when LLM_PROVIDER=gemini, groq when LLM_PROVIDER=groq,
+            else local (historical default)
   gemini -> Gemini audio understanding via google-genai (one generate_content)
+  groq   -> Groq Whisper API (whisper-large-v3-turbo, needs GROQ_API_KEY)
   local  -> faster-whisper on CPU (requirements/optional/whisper.txt)
   aws    -> Amazon Transcribe streaming (requirements/optional/transcribe.txt)
 
@@ -14,10 +16,14 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import json
 import logging
 import os
 import re
 import struct
+import urllib.error
+import urllib.request
+import uuid
 import wave
 
 import config
@@ -91,6 +97,71 @@ async def _transcribe_local_async(pcm_bytes: bytes, timeout_s: float = 60.0) -> 
     return await asyncio.wait_for(loop.run_in_executor(None, transcribe_local, pcm_bytes), timeout=timeout_s)
 
 
+# ---- groq whisper backend (OpenAI-compatible REST, no heavy deps) ----
+
+_GROQ_TRANSCRIPTIONS_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+_GROQ_TIMEOUT_S = 30.0
+
+
+def _encode_multipart(fields: dict[str, str], file_bytes: bytes,
+                       filename: str = "audio.wav",
+                       file_mimetype: str = "audio/wav") -> tuple[bytes, str]:
+    """Build a multipart/form-data body with stdlib only (no requests dep)."""
+    boundary = uuid.uuid4().hex
+    body = bytearray()
+    for key, value in fields.items():
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode())
+        body.extend(f"{value}\r\n".encode())
+    body.extend(f"--{boundary}\r\n".encode())
+    body.extend(
+        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode())
+    body.extend(f"Content-Type: {file_mimetype}\r\n\r\n".encode())
+    body.extend(file_bytes)
+    body.extend(f"\r\n--{boundary}--\r\n".encode())
+    return bytes(body), f"multipart/form-data; boundary={boundary}"
+
+
+def transcribe_groq(pcm_bytes: bytes, sample_rate: int = 16000) -> str | None:
+    """Blocking Groq Whisper transcription. Raises on auth/network errors."""
+    api_key = config.GROQ_API_KEY or os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY is required for STT_BACKEND=groq")
+    wav = encode_wav(pcm_bytes, sample_rate)
+    if len(wav) > 2 * 1024 * 1024:
+        return None
+    model = getattr(config, "GROQ_STT_MODEL", "whisper-large-v3-turbo") or "whisper-large-v3-turbo"
+    fields = {"model": model, "response_format": "json", "temperature": "0"}
+    if getattr(config, "STT_LANGUAGE", ""):
+        fields["language"] = config.STT_LANGUAGE
+    body, content_type = _encode_multipart(fields, wav)
+    req = urllib.request.Request(
+        _GROQ_TRANSCRIPTIONS_URL, data=body,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": content_type},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_GROQ_TIMEOUT_S) as res:
+            payload = json.loads(res.read().decode() or "{}")
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode()[:300]
+        except Exception:
+            pass
+        raise RuntimeError(f"groq STT HTTP {exc.code}: {detail}") from exc
+    text = (payload.get("text") or "").strip() if isinstance(payload, dict) else ""
+    return text or None
+
+
+async def _transcribe_groq_async(pcm_bytes: bytes, sample_rate: int,
+                                 timeout_s: float = 45.0) -> str | None:
+    loop = asyncio.get_running_loop()
+    return await asyncio.wait_for(
+        loop.run_in_executor(None, transcribe_groq, pcm_bytes, sample_rate),
+        timeout=timeout_s)
+
+
 async def _transcribe_aws(pcm_bytes: bytes, timeout_s: float = 45.0) -> str | None:
     try:
         from amazon_transcribe.client import TranscribeStreamingClient
@@ -145,6 +216,8 @@ def transcribe_utterance_blocking(pcm, sample_rate: int) -> str | None:
                 return asyncio.run(_transcribe_aws(pcm_bytes))
             if backend == "local":
                 return asyncio.run(_transcribe_local_async(pcm_bytes))
+            if backend == "groq":
+                return asyncio.run(_transcribe_groq_async(pcm_bytes, 16000))
             return asyncio.run(_transcribe_gemini(arr, sample_rate))
         except ModuleNotFoundError as exc:
             missing = exc.name or str(exc)

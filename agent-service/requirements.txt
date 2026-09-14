@@ -43,4 +43,5 @@ pytest==9.1.1
 #   faster-whisper → requirements/optional/whisper.txt
 #   firebase-admin → requirements/optional/firestore.txt
 #   boto3 + litellm → requirements/optional/bedrock.txt
+#   litellm (Groq) → requirements/optional/groq.txt
 #   amazon-transcribe → requirements/optional/transcribe.txt

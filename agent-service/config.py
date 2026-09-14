@@ -3,6 +3,7 @@
 Single service, no agent-brain. LLM_PROVIDER switches reasoning in-process:
   gemini  -> google-adk LlmAgent on Gemini API (GEMINI_MODEL + fallbacks)
   bedrock -> google-adk LlmAgent + LiteLlm on AWS Bedrock (BEDROCK_MODELS)
+  groq    -> google-adk LlmAgent + LiteLlm on Groq LPU (GROQ_MODELS)
 """
 
 from __future__ import annotations
@@ -59,21 +60,28 @@ MAX_TURNS_PER_INSTRUCTION: int = _int("MAX_TURNS_PER_INSTRUCTION", 15)
 REASONING_TIMEOUT_S: float = _int("REASONING_TIMEOUT_MS", 120000) / 1000.0
 
 LLM_PROVIDER: str = os.environ.get("LLM_PROVIDER", "gemini").strip().lower()
-if LLM_PROVIDER not in ("gemini", "bedrock"):
+if LLM_PROVIDER not in ("gemini", "bedrock", "groq"):
     LLM_PROVIDER = "gemini"
 
 BEDROCK_MODELS: list[str] = _list(
     "BEDROCK_MODELS", "bedrock/us.amazon.nova-lite-v1:0"
 )
+GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
+GROQ_MODELS: list[str] = _list(
+    "GROQ_MODELS", "groq/openai/gpt-oss-120b,groq/openai/gpt-oss-20b"
+)
 AWS_REGION: str = _str("AWS_REGION", "us-east-1")
 # Speech-to-text backend, independent of LLM_PROVIDER:
-#   auto   -> gemini audio when LLM_PROVIDER=gemini, else local whisper
+#   auto   -> gemini audio when LLM_PROVIDER=gemini, groq whisper when
+#             LLM_PROVIDER=groq, else local whisper
 #   gemini -> Gemini audio understanding (needs GEMINI_API_KEY)
+#   groq   -> Groq Whisper API (needs GROQ_API_KEY, no heavy deps)
 #   local  -> faster-whisper on CPU (needs requirements/optional/whisper.txt)
 #   aws    -> Amazon Transcribe streaming (needs optional/transcribe.txt + IAM)
 STT_BACKEND: str = os.environ.get("STT_BACKEND", "auto").strip().lower()
-if STT_BACKEND not in ("auto", "gemini", "local", "aws"):
+if STT_BACKEND not in ("auto", "gemini", "groq", "local", "aws"):
     STT_BACKEND = "auto"
+GROQ_STT_MODEL: str = _str("GROQ_STT_MODEL", "whisper-large-v3-turbo")
 STT_MODEL: str = _str("STT_MODEL", "base")
 STT_LANGUAGE: str = os.environ.get("STT_LANGUAGE", "en").strip() or "en"
 TTS_VOICE: str = _str("TTS_VOICE", "en-US-AriaNeural")
@@ -107,16 +115,23 @@ def get_model_waterfall() -> list[str]:
     if LLM_PROVIDER == "bedrock":
         seen = list(dict.fromkeys(BEDROCK_MODELS))
         return seen or ["bedrock/us.amazon.nova-lite-v1:0"]
+    if LLM_PROVIDER == "groq":
+        seen = list(dict.fromkeys(GROQ_MODELS))
+        return seen or ["groq/openai/gpt-oss-120b"]
     return get_gemini_models()
 
 
 def resolve_stt_backend() -> str:
-    """Concrete STT backend: gemini|local|aws. Resolves the `auto` default."""
+    """Concrete STT backend: gemini|groq|local|aws. Resolves the `auto` default."""
     if STT_BACKEND != "auto":
         return STT_BACKEND
     # `auto` preserves the historical coupling: Gemini reasoning transcribed via
-    # Gemini audio, Bedrock reasoning via local whisper.
-    return "gemini" if LLM_PROVIDER == "gemini" else "local"
+    # Gemini audio, Groq reasoning via Groq whisper, Bedrock via local whisper.
+    if LLM_PROVIDER == "gemini":
+        return "gemini"
+    if LLM_PROVIDER == "groq":
+        return "groq"
+    return "local"
 
 
 def validate_or_warn() -> None:
@@ -135,3 +150,7 @@ def validate_or_warn() -> None:
         raise RuntimeError("GEMINI_API_KEY is required in production for LLM_PROVIDER=gemini")
     if LLM_PROVIDER == "gemini" and not GEMINI_API_KEY:
         log.warning("GEMINI_API_KEY is not set. Set it in .env to enable real AI generation.")
+    if LLM_PROVIDER == "groq" and not GROQ_API_KEY:
+        if NODE_ENV == "production":
+            raise RuntimeError("GROQ_API_KEY is required in production for LLM_PROVIDER=groq")
+        log.warning("GROQ_API_KEY is not set. Set it in .env to enable Groq reasoning/STT.")
